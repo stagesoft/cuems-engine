@@ -1,14 +1,15 @@
 import pyossia as ossia
 import time
+import re
 
 import config
-from video_player import VideoPlayer
+from video_player import NodeVideoPlayers 
 from log import *
 
 
 
 
-video_players=[None]*config.number_of_displays
+video_players=NodeVideoPlayers()
 
 
 
@@ -31,11 +32,11 @@ for display_id, videoplayer in enumerate(video_players):
   video_nodes["start{}".format(display_id)].parameter.access_mode = ossia.AccessMode.Bi
   video_nodes["start{}".format(display_id)].parameter.value = False
 
-  video_nodes["osd{}".format(display_id)]=local_device.add_node("/node{}/videoplayer{}/osd".format(config.node_id, display_id))
+  #video_nodes["osd{}".format(display_id)]=local_device.add_node("/node{}/videoplayer{}/osd".format(config.node_id, display_id))
   #video_node.critical = True
-  video_nodes["osd{}".format(display_id)].create_parameter(ossia.ValueType.Int)
-  video_nodes["osd{}".format(display_id)].parameter.access_mode = ossia.AccessMode.Set
-  video_nodes["osd{}".format(display_id)].parameter.value = 0
+  #video_nodes["osd{}".format(display_id)].create_parameter(ossia.ValueType.Int)
+  #video_nodes["osd{}".format(display_id)].parameter.access_mode = ossia.AccessMode.Set
+  #video_nodes["osd{}".format(display_id)].parameter.value = 0
 
   video_nodes["load{}".format(display_id)]=local_device.add_node("/node{}/videoplayer{}/load".format(config.node_id, display_id))
   #video_node.critical = True
@@ -54,64 +55,8 @@ audio_node=local_device.add_node("/node{}/audioplayer/start".format(config.node_
 audio_node_parameter = audio_node.create_parameter(ossia.ValueType.Impulse)
 audio_node_parameter.access_mode = ossia.AccessMode.Set
 
-get_displays_node=local_device.add_node("/node{}/get/numberofdisplays".format(config.node_id))
-get_displays_node_parameter = get_displays_node.create_parameter(ossia.ValueType.Int)
-get_displays_node_parameter.access_mode = ossia.AccessMode.Get
-get_displays_node_parameter.value = config.number_of_displays
 
 
-def start_video_callback(value):
-  if value:
-    if display_id >= 0 and display_id < len(video_player):
-      if not video_players[display_id] is None:
-        if not video_players[display_id].is_alive():
-          video_players[display_id] = None
-
-      if video_players[display_id] is None:
-        video_players[display_id] = VideoPlayer(config.video_osc_port + display_id, display_id)
-        video_players[display_id].start()
-        print("video player started")
-
-      elif __debug__:
-        logging.debug("{} - Display index out of range: {}, number of displays: {}".format(value, display_id, config.number_of_displays))
-  else:
-    
-    if video_players[display_id].is_alive():
-      video_players[display_id].kill()
-      video_players[display_id] = None
-    else:
-      video_players[display_id] = None
-
-
-remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo", "127.0.0.1", config.video_osc_port, 4300)
-          
-remote_xjadeo_quit_node = remote_osc_xjadeo.add_node("/jadeo/quit")
-xjadeo_quit_parameter = remote_xjadeo_quit_node.create_parameter(ossia.ValueType.Impulse)
-
-remote_xjadeo_load_node = remote_osc_xjadeo.add_node("/jadeo/load")
-xjadeo_load_parameter = remote_xjadeo_load_node.create_parameter(ossia.ValueType.String)
-
-remote_xjadeo_seek_node = remote_osc_xjadeo.add_node("/jadeo/seek")
-xjadeo_seek_parameter = remote_xjadeo_seek_node.create_parameter(ossia.ValueType.Int)
-xjadeo_seek_parameter.value = 0
-xjadeo_seek_parameter.default_value = 0
-
-remote_xjadeo_osd_node = remote_osc_xjadeo.add_node("/jadeo/osd/timecode")
-xjadeo_osd_parameter = remote_xjadeo_osd_node.create_parameter(ossia.ValueType.Int)
-xjadeo_osd_parameter.value = 0
-xjadeo_osd_parameter.default_value = 0
-
-
-
-def osd_video_callback(value):
-  xjadeo_osd_parameter.value = value
-
-def load_video_callback(value):
-  xjadeo_load_parameter.value = value
-
-
-def seek_video_callback(value):
-  xjadeo_seek_parameter.value = value
 
 
 """ video_node_parameter.add_callback(start_video_callback)
@@ -124,21 +69,36 @@ video_seek_parameter.add_callback(seek_video_callback) """
 
 messageq_local = ossia.MessageQueue(local_device)
 
-messageq_redirect = ossia.MessageQueue(local_device)
 
-nodes_to_local=ossia.ossia.list_node_pattern([local_device.root_node], "//start")
-nodes_to_redirect = ossia.ossia.list_node_pattern([local_device.root_node], "/*")
-print("#########################")
-print(nodes_to_redirect[0].children())
-print(nodes_to_local)
-
-for node in nodes_to_local:
+for node in video_nodes.values():
   messageq_local.register(node.parameter)
+
+
+p = re.compile(r'/(\w*)(\d)/(\w*)(\d)/(\w*)')
 
 while(True):
   message = messageq_local.pop()
+  
   if(message != None):
+    print("message")
     parameter, value = message
+    
+    b = p.search(str(parameter.node))
+
+    print(b.group(0))
+    print(b.group(3))
+    print(b.group(4))
+
+    if str(b.group(5)) == "start":
+      if value == True:
+        video_players[int(b.group(4))].start()
+      else:
+        video_players[int(b.group(4))].kill()
+    
+    if str(b.group(5)) == "load":
+        print("load: {}".format(value))
+        video_players[int(b.group(4))].load(value)
+
     print("messageq : " +  str(parameter.node) + " " + str(value))
 
     
