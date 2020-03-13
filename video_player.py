@@ -60,34 +60,26 @@ class VideoPlayerRemote():
         self.__start_remote()
 
     def __start_remote(self):
-        
-        remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo{}".format(self.monitor_id), "127.0.0.1", self.port, self.port+10)
-          
-        remote_xjadeo_quit_node = remote_osc_xjadeo.add_node("/jadeo/quit")
-        self.xjadeo_quit_parameter = remote_xjadeo_quit_node.create_parameter(ossia.ValueType.Impulse)
+        print("remote{}, {}".format(self.port, self.port+10))
+        self.remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo{}".format(self.monitor_id), "127.0.0.1", self.port, self.port+10)
 
-        remote_xjadeo_load_node = remote_osc_xjadeo.add_node("/jadeo/load")
-        self.xjadeo_load_parameter = remote_xjadeo_load_node.create_parameter(ossia.ValueType.String)
+        self.remote_xjadeo_quit_node = self.remote_osc_xjadeo.add_node("/jadeo/quit")
+        self.xjadeo_quit_parameter = self.remote_xjadeo_quit_node.create_parameter(ossia.ValueType.Impulse)
 
-        remote_xjadeo_seek_node = remote_osc_xjadeo.add_node("/jadeo/seek")
-        self.xjadeo_seek_parameter = remote_xjadeo_seek_node.create_parameter(ossia.ValueType.Int)
-        self.xjadeo_seek_parameter.value = 0
-        self.xjadeo_seek_parameter.default_value = 0
+        self.remote_xjadeo_load_node = self.remote_osc_xjadeo.add_node("/jadeo/load")
+        self.xjadeo_load_parameter = self.remote_xjadeo_load_node.create_parameter(ossia.ValueType.String)
 
-        remote_xjadeo_osd_node = remote_osc_xjadeo.add_node("/jadeo/osd/timecode")
-        xjadeo_osd_parameter = remote_xjadeo_osd_node.create_parameter(ossia.ValueType.Int)
-        xjadeo_osd_parameter.value = 0
-    
+        self.remote_xjadeo_seek_node = self.remote_osc_xjadeo.add_node("/jadeo/seek")
+        self.xjadeo_seek_parameter = self.remote_xjadeo_seek_node.create_parameter(ossia.ValueType.Int)
+
     def start(self):
         self.videoplayer.start()
 
     def kill(self):
         self.videoplayer.kill()
 
-    def load(self, path):
-        print("loading")
-        print(path)
-        self.xjadeo_load_parameter.value = path
+    def load(self, load_path):
+        self.xjadeo_load_parameter.value = load_path
 
     def seek(self, frame):
 
@@ -103,6 +95,7 @@ class NodeVideoPlayers():
         self.vplayer=[None]*config.number_of_displays
         for i, v in enumerate(self.vplayer):
             self.vplayer[i] = VideoPlayerRemote(config.video_osc_port + i, i)
+            print(config.video_osc_port + i)
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]
@@ -114,17 +107,3 @@ class NodeVideoPlayers():
 # get_displays_node_parameter = get_displays_node.create_parameter(ossia.ValueType.Int)
 # get_displays_node_parameter.access_mode = ossia.AccessMode.Get
 # get_displays_node_parameter.value = config.number_of_displays
-
-n = NodeVideoPlayers()
-print(n.len())
-n[0].start()
-print("####")
-time.sleep(4)
-print("####")
-n[0].seek(3)
-print("####")
-time.sleep(4)
-print("####")
-#n[0].load("/home/ion/Videos/telegrafo_480.mp4")
-
-input("bu")

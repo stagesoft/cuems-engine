@@ -85,9 +85,6 @@ while(True):
     
     b = p.search(str(parameter.node))
 
-    print(b.group(0))
-    print(b.group(3))
-    print(b.group(4))
 
     if str(b.group(5)) == "start":
       if value == True:
@@ -96,7 +93,7 @@ while(True):
         video_players[int(b.group(4))].kill()
     
     if str(b.group(5)) == "load":
-        print("load: {}".format(value))
+
         video_players[int(b.group(4))].load(value)
 
     print("messageq : " +  str(parameter.node) + " " + str(value))
