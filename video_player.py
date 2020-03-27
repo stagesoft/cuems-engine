@@ -16,10 +16,12 @@ class VideoPlayer(threading.Thread):
         self.stdout = None
         self.stderr = None
         self.monitor_id = monitor_id
+        self.firstrun = True
+        
+        
+    def __init_trhead(self):
         threading.Thread.__init__(self)
         self.daemon = True
-        self.started = False
-        
 
     def run(self):
         print("run")
@@ -27,7 +29,7 @@ class VideoPlayer(threading.Thread):
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([config.videoplayer_path, "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([config.settings["videoplayer_path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -40,16 +42,18 @@ class VideoPlayer(threading.Thread):
     
     def kill(self):
         self.p.kill()
-
+        self.started = False
     def start(self):
-        if self.started:
-            if not self.is_alive():
-                self.__init__(self.port, self.monitor_id)
-                threading.Thread.start(self)
-        else:
+        if self.firstrun:
+            self.__init_trhead()
             threading.Thread.start(self)
-            self.started = True
-    
+            self.firstrun = False
+        else:
+            if not self.is_alive():
+                self.__init_trhead()
+                threading.Thread.start(self)
+            else:
+                logging.debug("VideoPlayer allready running")
 
 
 class VideoPlayerRemote():
@@ -66,11 +70,11 @@ class VideoPlayerRemote():
         self.remote_xjadeo_quit_node = self.remote_osc_xjadeo.add_node("/jadeo/quit")
         self.xjadeo_quit_parameter = self.remote_xjadeo_quit_node.create_parameter(ossia.ValueType.Impulse)
 
-        self.remote_xjadeo_load_node = self.remote_osc_xjadeo.add_node("/jadeo/load")
-        self.xjadeo_load_parameter = self.remote_xjadeo_load_node.create_parameter(ossia.ValueType.String)
-
         self.remote_xjadeo_seek_node = self.remote_osc_xjadeo.add_node("/jadeo/seek")
         self.xjadeo_seek_parameter = self.remote_xjadeo_seek_node.create_parameter(ossia.ValueType.Int)
+
+        self.remote_xjadeo_load_node = self.remote_osc_xjadeo.add_node("/jadeo/load")
+        self.xjadeo_load_parameter = self.remote_xjadeo_load_node.create_parameter(ossia.ValueType.String)
 
     def start(self):
         self.videoplayer.start()
@@ -82,20 +86,19 @@ class VideoPlayerRemote():
         self.xjadeo_load_parameter.value = load_path
 
     def seek(self, frame):
-
         self.xjadeo_seek_parameter.value = frame
-    
-    def quit(self, value):
 
-        self.xjadeo_quit_parameter.value = value
+    def quit(self):
+
+        self.xjadeo_quit_parameter.value = True
 
 class NodeVideoPlayers():
 
     def __init__(self):
-        self.vplayer=[None]*config.number_of_displays
+        self.vplayer=[None]*config.settings["number_of_displays"]
         for i, v in enumerate(self.vplayer):
-            self.vplayer[i] = VideoPlayerRemote(config.video_osc_port + i, i)
-            print(config.video_osc_port + i)
+            self.vplayer[i] = VideoPlayerRemote(config.settings["video_osc_port"] + i, i)
+            print(config.settings["video_osc_port"] + i)
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]

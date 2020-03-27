@@ -26,14 +26,14 @@ class InternalOscServer(liblo.ServerThread):
         self.destination=osc_dest
         
         
-        self.video_player=[None]*config.number_of_displays
+        self.video_player=[None]*config.settings["number_of_displays"]
 
         self.OSC = [self.OscCommand("/test", "ifs", self.test_callback, "/test int float string"),
                     self.OscCommand("/test", "i", self.test_la_callback, "/test int"),
                     self.OscCommand("/test", None, self.test_na_callback, "test unknow arguments"),
-                    self.OscCommand("/node{}/audioplayer/start".format(config.node_id), "i", self.start_video_callback, "start audio player"),
-                    self.OscCommand("/node{}/videoplayer/start".format(config.node_id), "i", self.start_video_callback, "start video player"),
-                    self.OscCommand("/node{}/get/numberofdisplays".format(config.node_id), None, self.get_num_displays_callback, "Get number of displays"),
+                    self.OscCommand("/node{}/audioplayer/start".format(config.settings["node_id"]), "i", self.start_video_callback, "start audio player"),
+                    self.OscCommand("/node{}/videoplayer/start".format(config.settings["node_id"]), "i", self.start_video_callback, "start video player"),
+                    self.OscCommand("/node{}/get/numberofdisplays".format(config.settings["node_id"]), None, self.get_num_displays_callback, "Get number of displays"),
                     ]
 
         for i in self.OSC:
@@ -56,16 +56,16 @@ class InternalOscServer(liblo.ServerThread):
                     self.video_player[display_id] = None
             
             if self.video_player[display_id] is None:
-                self.video_player[display_id] = VideoPlayer(config.video_osc_port + display_id, display_id)
+                self.video_player[display_id] = VideoPlayer(config.settings["video_osc_port"] + display_id, display_id)
                 self.video_player[display_id].start()
         
         elif __debug__:
-            logging.debug("{} - Display index out of range: {}, number of displays: {}".format(path, display_id, config.number_of_displays))
+            logging.debug("{} - Display index out of range: {}, number of displays: {}".format(path, display_id, config.settings["number_of_displays"]))
         
     def get_num_displays_callback(self, path):
         
-        print("received message {}, responding with: {}".format(path, config.number_of_displays))
-        liblo.send(self.destination, "/node{}/numberofdisplays".format(config.node_id), config.number_of_displays)
+        print("received message {}, responding with: {}".format(path, config.settings["number_of_displays"]))
+        liblo.send(self.destination, "/node{}/numberofdisplays".format(config.settings["node_id"]), config.settings["number_of_displays"])
         
 
     def test_callback(self, path, args):
