@@ -1,1 +1,42 @@
-<?xml version="1.0" encoding="UTF-8"?><Settings date="2020-03-27 18:24:34.114109">blu<inner>contenido</inner></Settings>
+<Settings date="2020-03-28 20:04:59.408869">
+    <node id="0">
+        <internal_osc_dest_host>localhost</internal_osc_dest_host>
+        <internal_osc_in_port>7700</internal_osc_in_port>
+        <internal_osc_out_port>7701</internal_osc_out_port>
+        <video_osc_port>7710</video_osc_port>
+        <videoplayer_path>/home/ion/src/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
+        <number_of_displays>2</number_of_displays>
+    </node>
+    <node id="1">
+        <internal_osc_dest_host>localhost</internal_osc_dest_host>
+        <internal_osc_in_port>7800</internal_osc_in_port>
+        <internal_osc_out_port>7801</internal_osc_out_port>
+        <video_osc_port>7810</video_osc_port>
+        <videoplayer_path>/home/ion/src/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
+        <number_of_displays>2</number_of_displays>
+    </node>
+    <purr id="5">
+        <internal_osc_dest_host>localhost</internal_osc_dest_host>
+        <internal_osc_in_port>7800</internal_osc_in_port>
+        <internal_osc_out_port>7801</internal_osc_out_port>
+        <video_osc_port>7810</video_osc_port>
+        <videoplayer_path>/home/ion/src/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
+        <number_of_displays>2</number_of_displays>
+    </purr>
+    <node id="6">
+        <internal_osc_dest_host>localhost</internal_osc_dest_host>
+        <internal_osc_in_port>7800</internal_osc_in_port>
+        <internal_osc_out_port>7801</internal_osc_out_port>
+        <video_osc_port>7810</video_osc_port>
+        <videoplayer_path>/home/ion/src/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
+        <number_of_displays>2</number_of_displays>
+    </node>
+    <purr id="6">
+        <internal_osc_dest_host>localhost</internal_osc_dest_host>
+        <internal_osc_in_port>7800</internal_osc_in_port>
+        <internal_osc_out_port>7801</internal_osc_out_port>
+        <video_osc_port>7810</video_osc_port>
+        <videoplayer_path>/home/ion/src/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
+        <number_of_displays>2</number_of_displays>
+    </purr>
+</Settings>
