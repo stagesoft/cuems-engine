@@ -4,23 +4,24 @@ import os
 import pyossia as ossia
 
 from log import *
-import config
+from settings import Settings
 
 import time
 
 
 class VideoPlayer(threading.Thread):
-    def __init__(self, port, monitor_id):
+    def __init__(self, port, monitor_id, settings):
         print("init monitor_id:{}".format(monitor_id))
         self.port = port
         self.stdout = None
         self.stderr = None
         self.monitor_id = monitor_id
         self.firstrun = True
+        self.settings = settings
         
         
     def __init_trhead(self):
-        threading.Thread.__init__(self)
+        super().__init__()
         self.daemon = True
 
     def run(self):
@@ -29,7 +30,7 @@ class VideoPlayer(threading.Thread):
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([config.settings["videoplayer_path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.settings['node']['0']["videoplayer_path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -57,10 +58,10 @@ class VideoPlayer(threading.Thread):
 
 
 class VideoPlayerRemote():
-    def __init__(self, port, monitor_id):
+    def __init__(self, port, monitor_id, settings):
         self.port = port
         self.monitor_id = monitor_id
-        self.videoplayer = VideoPlayer(self.port, self.monitor_id)
+        self.videoplayer = VideoPlayer(self.port, self.monitor_id, settings)
         self.__start_remote()
 
     def __start_remote(self):
@@ -94,11 +95,11 @@ class VideoPlayerRemote():
 
 class NodeVideoPlayers():
 
-    def __init__(self):
-        self.vplayer=[None]*config.settings["number_of_displays"]
+    def __init__(self, settings):
+        self.vplayer=[None]*int(settings['node']['0']["number_of_displays"])
         for i, v in enumerate(self.vplayer):
-            self.vplayer[i] = VideoPlayerRemote(config.settings["video_osc_port"] + i, i)
-            print(config.settings["video_osc_port"] + i)
+            self.vplayer[i] = VideoPlayerRemote(int(settings['node']['0']["video_osc_port"]) + i, i, settings)
+            print(int(settings['node']['0']["video_osc_port"]) + i)
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]

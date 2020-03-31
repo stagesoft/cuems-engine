@@ -21,23 +21,21 @@ def write(settings_dict):
                 c= ET.SubElement(b, key)
                 c.text = str(value)
 
-    ET.dump(a)
     tree=ET.ElementTree(a)
     tree.write('write_test.xml')
 
 def read():
-    settings = {}
+    settings_dict = {}
     tree = ET.parse('test.xml')
     root = tree.getroot()
     for child in root:
-        if not child.tag in settings:
-            settings.update({child.tag : {} })
+        if not child.tag in settings_dict:
+            settings_dict.update({child.tag : {} })
         
-        settings[child.tag][child.attrib['id']] = {}
+        settings_dict[child.tag][child.attrib['id']] = {}
         for child_ in child:
-            settings[child.tag][child.attrib['id']].update({child_.tag : child_.text})
+            settings_dict[child.tag][child.attrib['id']].update({child_.tag : child_.text})
 
-    print(settings)
-    return settings
+    return settings_dict
 
 write(read())

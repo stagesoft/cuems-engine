@@ -22,7 +22,7 @@ class InternalOscServer(liblo.ServerThread):
     lprotos = {0: 'default', 1: 'UDP', 2: 'UNIX', 4: 'TCP'}
 
     def __init__(self, osc_in_port, protocol, osc_dest):
-        liblo.ServerThread.__init__(self, osc_in_port, protocol)
+        super().__init__(osc_in_port, protocol)
         self.destination=osc_dest
         
         
@@ -44,7 +44,6 @@ class InternalOscServer(liblo.ServerThread):
         if __debug__:
             self.add_method(None, None, self.catchall_callback)
             logging.debug('InternalOscServer starting on {} port: {}'.format(self.lprotos[self.protocol], self.port))
-
 
 
     def start_video_callback(self, path, args):

@@ -5,15 +5,18 @@ import re
 import config
 from video_player import NodeVideoPlayers 
 from log import *
+from settings import Settings
 
 
 
+settings = Settings()
+settings.read()
 
-video_players=NodeVideoPlayers()
+video_players=NodeVideoPlayers(settings)
 
 
 
-local_device = ossia.LocalDevice("Node {}".format(config.settings["node_id"]))
+local_device = ossia.LocalDevice("Node {}".format(list(settings['node'].keys())[0]))
 
 local_device.create_oscquery_server(3456, 5678, True)
 #local_device.create_osc_server("127.0.0.1", 9997, 9996, True)
