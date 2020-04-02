@@ -7,10 +7,10 @@ from log import *
 
 class Settings(dict):
 
-    def __init__(self,*arg,**kw):
+    def __init__(self,filename, *arg,**kw):
       super(Settings, self).__init__(*arg, **kw)
       self.loaded = False
-      self.filename = "settings.xml"
+      self.filename = filename
 
     def __backup(self):
         if os.path.isfile(self.filename):

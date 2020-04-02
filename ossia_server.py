@@ -10,7 +10,7 @@ from settings import Settings
 
 
 
-settings = Settings()
+settings = Settings("settings.xml")
 settings.read()
 
 video_players=NodeVideoPlayers(settings)
@@ -19,17 +19,17 @@ audio_players=NodeAudioPlayers(settings)
 
 local_device = ossia.LocalDevice("Node {}".format(list(settings['node'].keys())[0]))
 
-local_device.create_oscquery_server(3456, 5678, True)
-#local_device.create_osc_server("127.0.0.1", 9997, 9996, True)
+local_device.create_oscquery_server(int(settings['node']['0']['internal_osc_out_port']), int(settings['node']['0']['internal_osc_in_port']), True)
+
+print("OscQuery device listening on port {}".format(settings['node']['0']['internal_osc_in_port']))
 
 video_nodes = {}
 audio_nodes = {}
 
 
 for display_id, videoplayer in enumerate(video_players):
-  print(display_id)
-  print(videoplayer)
 
+  #TODO: extract parameters from html
 
   video_nodes["start{}".format(display_id)]=local_device.add_node("/node{}/videoplayer{}/start".format(config.settings["node_id"], display_id))
   #video_node.critical = True
@@ -49,8 +49,7 @@ for display_id, videoplayer in enumerate(video_players):
 ## end video nodes
 
 for card_id, audioplayer in enumerate(audio_players):
-  print(card_id)
-  print(audioplayer)
+
 
 
   audio_nodes["start{}".format(card_id)]=local_device.add_node("/node{}/audioplayer{}/start".format(config.settings["node_id"], card_id))
@@ -64,9 +63,9 @@ for card_id, audioplayer in enumerate(audio_players):
   audio_nodes["load{}".format(card_id)].create_parameter(ossia.ValueType.String)
   audio_nodes["load{}".format(card_id)].parameter.access_mode = ossia.AccessMode.Set
 
-  audio_nodes["seek{}".format(card_id)]=local_device.add_node("/node{}/audioplayer{}/seek".format(config.settings["node_id"], card_id))
-  audio_nodes["seek{}".format(card_id)].create_parameter(ossia.ValueType.Int)
-  audio_nodes["seek{}".format(card_id)].parameter.access_mode = ossia.AccessMode.Set
+  audio_nodes["level{}".format(card_id)]=local_device.add_node("/node{}/audioplayer{}/level".format(config.settings["node_id"], card_id))
+  audio_nodes["level{}".format(card_id)].create_parameter(ossia.ValueType.Int)
+  audio_nodes["level{}".format(card_id)].parameter.access_mode = ossia.AccessMode.Set
 
 
 ## end audio nodes
@@ -89,12 +88,11 @@ while(True):
   message = messageq_local.pop()
   
   if(message != None):
-    print("message")
     parameter, value = message
     
     b = p.search(str(parameter.node))
 
-    #TODO: convertir a cases?
+    #TODO: parameters from XML
 
     if str(b.group(3)) == "videoplayer":
     # videoplayer cases
@@ -125,12 +123,13 @@ while(True):
 
           audio_players[int(b.group(4))].load(value)
 
-      if str(b.group(5)) == "seek":
+      if str(b.group(5)) == "level":
 
-          audio_players[int(b.group(4))].seek(value)
+          audio_players[int(b.group(4))].level(value)
 
     print("messageq : " +  str(parameter.node) + " " + str(value))
 
     
 
-  time.sleep(0.01)
+
+settings.write()

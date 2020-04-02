@@ -11,7 +11,6 @@ import time
 
 class VideoPlayer(threading.Thread):
     def __init__(self, port, monitor_id, settings):
-        print("init monitor_id:{}".format(monitor_id))
         self.port = port
         self.stdout = None
         self.stderr = None
@@ -25,7 +24,6 @@ class VideoPlayer(threading.Thread):
         self.daemon = True
 
     def run(self):
-        print("run")
         if __debug__:
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
@@ -65,7 +63,6 @@ class VideoPlayerRemote():
         self.__start_remote()
 
     def __start_remote(self):
-        print("remote{}, {}".format(self.port, self.port+10))
         self.remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo{}".format(self.monitor_id), "127.0.0.1", self.port, self.port+10)
 
         self.remote_xjadeo_quit_node = self.remote_osc_xjadeo.add_node("/jadeo/quit")
@@ -99,15 +96,9 @@ class NodeVideoPlayers():
         self.vplayer=[None]*int(settings['node']['0']["number_of_displays"])
         for i, v in enumerate(self.vplayer):
             self.vplayer[i] = VideoPlayerRemote(int(settings['node']['0']["video_osc_port"]) + i, i, settings)
-            print(int(settings['node']['0']["video_osc_port"]) + i)
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]
 
     def len(self):
         return len(self.vplayer)
-
-# get_displays_node=local_device.add_node("/node{}/get/numberofdisplays".format(config.node_id))
-# get_displays_node_parameter = get_displays_node.create_parameter(ossia.ValueType.Int)
-# get_displays_node_parameter.access_mode = ossia.AccessMode.Get
-# get_displays_node_parameter.value = config.number_of_displays
