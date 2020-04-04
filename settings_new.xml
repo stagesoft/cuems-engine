@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cms:Settings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">    
+<node id="0">
+        <osc_dest_host>localhost</osc_dest_host>
+            <osc_in_port>7700</osc_in_port>
+            <osc_out_port>7701</osc_out_port>
+            <videoplayer>
+                <path>/usr/bin/xjadeo</path>
+                <outputs>2</outputs>
+                <instance id="0">
+                    <osc_in_port>7710</osc_in_port>
+                </instance>
+                <instance id="1">
+                    <osc_in_port>7710</osc_in_port>
+                </instance>
+            </videoplayer>
+            <audioplayer>
+                <path>/audio/player/path</path>
+                <audio_cards>2</audio_cards>
+                <instance id="0">
+                    <osc_in_port>7720</osc_in_port>
+                </instance>
+
+            </audioplayer>
+    </node>
+</cms:Settings>

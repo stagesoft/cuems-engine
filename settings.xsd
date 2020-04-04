@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- describing schema for sample xml -->
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
+    <xs:element name="Settings">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="node">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="osc_dest_host" type="xs:string"></xs:element>
+                            <xs:element name="osc_in_port" type="xs:int"></xs:element>
+                            <xs:element name="osc_out_port" type="xs:int"></xs:element>
+                            <xs:element name="videoplayer">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="path" type="xs:string"></xs:element>
+                                        <xs:element name="outputs" type="xs:int"></xs:element>
+                                        <xs:element name="instance" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="osc_in_port" type="xs:int"></xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="id" type="xs:int" use="required"></xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="audioplayer">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="path" type="xs:string"></xs:element>
+                                        <xs:element name="audio_cards" type="xs:int"></xs:element>
+                                        <xs:element name="instance">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="osc_in_port" type="xs:int"></xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="id" type="xs:int" use="required"></xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="id" type="xs:int"></xs:attribute>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

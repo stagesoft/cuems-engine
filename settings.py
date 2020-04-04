@@ -2,8 +2,17 @@ import xml.etree.ElementTree as ET
 import datetime  as DT
 import os
 from log import *
+import xmlschema
 
+import sys
 
+schema = xmlschema.XMLSchema("settings.xsd")
+print(schema.validate('settings_new.xml'))
+
+if schema.is_valid('settings_new.xml'):
+     print("XML VALIDO!")
+     sys.exit()
+print("bla")
 
 class Settings(dict):
 
@@ -60,3 +69,8 @@ class Settings(dict):
                 self[child.tag][child.attrib['id']].update({child_.tag : child_.text})
         self.loaded = True
         return self
+
+""" settings=Settings("settings_new.xml")
+settings.read()
+print(settings)
+settings.write() """
