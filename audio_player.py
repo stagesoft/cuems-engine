@@ -12,13 +12,13 @@ import time
 class AudioPlayer(threading.Thread):
     # class that runs the player in its own thread
 
-    def __init__(self, port, card_id, settings):
+    def __init__(self, port, card_id, path):
         self.port = port
         self.stdout = None
         self.stderr = None
         self.card_id = card_id
         self.firstrun = True
-        self.settings = settings
+        self.path = path
         
         
     def __init_trhead(self):
@@ -32,7 +32,7 @@ class AudioPlayer(threading.Thread):
         try:
             # exec call -- ad command line args here as list 
             # TODO: get command line args from xml
-            self.p=subprocess.Popen([self.settings['node'][0]["audioplayer"]["path"], "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.path, "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
@@ -61,10 +61,10 @@ class AudioPlayer(threading.Thread):
 
 class AudioPlayerRemote():
     # class that exposes osc control of the player and manages the player
-    def __init__(self, port, card_id, settings):
+    def __init__(self, port, card_id, path):
         self.port = port
         self.card_id = card_id
-        self.audioplayer = AudioPlayer(self.port, self.card_id, settings)
+        self.audioplayer = AudioPlayer(self.port, self.card_id, path)
         self.__start_remote()
 
     def __start_remote(self):
@@ -98,12 +98,12 @@ class AudioPlayerRemote():
 class NodeAudioPlayers():
     # class to group  al the audio players in a node
 
-    def __init__(self, settings):
+    def __init__(self, audioplayer_settings):
         #initialize array to store the player with the number of audio cards we have ( no more players than audio outputs for the moment)
-        self.aplayer=[None]*settings['node'][0]["audioplayer"]["audio_cards"]
+        self.aplayer=[None]*audioplayer_settings["audio_cards"]
         #start a remote controller for each audio output (could be multiple channels), it will controll it own player
         for i, v in enumerate(self.aplayer):
-            self.aplayer[i] = AudioPlayerRemote(settings['node'][0]["audioplayer"]["instance"][i]["osc_in_port"], i, settings)
+            self.aplayer[i] = AudioPlayerRemote(audioplayer_settings["instance"][i]["osc_in_port"], i, audioplayer_settings["path"])
     
     def __getitem__(self, subscript):
         return self.aplayer[subscript]

@@ -10,13 +10,13 @@ import time
 
 
 class VideoPlayer(threading.Thread):
-    def __init__(self, port, monitor_id, settings):
+    def __init__(self, port, monitor_id, path):
         self.port = port
         self.stdout = None
         self.stderr = None
         self.monitor_id = monitor_id
         self.firstrun = True
-        self.settings = settings
+        self.path = path
         
         
     def __init_trhead(self):
@@ -28,7 +28,7 @@ class VideoPlayer(threading.Thread):
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([self.settings['node'][0]["videoplayer"]["path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.path, "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -56,10 +56,10 @@ class VideoPlayer(threading.Thread):
 
 
 class VideoPlayerRemote():
-    def __init__(self, port, monitor_id, settings):
+    def __init__(self, port, monitor_id, path):
         self.port = port
         self.monitor_id = monitor_id
-        self.videoplayer = VideoPlayer(self.port, self.monitor_id, settings)
+        self.videoplayer = VideoPlayer(self.port, self.monitor_id, path)
         self.__start_remote()
 
     def __start_remote(self):
@@ -92,10 +92,10 @@ class VideoPlayerRemote():
 
 class NodeVideoPlayers():
 
-    def __init__(self, settings):
-        self.vplayer=[None]*settings['node'][0]["videoplayer"]["outputs"]
+    def __init__(self, videoplayer_settings):
+        self.vplayer=[None]*videoplayer_settings["outputs"]
         for i, v in enumerate(self.vplayer):
-            self.vplayer[i] = VideoPlayerRemote(settings['node'][0]["videoplayer"]["instance"][i]["osc_in_port"], i, settings)
+            self.vplayer[i] = VideoPlayerRemote(videoplayer_settings["instance"][i]["osc_in_port"], i, videoplayer_settings["path"])
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]

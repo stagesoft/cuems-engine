@@ -12,16 +12,20 @@ from settings import Settings
 
 settings = Settings("settings.xsd","settings_new.xml")
 settings.read()
+settings_node_0= settings["node"][0]
 
-video_players=NodeVideoPlayers(settings)
-audio_players=NodeAudioPlayers(settings)
+videoplayer_settings = settings_node_0["videoplayer"]
+audioplayer_settings = settings_node_0["audioplayer"]
+
+video_players=NodeVideoPlayers(videoplayer_settings)
+audio_players=NodeAudioPlayers(audioplayer_settings)
 
 
-local_device = ossia.LocalDevice("Node {}".format(settings["node"][0]["@id"]))
+local_device = ossia.LocalDevice("Node {}".format(settings_node_0["@id"]))
 
-local_device.create_oscquery_server(settings['node'][0]['osc_out_port'], settings['node'][0]['osc_in_port'], True)
+local_device.create_oscquery_server(settings_node_0['osc_out_port'], settings_node_0['osc_in_port'], True)
 
-print("OscQuery device listening on port {}".format(settings['node'][0]['osc_in_port']))
+print("OscQuery device listening on port {}".format(settings_node_0['osc_in_port']))
 
 video_nodes = {}
 audio_nodes = {}
