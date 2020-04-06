@@ -28,7 +28,7 @@ class VideoPlayer(threading.Thread):
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([self.settings['node']['0']["videoplayer_path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.settings['node'][0]["videoplayer"]["path"], "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -93,9 +93,9 @@ class VideoPlayerRemote():
 class NodeVideoPlayers():
 
     def __init__(self, settings):
-        self.vplayer=[None]*int(settings['node']['0']["number_of_displays"])
+        self.vplayer=[None]*settings['node'][0]["videoplayer"]["outputs"]
         for i, v in enumerate(self.vplayer):
-            self.vplayer[i] = VideoPlayerRemote(int(settings['node']['0']["video_osc_port"]) + i, i, settings)
+            self.vplayer[i] = VideoPlayerRemote(settings['node'][0]["videoplayer"]["instance"][i]["osc_in_port"], i, settings)
     
     def __getitem__(self, subscript):
         return self.vplayer[subscript]
