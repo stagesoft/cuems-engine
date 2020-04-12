@@ -1,26 +1,24 @@
 from timecode import Timecode
-from mido import Message
 
 
+class CTimecode(Timecode):
+    def __init__(self, start_timecode=None, start_seconds=None, frames=None, framerate=25):
+        super().__init__(framerate, start_timecode, start_seconds, frames)
+    
+    
+    @property
+    def milliseconds(self):
+        """returns time as milliseconds
+        """
+        #TODO: float math for other framerates                               
+        millis_per_frame = int(1000/self._int_framerate)
+        return (millis_per_frame * self.frame_number)
 
-
-msg = Message('quarter_frame', note=60)
-
-
-
-
-
-
-
-
-
-
-tc1 = Timecode('25', '00:00:00:00')
-tc2 = Timecode('25', '00:00:00:10')
-tc3 = tc1 + tc2
-print(tc3)
-print(tc3.frames)
-print(tc3.frameratepip)
-assert tc3.framerate == '25'
-assert tc3.frames == 12
-assert tc3 == '00:00:00:11'
+    def __hash__(self):
+        return hash((self.milliseconds, self.milliseconds))
+    
+    def __eq__(self, other):
+        """Compares seconds of tc""" #TODO: decide if we cheek framerate and frame equality or time equiality 
+        if isinstance(other, CTimecode):
+            return self.milliseconds == other.milliseconds
+        return NotImplemented

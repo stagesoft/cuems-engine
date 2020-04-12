@@ -1,19 +1,66 @@
 from midiutil.MidiFile import MIDIFile
 from numpy import interp
-from collections import defaultdict
+from mtc import *
+
 import random
 
 import pprint
 
+class Cue():
+    def __init__(self):
+        self._cue = dict()
 
-class DmxToMidi():
+
+
+
+
+class DmxUniverse(dict):
+
+    def __init__(self, *arg,**kw):
+      super().__init__(*arg,**kw)
+    
+
+
+    def channel(self, channel):
+        return super().__getitem__(channel)
+
+    def set_channel(self, channel, value):
+        if value > 255:
+            value = 255
+        super().__setitem__(channel, value)
+
+    def setall(self, value):
+        for channel in range(512):
+            super().__setitem__(channel, value)
+        return self      #TODO: valorate return self to be able to do things like 'universe_full = DmxUniverse().setall(255)'
+
+class DmxScene(dict):
+    def __init__(self, *arg,**kw):
+      super().__init__(*arg,**kw)
+
+    def universe(self, num=0):
+        return super().__getitem__(num)
+      
+    def set_universe(self, universe, num=0):
+        super().__setitem__(num, universe)
+
+       
+
+        #merge two universes, priority on the newcoming
+    def merge_universe(self, universe, num=0):
+        super().__getitem__(num).update(universe)
+
+
+class DmxCue(Cue):
+        pass
+
+class DmxSceneList():
 
     def __init__(self):
         self.file = None
         self.track = None
         self.time = None
-        self._dmx_channel = dict()
-        self._channel = [0] * 16
+
         self._controller = [0] * 128
         self.events = dict()
         self._midifile = MIDIFile(numTracks=1, removeDuplicates=False,  deinterleave=True)
@@ -22,27 +69,15 @@ class DmxToMidi():
         self._midifile.addTrackName(track, time, "Sample Track")
         self._midifile.addTempo(track, time, 480)
 
-    def channel(self, num):
-        return self._dmx_channel[num]
 
-    def channel_set(self, num, value):
-        if value > 255:
-            value = 255
-        self._dmx_channel[num] = value
-
-    def channel_setall(self, value):
-        for channel in range(512):
-            self._dmx_channel[channel] = value
-
-    def add_event(self, time, fadetime=0):
+    def add_event(self, time, dmxscene, in_time, out_time):
         if time in self.events:
-            merge_dmx_channel = {**self.events[time]["dmx"], **self._dmx_channel}
-            self.events[time] = {'fadetime': fadetime,
-            'dmx': dict(merge_dmx_channel)}
+            merge_dmx_scene = {**self.events[time]["dmx_scene"], **dmxscene}
+            self.events[time] = {'in_time': in_time, 'out_time' : out_time,
+            'dmx_scene': dict(merge_dmx_scene)}
         else:
-            self.events[time] = {'fadetime': fadetime,
-                'dmx': dict(self._dmx_channel)}
-        self._dmx_channel.clear()
+            self.events[time] = {'in_time': in_time, 'out_time' : out_time,
+                'dmx_scene': dict(dmxscene)}
 
     def print_events(self, time=None):
         print(self.events)
@@ -50,7 +85,7 @@ class DmxToMidi():
     def dmx_to_midi(self, dmx_list):
         
         #dmx_midi_matrix = [[0 for i in range(128)] for j in range(16)]
-        dmx_midi_matrix = defaultdict(dict)
+        dmx_midi_matrix = dict()
         for channel, value in dmx_list.items():
 
             cc_value = int(interp(value, [0, 255], [0, 127]))
@@ -80,59 +115,43 @@ class DmxToMidi():
         self._midifile.writeFile(binfile)
         binfile.close()
 
-d = DmxToMidi()
-
-d.channel_setall(0)
-d.add_event(0)
-
-d.channel_set(1, 255)
-d.add_event(1)
-d.channel_set(2, 255)
-d.add_event(2)
-d.channel_set(3, 255)
-d.add_event(2)
-
-
-time = 3.9
-
-for x in range(256):
-    for y in range(100):
-        d.channel_set(y,x)
-    time = round(time +0.1, 2)
-    d.add_event(time)
-time = 3.9
-
-for x in range(256):
-    for y in range(101,200):
-        d.channel_set(y,x)
-    time = round(time +0.3, 2)
-    d.add_event(time)
-time = 3.9
-
-for x in range(256):
-    for y in range(201,300):
-        d.channel_set(y,x)
-    time = round(time +0.6, 2)
-    d.add_event(time)
-
-time = 3.9
-
-for x in range(256,-1,-1):
-    for y in range(301,400):
-        d.channel_set(y,x)
-    time = round(time +0.2, 2)
-    d.add_event(time)
-
-time = 3.9
-
-for x in range(256,-1,-1):
-    for y in range(401,512):
-        d.channel_set(y,x)
-    time = round(time +0.5, 2)
-    d.add_event(time)
 
 
 
+scene = DmxScene({0:DmxUniverse({0:230, 1:230})})
 
-# d.print_events()
-d.write()
+
+scene2 = DmxScene({1:DmxUniverse({0:20, 1:20})})
+#universe_full2 = DmxUniverse().setall(255)
+#scene2.set_universe(universe_full2, 2)
+
+
+universe = DmxUniverse({0:10, 1:15, 2:15})
+
+universe[3]=255
+
+
+scene.set_universe(universe, 1)
+
+universe_full = DmxUniverse().setall(255)
+
+#scene.set_universe(universe_full, 2)
+scene.merge_universe(scene[0], 1)
+
+
+scene_list = DmxSceneList()
+scene_list.add_event(CTimecode('00:00:01:00'), scene, 2, 3)
+
+scene_list.add_event(CTimecode(frames=51), scene2, 12, 13)
+scene_list.print_events()
+
+a = CTimecode('00:00:01:00')
+b = CTimecode(frames=26)
+c = CTimecode('00:00:01:00', framerate=30)
+print(a.frame_number)
+print(c.frame_number)
+print(a.milliseconds)
+print(c.milliseconds)
+assert a == a
+assert a == b
+assert a != c
