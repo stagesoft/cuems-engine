@@ -3,10 +3,11 @@ import time
 import re
 
 import config
-from video_player import NodeVideoPlayers
-from audio_player import NodeAudioPlayers
+
+from VideoPlayer import NodeVideoPlayers
+from AudioPlayer import NodeAudioPlayers
 from log import *
-from settings import Settings
+from Settings import Settings
 
 settings = Settings("settings.xsd", "settings_new.xml")
 settings.read()

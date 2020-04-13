@@ -50,8 +50,8 @@ class Settings(dict):
     def xmlfile(self, path):
         if os.path.isfile(path):
             self._xmlfile = path
-        else:
-            raise FileNotFoundError("xml file not found")
+        #else:
+        #    raise FileNotFoundError("xml file not found")
 
 
 
@@ -89,3 +89,22 @@ class Settings(dict):
         super().__init__(schema.to_dict(xml_file, validation='strict'))
         self.loaded = True
         return self
+
+    def data2xml(self, name='data'):
+        r = ET.Element(name)
+        return ET.tostring(self.buildxml(r, super()))
+
+    def buildxml(self, r, d):
+        if isinstance(d, dict):
+            for k, v in d.iteritems():
+                s = ET.SubElement(r, k)
+                self.buildxml(s, v)
+        elif isinstance(d, tuple) or isinstance(d, list):
+            for v in d:
+                s = ET.SubElement(r, 'i')
+                self.buildxml(s, v)
+        elif isinstance(d, str):
+            r.text = d
+        else:
+            r.text = str(d)
+        return r

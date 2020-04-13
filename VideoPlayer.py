@@ -4,7 +4,7 @@ import os
 import pyossia as ossia
 
 from log import *
-from settings import Settings
+from Settings import Settings
 
 import time
 
