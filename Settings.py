@@ -13,10 +13,9 @@ class Settings(dict):
     def __init__(self,schema=None,xmlfile=None,*arg,**kw):
       super().__init__(*arg, **kw)
       self.loaded = False
-      self._xmlfile = None
-      self._schema = None
       self.schema = schema
       self.xmlfile = xmlfile
+      self.xmldata = None
       
     
     def __backup(self):
@@ -48,33 +47,17 @@ class Settings(dict):
 
     @xmlfile.setter
     def xmlfile(self, path):
-        if os.path.isfile(path):
-            self._xmlfile = path
+        #if os.path.isfile(path): #TODO: clean this and backup
+        self._xmlfile = path
         #else:
         #    raise FileNotFoundError("xml file not found")
 
 
 
-    # def write(self):
-    #     a = ET.Element('a')
-    #     a.tag = "Settings"
-    #     a.attrib['date'] = str(DT.datetime.now())
-        
+    def write(self):
 
-
-    #     for node, node_id_dict in self.items():
-
-    #         for node_id, values_dict in node_id_dict.items():
-
-    #             b= ET.SubElement(a, node, id = node_id)
-
-    #             for key, value in values_dict.items():
-    #                 c= ET.SubElement(b, key)
-    #                 c.text = str(value)
-
-    #     tree=ET.ElementTree(a)
-    #     self.__backup()
-    #     tree.write(self._xmlfile)
+       # self.__backup()
+        ET.ElementTree(self.xmldata).write(self.xmlfile)
 
     def validate(self):
         schema_file = open(self.schema)
@@ -90,21 +73,40 @@ class Settings(dict):
         self.loaded = True
         return self
 
-    def data2xml(self, name='data'):
-        r = ET.Element(name)
-        return ET.tostring(self.buildxml(r, super()))
+    def data2xml(self, obj):
+        xml_tree = ET.Element(type(obj).__name__)
+        self.xmldata = self.buildxml(xml_tree, obj)
 
-    def buildxml(self, r, d):
+    def buildxml(self, xml_tree, d): #TODO: clean variable names, simplify¿
         if isinstance(d, dict):
-            for k, v in d.iteritems():
-                s = ET.SubElement(r, k)
+            for k, v in d.items():
+                if isinstance(k, str):
+                    s = ET.SubElement(xml_tree, k)
+                    
+                elif isinstance(k, (dict)):
+                    s = ET.SubElement(xml_tree, type(k).__name__)
+                    s.text = k
+                elif isinstance(k, (int, float)):
+                    s = ET.SubElement(xml_tree, type(v).__name__, id=str(k))
+                    
+                else:
+                    s = ET.SubElement(xml_tree, type(k).__name__)
+                
+                # order only nested dictionaries, not the root one TODO: try to implement order in dmx classes so is not need here
+                if isinstance(v, dict):
+                    v = {k: v[k] for k in sorted(v)}
+
                 self.buildxml(s, v)
         elif isinstance(d, tuple) or isinstance(d, list):
             for v in d:
-                s = ET.SubElement(r, 'i')
+                s = ET.SubElement(xml_tree, 'i')
                 self.buildxml(s, v)
         elif isinstance(d, str):
-            r.text = d
+            xml_tree.text = d
+        elif isinstance(d, (float, int)):
+      #  elif type(d) is int:
+            xml_tree.text = str(d)
         else:
-            r.text = str(d)
-        return r
+            s = ET.SubElement(xml_tree, type(d).__name__)
+            self.buildxml(s, str(d))
+        return xml_tree
