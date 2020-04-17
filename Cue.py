@@ -3,7 +3,8 @@ from CTimecode import CTimecode
 class Cue(dict):
     def __init__(self, time=None):
         super().__init__()
-        self.time = time
+        if time:
+            self.time = time
     
     @property
     def time(self):
