@@ -9,6 +9,9 @@ from AudioPlayer import NodeAudioPlayers
 from log import *
 from Settings import Settings
 
+if __debug__:
+    logging.debug("Debug mode")
+
 settings = Settings("settings.xsd", "settings_new.xml")
 settings.read()
 

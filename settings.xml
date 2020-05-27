@@ -4,10 +4,10 @@
         <internal_osc_in_port>7700</internal_osc_in_port>
         <internal_osc_out_port>7701</internal_osc_out_port>
         <video_osc_port>7710</video_osc_port>
-        <videoplayer_path>/usr/bin/xjadeo</videoplayer_path>
+        <videoplayer_path>/home/ion/src/cuems/xjadeo/src/xjadeo/xjadeo</videoplayer_path>
         <number_of_displays>2</number_of_displays>
         <audio_osc_port>7720</audio_osc_port>
-        <audioplayer_path>/audio/player/path</audioplayer_path>
+        <audioplayer_path>/home/ion/src/cuems/audioplayer/audioplayer</audioplayer_path>
         <number_of_audio_cards>2</number_of_audio_cards>
     </node>
     <node id="1">

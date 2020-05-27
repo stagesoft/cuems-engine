@@ -1,4 +1,5 @@
 from Cue import Cue
+from collections.abc import Mapping
 
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
@@ -6,8 +7,12 @@ from Cue import Cue
 class DmxCue(Cue):
     def __init__(self, time=None, dmxscene=None, in_time=0, out_time=0):
         super().__init__(time)
-        if ( dmxscene and isinstance(dmxscene, DmxScene) ):
-            super().__setitem__('dmx_scene', dmxscene)
+        if dmxscene:
+            if isinstance(dmxscene, DmxScene):
+                super().__setitem__('dmx_scene', dmxscene)
+            else:
+                raise NotImplementedError
+        
         if in_time:
             super().__setitem__('in_time', in_time)
         if out_time:
@@ -64,6 +69,13 @@ class DmxUniverse(dict):
         for channel in range(512):
             super().__setitem__(channel, value)
         return self      #TODO: valorate return self to be able to do things like 'universe_full = DmxUniverse().setall(255)'
+
+    def update(self, other=None, **kwargs):
+        if other is not None:
+            for k, v in other.items() if isinstance(other, Mapping) else other:
+                self[k] = DmxChannel(v)
+        for k, v in kwargs.items():
+            self[k] = DmxChannel(v)
 
 class DmxChannel(int):
     def __init__(self, value):

@@ -4,7 +4,6 @@ import os
 import pyossia as ossia
 
 from log import *
-from Settings import Settings
 
 import time
 
@@ -32,7 +31,7 @@ class AudioPlayer(threading.Thread):
         try:
             # exec call -- ad command line args here as list 
             # TODO: get command line args from xml
-            self.p=subprocess.Popen([self.path, "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.path, str(self.port), "/audioplayer"], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
@@ -68,7 +67,7 @@ class AudioPlayerRemote():
         self.__start_remote()
 
     def __start_remote(self):
-        self.remote_osc_audioplayer = ossia.ossia.OSCDevice("remoteAudioPlayer{}".format(self.card_id), "127.0.0.1", self.port, self.port+10)
+        self.remote_osc_audioplayer = ossia.ossia.OSCDevice("remoteAudioPlayer{}".format(self.card_id), "127.0.0.1", self.port, self.port+1)
 
         self.remote_audioplayer_quit_node = self.remote_osc_audioplayer.add_node("/audioplayer/quit")
         self.audioplayer_quit_parameter = self.remote_audioplayer_quit_node.create_parameter(ossia.ValueType.Impulse)
@@ -92,7 +91,7 @@ class AudioPlayerRemote():
         self.audioplayer_level_parameter.value = level
 
     def quit(self):
-
+        self.audioplayer.kill()
         self.audioplayer_quit_parameter.value = True
 
 class NodeAudioPlayers():

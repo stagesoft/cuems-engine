@@ -21,7 +21,7 @@ class Cue(dict):
         elif isinstance(time, str):
             super().__setitem__('time', CTimecode(time))
         else:
-            raise NotImplementedError
+            raise NotImplementedError #TODO: disscuss raised error
 
     def __setitem__(self, key, value):
         if key == 'time':

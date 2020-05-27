@@ -7,6 +7,48 @@ from log import *
 
 import sys
 
+class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
+ 
+      
+    def element_decode(self, data, xsd_element, xsd_type=None, level=0):
+        xsd_type = xsd_type or xsd_element.type
+        preserve_root = self.preserve_root
+        if xsd_type.is_simple() or xsd_type.has_simple_content():
+            if preserve_root:
+                return self.dict([(self.map_qname(data.tag), data.text)])
+            else:
+                return data.text if data.text != '' else None
+        else:
+            result_dict = self.dict()
+            list_types = list if self.list is list else (self.list, list)
+            for name, value, xsd_child in self.map_content(data.content):
+                if preserve_root:
+                    try:
+                        if len(value) == 1:
+                            value = value[name]
+                    except (TypeError, KeyError):
+                        pass
+
+                try:
+                    result_dict[name].append(value)
+                except KeyError:
+                    if isinstance(value, list_types):
+                        result_dict[name] = self.list([value])
+                    else:
+                        result_dict[name] = value
+                except AttributeError:
+                    result_dict[name] = self.list([result_dict[name], value])
+
+            for k, v in result_dict.items():
+                if isinstance(v, (self.list, list)) and len(v) == 1:
+                    value = v.pop()
+                    v.extend(value)
+
+            if preserve_root:
+                return self.dict([(self.map_qname(data.tag), result_dict)])
+            else:
+                return result_dict if result_dict else None
+
 
 class Settings(dict):
 
@@ -70,6 +112,7 @@ class Settings(dict):
         schema = xmlschema.XMLSchema(schema_file, base_url='/home/ion/src/cuems/python/python-osc-ossia/')
         xml_file = open(self.xmlfile)        
         super().__init__(schema.to_dict(xml_file, validation='strict'))
+       # super().__init__(schema.to_dict(xml_file, converter=CMLCuemsConverter, validation='strict'))
         self.loaded = True
         return self
 

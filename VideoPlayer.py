@@ -4,7 +4,6 @@ import os
 import pyossia as ossia
 
 from log import *
-from Settings import Settings
 
 import time
 
@@ -28,7 +27,7 @@ class VideoPlayer(threading.Thread):
             logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([self.path, "--no-splash", "--osc", str(self.port)], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.path, "--no-splash", "--osc", str(self.port), "--start-screen", str(self.monitor_id)],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -63,7 +62,7 @@ class VideoPlayerRemote():
         self.__start_remote()
 
     def __start_remote(self):
-        self.remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo{}".format(self.monitor_id), "127.0.0.1", self.port, self.port+10)
+        self.remote_osc_xjadeo = ossia.ossia.OSCDevice("remoteXjadeo{}".format(self.monitor_id), "127.0.0.1", self.port, self.port+1)
 
         self.remote_xjadeo_quit_node = self.remote_osc_xjadeo.add_node("/jadeo/quit")
         self.xjadeo_quit_parameter = self.remote_xjadeo_quit_node.create_parameter(ossia.ValueType.Impulse)
