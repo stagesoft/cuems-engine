@@ -1,0 +1,13 @@
+Source: osc-control
+Section: python
+Priority: extra
+Maintainer: Ion Reguera <ion@stagelab.net>
+Build-Depends: debhelper (>= 9), python3, dh-virtualenv (>= 0.8)
+Standards-Version: 3.9.5
+
+Package: osc-control
+Architecture: any
+Pre-Depends: dpkg (>= 1.16.1), python3.5 | python3.8, ${misc:Pre-Depends}
+Depends: ${misc:Depends}
+Description: really neat package!
+ second line can contain extra information about it.

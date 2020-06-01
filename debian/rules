@@ -1,0 +1,5 @@
+#!/usr/bin/make -f
+override_dh_virtualenv:
+	python2 $(shell which dh_virtualenv) --python python3
+%:
+	dh $@ --with python-virtualenv
