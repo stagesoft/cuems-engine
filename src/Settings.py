@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 import xmlschema
 import datetime  as DT
 import os
+import json
 from log import *
 
 
@@ -109,9 +110,15 @@ class Settings(dict):
 
     def read(self):
         schema_file = open(self.schema)
+        #schema = xmlschema.XMLSchema(schema_file, converter=xmlschema.JsonMLConverter)
         schema = xmlschema.XMLSchema(schema_file, base_url='/home/ion/src/cuems/python/python-osc-ossia/')
-        xml_file = open(self.xmlfile)        
-        super().__init__(schema.to_dict(xml_file, validation='strict'))
+
+        xml_file = open(self.xmlfile)
+        xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True)
+        json_str=json.dumps(xml_dict)
+        logging.debug(xml_dict)
+        logging.debug(json_str)
+        super().__init__(xml_dict)
        # super().__init__(schema.to_dict(xml_file, converter=CMLCuemsConverter, validation='strict'))
         self.loaded = True
         return self

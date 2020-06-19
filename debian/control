@@ -7,7 +7,6 @@ Standards-Version: 3.9.5
 
 Package: osc-control
 Architecture: any
-Pre-Depends: dpkg (>= 1.16.1), python3.5 | python3.8, ${misc:Pre-Depends}
-Depends: ${misc:Depends}
-Description: really neat package!
- second line can contain extra information about it.
+Pre-Depends: dpkg (>= 1.16.1), python3.7, ${misc:Pre-Depends}
+Depends: ${misc:Depends}, libossia, libmtcmaster, audioplayer, xjadeo
+Description: osc-control Package!

@@ -12,11 +12,11 @@ from Settings import Settings
 if __debug__:
     logging.debug("Debug mode")
 
-settings = Settings("settings.xsd", "settings_new.xml")
+settings = Settings("settings.xsd", "settings.xml")
 settings.read()
 
 
-print(settings.schema)
+#print(settings.schema)
 
 settings_node_0 = settings["node"][0]
 

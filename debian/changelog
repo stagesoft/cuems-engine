@@ -1,4 +1,11 @@
-osc-control (0.1-0) unstable; urgency=low
+osc-control (0.0.0-2) unstable; urgency=low
+
+  * Making it work
+
+ -- Ion Reguera <ion@stagelab.net>  Thu, 21 May 2020 17:00:00 +0200
+
+
+osc-control (0.0-1) unstable; urgency=low
 
   * Initial dev release
 
