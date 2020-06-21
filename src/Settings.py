@@ -63,13 +63,13 @@ class Settings(dict):
     
     def __backup(self):
         if os.path.isfile(self.xmlfile):
-            logging.debug("File exist")
+            logger.debug("File exist")
             try:
                 os.rename(self.xmlfile, "{}.back".format(self.xmlfile))
             except OSError:
-                logging.debug("cannot create settings backup")
+                logger.debug("cannot create settings backup")
         else:
-            logging.debug("settings file not found")
+            logger.debug("settings file not found")
     
     @property
     def schema(self):
@@ -115,11 +115,8 @@ class Settings(dict):
 
         xml_file = open(self.xmlfile)
         xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True)
-        json_str=json.dumps(xml_dict)
-        logging.debug(xml_dict)
-        logging.debug(json_str)
+ 
         super().__init__(xml_dict)
-       # super().__init__(schema.to_dict(xml_file, converter=CMLCuemsConverter, validation='strict'))
         self.loaded = True
         return self
 

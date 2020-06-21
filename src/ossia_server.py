@@ -9,14 +9,12 @@ from AudioPlayer import NodeAudioPlayers
 from log import *
 from Settings import Settings
 
-if __debug__:
-    logging.debug("Debug mode")
+
 
 settings = Settings("settings.xsd", "settings.xml")
 settings.read()
 
 
-#print(settings.schema)
 
 settings_node_0 = settings["node"][0]
 
@@ -32,7 +30,7 @@ local_device = ossia.LocalDevice("Node {}".format(settings_node_0["@id"]))
 local_device.create_oscquery_server(
     settings_node_0['osc_out_port'], settings_node_0['osc_in_port'], True)
 
-print("OscQuery device listening on port {}".format(
+logger.debug("OscQuery device listening on port {}".format(
     settings_node_0['osc_in_port']))
 
 video_nodes = {}
@@ -41,7 +39,7 @@ audio_nodes = {}
 
 for display_id, videoplayer in enumerate(video_players):
 
-    # TODO: extract parameters from html
+    # TODO: extract parameters from xml
 
     video_nodes["start{}".format(display_id)] = local_device.add_node(
         "/node{}/videoplayer{}/start".format(config.settings["node_id"], display_id))
@@ -152,4 +150,4 @@ while(True):
 
                 audio_players[int(b.group(4))].level(value)
 
-        print("messageq : " + str(parameter.node) + " " + str(value))
+        logger.debug("messageq : " + str(parameter.node) + " " + str(value))

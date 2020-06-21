@@ -26,7 +26,7 @@ class AudioPlayer(threading.Thread):
 
     def run(self):
         if __debug__:
-            logging.debug('AudioPlayer starting on card:{}'.format(self.card_id))
+            logger.debug('AudioPlayer starting on card:{}'.format(self.card_id))
            
         try:
             # exec call -- ad command line args here as list 
@@ -34,13 +34,13 @@ class AudioPlayer(threading.Thread):
             self.p=subprocess.Popen([self.path, str(self.port), "/audioplayer"], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
-            logging.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
+            logger.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
             if __debug__:
-                logging.debug(e)
+                logger.debug(e)
 
         if __debug__:
-            logging.debug(self.stdout)
-            logging.debug(self.stderr)
+            logger.debug(self.stdout)
+            logger.debug(self.stderr)
     
     def kill(self):
         self.p.kill()
@@ -55,7 +55,7 @@ class AudioPlayer(threading.Thread):
                 self.__init_trhead()
                 threading.Thread.start(self)
             else:
-                logging.debug("AudioPlayer allready running")
+                logger.debug("AudioPlayer allready running")
 
 
 class AudioPlayerRemote():

@@ -5,7 +5,7 @@
         <osc_in_port>7700</osc_in_port>
         <osc_out_port>7701</osc_out_port>
         <videoplayer>
-            <path>/home/ion/src/cuems/xjadeo/src/xjadeo/xjadeo</path>
+            <path>/usr/bin/xjadeo</path>
             <outputs>2</outputs>
             <instance id="0">
                 <osc_in_port>7710</osc_in_port>
@@ -15,7 +15,7 @@
             </instance>
         </videoplayer>
         <audioplayer>
-            <path>/home/ion/src/cuems/audioplayer/audioplayer</path>
+            <path>/usr/bin/audioplayer</path>
             <audio_cards>1</audio_cards>
             <instance id="0">
                 <osc_in_port>7730</osc_in_port>

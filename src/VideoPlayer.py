@@ -24,19 +24,19 @@ class VideoPlayer(threading.Thread):
 
     def run(self):
         if __debug__:
-            logging.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
+            logger.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
             self.p=subprocess.Popen([self.path, "--no-splash", "--osc", str(self.port), "--start-screen", str(self.monitor_id)],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
-            logging.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
+            logger.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
             if __debug__:
-                logging.debug(e)
+                logger.debug(e)
 
         if __debug__:
-            logging.debug(self.stdout)
-            logging.debug(self.stderr)
+            logger.debug(self.stdout)
+            logger.debug(self.stderr)
     
     def kill(self):
         self.p.kill()
@@ -51,7 +51,7 @@ class VideoPlayer(threading.Thread):
                 self.__init_trhead()
                 threading.Thread.start(self)
             else:
-                logging.debug("VideoPlayer allready running")
+                logger.debug("VideoPlayer allready running")
 
 
 class VideoPlayerRemote():

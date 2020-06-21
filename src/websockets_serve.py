@@ -1,9 +1,9 @@
 import asyncio
 import json
-import logging
+import logger
 import websockets
 
-logging.basicConfig()
+logger.basicConfig()
 
 STATE = {"value": 0}
 
