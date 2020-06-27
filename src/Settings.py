@@ -115,7 +115,9 @@ class Settings(dict):
 
         xml_file = open(self.xmlfile)
         xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True)
- 
+
+
+        print(json.dumps(xml_dict))
         super().__init__(xml_dict)
         self.loaded = True
         return self
