@@ -8,21 +8,23 @@ class DmxCue(Cue):
     def __init__(self, time=None, dmxscene=None, in_time=0, out_time=0):
         super().__init__(time)
         if dmxscene:
-            if isinstance(dmxscene, DmxScene):
                 super().__setitem__('dmx_scene', dmxscene)
-            else:
-                raise NotImplementedError
         
         if in_time:
             super().__setitem__('in_time', in_time)
         if out_time:
             super().__setitem__('out_time', out_time)
+    @property
+    def dmxscene(self):
+        return self['dmx_scene']
 
+    @dmxscene.setter
     def dmxscene(self, dmxscene):
         if isinstance(dmxscene, DmxScene):
             super().__setitem__('dmx_scene', dmxscene)
         else:
             raise NotImplementedError
+    
 
     
 
@@ -44,6 +46,9 @@ class DmxScene(dict):
         #merge two universes, priority on the newcoming
     def merge_universe(self, universe, num=0):
         super().__getitem__(num).update(universe)
+
+    def __iter__(self):
+        return iter(self)
 
 
 class DmxUniverse(dict):

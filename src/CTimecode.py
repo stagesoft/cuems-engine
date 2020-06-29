@@ -1,4 +1,5 @@
 from timecode import Timecode
+import json
 
 
 class CTimecode(Timecode):
@@ -11,7 +12,8 @@ class CTimecode(Timecode):
         """returns time as milliseconds
         """
         #TODO: float math for other framerates                               
-        millis_per_frame = int(1000/self._int_framerate)
+        millis_per_frame = int(1000/self.
+        _framerate)
         return (millis_per_frame * self.frame_number)
 
     def __hash__(self):
@@ -33,6 +35,9 @@ class CTimecode(Timecode):
         """Compares seconds of tc""" #TODO: decide if we cheek framerate and frame equality or time equiality 
         if isinstance(other, CTimecode):
             return self.milliseconds < other.milliseconds
+        elif isinstance(other, int):
+            return self.milliseconds < other
+
         return NotImplemented
 
     def __le__(self, other):
@@ -45,6 +50,8 @@ class CTimecode(Timecode):
         """Compares seconds of tc""" #TODO: decide if we cheek framerate and frame equality or time equiality 
         if isinstance(other, CTimecode):
             return self.milliseconds > other.milliseconds
+        elif isinstance(other, int):
+            return self.milliseconds > other
         return NotImplemented
 
     def __ge__(self, other):
@@ -116,3 +123,14 @@ class CTimecode(Timecode):
 
     def __str__(self):
         return self.tc_to_string(*self.frames_to_tc(self.frames))
+
+    def __iter__(self):
+        yield ('timecode', self.__str__())
+        yield ('framerate', self.framerate)
+    
+
+
+class CTimecodeError(Exception):
+    """Raised when an error occurred in timecode calculation
+    """
+    pass

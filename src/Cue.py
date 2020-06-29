@@ -1,10 +1,12 @@
 from CTimecode import CTimecode
 
 class Cue(dict):
-    def __init__(self, time=None):
-        super().__init__()
-        if time:
-            self.time = time
+    def __init__(self, time=None, init_dict=None):
+        if init_dict:
+            super().__init__(init_dict)
+        else:
+            super().__init__()
+        self.time = time
     
     @property
     def time(self):
@@ -20,8 +22,14 @@ class Cue(dict):
             super().__setitem__('time', corrected_seconds) #TODO: discuss this
         elif isinstance(time, str):
             super().__setitem__('time', CTimecode(time))
+        elif time == None:
+            super().__setitem__('time', None)
         else:
             raise NotImplementedError #TODO: disscuss raised error
+
+    def type(self):
+        return type(self)
+
 
     def __setitem__(self, key, value):
         if key == 'time':
