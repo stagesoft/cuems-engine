@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import click, mido
+import mido
 
 import threading
 import queue
@@ -111,96 +111,3 @@ class MtcListener(threading.Thread):
                 # 'odd' pieces came from the high nibble
                 mtc_bytes[mtc_index] += data * 16
         return self.__mtc_decode(mtc_bytes)
-
-
-class CuePriorityQueu(queue.PriorityQueue):
-    def __init__(self):
-      super().__init__()
-
-    def clear(self):
-        while not self.empty():
-            logger.debug(str(self.get()) + "deleted")
-            self.task_done()
-
-class CueQueueProcessor(threading.Thread):
-
-    def __init__(self, queue):
-        self.queue = queue
-        self.item = None
-
-        super().__init__()
-        self.daemon = False
-        threading.Thread.start(self)
-
-    def run(self):
-        while True:
-            self.item = self.queue.get()
-            logger.debug(f'Working on {self.item}')
-            time.sleep(4)
-            logger.debug(f'Finished {self.item}')
-            self.queue.task_done()
-
-
-class CueTimeList(list):
-    def __init__(self, args):
-        super().__init__(args)
-        self.backup = args
-    
-    def append(self, item):
-        super(CueTimeList, self).append(item)  #append the item to itself (the list)
-        self.backup.append(item)
-
-    def reset(self):
-        print("reset callback")
-        super(CueTimeList, self) == self.backup.copy() #not working
-
-#
-################
-#
-
-
-
-
-
-
-#%%
-def check_cues(timecode, queue, timelist):
-    if ((timelist) and (timelist[-1] <= timecode)):
-        last = timelist.pop()
-        logger.debug('event')
-        logger.debug(last)
-        queue.put((last), block=True, timeout=None)
-
-
-
-def reset_all(queue, list):
-    queue.clear()
-    list.reset()
-
-
-
-@click.command()
-@click.option('--port', '-p', help='name of MIDI port to connect to')
-
-def main(port):
-
-
-    
-
-    c1 = CTimecode('0:0:5:0')
-    c2 = CTimecode('0:0:6:0')
-    c3 = CTimecode('0:0:7:0')
-    c4 = CTimecode('0:0:10:0')
-    time_list = CueTimeList([c1, c3, c4, c2])
-    time_list.sort(reverse=True)
-
-    
-
-    cue_queue = CuePriorityQueu()
-    cue_processor = CueQueueProcessor(cue_queue)
-    mtc_listener = MtcListener(step_callback=partial(check_cues, queue=cue_queue, timelist=time_list), reset_callback=partial(reset_all, queue=cue_queue, list=time_list), port=port)
-
-
-
-main()
-

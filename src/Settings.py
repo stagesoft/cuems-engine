@@ -148,7 +148,7 @@ class Settings(dict):
                 self.buildxml(s, v)
         elif isinstance(d, tuple) or isinstance(d, list):
             for v in d:
-                s = ET.SubElement(xml_tree, 'i')
+                s = ET.SubElement(xml_tree, type(v).__name__)
                 self.buildxml(s, v)
         elif isinstance(d, str):
             xml_tree.text = d

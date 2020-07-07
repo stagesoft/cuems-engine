@@ -5,8 +5,8 @@ from collections.abc import Mapping
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
 
 class DmxCue(Cue):
-    def __init__(self, time=None, dmxscene=None, in_time=0, out_time=0):
-        super().__init__(time)
+    def __init__(self, time=None, dmxscene=None, in_time=0, out_time=0, init_dict=None):
+        super().__init__(time, init_dict)
         if dmxscene:
                 super().__setitem__('dmx_scene', dmxscene)
         

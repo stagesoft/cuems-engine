@@ -2,8 +2,8 @@
 from Cue import Cue
 class CueList(list):
     
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, *args):
+        super().__init__(*args)
         self.sort(key=self.__sorting)
     
     def __sorting(self, cue):

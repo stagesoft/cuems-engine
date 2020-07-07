@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cms:Settings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">
+    <Cue>
+        <CTimecode>
+
+        </CTimecode>
+    </Cue>
+    <AudioCue>
+        <CTimecode>
+            
+        </CTimecode>
+
+    </AudioCue>
+</cms:Settings>

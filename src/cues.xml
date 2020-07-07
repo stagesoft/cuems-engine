@@ -1,0 +1,55 @@
+<CueList>
+    <Cue>
+        <time>
+            <NoneType>None</NoneType>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </Cue>
+    <Cue>
+        <time>
+            <CTimecode>00:00:05:00</CTimecode>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </Cue>
+    <DmxCue>
+        <time>
+            <CTimecode>00:00:23:00</CTimecode>
+        </time>
+        <dmx_scene>
+            <dict id="0">
+                <int id="0">10</int>
+                <int id="1">50</int>
+            </dict>
+        </dmx_scene>
+    </DmxCue>
+    <AudioCue>
+        <time>
+            <NoneType>None</NoneType>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </AudioCue>
+    <Cue>
+        <time>
+            <CTimecode>00:00:33:00</CTimecode>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </Cue>
+    <AudioCue>
+        <time>
+            <CTimecode>00:00:45:00</CTimecode>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </AudioCue>
+    <AudioCue>
+        <time>
+            <NoneType>None</NoneType>
+        </time>
+        <type>virtual</type>
+        <loop>False</loop>
+    </AudioCue>
+</CueList>

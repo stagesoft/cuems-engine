@@ -12,8 +12,7 @@ class CTimecode(Timecode):
         """returns time as milliseconds
         """
         #TODO: float math for other framerates                               
-        millis_per_frame = int(1000/self.
-        _framerate)
+        millis_per_frame = int(1000/int(self._framerate))
         return (millis_per_frame * self.frame_number)
 
     def __hash__(self):
