@@ -8,8 +8,22 @@
               <xs:element name="time">
                 <xs:complexType>
                   <xs:sequence>
-                    <xs:element type="xs:string" name="NoneType" minOccurs="0"/>
-                    <xs:element type="xs:string" name="CTimecode" minOccurs="0"/>
+                    <xs:element type="xs:string" name="NoneType"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+              <xs:element type="xs:string" name="type"/>
+              <xs:element type="xs:string" name="loop"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="AudioCue">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="time">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element type="xs:string" name="NoneType"/>
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
@@ -31,16 +45,15 @@
               <xs:element name="dmx_scene">
                 <xs:complexType>
                   <xs:sequence>
-                    <xs:element name="dict">
+                    <xs:element name="DmxUniverse">
                       <xs:complexType>
                         <xs:sequence>
-                          <xs:element name="int" maxOccurs="unbounded" minOccurs="0">
+                          <xs:element name="DmxChannel" maxOccurs="unbounded" minOccurs="0">
                             <xs:complexType>
-                              <xs:simpleContent>
-                                <xs:extension base="xs:byte">
-                                  <xs:attribute type="xs:byte" name="id" use="optional"/>
-                                </xs:extension>
-                              </xs:simpleContent>
+                              <xs:sequence>
+                                <xs:element type="xs:byte" name="DmxChannel"/>
+                              </xs:sequence>
+                              <xs:attribute type="xs:byte" name="id" use="optional"/>
                             </xs:complexType>
                           </xs:element>
                         </xs:sequence>
@@ -50,22 +63,6 @@
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
-            </xs:sequence>
-          </xs:complexType>
-        </xs:element>
-        <xs:element name="AudioCue">
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element name="time">
-                <xs:complexType>
-                  <xs:sequence>
-                    <xs:element type="xs:string" name="NoneType" minOccurs="0"/>
-                    <xs:element type="xs:string" name="CTimecode" minOccurs="0"/>
-                  </xs:sequence>
-                </xs:complexType>
-              </xs:element>
-              <xs:element type="xs:string" name="type"/>
-              <xs:element type="xs:string" name="loop"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>

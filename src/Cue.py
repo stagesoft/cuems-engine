@@ -8,7 +8,7 @@ class Cue(dict):
             super().__init__(init_dict)
         else:
             super().__init__()
-        if time is not None:
+        if init_dict is None:
             self.time = time
     
     @property

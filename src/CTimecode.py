@@ -36,6 +36,8 @@ class CTimecode(Timecode):
             return self.milliseconds < other.milliseconds
         elif isinstance(other, int):
             return self.milliseconds < other
+        elif isinstance(other, type(None)):
+            return other
 
         return NotImplemented
 
@@ -43,6 +45,8 @@ class CTimecode(Timecode):
         """Compares seconds of tc""" #TODO: decide if we cheek framerate and frame equality or time equiality 
         if isinstance(other, CTimecode):
             return self.milliseconds <= other.milliseconds
+        elif isinstance(other, type(None)):
+            return other
         return NotImplemented
 
     def __gt__(self, other):
@@ -51,12 +55,16 @@ class CTimecode(Timecode):
             return self.milliseconds > other.milliseconds
         elif isinstance(other, int):
             return self.milliseconds > other
+        elif isinstance(other, type(None)):
+            return self 
         return NotImplemented
 
     def __ge__(self, other):
         """Compares seconds of tc""" #TODO: decide if we cheek framerate and frame equality or time equiality 
         if isinstance(other, CTimecode):
             return self.milliseconds >= other.milliseconds
+        elif isinstance(other, type(None)):
+            return self
         return NotImplemented
 
     def __add__(self, other):

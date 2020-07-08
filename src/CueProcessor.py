@@ -27,7 +27,8 @@ class CueQueueProcessor(threading.Thread):
 
     def run(self):
         while True:
-            self.item = self.queue.get()
+
+            self.item = self.queue.get(block=True, timeout=None)
             logger.debug(f'Working on {self.item}')
             logger.debug(f'Finished {self.item}')
             self.queue.task_done()

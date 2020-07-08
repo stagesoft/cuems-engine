@@ -40,7 +40,7 @@ class MtcListener(threading.Thread):
 
     def __open_port(self, port):
         if port == None:
-            ports = mido.get_input_names()
+            ports = mido.get_input_names() # pylint: disable=maybe-no-member
             mtc_ports = [s for s in ports if "mtc" in s.lower()]
             self.port_name = mtc_ports[-1] if mtc_ports else ports[-1]
             logger.info ('Selected MIDI port: ' + self.port_name)
@@ -49,7 +49,7 @@ class MtcListener(threading.Thread):
             print("hay port")
 
     def run(self):
-        port = mido.open_input(self.port_name, callback= self.__handle_message)
+        port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member
 
         logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
 

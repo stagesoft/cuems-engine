@@ -17,17 +17,16 @@ from MtcListener import MtcListener
 
 #%%
 def check_cues(timecode, queue, timelist):
-    if ((timelist) and (timelist[-1] <= timecode)):
-        last = timelist.pop()
+    if ((timelist) and (timelist[0].time <= timecode)):
+        last = timelist.pop(0)
         logger.debug('event')
         logger.debug(last)
-        queue.put((last), block=True, timeout=None)
+        queue.put((2, last), block=True, timeout=None)
 
 
 
 def reset_all(queue, list):
     queue.clear()
-    list.reset()
 
 
 
@@ -43,7 +42,10 @@ def main(port):
     c2 = Cue('0:0:6:0')
     c3 = Cue('0:0:7:0')
     c4 = Cue('0:0:10:0')
-    time_list = CueList([c1, c3, c4, c2])
+    c5 = Cue(time=None)
+    c6 = Cue(time=None)
+    c7 = Cue(time=None)
+    time_list = CueList([c1, c3, c4, c2, c5, c6, c7])
 
     
 
@@ -53,5 +55,6 @@ def main(port):
 
 
 
-main()
+main() # pylint: disable=no-value-for-parameter
 
+# %%

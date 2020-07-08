@@ -5,23 +5,27 @@ from collections.abc import Mapping
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
 
 class DmxCue(Cue):
-    def __init__(self, time=None, dmxscene=None, in_time=0, out_time=0, init_dict=None):
+    def __init__(self, time=None, scene=None, in_time=0, out_time=0, init_dict=None):
+        if init_dict:
+            self.scene = init_dict.pop('dmx_scene', None)
         super().__init__(time, init_dict)
-        if dmxscene:
-                super().__setitem__('dmx_scene', dmxscene)
+        if scene:
+                self.scene = scene
         
         if in_time:
             super().__setitem__('in_time', in_time)
         if out_time:
             super().__setitem__('out_time', out_time)
     @property
-    def dmxscene(self):
+    def scene(self):
         return self['dmx_scene']
 
-    @dmxscene.setter
-    def dmxscene(self, dmxscene):
-        if isinstance(dmxscene, DmxScene):
-            super().__setitem__('dmx_scene', dmxscene)
+    @scene.setter
+    def scene(self, scene):
+        if isinstance(scene, DmxScene):
+            super().__setitem__('dmx_scene', scene)
+        elif isinstance(scene, dict):
+            super().__setitem__('dmx_scene', DmxScene(init_dict=scene))
         else:
             raise NotImplementedError
     
@@ -29,14 +33,18 @@ class DmxCue(Cue):
     
 
 class DmxScene(dict):
-    def __init__(self, universe=None):
+    def __init__(self, init_dict=None):
         super().__init__()
-        if dict:
-            for k, v, in universe.items():
+        if init_dict:
+            for k, v, in init_dict.items():
                 super().__setitem__(k, DmxUniverse(v))
 
-    def universe(self, num=0):
-        return super().__getitem__(num)
+    def universe(self, num=None):
+        if num is not None:
+            return super().__getitem__(num)
+
+    def universes(self):
+        return self
       
     def set_universe(self, universe, num=0):
         super().__setitem__(num, DmxUniverse(universe))
@@ -47,16 +55,14 @@ class DmxScene(dict):
     def merge_universe(self, universe, num=0):
         super().__getitem__(num).update(universe)
 
-    def __iter__(self):
-        return iter(self)
 
 
 class DmxUniverse(dict):
 
-    def __init__(self, dict=None):
+    def __init__(self, init_dict=None):
         super().__init__()
-        if dict:
-            for k, v, in dict.items():
+        if init_dict:
+            for k, v, in init_dict.items():
                 super().__setitem__(k, DmxChannel(v))
     
 
@@ -82,7 +88,7 @@ class DmxUniverse(dict):
         for k, v in kwargs.items():
             self[k] = DmxChannel(v)
 
-class DmxChannel(int):
+class DmxChannel():
     def __init__(self, value):
         self.value = value
 
