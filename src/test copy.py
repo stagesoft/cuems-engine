@@ -26,8 +26,8 @@ custom_cue_list.append(ac)
 
 custom_cue_list + [d_c, c3]
 custom_cue_list.extend([d_c, c3])
-#print(custom_cue_list)
-#print(custom_cue_list.times())
+print(custom_cue_list)
+
 
 blu= Settings(schema="cues.xsd", xmlfile="cues.xml")
 blu.data2xml(custom_cue_list)
@@ -43,9 +43,9 @@ for key, value in obj.items():
         print(list_value)
         store.append(globals()[key](init_dict=list_value)) 
 print("--------------------")
-print(store.times())
 for o in store:
     print(type(o))
     print(o)
-        
+    if isinstance(o, DmxCue):
+        print(o.scene.universe(0).channel(0))
 # %%

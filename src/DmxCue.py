@@ -37,7 +37,13 @@ class DmxScene(dict):
         super().__init__()
         if init_dict:
             for k, v, in init_dict.items():
-                super().__setitem__(k, DmxUniverse(v))
+                if isinstance(k, int):
+                    super().__setitem__(k, DmxUniverse(v))
+                elif k == 'DmxUniverse':
+                    print(k)
+                    print(v)
+                    for u in v:
+                        super().__setitem__(u['id'], DmxUniverse(init_dict=u))
 
     def universe(self, num=None):
         if num is not None:
@@ -63,7 +69,11 @@ class DmxUniverse(dict):
         super().__init__()
         if init_dict:
             for k, v, in init_dict.items():
-                super().__setitem__(k, DmxChannel(v))
+                if isinstance(k, int):
+                    super().__setitem__(k, DmxChannel(v))
+                elif k == 'DmxChannel':
+                    for u in v:
+                        super().__setitem__(u['id'], DmxChannel(u['value']))
     
 
 
