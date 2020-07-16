@@ -4,10 +4,9 @@ class CueList(list):
     
     def __init__(self, *args):
         super().__init__(*args)
-        self.sort(key=self.__sorting)
     
     def __sorting(self, cue):
-        if cue.time is None:
+        if cue.time is None: # TODO: change this to somthing not so ugly
             return -99999
         else:
             return cue.time
@@ -33,8 +32,6 @@ class CueList(list):
         if not isinstance(item, Cue):
             raise TypeError('item is not of type %s' % Cue)
         super().append(item)  #append the item to itself (the list)
-        self.sort(key=self.__sorting)
 
     def extend(self, other):
         super().extend(other)
-        self.sort(key=self.__sorting)

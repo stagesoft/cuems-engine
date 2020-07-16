@@ -6,8 +6,6 @@ from collections.abc import Mapping
 
 class DmxCue(Cue):
     def __init__(self, time=None, scene=None, in_time=0, out_time=0, init_dict=None):
-        if init_dict:
-            self.scene = init_dict.pop('dmx_scene', None)
         super().__init__(time, init_dict)
         if scene:
                 self.scene = scene
@@ -40,10 +38,8 @@ class DmxScene(dict):
                 if isinstance(k, int):
                     super().__setitem__(k, DmxUniverse(v))
                 elif k == 'DmxUniverse':
-                    print(k)
-                    print(v)
                     for u in v:
-                        super().__setitem__(u['id'], DmxUniverse(init_dict=u))
+                        super().__setitem__(u['@id'], DmxUniverse(init_dict=u))
 
     def universe(self, num=None):
         if num is not None:
@@ -73,7 +69,7 @@ class DmxUniverse(dict):
                     super().__setitem__(k, DmxChannel(v))
                 elif k == 'DmxChannel':
                     for u in v:
-                        super().__setitem__(u['id'], DmxChannel(u['value']))
+                        super().__setitem__(u['@id'], DmxChannel(u['$']))
     
 
 
@@ -81,9 +77,10 @@ class DmxUniverse(dict):
         return super().__getitem__(channel)
 
     def set_channel(self, channel, value):
-        if value > 255:
-            value = 255
-        super().__setitem__(channel, DmxChannel(value))
+        if isinstance(value, DmxChannel):
+            super().__setitem__(channel, value)
+        else:
+            super().__setitem__(channel, DmxChannel(value))
         return self
 
     def setall(self, value):
@@ -99,8 +96,18 @@ class DmxUniverse(dict):
             self[k] = DmxChannel(v)
 
 class DmxChannel():
-    def __init__(self, value):
-        self.value = value
+    def __init__(self, value=None):
+        self._value = value
 
     def __repr__(self):
         return str(self.value)
+
+    @property
+    def value(self):
+        return self._value
+    
+    @value.setter
+    def value (self, value):
+        if value > 255:
+            value = 255
+        self._value = value

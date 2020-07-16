@@ -8,6 +8,8 @@ import os
 import json
 from log import *
 
+from CTimecode import CTimecode
+
 from CMLCuemsConverter import CMLCuemsConverter
 
 class Settings(dict):
@@ -95,19 +97,14 @@ class Settings(dict):
                     s = ET.SubElement(xml_tree, type(k).__name__)
                     s.text = k
                 elif isinstance(k, (int, float)):
-                    print(type(k).__name__)
-                    print(k)
-                    s = ET.SubElement(xml_tree, type(k).__name__)
-                    s = ET.SubElement(xml_tree, 'id')
-                    s.text = k
-                    
+                    s = ET.SubElement(xml_tree, type(v).__name__, id=str(k))
+                    if not isinstance(v, dict):
+                        s.text =str(v)
                 else:
                     s = ET.SubElement(xml_tree, type(k).__name__)
                 
-                # order only nested dictionaries, not the root one TODO: try to implement order in dmx classes so is not need here
-
-
-                self.buildxml(s, v)
+                if isinstance(v, (type(None), CTimecode, dict, list, tuple, int, float, str)):
+                    self.buildxml(s, v)
         elif isinstance(d, tuple) or isinstance(d, list):
             for v in d:
                 s = ET.SubElement(xml_tree, type(v).__name__)

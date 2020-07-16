@@ -2,14 +2,11 @@ from CTimecode import CTimecode
 
 class Cue(dict):
     def __init__(self, time=None, init_dict=None):
-        if init_dict:
-            self.time = init_dict.pop('time', None)
-
+        if init_dict is not None:
             super().__init__(init_dict)
         else:
             super().__init__()
-        if init_dict is None:
-            self.time = time
+        self.time = time
     
     @property
     def time(self):
