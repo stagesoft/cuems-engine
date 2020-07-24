@@ -48,20 +48,26 @@
               <xs:element name="dmx_scene" minOccurs="0">
                 <xs:complexType>
                   <xs:sequence>
-                    <xs:element name="DmxUniverse" maxOccurs="unbounded" minOccurs="0">
+                    <xs:element name="DmxScene">
                       <xs:complexType>
                         <xs:sequence>
-                          <xs:element name="DmxChannel" maxOccurs="unbounded" minOccurs="0">
+                          <xs:element name="DmxUniverse" maxOccurs="unbounded" minOccurs="0">
                             <xs:complexType>
-                              <xs:simpleContent>
-                                <xs:extension base="xs:short">
-                                  <xs:attribute type="xs:byte" name="id" use="optional"/>
-                                </xs:extension>
-                              </xs:simpleContent>
+                              <xs:sequence>
+                                <xs:element name="DmxChannel" maxOccurs="unbounded" minOccurs="0">
+                                  <xs:complexType>
+                                    <xs:simpleContent>
+                                      <xs:extension base="xs:short">
+                                        <xs:attribute type="xs:byte" name="id" use="optional"/>
+                                      </xs:extension>
+                                    </xs:simpleContent>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                              <xs:attribute type="xs:byte" name="id" use="optional"/>
                             </xs:complexType>
                           </xs:element>
                         </xs:sequence>
-                        <xs:attribute type="xs:byte" name="id" use="optional"/>
                       </xs:complexType>
                     </xs:element>
                   </xs:sequence>

@@ -103,7 +103,7 @@ class Settings(dict):
                 else:
                     s = ET.SubElement(xml_tree, type(k).__name__)
                 
-                if isinstance(v, (type(None), CTimecode, dict, list, tuple, int, float, str)):
+                if isinstance(v, (type(None), CTimecode, dict, list, tuple, int, float, str)): #TODO: filter without using explicit classes (like CTimecode)
                     self.buildxml(s, v)
         elif isinstance(d, tuple) or isinstance(d, list):
             for v in d:

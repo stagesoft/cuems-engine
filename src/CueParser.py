@@ -2,6 +2,10 @@ from CueList import CueList
 from Cue import Cue
 from AudioCue import AudioCue
 from DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
+from CTimecode import CTimecode
+from log import *
+
+PARSER_SUFFIX = 'Parser'
 
 class CueListParser():
     def __init__(self, init_dict, cuelist=None):
@@ -16,59 +20,65 @@ class CueListParser():
     def parse(self):
         for class_string, class_items_list in self.init_dict.items():   
             for class_item in class_items_list:
-            #    print(globals()[key])
-            #    print(list_value)
                 parser_class = self.get_parser_class(class_string)
                 item_obj = parser_class(init_dict=class_item).parse()
                 self.cuelist.append(item_obj)
         return self.cuelist
     
     def get_parser_class(self, class_string):
-        parser_name = class_string + 'Parser'
-        parser_class = globals()[parser_name]
+        parser_name = class_string + PARSER_SUFFIX
+        try:
+            parser_class = globals()[parser_name]
+        except KeyError as err:
+            logger.error("Could not find class {0}".format(err))
+            parser_class =None
         return parser_class
+
+    def get_class(self, caller_class):
+        class_name = type(caller_class).__name__
+        if class_name.endswith(PARSER_SUFFIX):
+            class_name = class_name[:-6]
+        try:
+            _class = globals()[class_name]
+        except KeyError as err:
+            logger.error("Could not find class {0}".format(err))
+            _class = None
+
+        return _class
 
 class CueParser(CueListParser):
     def __init__(self, init_dict):
         self.init_dict = init_dict
-        self._class = globals()['Cue']
+        self._class = self.get_class(self)
+        self.item = self._class(self.init_dict)
     
     def parse(self):
-        self.item = self._class(init_dict = self.init_dict)
-        if self.init_dict['time'] != None:
-            self.item.time = self.init_dict['time']
+        for dict_key, dict_value in self.init_dict.items():
+            if type(dict_value) is dict:
+                parser_class = self.get_parser_class(list(dict_value)[0])
+                class_dict = list(dict_value.values())[0]
+                self.item[dict_key] = parser_class(init_dict=class_dict).parse()
+            else:
+                self.item[dict_key] = dict_value
+        
         return self.item
 
 class AudioCueParser(CueParser):
     def __init__(self, init_dict):
-        self.init_dict = init_dict
-        self._class = globals()['AudioCue']
+        super().__init__(init_dict)
 
 class DmxCueParser(CueParser):
     def __init__(self, init_dict):
-        self.init_dict = init_dict
-        self._class = globals()['DmxCue']
-        dmxscene = init_dict.pop('dmx_scene', None)
-        self.dmxscene = dmxscene
+        super().__init__(init_dict)
 
-    def parse(self):
-        if self.dmxscene is not None:
-            self.item = self._class(init_dict = self.init_dict)
-            self.item.scene = DmxSceneParser(init_dict=self.dmxscene).parse()
-        if self.init_dict['time'] != None:
-            self.item.time = self.init_dict['time']
-        return self.item
 
 class DmxSceneParser(CueParser):
     def __init__(self, init_dict):
-        self.init_dict=init_dict
-        self.item = DmxScene()
+        super().__init__(init_dict)
 
     def parse(self):
         for class_string, class_item_list in self.init_dict.items():   
             for class_item in class_item_list:
-            #    print(globals()[key])
-            #    print(list_value)
                 parser_class = self.get_parser_class(class_string)
                 item_obj = parser_class(init_dict=class_item).parse()
                 self.item.set_universe(item_obj, class_item['@id'])
@@ -76,15 +86,14 @@ class DmxSceneParser(CueParser):
 
 class DmxUniverseParser(CueParser):
     def __init__(self, init_dict):
-        self.init_dict=init_dict
-        self.item = DmxUniverse()
+        self.init_dict = init_dict
+        self._class = self.get_class(self)
+        self.item = self._class()
 
     def parse(self):
         for class_string, class_item_list in self.init_dict.items():
             if class_string != '@id':
                 for class_item in class_item_list:
-                #    print(globals()[key])
-                #    print(list_value)
                     parser_class = self.get_parser_class(class_string)
                     item_obj = parser_class(init_dict=class_item).parse()
                     self.item.set_channel(class_item['@id'], item_obj)
@@ -92,9 +101,24 @@ class DmxUniverseParser(CueParser):
 
 class DmxChannelParser(CueParser):
     def __init__(self, init_dict):
-        self.init_dict=init_dict
-        self.item = DmxChannel()
+        super().__init__(init_dict)
 
     def parse(self):
         self.item.value = self.init_dict['$']
         return self.item
+
+class CTimecodeParser(CueParser):
+    def __init__(self, init_dict):
+        super().__init__(init_dict)
+    
+    def parse(self):
+        _class = self.get_class(self)
+        self.item = _class(self.init_dict)
+        return self.item
+
+class NoneTypeParser():
+    def __init__(self, init_dict):
+        pass
+
+    def parse(self):
+        return None

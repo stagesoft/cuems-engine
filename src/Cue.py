@@ -24,7 +24,6 @@ class Cue(dict):
             super().__setitem__('time', CTimecode(time))
         elif isinstance(time, dict):
             dict_timecode = time.pop('CTimecode', None)
-            print(dict_timecode)
             if dict_timecode is None:
                 super().__setitem__('time', None)
             else:

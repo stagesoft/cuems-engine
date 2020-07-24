@@ -6,9 +6,13 @@ from CueList import CueList
 from CTimecode import CTimecode
 from Settings import Settings
 from CueParser import CueListParser
+from XmlBuilder import XmlBuilder
+from XmlReaderWriter import XmlReader, XmlWriter
 
 import json
 import jsonpickle
+import xml.etree.ElementTree as ET
+
 
 jsonpickle.set_preferred_backend('json')
 jsonpickle.set_encoder_options('json', sort_keys=False)
@@ -27,16 +31,18 @@ custom_cue_list.append(ac)
 
 custom_cue_list + [d_c, c3]
 custom_cue_list.extend([d_c, c3])
-print(c)
 print(custom_cue_list)
 
-blu= Settings(schema="cues.xsd", xmlfile="cues.xml")
-blu.data2xml(custom_cue_list)
+xml_data = XmlBuilder(custom_cue_list).build()
+writer = XmlWriter(schema = 'cues.xsd', xmlfile = 'cues.xml')
+writer.write(xml_data)
 
-blu.write()
-readed_dict=blu.read()
-print(readed_dict)
-store = CueListParser(readed_dict).parse()
+reader = XmlReader(schema = 'cues.xsd', xmlfile = 'cues.xml')
+xml_dict = reader.read()
+print("-------++++++---------")
+print(xml_dict)
+print("-------++++++---------")
+store = CueListParser(xml_dict).parse()
 print("--------------------")
 print(store)
 print("--------------------")
@@ -45,5 +51,7 @@ for o in store:
     print(o)
     if isinstance(o, DmxCue):
         print(o.scene.universe(0).channel(0))
+
 # %%
+
 
