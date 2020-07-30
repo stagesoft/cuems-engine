@@ -13,7 +13,7 @@ ElementData = namedtuple('ElementData', ['tag', 'text', 'content', 'attributes']
 class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
 
     def __init__(self, namespaces=None, dict_class=None, list_class=None,
-                 etree_element_class=None, text_key='$', attr_prefix='@',
+                 etree_element_class=None, text_key='value', attr_prefix='',
                  cdata_prefix=None, indent=4, strip_namespaces=False,
                  preserve_root=False, force_dict=False, force_list=False, **kwargs):
 

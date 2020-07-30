@@ -39,7 +39,7 @@ class DmxScene(dict):
                     super().__setitem__(k, DmxUniverse(v))
                 elif k == 'DmxUniverse':
                     for u in v:
-                        super().__setitem__(u['@id'], DmxUniverse(init_dict=u))
+                        super().__setitem__(u['id'], DmxUniverse(init_dict=u))
 
     def universe(self, num=None):
         if num is not None:
@@ -69,7 +69,7 @@ class DmxUniverse(dict):
                     super().__setitem__(k, DmxChannel(v))
                 elif k == 'DmxChannel':
                     for u in v:
-                        super().__setitem__(u['@id'], DmxChannel(u['$']))
+                        super().__setitem__(u['id'], DmxChannel(u['&']))
     
 
 
