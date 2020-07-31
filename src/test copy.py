@@ -17,12 +17,16 @@ import xml.etree.ElementTree as ET
 jsonpickle.set_preferred_backend('json')
 jsonpickle.set_encoder_options('json', sort_keys=False)
 
-c = Cue(33, {'type': 'virtual', 'loop': False})
+c = Cue(33, {'type': 'mtc', 'loop': False})
+c.outputs = 5
 c2 = Cue(None, {'type': 'floating', 'loop': False})
+c2.outputs = {'physiscal': 1, 'virtual': 3}
 c3 = Cue(5, {'type': 'virtual', 'loop': False})
+c3.outputs = 5
 ac = AudioCue(45, {'type': 'virtual','loop': False} )
+ac.outputs = {'stereo': 1}
 d_c = DmxCue(time=23, scene={0:{0:10, 1:50}, 1:{20:23, 21:255}, 2:{5:10, 6:23, 7:125, 8:200}})
-
+d_c.outputs = 4
 
 cue_list = [c, c2, ac, d_c]
 
@@ -46,6 +50,9 @@ store = CueListParser(xml_dict).parse()
 print("--------------------")
 print(store)
 print("--------------------")
+print("*******************")
+print(json.dumps(xml_dict))
+print("*******************")
 for o in store:
     print(type(o))
     print(o)

@@ -5,6 +5,7 @@
         <xs:element name="Cue" maxOccurs="unbounded" minOccurs="0">
           <xs:complexType>
             <xs:sequence>
+              <xs:element type="xs:string" name="uuid"/>
               <xs:element type="xs:string" name="type"/>
               <xs:element type="xs:string" name="loop"/>
               <xs:element name="time">
@@ -15,12 +16,20 @@
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
+              <xs:element name="outputs">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element type="xs:string" name="CueOutputs"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element name="AudioCue">
           <xs:complexType>
             <xs:sequence>
+              <xs:element type="xs:string" name="uuid"/>
               <xs:element type="xs:string" name="type"/>
               <xs:element type="xs:string" name="loop"/>
               <xs:element name="time">
@@ -30,12 +39,20 @@
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
+              <xs:element name="outputs">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element type="xs:string" name="AudioCueOutputs"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element name="DmxCue">
           <xs:complexType>
             <xs:sequence>
+              <xs:element type="xs:string" name="uuid"/>
               <xs:element type="xs:string" name="type" minOccurs="0"/>
               <xs:element type="xs:string" name="loop" minOccurs="0"/>
               <xs:element name="time">
@@ -70,6 +87,14 @@
                         </xs:sequence>
                       </xs:complexType>
                     </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="outputs">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element type="xs:string" name="DmxCueOutputs" minOccurs="0"/>
+                    <xs:element type="xs:string" name="CueOutputs" minOccurs="0"/>
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>

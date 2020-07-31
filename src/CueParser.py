@@ -1,9 +1,10 @@
 from CueList import CueList
 from Cue import Cue
+from Outputs import CueOutputs, AudioCueOutputs, DmxCueOutputs
 from AudioCue import AudioCue
 from DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from CTimecode import CTimecode
-from log import *
+from log import logger
 
 PARSER_SUFFIX = 'Parser'
 
@@ -107,7 +108,7 @@ class DmxChannelParser(CueParser):
         self.item.value = self.init_dict['&']
         return self.item
 
-class CTimecodeParser(CueParser):
+class GenericSubObjectParser(CueParser):
     def __init__(self, init_dict):
         super().__init__(init_dict)
     
@@ -115,6 +116,22 @@ class CTimecodeParser(CueParser):
         _class = self.get_class(self)
         self.item = _class(self.init_dict)
         return self.item
+
+class CTimecodeParser(GenericSubObjectParser):
+    def __init__(self, init_dict):
+        super().__init__(init_dict)
+
+class CueOutputsParser(GenericSubObjectParser):
+    def __init__(self, init_dict):
+        super().__init__(init_dict)
+
+class AudioCueOutputsParser(GenericSubObjectParser):
+    def __init__(self, init_dict):
+        super().__init__(init_dict)
+
+class DmxCueOutputsParser(GenericSubObjectParser):
+    def __init__(self, init_dict):
+        super().__init__(init_dict)
 
 class NoneTypeParser():
     def __init__(self, init_dict):
