@@ -8,24 +8,10 @@ from log import logger
 
 PARSER_SUFFIX = 'Parser'
 
-class CueListParser():
-    def __init__(self, init_dict, cuelist=None):
-        if cuelist is None:
-            self.cuelist = CueList()
-        else:
-            self.cuelist = cuelist
+class CuemsParser():
+    def __init__(self, init_dict):
         self.init_dict=init_dict
-        
-        
-    
-    def parse(self):
-        for class_string, class_items_list in self.init_dict.items():   
-            for class_item in class_items_list:
-                parser_class = self.get_parser_class(class_string)
-                item_obj = parser_class(init_dict=class_item).parse()
-                self.cuelist.append(item_obj)
-        return self.cuelist
-    
+
     def get_parser_class(self, class_string):
         parser_name = class_string + PARSER_SUFFIX
         try:
@@ -46,6 +32,33 @@ class CueListParser():
             _class = None
 
         return _class
+
+    def parse(self):
+        parser_class = self.get_parser_class(next(iter(self.init_dict.keys())))
+        print(self.init_dict)
+        print(parser_class)
+        item_obj = parser_class(init_dict=next(iter(self.init_dict.values()))).parse()
+        return item_obj
+
+class CueListParser(CuemsParser):
+    def __init__(self, init_dict, cuelist=None):
+        if cuelist is None:
+            self.cuelist = CueList()
+        else:
+            self.cuelist = cuelist
+        self.init_dict=init_dict
+        
+        
+    
+    def parse(self):
+        for class_string, class_items_list in self.init_dict.items():   
+            for class_item in class_items_list:
+                parser_class = self.get_parser_class(class_string)
+                item_obj = parser_class(init_dict=class_item).parse()
+                self.cuelist.append(item_obj)
+        return self.cuelist
+    
+    
 
 class CueParser(CueListParser):
     def __init__(self, init_dict):

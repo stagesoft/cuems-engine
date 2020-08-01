@@ -10,10 +10,9 @@ for mode in res.modes:
     w, h = mode.width, mode.height
     print("Width: {}, height: {}".format(w, h))
 
-o = randr.get_screen_resources(window).outputs
-print(o)
+outputs = randr.get_screen_resources(window).outputs
+print(outputs)
+for index, output in enumerate(outputs):
 
-print(randr.get_output_info(window, o[0], 0))
-print(randr.get_output_info(window, o[1], 0))
-print(randr.get_output_info(window, o[2], 0))
-print(randr.get_output_info(window, o[3], 0))
+    print(output)
+    print(randr.get_output_info(window, outputs[index], 0))

@@ -4,6 +4,7 @@ import uuid
 class Cue(dict):
     def __init__(self, time=None, init_dict=None, outputs=None):
         super().__setitem__('uuid', str(uuid.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
+        #TODO: do not generate uuid if geting dict from xml, now we generate it and then overwrite it so we allwais have one
         if init_dict is not None:
             super().__init__(init_dict)
         else:
@@ -11,7 +12,8 @@ class Cue(dict):
         self.time = time
         if outputs is not None:
             self.outputs = outputs
-    
+
+    # TODO: convert to @classmethod from init_dict
     @property
     def outputs(self):
         return super().__getitem__('outputs')

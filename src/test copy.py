@@ -2,20 +2,18 @@
 from Cue import Cue
 from AudioCue import AudioCue
 from DmxCue import DmxCue
+from CuemsScript import CuemsScript
 from CueList import CueList
 from CTimecode import CTimecode
 from Settings import Settings
-from CueParser import CueListParser
+from DictParser import CuemsParser
 from XmlBuilder import XmlBuilder
 from XmlReaderWriter import XmlReader, XmlWriter
 
 import json
-import jsonpickle
 import xml.etree.ElementTree as ET
 
 
-jsonpickle.set_preferred_backend('json')
-jsonpickle.set_encoder_options('json', sort_keys=False)
 
 c = Cue(33, {'type': 'mtc', 'loop': False})
 c.outputs = 5
@@ -28,16 +26,20 @@ ac.outputs = {'stereo': 1}
 d_c = DmxCue(time=23, scene={0:{0:10, 1:50}, 1:{20:23, 21:255}, 2:{5:10, 6:23, 7:125, 8:200}})
 d_c.outputs = 4
 
-cue_list = [c, c2, ac, d_c]
 
 custom_cue_list = CueList([c, c2])
 custom_cue_list.append(ac)
 
 custom_cue_list + [d_c, c3]
-custom_cue_list.extend([d_c, c3])
-print(custom_cue_list)
+float_cue_list = CueList([d_c, c3])
 
-xml_data = XmlBuilder(custom_cue_list).build()
+float_cuelist = CueList([ac, c3 ])
+script = CuemsScript(custom_cue_list, float_cue_list)
+print(script)
+print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+xml_data = XmlBuilder(script).build()
+print(xml_data)
+print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
 writer = XmlWriter(schema = 'cues.xsd', xmlfile = 'cues.xml')
 writer.write(xml_data)
 
@@ -46,7 +48,7 @@ xml_dict = reader.read()
 print("-------++++++---------")
 print(xml_dict)
 print("-------++++++---------")
-store = CueListParser(xml_dict).parse()
+store = CuemsParser(xml_dict).parse()
 print("--------------------")
 print(store)
 print("--------------------")

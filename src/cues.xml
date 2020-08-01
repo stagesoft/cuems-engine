@@ -1,1 +1,82 @@
-<CueList><Cue><uuid>29fa898f-1bcc-47f5-8c26-fd930cb9d6b6</uuid><type>mtc</type><loop>False</loop><time><CTimecode>00:00:33:00</CTimecode></time><outputs><CueOutputs>{'output_id': 5}</CueOutputs></outputs></Cue><Cue><uuid>d48ed02d-14dc-4e32-b081-9662ff7e4335</uuid><type>floating</type><loop>False</loop><time><NoneType>None</NoneType></time><outputs><CueOutputs>{'physiscal': 1, 'virtual': 3}</CueOutputs></outputs></Cue><AudioCue><uuid>fd95f58f-420f-43f9-9137-4a6ad3b71baf</uuid><type>virtual</type><loop>False</loop><time><CTimecode>00:00:45:00</CTimecode></time><outputs><AudioCueOutputs>{'stereo': 1}</AudioCueOutputs></outputs></AudioCue><DmxCue><uuid>247b9988-8489-4b3c-b9a5-f1f20efc8030</uuid><time><CTimecode>00:00:23:00</CTimecode></time><dmx_scene><DmxScene><DmxUniverse id="0"><DmxChannel id="0">10</DmxChannel><DmxChannel id="1">50</DmxChannel></DmxUniverse><DmxUniverse id="1"><DmxChannel id="20">23</DmxChannel><DmxChannel id="21">255</DmxChannel></DmxUniverse><DmxUniverse id="2"><DmxChannel id="5">10</DmxChannel><DmxChannel id="6">23</DmxChannel><DmxChannel id="7">125</DmxChannel><DmxChannel id="8">200</DmxChannel></DmxUniverse></DmxScene></dmx_scene><outputs><DmxCueOutputs>{'output_id': 4}</DmxCueOutputs></outputs></DmxCue><Cue><uuid>8fbe2e35-4add-4c59-b45c-725878093976</uuid><type>virtual</type><loop>False</loop><time><CTimecode>00:00:05:00</CTimecode></time><outputs><CueOutputs>{'output_id': 5}</CueOutputs></outputs></Cue></CueList>
+<CuemsScript>
+    <uuid>db355c4d-1f10-4614-8bb6-6713ab08efe6</uuid>
+    <timecode_cuelist>
+        <CueList>
+            <Cue>
+                <uuid>76c1ca03-bbc9-4897-87b0-51543bd9da1a</uuid>
+                <type>mtc</type>
+                <loop>False</loop>
+                <time>
+                    <CTimecode>00:00:33:00</CTimecode>
+                </time>
+                <outputs>
+                    <CueOutputs>{'output_id': 5}</CueOutputs>
+                </outputs>
+            </Cue>
+            <Cue>
+                <uuid>e81b5a27-0c31-458c-8c7a-0a8593226516</uuid>
+                <type>floating</type>
+                <loop>False</loop>
+                <time>
+                    <NoneType>None</NoneType>
+                </time>
+                <outputs>
+                    <CueOutputs>{'physiscal': 1, 'virtual': 3}</CueOutputs>
+                </outputs>
+            </Cue>
+            <AudioCue>
+                <uuid>cf7cbba6-afc2-4c35-814a-698696cdc13d</uuid>
+                <type>virtual</type>
+                <loop>False</loop>
+                <time>
+                    <CTimecode>00:00:45:00</CTimecode>
+                </time>
+                <outputs>
+                    <AudioCueOutputs>{'stereo': 1}</AudioCueOutputs>
+                </outputs>
+            </AudioCue>
+        </CueList>
+    </timecode_cuelist>
+    <floating_cuelist>
+        <CueList>
+            <DmxCue>
+                <uuid>411981bd-7149-4614-9ae3-934197094766</uuid>
+                <time>
+                    <CTimecode>00:00:23:00</CTimecode>
+                </time>
+                <dmx_scene>
+                    <DmxScene>
+                        <DmxUniverse id="0">
+                            <DmxChannel id="0">10</DmxChannel>
+                            <DmxChannel id="1">50</DmxChannel>
+                        </DmxUniverse>
+                        <DmxUniverse id="1">
+                            <DmxChannel id="20">23</DmxChannel>
+                            <DmxChannel id="21">255</DmxChannel>
+                        </DmxUniverse>
+                        <DmxUniverse id="2">
+                            <DmxChannel id="5">10</DmxChannel>
+                            <DmxChannel id="6">23</DmxChannel>
+                            <DmxChannel id="7">125</DmxChannel>
+                            <DmxChannel id="8">200</DmxChannel>
+                        </DmxUniverse>
+                    </DmxScene>
+                </dmx_scene>
+                <outputs>
+                    <DmxCueOutputs>{'output_id': 4}</DmxCueOutputs>
+                </outputs>
+            </DmxCue>
+            <Cue>
+                <uuid>4a25bd79-141d-43d3-97e9-ef451d66687a</uuid>
+                <type>virtual</type>
+                <loop>False</loop>
+                <time>
+                    <CTimecode>00:00:05:00</CTimecode>
+                </time>
+                <outputs>
+                    <CueOutputs>{'output_id': 5}</CueOutputs>
+                </outputs>
+            </Cue>
+        </CueList>
+    </floating_cuelist>
+</CuemsScript>
