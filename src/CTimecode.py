@@ -3,11 +3,18 @@ import json
 
 
 class CTimecode(Timecode):
-    def __init__(self, start_timecode=None, start_seconds=None, frames=None, framerate=25):
-        super().__init__(framerate, start_timecode, start_seconds, frames)
+    def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate=25):
+        if init_dict is not None:
+            super().__init__(framerate, init_dict, start_seconds, frames)
+        else:
+            super().__init__(framerate, start_timecode, start_seconds, frames)
     
-    
+    @classmethod
+    def from_dict(cls, init_dict):
+        return cls(init_dict =  init_dict)
     @property
+
+    
     def milliseconds(self):
         """returns time as milliseconds
         """

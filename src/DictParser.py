@@ -1,3 +1,4 @@
+from CuemsScript import CuemsScript
 from CueList import CueList
 from Cue import Cue
 from Outputs import CueOutputs, AudioCueOutputs, DmxCueOutputs
@@ -35,10 +36,24 @@ class CuemsParser():
 
     def parse(self):
         parser_class = self.get_parser_class(next(iter(self.init_dict.keys())))
-        print(self.init_dict)
-        print(parser_class)
         item_obj = parser_class(init_dict=next(iter(self.init_dict.values()))).parse()
         return item_obj
+class CuemsScriptParser(CuemsParser):
+    def __init__(self, init_dict):
+        self.init_dict = init_dict
+        self._class = self.get_class(self)
+        self.item = self._class(self.init_dict)
+    
+    def parse(self):
+        for dict_key, dict_value in self.init_dict.items():
+            if type(dict_value) is dict:
+                parser_class = self.get_parser_class(list(dict_value)[0])
+                class_dict = list(dict_value.values())[0]
+                self.item[dict_key] = parser_class(init_dict=class_dict).parse()
+            else:
+                self.item[dict_key] = dict_value
+        
+        return self.item
 
 class CueListParser(CuemsParser):
     def __init__(self, init_dict, cuelist=None):
@@ -51,11 +66,17 @@ class CueListParser(CuemsParser):
         
     
     def parse(self):
-        for class_string, class_items_list in self.init_dict.items():   
-            for class_item in class_items_list:
+        for class_string, class_items_list in self.init_dict.items():
+            if isinstance(class_items_list, list):
+                for class_item in class_items_list:
+                    parser_class = self.get_parser_class(class_string)
+                    item_obj = parser_class(init_dict=class_item).parse()
+                    self.cuelist.append(item_obj)
+            else:
                 parser_class = self.get_parser_class(class_string)
-                item_obj = parser_class(init_dict=class_item).parse()
+                item_obj = parser_class(init_dict=class_items_list).parse()
                 self.cuelist.append(item_obj)
+            
         return self.cuelist
     
     
@@ -64,7 +85,8 @@ class CueParser(CueListParser):
     def __init__(self, init_dict):
         self.init_dict = init_dict
         self._class = self.get_class(self)
-        self.item = self._class(self.init_dict)
+       # self.item = self._class.from_dict(self.init_dict)
+        self.item = self._class()
     
     def parse(self):
         for dict_key, dict_value in self.init_dict.items():
@@ -137,6 +159,7 @@ class CTimecodeParser(GenericSubObjectParser):
 class CueOutputsParser(GenericSubObjectParser):
     def __init__(self, init_dict):
         super().__init__(init_dict)
+
 
 class AudioCueOutputsParser(GenericSubObjectParser):
     def __init__(self, init_dict):

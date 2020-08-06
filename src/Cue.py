@@ -2,18 +2,17 @@ from CTimecode import CTimecode
 from Outputs import Outputs
 import uuid
 class Cue(dict):
-    def __init__(self, time=None, init_dict=None, outputs=None):
+    def __init__(self, time=None, init_dict = None):
         super().__setitem__('uuid', str(uuid.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
         #TODO: do not generate uuid if geting dict from xml, now we generate it and then overwrite it so we allwais have one
+        self.time = time
         if init_dict is not None:
             super().__init__(init_dict)
-        else:
-            super().__init__()
-        self.time = time
-        if outputs is not None:
-            self.outputs = outputs
 
-    # TODO: convert to @classmethod from init_dict
+    @classmethod
+    def from_dict(cls, init_dict):
+        return cls(init_dict =  init_dict)
+
     @property
     def outputs(self):
         return super().__getitem__('outputs')
@@ -26,7 +25,7 @@ class Cue(dict):
     def time(self):
         return super().__getitem__('time')
 
-    @time.setter
+    @time.setter #TODO: let te timecode object handle this
     def time(self, time):
         if isinstance(time, CTimecode):
             super().__setitem__('time', time)

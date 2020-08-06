@@ -32,6 +32,3 @@ class CuemsScript(dict):
             super().__setitem__('floating_cuelist', cuelist)
         else:
             raise NotImplementedError
-
-    def __str__(self):
-        return super().__str__()

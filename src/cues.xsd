@@ -2,89 +2,38 @@
   <xs:element name="CuemsScript">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="CueList">
+        <xs:element type="xs:string" name="uuid"/>
+        <xs:element name="timecode_cuelist">
           <xs:complexType>
-            <xs:choice maxOccurs="unbounded" minOccurs="0">
-              <xs:element name="Cue" maxOccurs="unbounded" minOccurs="0">
+            <xs:sequence>
+              <xs:element name="CueList">
                 <xs:complexType>
                   <xs:sequence>
-                    <xs:element type="xs:string" name="uuid"/>
-                    <xs:element type="xs:string" name="type"/>
-                    <xs:element type="xs:string" name="loop"/>
-                    <xs:element name="time">
+                    <xs:element name="Cue" maxOccurs="unbounded" minOccurs="0">
                       <xs:complexType>
                         <xs:sequence>
-                          <xs:element type="xs:string" name="CTimecode" minOccurs="0"/>
-                          <xs:element type="xs:string" name="NoneType" minOccurs="0"/>
-                        </xs:sequence>
-                      </xs:complexType>
-                    </xs:element>
-                    <xs:element name="outputs">
-                      <xs:complexType>
-                        <xs:sequence>
-                          <xs:element type="xs:string" name="CueOutputs"/>
-                        </xs:sequence>
-                      </xs:complexType>
-                    </xs:element>
-                  </xs:sequence>
-                </xs:complexType>
-              </xs:element>
-              <xs:element name="AudioCue">
-                <xs:complexType>
-                  <xs:sequence>
-                    <xs:element type="xs:string" name="uuid"/>
-                    <xs:element type="xs:string" name="type"/>
-                    <xs:element type="xs:string" name="loop"/>
-                    <xs:element name="time">
-                      <xs:complexType>
-                        <xs:sequence>
-                          <xs:element type="xs:string" name="CTimecode"/>
-                        </xs:sequence>
-                      </xs:complexType>
-                    </xs:element>
-                    <xs:element name="outputs">
-                      <xs:complexType>
-                        <xs:sequence>
-                          <xs:element type="xs:string" name="AudioCueOutputs"/>
-                        </xs:sequence>
-                      </xs:complexType>
-                    </xs:element>
-                  </xs:sequence>
-                </xs:complexType>
-              </xs:element>
-              <xs:element name="DmxCue">
-                <xs:complexType>
-                  <xs:sequence>
-                    <xs:element type="xs:string" name="uuid"/>
-                    <xs:element type="xs:string" name="type" minOccurs="0"/>
-                    <xs:element type="xs:string" name="loop" minOccurs="0"/>
-                    <xs:element name="time">
-                      <xs:complexType>
-                        <xs:sequence>
-                          <xs:element type="xs:string" name="CTimecode"/>
-                        </xs:sequence>
-                      </xs:complexType>
-                    </xs:element>
-                    <xs:element name="dmx_scene" minOccurs="0">
-                      <xs:complexType>
-                        <xs:sequence>
-                          <xs:element name="DmxScene">
+                          <xs:element type="xs:string" name="uuid"/>
+                          <xs:element name="time">
                             <xs:complexType>
                               <xs:sequence>
-                                <xs:element name="DmxUniverse" maxOccurs="unbounded" minOccurs="0">
+                                <xs:element type="xs:string" name="CTimecode" minOccurs="0"/>
+                                <xs:element type="xs:string" name="NoneType" minOccurs="0"/>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element type="xs:string" name="type"/>
+                          <xs:element type="xs:string" name="loop"/>
+                          <xs:element name="outputs">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="CueOutputs">
                                   <xs:complexType>
                                     <xs:sequence>
-                                      <xs:element name="DmxChannel" maxOccurs="unbounded" minOccurs="0">
-                                        <xs:complexType>
-                                          <xs:simpleContent>
-                                            <xs:extension base="xs:short">
-                                              <xs:attribute type="xs:byte" name="id" use="optional"/>
-                                            </xs:extension>
-                                          </xs:simpleContent>
-                                        </xs:complexType>
-                                      </xs:element>
+                                      <xs:element type="xs:byte" name="id" minOccurs="0"/>
+                                      <xs:element type="xs:string" name="bla" minOccurs="0"/>
+                                      <xs:element type="xs:byte" name="physiscal" minOccurs="0"/>
+                                      <xs:element type="xs:byte" name="virtual" minOccurs="0"/>
                                     </xs:sequence>
-                                    <xs:attribute type="xs:byte" name="id" use="optional"/>
                                   </xs:complexType>
                                 </xs:element>
                               </xs:sequence>
@@ -93,18 +42,135 @@
                         </xs:sequence>
                       </xs:complexType>
                     </xs:element>
-                    <xs:element name="outputs">
+                    <xs:element name="AudioCue">
                       <xs:complexType>
                         <xs:sequence>
-                          <xs:element type="xs:string" name="DmxCueOutputs" minOccurs="0"/>
-                          <xs:element type="xs:string" name="CueOutputs" minOccurs="0"/>
+                          <xs:element type="xs:string" name="uuid"/>
+                          <xs:element name="time">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element type="xs:string" name="CTimecode"/>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element type="xs:string" name="type"/>
+                          <xs:element type="xs:string" name="loop"/>
+                          <xs:element name="outputs">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="AudioCueOutputs">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element type="xs:byte" name="stereo"/>
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
                         </xs:sequence>
                       </xs:complexType>
                     </xs:element>
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
-            </xs:choice>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="floating_cuelist">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="CueList">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="DmxCue">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element type="xs:string" name="uuid"/>
+                          <xs:element name="time">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element type="xs:string" name="CTimecode"/>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element name="dmx_scene">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="DmxScene">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element name="DmxUniverse" maxOccurs="unbounded" minOccurs="0">
+                                        <xs:complexType>
+                                          <xs:sequence>
+                                            <xs:element name="DmxChannel" maxOccurs="unbounded" minOccurs="0">
+                                              <xs:complexType>
+                                                <xs:simpleContent>
+                                                  <xs:extension base="xs:short">
+                                                    <xs:attribute type="xs:byte" name="id" use="optional"/>
+                                                  </xs:extension>
+                                                </xs:simpleContent>
+                                              </xs:complexType>
+                                            </xs:element>
+                                          </xs:sequence>
+                                          <xs:attribute type="xs:byte" name="id" use="optional"/>
+                                        </xs:complexType>
+                                      </xs:element>
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element name="outputs">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="DmxCueOutputs">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element type="xs:byte" name="universe0"/>
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="Cue">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element type="xs:string" name="uuid"/>
+                          <xs:element name="time">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element type="xs:string" name="CTimecode"/>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element type="xs:string" name="type"/>
+                          <xs:element type="xs:string" name="loop"/>
+                          <xs:element name="outputs">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="CueOutputs">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element type="xs:byte" name="id"/>
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
