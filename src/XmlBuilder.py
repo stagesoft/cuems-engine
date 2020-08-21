@@ -5,6 +5,7 @@ from log import logger
 
 
 PARSER_SUFFIX = 'XmlBuilder'
+GENERIC_BUILDER = 'GenericCueXmlBuilder'
 
 class XmlBuilder():
     def __init__(self, _object, xml_tree = None):
@@ -18,24 +19,22 @@ class XmlBuilder():
         try:
             builder_class = globals()[builder_class_name]
         except KeyError as err:
-            logger.error("Could not find class {0}".format(err))
-            builder_class =None
+            logger.info("Could not find class {0}, reverting to generic builder class".format(err))
+            builder_class = globals()[GENERIC_BUILDER]
         return builder_class
     
     def build(self):
+        self.xml_tree = ET.Element('CueMs')
         builder_class = self.get_builder_class(self._object)
         self.xml_tree = builder_class(self._object, xml_tree = self.xml_tree).build()
         return self.xml_tree
 
 class CuemsScriptXmlBuilder(XmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
-        
-    
+
     def build(self):
-        self.xml_tree = ET.Element(self.class_name)
+        cue_element = ET.SubElement(self.xml_tree, self.class_name)
         for key, value in self._object.items():
-            cue_subelement = ET.SubElement(self.xml_tree, str(key))
+            cue_subelement = ET.SubElement(cue_element, str(key))
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement.text = str(value)
             else:
@@ -43,9 +42,8 @@ class CuemsScriptXmlBuilder(XmlBuilder):
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
         return self.xml_tree
 
-class CueListXmlBuilder(CuemsScriptXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class CueListXmlBuilder(XmlBuilder):
+
     
     def build(self):
         cuelist_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -55,9 +53,7 @@ class CueListXmlBuilder(CuemsScriptXmlBuilder):
         return self.xml_tree
     
         
-class CueXmlBuilder(CueListXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class GenericCueXmlBuilder(XmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -69,19 +65,9 @@ class CueXmlBuilder(CueListXmlBuilder):
                 builder_class = self.get_builder_class(value)
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
         return self.xml_tree
-    
-class AudioCueXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
-    
-class DmxCueXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
 
-class DmxSceneXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
-        
+class DmxSceneXmlBuilder(XmlBuilder):
+ 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
         universe_list = list(self._object.items())
@@ -91,9 +77,7 @@ class DmxSceneXmlBuilder(CueXmlBuilder):
             
         return self.xml_tree
 
-class DmxUniverseXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class DmxUniverseXmlBuilder(XmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, type(self._object[1]).__name__, id=str(self._object[0]))
@@ -103,17 +87,13 @@ class DmxUniverseXmlBuilder(CueXmlBuilder):
             sub_object_element = builder_class(channel, xml_tree = cue_element).build()
         return self.xml_tree
     
-class DmxChannelXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class DmxChannelXmlBuilder(XmlBuilder):
     
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, type(self._object[1]).__name__, id=str(self._object[0]))
         cue_element.text = str(self._object[1])
 
-class GenericSubObjectXmlBuilder(CueXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class GenericSubObjectXmlBuilder(XmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -121,12 +101,9 @@ class GenericSubObjectXmlBuilder(CueXmlBuilder):
         return self.xml_tree
 
 class CTimecodeXmlBuilder(GenericSubObjectXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+    pass
 
-class CueOutputsXmlBuilder(GenericSubObjectXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+class CueOutputsXmlBuilder(XmlBuilder):
 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -141,13 +118,10 @@ class CueOutputsXmlBuilder(GenericSubObjectXmlBuilder):
         return self.xml_tree
 
 class AudioCueOutputsXmlBuilder(CueOutputsXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+    pass
 
 class DmxCueOutputsXmlBuilder(CueOutputsXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+    pass
     
 class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder):
-    def __init__(self, _object, xml_tree):
-        super().__init__(_object, xml_tree)
+    pass
