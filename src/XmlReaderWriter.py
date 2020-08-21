@@ -64,6 +64,10 @@ class XmlWriter(CuemsXml):
        # self.__backup()
         ET.ElementTree(xmldata).write(self.xmlfile)
 
+    def to_json(self, xmldata):
+
+       return xmlschema.to_json(xmldata, schema=self.schema)
+
 class XmlReader(CuemsXml):
     def __init__(self,schema=None,xmlfile=None):
       super().__init__(schema, xmlfile)
@@ -72,3 +76,11 @@ class XmlReader(CuemsXml):
         xml_file = open(self.xmlfile)
         xml_dict = self.schema_object.to_dict(xml_file, validation='strict',  strip_namespaces=True)
         return xml_dict
+
+    def from_json(self, _json):
+        xml_element = xmlschema.from_json(_json, xmlschema.XMLSchema(self.schema), converter=self.converter)
+        xml_dict = self.schema_object.to_dict(xml_element, validation='strict',  strip_namespaces=True, converter=self.converter)
+        return xml_dict
+
+
+    # include preserve_root !!! to json

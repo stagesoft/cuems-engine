@@ -10,8 +10,6 @@ from DictParser import CuemsParser
 from XmlBuilder import XmlBuilder
 from XmlReaderWriter import XmlReader, XmlWriter
 
-import json
-
 
 
 c = Cue(33, {'type': 'mtc', 'loop': 'False'})
@@ -24,12 +22,12 @@ ac = AudioCue(45, {'type': 'virtual','loop': 'True'} )
 ac.outputs = {'stereo': 1}
 d_c = DmxCue(time=23, scene={0:{0:10, 1:50}, 1:{20:23, 21:255}, 2:{5:10, 6:23, 7:125, 8:200}})
 d_c.outputs = {'universe0': 3}
-
+g = Cue(33, {'type': 'mtc', 'loop': 'False'})
 
 custom_cue_list = CueList([c, c2])
 custom_cue_list.append(ac)
 
-custom_cue_list + [d_c, c3]
+custom_cue_list + [d_c, c3, g]
 float_cue_list = CueList([d_c, c3])
 
 float_cuelist = CueList([ac, c3 ])
@@ -40,6 +38,7 @@ print(script)
 xml_data = XmlBuilder(script).build()
 
 writer = XmlWriter(schema = 'cues.xsd', xmlfile = 'cues.xml')
+
 writer.write(xml_data)
 
 reader = XmlReader(schema = 'cues.xsd', xmlfile = 'cues.xml')
@@ -62,8 +61,15 @@ else:
 print("-----^^^^^^^^------")
 print("*******************")
 print('JSON:')
-print(json.dumps(xml_dict))
+xmlschema_json = writer.to_json(xml_data)
+print(xmlschema_json)
+
 print("*******************")
+print('recreated dict from json')
+#xml_dict_from_json = reader.from_json(xmlschema_json)
+#print(xml_dict_from_json)
+
+print('xxxxxxxxxxxxxxxxxxxx')
 for o in store.timecode_cuelist:
     print(type(o))
     print(o)
