@@ -3,7 +3,7 @@ from Outputs import Outputs
 import uuid
 class Cue(dict):
     def __init__(self, time=None, init_dict = None):
-        super().__setitem__('uuid', str(uuid.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
+        super().__setitem__('uuid', str(uuid.uuid1())) # TODO: Check safe and choose uuid version (4? 5?)
         #TODO: do not generate uuid if geting dict from xml, now we generate it and then overwrite it so we allwais have one
         self.time = time
         if init_dict is not None:

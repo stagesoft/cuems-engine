@@ -3,7 +3,7 @@ import uuid
 
 class CuemsScript(dict):
     def __init__(self, timecode_cuelist=None, floating_cuelist=None):
-        super().__setitem__('uuid', str(uuid.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
+        super().__setitem__('uuid', str(uuid.uuid1())) # TODO: Check safe and choose uuid version (4? 5?)
         super().__setitem__('timecode_cuelist', timecode_cuelist)
         super().__setitem__('floating_cuelist', floating_cuelist)
         
