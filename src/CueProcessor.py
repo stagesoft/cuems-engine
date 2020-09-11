@@ -6,7 +6,7 @@ import queue
 
 from log import *
 
-class CuePriorityQueu(queue.PriorityQueue):
+class CuePriorityQueue(queue.PriorityQueue):
     def __init__(self):
       super().__init__()
 
