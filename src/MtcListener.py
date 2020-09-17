@@ -22,7 +22,7 @@ class MtcListener(threading.Thread):
 
         self.step_callback = step_callback
         self.reset_callback = reset_callback
-        super().__init__()
+        super().__init__(name = 'mtcl')
         self.daemon = False
         threading.Thread.start(self)
 

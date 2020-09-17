@@ -24,7 +24,7 @@ audioplayer_settings = settings_node_0["audioplayer"]
 video_players = NodeVideoPlayers(videoplayer_settings)
 audio_players = NodeAudioPlayers(audioplayer_settings)
 
-local_device = ossia.LocalDevice("Node {}".format(settings_node_0["@id"]))
+local_device = ossia.LocalDevice("Node {}".format(settings_node_0["id"]))
 
 local_device.create_oscquery_server(
     settings_node_0['osc_out_port'], settings_node_0['osc_in_port'], True)
