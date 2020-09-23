@@ -6,43 +6,45 @@ import multiprocessing
 import signal
 import time
 import os
-from ws_server import CuemsWsServer
+from cuems_editor import CuemsWsServer
 
 from MtcListener import MtcListener
 
-from log import *
+from log import logger
+from OssiaServer import OssiaServer
 from Settings import Settings
 
 # %%
 class cuems_engine():
+    # Flags
+    stop_requested = False
+    ws_exited = False
+
+    # Main thread ids
+    main_thread_pid = os.getpid()
+    main_thread_id = threading.get_ident()
+
+    # Conf
+    node_conf = {}
+    master = False
+    engine_settings = None
+
     def __init__(self):
         # Our MTC listener object
         logger.info('CUEMS ENGINE INITIALIZATION')
+        logger.info(f'Main thread PID: {self.main_thread_pid} ID: {self.main_thread_id}')
         logger.info('Starting MTC listener')
         self.mtclistener = MtcListener()
-
-        # Flags
-        self.stop_requested = False
-        self.ws_exited = False
-
-        # Main thread ids
-        self.main_thread_pid = os.getpid()
-        self.main_thread_id = threading.get_ident()
-        logger.info(f'Main thread PID: {self.main_thread_pid} ID: {self.main_thread_id}')
-
-        # Conf
-        self.node_conf = {}
-        self.master = False
 
         ########################################################3
         # Threaded managers objects
         self.cm = threading.Thread(target = self.config_manager, name = 'cm')
         self.pm = threading.Thread(target = self.project_manager, name = 'pm')
         self.ws = threading.Thread(target = self.websocket_server, name = 'ws')
+        self.om = threading.Thread(target = self.ossia_manager, name = 'ossia')
         self.sm = threading.Thread(target = self.script_manager, name = 'sm')
         self.mq = threading.Thread(target = self.main_queue, name = 'mq')
         self.pq = threading.Thread(target = self.preview_queue, name = 'pq')
-
         self.start_threads()
 
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -57,11 +59,20 @@ class cuems_engine():
         self.stop_all_threads()
 
     ########################################################3
+    # Init check functions
+    def check_audio_devs(self):
+        pass
+
+    def check_video_devs(self):
+        pass
+
+    ########################################################3
     # Thread starting functions
     def start_threads(self):
         self.cm.start()
         self.pm.start()
         self.ws.start()
+        self.om.start()
         self.sm.start()
         self.mq.start()
         self.pq.start()
@@ -76,6 +87,7 @@ class cuems_engine():
         self.cm.join()
         self.pm.join()
         self.ws.join()
+        self.om.join()
         self.sm.join()
         self.mq.join()
         self.pq.join()
@@ -143,9 +155,8 @@ class cuems_engine():
             self.engine_settings.read()
             logger.info('Configuration loaded:')
             self.node_conf = self.engine_settings['node'][0]
-            logger.info('node :\n' + print_dict(self.node_conf, 1))
-        else:
-            logger.info(str(self.engine_settings))
+
+        logger.info('node :\n' + print_dict(self.node_conf, 1))
 
         while not self.stop_requested:
             time.sleep(0.1)
@@ -161,16 +172,38 @@ class cuems_engine():
         # or as an independent process
         # Do we need pipe communication??
         self.ws_id = threading.get_ident()
-        ''' os.popen ??? '''
         logger.info(f'Starting Websocket Server. Thread ID: {self.ws_id}')
-        self.ws_process = multiprocessing.Process(name='cuems_ws_server', target=os.execv('/usr/bin/python3', ('/home/calamar/MEGA/StageLab/osc_control/ws-server/ws-test.py', )))
+        ws_server = CuemsWsServer.CuemsWsServer()
+        ws_process = multiprocessing.Process(name='cuems_ws_server', target=ws_server.start(9092))
         # self.ws_pid = os.spawnl(os.P_NOWAIT, '/usr/bin/python3', '/usr/bin/python3','/home/calamar/MEGA/StageLab/osc_control/ws-server/ws-test.py')
-        logger.info(f'\t\tServer process own PID: {self.ws_process}')
-        self.ws_process.start()
+        logger.info(f'Websocket Server process own PID: {ws_process}')
+        logger.info('\tlistening on port: 9092')
+        ws_process.start()
         while not self.stop_requested:
             time.sleep(0.1)
 
-        self.ws_process.terminate()
+        logger.info(f'Stopping Websocket Server')
+        ws_server.stop()
+
+        logger.info(f'Terminate Websocket Server process (PID: {ws_process})')
+        ws_process.terminate()
+
+    def ossia_manager(self):
+        while not self.engine_settings.loaded:
+            time.sleep(0.1)
+
+        self.om_id = threading.get_ident()
+        logger.info(f'Starting Ossia Manager. Thread ID: {self.sm_id}')
+
+        logger.info('\tCreating Ossia server...')
+        ossia_server = OssiaServer(self.node_conf)
+        logger.info('\tStarting Ossia server...')
+        ossia_server.start()
+        
+        while not self.stop_requested:
+            time.sleep(0.1)
+
+        ossia_server.stop()
 
     def script_manager(self):
         self.sm_id = threading.get_ident()
@@ -209,7 +242,8 @@ class cuems_engine():
         exit(sigNum)
 
     def sigChldHandler(self, sigNum, frame):
-        logger.info('Child process signal received, maybe from ws-server')
+        pass
+        # logger.info('Child process signal received, maybe from ws-server')
         # wait_return = os.waitid(os.P_PID, self.ws_pid, os.WEXITED)
         # logger.info(wait_return)
         #if wait_return.si_code

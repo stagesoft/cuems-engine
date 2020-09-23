@@ -9,12 +9,8 @@ from AudioPlayer import NodeAudioPlayers
 from log import *
 from Settings import Settings
 
-
-
 settings = Settings("settings.xsd", "settings.xml")
 settings.read()
-
-
 
 settings_node_0 = settings["node"][0]
 
@@ -29,12 +25,13 @@ local_device = ossia.LocalDevice("Node {}".format(settings_node_0["id"]))
 local_device.create_oscquery_server(
     settings_node_0['osc_out_port'], settings_node_0['osc_in_port'], True)
 
-logger.debug("OscQuery device listening on port {}".format(
+logger.info("OscQuery device listening on port {}".format(
     settings_node_0['osc_in_port']))
 
 video_nodes = {}
 audio_nodes = {}
 
+# Video nodes
 
 for display_id, videoplayer in enumerate(video_players):
 
@@ -66,6 +63,8 @@ for display_id, videoplayer in enumerate(video_players):
 
 # end video nodes
 
+# Audio nodes
+
 for card_id, audioplayer in enumerate(audio_players):
 
     audio_nodes["start{}".format(card_id)] = local_device.add_node(
@@ -95,8 +94,16 @@ for card_id, audioplayer in enumerate(audio_players):
 # end audio nodes
 
 
-messageq_local = ossia.MessageQueue(local_device)
+# Engine nodes
 
+enode = local_device.add_node('/P3/B2')
+enode.create_parameter(ossia.ValueType.String)
+enode.parameter.access_mode = ossia.AccessMode.Set
+
+# end engine nodes
+
+
+messageq_local = ossia.MessageQueue(local_device)
 
 for node in video_nodes.values():
     messageq_local.register(node.parameter)
@@ -104,13 +111,16 @@ for node in video_nodes.values():
 for node in audio_nodes.values():
     messageq_local.register(node.parameter)
 
-
 p = re.compile(r'/(\w*)(\d)/(\w*)(\d)/(\w*)')
 
 while(True):
+    time.sleep(0.1)
+
     message = messageq_local.pop()
 
     if(message != None):
+        logger.debug("messageq : " + str(message))
+
         parameter, value = message
 
         b = p.search(str(parameter.node))
