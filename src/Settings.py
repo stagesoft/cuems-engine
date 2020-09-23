@@ -6,7 +6,7 @@ import xmlschema
 import datetime  as DT
 import os
 import json
-from log import *
+from .log import logger
 
 from CTimecode import CTimecode
 

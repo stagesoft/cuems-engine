@@ -1,11 +1,11 @@
-from CuemsScript import CuemsScript
-from CueList import CueList
-from Cue import Cue
-from Outputs import CueOutputs, AudioCueOutputs, DmxCueOutputs
-from AudioCue import AudioCue
-from DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
-from CTimecode import CTimecode
-from log import logger
+from .CuemsScript import CuemsScript
+from .CueList import CueList
+from .Cue import Cue
+from .Outputs import Outputs
+from .AudioCue import AudioCue
+from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
+from .CTimecode import CTimecode
+from .log import logger
 
 PARSER_SUFFIX = 'Parser'
 GENERIC_PARSER = 'GenericCueParser'

@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 
-from log import logger
+from .log import logger
 
 
 

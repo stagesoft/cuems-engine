@@ -1,6 +1,7 @@
-from log import *
-
+from .log import logger
 OUTPUTS_SUFFIX = 'Outputs'
+
+
 
 class Outputs():
     def __init__(self, caller_class, init_dict = None):

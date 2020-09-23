@@ -1,6 +1,7 @@
-from CTimecode import CTimecode
-from Outputs import Outputs
+from .CTimecode import CTimecode
+from .Outputs import Outputs
 import uuid
+
 class Cue(dict):
     def __init__(self, time=None, init_dict = None):
         super().__setitem__('uuid', str(uuid.uuid1())) # TODO: Check safe and choose uuid version (4? 5?)

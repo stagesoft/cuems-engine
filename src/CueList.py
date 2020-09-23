@@ -1,5 +1,6 @@
 
-from Cue import Cue
+from .Cue import Cue
+
 class CueList(list):
     
     def __init__(self, *args):

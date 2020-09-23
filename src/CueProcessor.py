@@ -4,7 +4,7 @@
 import threading
 import queue
 
-from log import *
+from .log import logger
 
 class CuePriorityQueu(queue.PriorityQueue):
     def __init__(self):

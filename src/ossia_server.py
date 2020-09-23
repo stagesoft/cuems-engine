@@ -2,12 +2,11 @@ import pyossia as ossia
 import time
 import re
 
-import config
-
-from VideoPlayer import NodeVideoPlayers
-from AudioPlayer import NodeAudioPlayers
-from log import *
-from Settings import Settings
+from .config import settings
+from .VideoPlayer import NodeVideoPlayers
+from .AudioPlayer import NodeAudioPlayers
+from .log import logger
+from .Settings import Settings
 
 
 
@@ -41,7 +40,7 @@ for display_id, videoplayer in enumerate(video_players):
     # TODO: extract parameters from xml
 
     video_nodes["start{}".format(display_id)] = local_device.add_node(
-        "/node{}/videoplayer{}/start".format(config.settings["node_id"], display_id))
+        "/node{}/videoplayer{}/start".format(settings["node_id"], display_id))
     #video_node.critical = True
     video_nodes["start{}".format(display_id)].create_parameter(
         ossia.ValueType.Bool)
@@ -50,14 +49,14 @@ for display_id, videoplayer in enumerate(video_players):
     video_nodes["start{}".format(display_id)].parameter.value = False
 
     video_nodes["load{}".format(display_id)] = local_device.add_node(
-        "/node{}/videoplayer{}/load".format(config.settings["node_id"], display_id))
+        "/node{}/videoplayer{}/load".format(settings["node_id"], display_id))
     video_nodes["load{}".format(display_id)].create_parameter(
         ossia.ValueType.String)
     video_nodes["load{}".format(
         display_id)].parameter.access_mode = ossia.AccessMode.Set
 
     video_nodes["seek{}".format(display_id)] = local_device.add_node(
-        "/node{}/videoplayer{}/seek".format(config.settings["node_id"], display_id))
+        "/node{}/videoplayer{}/seek".format(settings["node_id"], display_id))
     video_nodes["seek{}".format(display_id)].create_parameter(
         ossia.ValueType.Int)
     video_nodes["seek{}".format(
@@ -69,7 +68,7 @@ for display_id, videoplayer in enumerate(video_players):
 for card_id, audioplayer in enumerate(audio_players):
 
     audio_nodes["start{}".format(card_id)] = local_device.add_node(
-        "/node{}/audioplayer{}/start".format(config.settings["node_id"], card_id))
+        "/node{}/audioplayer{}/start".format(settings["node_id"], card_id))
     #audio_node.critical = True
     audio_nodes["start{}".format(card_id)].create_parameter(
         ossia.ValueType.Bool)
@@ -78,14 +77,14 @@ for card_id, audioplayer in enumerate(audio_players):
     audio_nodes["start{}".format(card_id)].parameter.value = False
 
     audio_nodes["load{}".format(card_id)] = local_device.add_node(
-        "/node{}/audioplayer{}/load".format(config.settings["node_id"], card_id))
+        "/node{}/audioplayer{}/load".format(settings["node_id"], card_id))
     audio_nodes["load{}".format(card_id)].create_parameter(
         ossia.ValueType.String)
     audio_nodes["load{}".format(
         card_id)].parameter.access_mode = ossia.AccessMode.Set
 
     audio_nodes["level{}".format(card_id)] = local_device.add_node(
-        "/node{}/audioplayer{}/level".format(config.settings["node_id"], card_id))
+        "/node{}/audioplayer{}/level".format(settings["node_id"], card_id))
     audio_nodes["level{}".format(card_id)].create_parameter(
         ossia.ValueType.Int)
     audio_nodes["level{}".format(

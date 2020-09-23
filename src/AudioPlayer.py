@@ -3,7 +3,7 @@ import threading
 import os
 import pyossia as ossia
 
-from log import *
+from .log import logger
 
 import time
 

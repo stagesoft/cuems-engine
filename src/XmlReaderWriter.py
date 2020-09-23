@@ -6,11 +6,11 @@ import xmlschema
 import datetime  as DT
 import os
 import json
-from log import *
 
-from CTimecode import CTimecode
+from .log import logger
+from .CTimecode import CTimecode
+from .CMLCuemsConverter import CMLCuemsConverter
 
-from CMLCuemsConverter import CMLCuemsConverter
 class CuemsXml():
     def __init__(self,schema=None,xmlfile=None):
         self.converter = CMLCuemsConverter
@@ -46,7 +46,7 @@ class CuemsXml():
         if os.path.isfile(path): #TODO: clean this and backup
             self._xmlfile = path
         else:
-            logging.debug("xml file {} not found, creating new".format(self.xmlfile))
+            logger.debug("xml file {} not found, creating new".format(self.xmlfile))
             self._xmlfile = path
             
     def validate(self):

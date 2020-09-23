@@ -9,8 +9,8 @@ import time
 
 # some_file.py
 
-from CTimecode import CTimecode
-from log import *
+from .CTimecode import CTimecode
+from .log import logger
 
 class MtcListener(threading.Thread):
     
