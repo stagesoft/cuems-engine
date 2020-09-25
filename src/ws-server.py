@@ -1,6 +1,6 @@
 
-from src.log import logger 
-from src.cuems_editor import CuemsWsServer
+from cuems.log import logger 
+from cuems.cuems_editor import CuemsWsServer
 
 
 

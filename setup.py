@@ -11,9 +11,9 @@ setuptools.setup(
     description="A small example package",
     long_description=long_description,
     url="https://github.com/stagesoft/osc_control",
-    package_dir={'osc-control': 'src'},
+    package_dir={'cuems': 'src/cuems'},
 
-    packages=setuptools.find_packages(where='src'),
+    packages=setuptools.find_packages(where='src/cuems'),
     package_data={  # Optional
         'xml': ['settings.xml'],
         'xds': ['settings.xds'],
