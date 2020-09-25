@@ -8,9 +8,9 @@ import os
 import json
 from .log import logger
 
-from CTimecode import CTimecode
+from .CTimecode import CTimecode
 
-from CMLCuemsConverter import CMLCuemsConverter
+from .CMLCuemsConverter import CMLCuemsConverter
 
 class Settings(dict):
 
