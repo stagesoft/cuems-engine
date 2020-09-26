@@ -1,11 +1,12 @@
 from .CTimecode import CTimecode
 from .Outputs import Outputs
-import uuid
+from .log import logger
+import uuid as uuid_module
 
 class Cue(dict):
-    def __init__(self, time=None, init_dict = None):
-        super().__setitem__('uuid', str(uuid.uuid1())) # TODO: Check safe and choose uuid version (4? 5?)
-        #TODO: do not generate uuid if geting dict from xml, now we generate it and then overwrite it so we allwais have one
+    def __init__(self, time=None, init_dict = None, uuid=None ):
+        if uuid is None:
+            super().__setitem__('uuid', str(uuid_module.uuid1())) # TODO: Check safe and choose uuid version (4? 5?)
         self.time = time
         if init_dict is not None:
             super().__init__(init_dict)
@@ -13,6 +14,10 @@ class Cue(dict):
     @classmethod
     def from_dict(cls, init_dict):
         return cls(init_dict =  init_dict)
+
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
 
     @property
     def outputs(self):
@@ -46,6 +51,17 @@ class Cue(dict):
             super().__setitem__('time', None)
         else:
             raise NotImplementedError #TODO: disscuss raised error
+
+    @property
+    def media(self):
+        try:
+            return super().__getitem__('media')
+        except KeyError:
+            logger.debug('{} {} with no media'.format(type(self), self.uuid))
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('media', media)
 
     def type(self):
         return type(self)

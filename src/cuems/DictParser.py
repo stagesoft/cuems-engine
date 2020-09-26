@@ -1,7 +1,7 @@
 from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
-from .Outputs import Outputs
+from .Outputs import *
 from .AudioCue import AudioCue
 from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from .CTimecode import CTimecode
