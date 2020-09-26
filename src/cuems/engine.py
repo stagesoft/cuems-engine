@@ -6,6 +6,8 @@ import multiprocessing
 import signal
 import time
 import os
+import pyossia as ossia
+
 from cuems_editor import CuemsWsServer
 
 from MtcListener import MtcListener
@@ -16,20 +18,19 @@ from Settings import Settings
 
 # %%
 class cuems_engine():
-    # Flags
-    stop_requested = False
-    ws_exited = False
-
-    # Main thread ids
-    main_thread_pid = os.getpid()
-    main_thread_id = threading.get_ident()
-
-    # Conf
-    node_conf = {}
-    master = False
-    engine_settings = None
-
     def __init__(self):
+        # Flags
+        self.stop_requested = False
+
+        # Main thread ids
+        self.main_thread_pid = os.getpid()
+        self.main_thread_id = threading.get_ident()
+
+        # Conf
+        self.node_conf = {}
+        self.master = False
+        self.engine_settings = None
+
         # Our MTC listener object
         logger.info('CUEMS ENGINE INITIALIZATION')
         logger.info(f'Main thread PID: {self.main_thread_pid} ID: {self.main_thread_id}')
@@ -38,13 +39,14 @@ class cuems_engine():
 
         ########################################################3
         # Threaded managers objects
-        self.cm = threading.Thread(target = self.config_manager, name = 'cm')
-        self.pm = threading.Thread(target = self.project_manager, name = 'pm')
-        self.ws = threading.Thread(target = self.websocket_server, name = 'ws')
+        self.cm = threading.Thread(target = self.config_manager, name = 'confman')
+        self.pm = threading.Thread(target = self.project_manager, name = 'projman')
+        self.ws = threading.Thread(target = self.websocket_server, name = 'wsserver')
         self.om = threading.Thread(target = self.ossia_manager, name = 'ossia')
-        self.sm = threading.Thread(target = self.script_manager, name = 'sm')
-        self.mq = threading.Thread(target = self.main_queue, name = 'mq')
-        self.pq = threading.Thread(target = self.preview_queue, name = 'pq')
+        self.osc = threading.Thread(target = self.osc_server, name = 'osc')
+        self.sm = threading.Thread(target = self.script_manager, name = 'scriptman')
+        self.mq = threading.Thread(target = self.main_queue, name = 'mainq')
+        self.pq = threading.Thread(target = self.preview_queue, name = 'previewq')
         self.start_threads()
 
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -54,7 +56,7 @@ class cuems_engine():
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
 
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         self.stop_all_threads()
 
@@ -73,6 +75,7 @@ class cuems_engine():
         self.pm.start()
         self.ws.start()
         self.om.start()
+        self.osc.start()
         self.sm.start()
         self.mq.start()
         self.pq.start()
@@ -88,6 +91,7 @@ class cuems_engine():
         self.pm.join()
         self.ws.join()
         self.om.join()
+        self.osc.join()
         self.sm.join()
         self.mq.join()
         self.pq.join()
@@ -159,13 +163,13 @@ class cuems_engine():
         logger.info('node :\n' + print_dict(self.node_conf, 1))
 
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def project_manager(self):
         self.pm_id = threading.get_ident()
         logger.info(f'Starting Project Manager. Thread ID: {self.pm_id}')
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
     
     def websocket_server(self):
         # This server is to be reviewed to run it as a thread
@@ -174,54 +178,59 @@ class cuems_engine():
         self.ws_id = threading.get_ident()
         logger.info(f'Starting Websocket Server. Thread ID: {self.ws_id}')
         ws_server = CuemsWsServer.CuemsWsServer()
-        ws_process = multiprocessing.Process(name='cuems_ws_server', target=ws_server.start(9092))
-        # self.ws_pid = os.spawnl(os.P_NOWAIT, '/usr/bin/python3', '/usr/bin/python3','/home/calamar/MEGA/StageLab/osc_control/ws-server/ws-test.py')
-        logger.info(f'Websocket Server process own PID: {ws_process}')
+        ws_server.start(9092)
+
+        logger.info(f'Websocket Server process own PID: {ws_server.process.pid}')
         logger.info('\tlistening on port: 9092')
-        ws_process.start()
+
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         logger.info(f'Stopping Websocket Server')
         ws_server.stop()
 
-        logger.info(f'Terminate Websocket Server process (PID: {ws_process})')
-        ws_process.terminate()
+        logger.info(f'Websocket Server process terminated (PID: {ws_server.process.pid})')
 
     def ossia_manager(self):
         while not self.engine_settings.loaded:
-            time.sleep(0.1)
+            time.sleep(0.01)
+
+        while self.node_conf == {}:
+            time.sleep(0.01)
 
         self.om_id = threading.get_ident()
         logger.info(f'Starting Ossia Manager. Thread ID: {self.sm_id}')
 
-        logger.info('\tCreating Ossia server...')
         ossia_server = OssiaServer(self.node_conf)
         logger.info('\tStarting Ossia server...')
         ossia_server.start()
         
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         ossia_server.stop()
+
+    def osc_server(self):
+        while not self.stop_requested:
+            time.sleep(0.01)
 
     def script_manager(self):
         self.sm_id = threading.get_ident()
         logger.info(f'Starting Script Manager. Thread ID: {self.sm_id}')
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def main_queue(self):
         self.mq_id = threading.get_ident()
         logger.info(f'Starting main queue manager. Tthread ID: {self.mq_id}')
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def preview_queue(self):
         self.pq_id = threading.get_ident()
         logger.info(f'Starting preview queue manager. Thread ID: {self.pq_id}')
         while not self.stop_requested:
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     ########################################################3
     # System signals handlers
