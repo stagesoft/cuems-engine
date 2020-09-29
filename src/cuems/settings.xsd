@@ -8,8 +8,11 @@
                     <xs:complexType>
                         <xs:sequence>
                             <xs:element name="osc_dest_host" type="NonEmptyString"></xs:element>
-                            <xs:element name="osc_in_port" type="xs:positiveInteger"></xs:element>
-                            <xs:element name="osc_out_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="engine_osc_in_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="engine_osc_out_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="videoplayer" minOccurs="0" maxOccurs="1">
                                 <xs:complexType>
                                     <xs:sequence>

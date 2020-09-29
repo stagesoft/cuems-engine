@@ -9,8 +9,8 @@ import time
 
 # some_file.py
 
-from CTimecode import CTimecode
-from log import *
+from .CTimecode import CTimecode
+from .log import *
 
 class MtcListener(threading.Thread):
     
@@ -46,7 +46,7 @@ class MtcListener(threading.Thread):
             logger.info ('Selected MIDI port: ' + self.port_name)
         else:
             self.port_name = port
-            print("hay port")
+            # print("hay port")
 
     def run(self):
         port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member

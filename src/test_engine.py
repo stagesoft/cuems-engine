@@ -2,8 +2,8 @@
 
 # %%
 
-import engine
+from cuems.CuemsEngine import CuemsEngine
 
-my_engine = engine.cuems_engine()
+my_engine = CuemsEngine()
 
 # %%
