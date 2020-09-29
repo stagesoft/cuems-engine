@@ -3,7 +3,7 @@ import threading
 import queue
 import time
 
-from .log import *
+from .log import logger
 
 class CuePriorityQueue(queue.PriorityQueue):
     def __init__(self):

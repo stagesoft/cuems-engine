@@ -12,7 +12,7 @@ from .CTimecode import CTimecode
 
 from .cuems_editor import CuemsWsServer
 
-from .MtcListener import MtcListener
+# from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
 
 from .log import logger
@@ -41,16 +41,16 @@ class CuemsEngine():
         # self.engine_settings = None
 
         # Our MTC objects
-        logger.info('Starting MTC listener')
-        self.mtclistener = MtcListener(step_callback=self.mtc_step_callback)
+        # logger.info('Starting MTC listener')
+        # self.mtclistener = MtcListener(step_callback=self.mtc_step_callback)
 
         # MTC master object creation through bound library and open port
         self.mtcmaster = libmtcmaster.MTCSender_create()
 
         self.ossia_server = None
 
-        self.main_queue = RunningQueue()
-        self.preview_queue = RunningQueue()
+        self.main_queue = RunningQueue(main_flag=True, name='Main', mtcmaster=self.mtcmaster)
+        self.preview_queue = RunningQueue(main_flag=False, name='Preview')
 
         ########################################################3
         # System signals handlers
@@ -66,7 +66,7 @@ class CuemsEngine():
         # self.pm = threading.Thread(target = self.project_manager, name = 'projman')
         self.ws = threading.Thread(target = self.websocket_server, name = 'wsserver')
         self.om = threading.Thread(target = self.ossia_manager, name = 'ossia')
-        self.osc = threading.Thread(target = self.osc_server, name = 'osc')
+        # self.osc = threading.Thread(target = self.osc_server, name = 'osc')
         # self.sm = threading.Thread(target = self.script_manager, name = 'scriptman')
         # self.mq = threading.Thread(target = self.main_queue, name = 'mainq')
         # self.pq = threading.Thread(target = self.preview_queue, name = 'previewq')
@@ -98,10 +98,8 @@ class CuemsEngine():
         # self.pm.start()
         self.ws.start()
         self.om.start()
-        self.osc.start()
+        # self.osc.start()
         # self.sm.start()
-        # self.mq.start()
-        # self.pq.start()
 
     ########################################################3
     # Thread stopping functions
@@ -110,12 +108,15 @@ class CuemsEngine():
 
         self.cm.join()
         # self.pm.join()
+
         self.ws.join()
+        logger.info(f'Ws-server thread finished')
+
         self.om.join()
-        self.osc.join()
+        logger.info(f'Ossia server thread finished')
+
+        # self.osc.join()
         # self.sm.join()
-        # self.mq.join()
-        # self.pq.join()
 
     ########################################################3
     # Status check functions
@@ -156,21 +157,9 @@ class CuemsEngine():
         else:
             logger.info(self.sm.getName() + ' is not alive, trying to restore it')
             self.sm.start()
-
-        if self.mq.is_alive():
-            logger.info(self.mq.getName() + ' is alive')
-        else:
-            logger.info(self.mq.getName() + ' is not alive, trying to restore it')
-            self.mq.start()
-
-        if self.pq.is_alive():
-            logger.info(self.pq.getName() + ' is alive')
-        else:
-            logger.info(self.pq.getName() + ' is not alive, trying to restore it')
-            self.pq.start()
         '''
 
-        logger.info(f'MTC: {self.mtclistener.timecode()}')
+        # logger.info(f'MTC: {self.mtclistener.timecode()}')
 
     ########################################################3
     # Managers threaded functions
@@ -182,9 +171,9 @@ class CuemsEngine():
             engine_settings = Settings('./cuems/settings.xsd', './cuems/settings.xml')
             if not engine_settings.loaded:
                 engine_settings.read()
-                self.node_conf = engine_settings['node'][0]
-
-                self.conf_loaded_condition.notify_all()
+            
+            self.node_conf = engine_settings['node'][0]
+            self.conf_loaded_condition.notify_all()
 
         if self.node_conf['id'] == 0:
             self.master_flag = True
@@ -196,6 +185,7 @@ class CuemsEngine():
     def project_manager(self):
         self.pm_id = threading.get_ident()
         logger.info(f'Starting Project Manager. Thread ID: {self.pm_id}')
+
         while not self.stop_requested:
             time.sleep(0.01)
 
@@ -203,55 +193,55 @@ class CuemsEngine():
 
     def websocket_server(self):
         with self.conf_loaded_condition:
-            while not self.node_conf == {}:
+            while self.node_conf == {}:
                 self.conf_loaded_condition.wait()
 
-        # This server is to be reviewed to run it as a thread
-        # or as an independent process
-        # Do we need pipe communication??
-        self.ws_id = threading.get_ident()
-        logger.info(f'Starting Websocket Server. Thread ID: {self.ws_id}')
-        
         ws_server = CuemsWsServer.CuemsWsServer()
         ws_server.start(self.node_conf['websocket_port'])
 
-        logger.info(f'Websocket Server process own PID: {ws_server.process.pid}')
-        logger.info(f'\tlistening on port: {self.node_conf["websocket_port"]}')
+        self.ws_id = threading.get_ident()
+        logger.info(f'Websocket Server started. Thread ID: {self.ws_id} Process PID: {ws_server.process.pid} PORT : {self.node_conf["websocket_port"]}')
 
         while not self.stop_requested:
             time.sleep(0.01)
 
-        logger.info(f'Stopping Websocket Server')
         ws_server.stop()
-        time.sleep(0.1)
-
         logger.info(f'Websocket Server process terminated (PID: {ws_server.process.pid})')
-        logger.info(f'Stopping ws-server thread')
+        logger.info(f'Websocket server stopped')
 
     def ossia_manager(self):
         with self.conf_loaded_condition:
-            while not self.node_conf == {}:
+            while self.node_conf == {}:
                 self.conf_loaded_condition.wait()
 
-        self.om_id = threading.get_ident()
-        logger.info(f'Starting Ossia Manager. Thread ID: {self.om_id}')
+        osc_bridge_conf = {   '/engine' : [ossia.ValueType.Impulse, self.main_queue],
+                        '/engine/go' : [ossia.ValueType.String, self.main_queue.go],
+                        '/engine/pause' : [ossia.ValueType.Impulse, self.main_queue.pause],
+                        '/engine/stop' : [ossia.ValueType.Impulse, self.main_queue.stop],
+                        '/engine/resetall' : [ossia.ValueType.Impulse, self.main_queue.reset_all],
+                        '/engine/preload' : [ossia.ValueType.String, self.main_queue.preload],
+                        '/engine/timecode' : [ossia.ValueType.Int, self.main_queue.timecode]
+                    }
 
         with self.ossia_created_condition:
-            self.ossia_server = OssiaServer(self.node_conf)
+            self.ossia_server = OssiaServer(self.node_conf, osc_bridge_conf)
             self.ossia_created_condition.notify_all()
             
         self.ossia_server.start()
         
+        self.om_id = threading.get_ident()
+        logger.info(f'Ossia Server started. Thread ID: {self.om_id}')
+
         while not self.stop_requested:
             time.sleep(0.01)
 
         self.ossia_server.stop()
+        logger.info(f'Ossia server stopped')
 
-        logger.info(f'Stopping ossia manager thread')
-
+    '''
     def osc_server(self):
         with self.conf_loaded_condition:
-            while not self.node_conf == {}:
+            while self.node_conf == {}:
                 self.conf_loaded_condition.wait()
 
         engine_osc_mappings = { '/engine/go':self.osc_go_handler,
@@ -280,51 +270,32 @@ class CuemsEngine():
         while not self.stop_requested:
             time.sleep(0.01)
 
-    '''
-    def main_queue_(self):
-        self.mq_id = threading.get_ident()
-        logger.info(f'Starting main queue manager. Tthread ID: {self.mq_id}')
-        
-        self.previous_cue_uuid = None
-        self.current_cue_uuid = None
-        self.next_cue_uuid = None
-
-        while not self.stop_requested:
-            time.sleep(0.01)
-
-    def preview_queue(self):
-        self.pq_id = threading.get_ident()
-        logger.info(f'Starting preview queue manager. Thread ID: {self.pq_id}')
-        while not self.stop_requested:
-            time.sleep(0.01)
-    '''
-
     def mtc_step_callback(self, mtc):
         logger.info(f'MTC step callback {mtc}')
         with self.ossia_created_condition:
             while self.ossia_server == None:
                 self.ossia_created_condition.wait()
         self.ossia_server.engine_oscquery_nodes['/engine/timecode'].parameter.value = mtc.milliseconds
+    '''
 
     ########################################################
     # OSC handler functions
+    '''
     def osc_go_handler(self, unused_address, args, message):
-        logger.info(f'OSC /engine/go received {unused_address} {args} {message}')
-        libmtcmaster.MTCSender_play(self.mtcmaster)
+        self.main_queue.go(message)
 
     def osc_pause_handler(self, unused_address, args):
-        logger.info(f'OSC /engine/pause received {unused_address} {args}')
-        libmtcmaster.MTCSender_pause(self.mtcmaster)
+        self.main_queue.pause()
 
     def osc_stop_handler(self, unused_address, args):
-        logger.info(f'OSC /engine/stop received {unused_address} {args}')
-        libmtcmaster.MTCSender_stop(self.mtcmaster)
+        self.main_queue.stop()
 
     def osc_resetall_handler(self, unused_address, args):
-        logger.info(f'OSC /engine/resetall received {unused_address} {args}')
+        self.main_queue.reset_all()
 
     def osc_preload_handler(self, unused_address, args, message):
-        logger.info(f'OSC /engine/preload received {unused_address} {args} {message}')
+        self.main_queue.preload(message)
+    '''
     ########################################################
 
     ########################################################
@@ -334,7 +305,7 @@ class CuemsEngine():
         print('\n\n' + string + '\n\n')
         logger.info(string)
         self.stop_all_threads()
-        logger.info('Exiting with result code: {}'.format(sigNum))
+        logger.info(f'Exiting with result code: {sigNum}')
         exit(sigNum)
 
     def sigIntHandler(self, sigNum, frame):
@@ -342,7 +313,7 @@ class CuemsEngine():
         print('\n\n' + string + '\n\n')
         logger.info(string)
         self.stop_all_threads()
-        logger.info('Exiting with result code: {}'.format(sigNum))
+        logger.info(f'Exiting with result code: {sigNum}')
         exit(sigNum)
 
     def sigChldHandler(self, sigNum, frame):
@@ -386,8 +357,51 @@ def print_dict(d, depth = 0):
     return outstring
 
 class RunningQueue():
-    def __init__(self, main_flag=False):
-        self.mainqueue = main_flag
+    def __init__(self, main_flag=False, name='', mtcmaster=None):
+        self.main_flag = main_flag
+        self.queue_name = name
         self.running = False
         self.queue = CuePriorityQueue()
         self.processor = CueQueueProcessor(self.queue)
+
+        self.mtcmaster = mtcmaster
+
+        self.previous_cue_uuid = None
+        self.current_cue_uuid = None
+        self.next_cue_uuid = None
+
+    def go(self, **kwargs):
+        logger.info(f'{self.queue_name} queue GO! -> CUE : {kwargs["value"]}')
+        try:
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def preload(self, **kwargs):
+        logger.info(f'{self.queue_name} queue PRELOAD! -> CUE : {kwargs["value"]}')
+
+    def pause(self, **kwargs):
+        logger.info(f'{self.queue_name} queue PAUSE!')
+        try:
+            libmtcmaster.MTCSender_pause(self.mtcmaster)
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def stop(self, **kwargs):
+        logger.info(f'{self.queue_name} queue STOP!')
+        try:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def reset_all(self, **kwargs):
+        logger.info(f'{self.queue_name} queue RESETALL!')
+        try:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def timecode(self, **kwargs):
+        logger.info(f'{self.queue_name} queue TIMECODE!')
+        # libmtcmaster.MTCSender_stop(self.mtcmaster)
+
