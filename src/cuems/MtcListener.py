@@ -13,7 +13,6 @@ from .CTimecode import CTimecode
 from .log import *
 
 class MtcListener(threading.Thread):
-    
     def __init__(self, step_callback=None, reset_callback=None, port=None):
         self.main_tc = CTimecode('0:0:0:0')
         self.__quarter_frames = [0,0,0,0,0,0,0,0]
@@ -23,8 +22,8 @@ class MtcListener(threading.Thread):
         self.step_callback = step_callback
         self.reset_callback = reset_callback
         super().__init__(name = 'mtcl')
-        self.daemon = False
-        threading.Thread.start(self)
+        self.daemon = True
+        self.start()
 
 
     def timecode(self):

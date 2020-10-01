@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <cms:Settings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">
-    <node id="0">
+    <node id="0" master="1">
         <osc_dest_host>localhost</osc_dest_host>
         <oscquery_port>7700</oscquery_port>
         <oscquery_out_port>7701</oscquery_out_port>
-        <engine_osc_in_port>7800</engine_osc_in_port>
-        <engine_osc_out_port>7801</engine_osc_out_port>
         <websocket_port>9092</websocket_port>
         <videoplayer>
             <path>/usr/bin/xjadeo</path>

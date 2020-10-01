@@ -10,8 +10,6 @@
                             <xs:element name="osc_dest_host" type="NonEmptyString"></xs:element>
                             <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
-                            <xs:element name="engine_osc_in_port" type="xs:positiveInteger"></xs:element>
-                            <xs:element name="engine_osc_out_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="videoplayer" minOccurs="0" maxOccurs="1">
                                 <xs:complexType>
@@ -63,6 +61,7 @@
                             </xs:element>
                         </xs:sequence>
                         <xs:attribute name="id" type="xs:int"></xs:attribute>
+                        <xs:attribute name="master" type="xs:boolean"></xs:attribute>
                     </xs:complexType>
                 </xs:element>
             </xs:sequence>
