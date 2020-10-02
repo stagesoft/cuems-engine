@@ -11,6 +11,7 @@
                             <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
                             <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="mtc_port" type="xs:string"></xs:element>
                             <xs:element name="videoplayer" minOccurs="0" maxOccurs="1">
                                 <xs:complexType>
                                     <xs:sequence>

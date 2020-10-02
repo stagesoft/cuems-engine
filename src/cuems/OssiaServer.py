@@ -46,7 +46,8 @@ class OssiaServer(threading.Thread):
             oscq_message = self.oscquery_messageq.pop()
             while (oscq_message != None):
                 parameter, value = oscq_message
-                self.osc_registered_nodes[str(parameter.node)][1](value=value)
+                if self.osc_registered_nodes[str(parameter.node)][1] is not None:
+                    self.osc_registered_nodes[str(parameter.node)][1](value=value)
                 '''
                 try:                
                     self.engine_osc_nodes[str(parameter.node)][0].parameter.value = value

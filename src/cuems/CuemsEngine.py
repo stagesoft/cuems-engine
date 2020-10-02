@@ -8,6 +8,7 @@ import signal
 import time
 import os
 import pyossia as ossia
+from functools import partial
 
 from .CTimecode import CTimecode
 
@@ -21,27 +22,28 @@ from .OssiaServer import OssiaServer
 from .OscServer import OscServer
 from .Settings import Settings
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
+from .XmlReaderWriter import XmlReader
 
 # %%
 class CuemsEngine():
     def __init__(self):
+        logger.info('CUEMS ENGINE INITIALIZATION')
+
         # Main thread ids
         self.main_thread_pid = os.getpid()
-        self.main_thread_id = threading.get_ident()
-        logger.info('CUEMS ENGINE INITIALIZATION')
-        logger.info(f'Main thread PID: {self.main_thread_pid} ID: {self.main_thread_id}')
+        os.name
+        
+        logger.info(f'Main thread PID: {self.main_thread_pid}')
 
-        # Main thread flags
+        # Main thread conf and flags
+        self.cuems_path=os.environ['HOME'] + '/cuems/'
+        logger.info(f'Cuems path: {self.cuems_path}')
         self.stop_requested = False
         self.conf_loaded_condition = threading.Condition()
-
-        # Our MTC objects
-        # logger.info('Starting MTC listener')
-        self.mtclistener = MtcListener(step_callback=self.mtc_step_callback)
+        self.script = {}
 
         # MTC master object creation through bound library and open port
         self.mtcmaster = libmtcmaster.MTCSender_create()
-        logger.info('MTC Master created')
 
         #########################################################
         # System signals handlers
@@ -57,6 +59,7 @@ class CuemsEngine():
         self.master_flag = False
         self.project_conf = {}
 
+        # Conf load manager
         self.cm = threading.Thread(target = self.config_manager, name = 'confman')
         self.cm.start()
 
@@ -64,35 +67,46 @@ class CuemsEngine():
             while self.node_conf == None:
                 self.conf_loaded_condition.wait()
 
-        self.ws_server = CuemsWsServer.CuemsWsServer()
-        self.ws_server.start(self.node_conf['websocket_port'])
+        # Our MTC objects
+        # logger.info('Starting MTC listener')
+        self.mtclistener = MtcListener(port=self.node_conf['mtc_port'], step_callback=partial(CuemsEngine.mtc_step_callback, self), reset_callback=partial(CuemsEngine.mtc_step_callback, self, CTimecode('0:0:0:0')))
 
+        # WebSocket server
+        self.ws_server = CuemsWsServer.CuemsWsServer()
+        try:
+            self.ws_server.start(self.node_conf['websocket_port'])
+        except KeyError:
+            self.stop_all_threads()
+            logger.error('Config error, websocket_port key not found. Exiting.')
+            exit(-1)
+
+        # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
         self.ossia_server = OssiaServer(self.node_conf, self.ossia_queue)
         self.ossia_server.start()
 
-        # Execution Queues
-        self.main_queue = RunningQueue(True, 'Main', self.ossia_server, self.mtcmaster)
-        self.preview_queue = RunningQueue(False, 'Preview', self.ossia_server, self.mtcmaster)
-
         # Initial OSC nodes to tell ossia to configure
         self.osc_bridge_conf = {'/engine' : [ossia.ValueType.Impulse, None],
                                 '/engine/command' : [ossia.ValueType.Impulse, None],
-                                '/engine/command/load' : [ossia.ValueType.String, self.main_queue.load],
-                                '/engine/command/go' : [ossia.ValueType.String, self.main_queue.go],
-                                '/engine/command/pause' : [ossia.ValueType.Impulse, self.main_queue.pause],
-                                '/engine/command/stop' : [ossia.ValueType.Impulse, self.main_queue.stop],
-                                '/engine/command/resetall' : [ossia.ValueType.Impulse, self.main_queue.reset_all],
-                                '/engine/command/preload' : [ossia.ValueType.String, self.main_queue.preload],
-                                '/engine/status/timecode' : [ossia.ValueType.Int, self.main_queue.timecode], 
-                                '/engine/status/currentcue' : [ossia.ValueType.String, self.main_queue.currentcue],
-                                '/engine/status/nextcue' : [ossia.ValueType.String, self.main_queue.nextcue],
-                                '/engine/status/running' : [ossia.ValueType.Bool, self.main_queue.running]
+                                '/engine/command/load' : [ossia.ValueType.String, self.load],
+                                '/engine/command/go' : [ossia.ValueType.String, self.go],
+                                '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause],
+                                '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop],
+                                '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all],
+                                '/engine/command/preload' : [ossia.ValueType.String, self.preload],
+                                '/engine/status/timecode' : [ossia.ValueType.String, None], 
+                                '/engine/status/currentcue' : [ossia.ValueType.String, None],
+                                '/engine/status/nextcue' : [ossia.ValueType.String, None],
+                                '/engine/status/running' : [ossia.ValueType.Bool, None]
                                 }
         self.ossia_queue.put(['add', self.osc_bridge_conf])
 
+        # Execution Queues
+        self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
+        self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
+
         while not self.stop_requested:
-            time.sleep(0.01)
+            time.sleep(0.005)
 
         self.stop_all_threads()
 
@@ -118,14 +132,21 @@ class CuemsEngine():
         except:
             logger.info('MTC Master could not be released')
 
-        # self.mtclistener.join()
+        self.mtclistener.stop()
+        self.mtclistener.join()
 
         self.cm.join()
 
-        self.ws_server.stop()
+        try:
+            self.ws_server.stop()
+        except AttributeError:
+            pass
         logger.info(f'Ws-server thread finished')
 
-        self.ossia_server.stop()
+        try:
+            self.ossia_server.stop()
+        except AttributeError:
+            pass
         logger.info(f'Ossia server thread finished')
 
         # self.sm.join()
@@ -152,7 +173,7 @@ class CuemsEngine():
             '''
         else:
             logger.info(self.ws_server.getName() + ' is not alive, trying to restore it')
-            self.ws_server.start()
+            # self.ws_server.start()
 
         logger.info(f'MTC: {self.mtclistener.timecode()}')
 
@@ -160,10 +181,15 @@ class CuemsEngine():
     # Managers threaded functions and callbacks
     def config_manager(self):
         with self.conf_loaded_condition:
-            engine_settings = Settings('./cuems/settings.xsd', './cuems/settings.xml')
-            if not engine_settings.loaded:
+            try:
+                engine_settings = Settings(self.cuems_path + 'settings.xsd', self.cuems_path + 'settings.xml')
                 engine_settings.read()
-            
+            except FileNotFoundError:
+                message = 'Cuems configuration files could not be found. Exiting with error -1.'
+                print('\n\n' + message + '\n\n')
+                logger.error(message)
+                exit(-1)
+
             self.node_conf = engine_settings['node'][0]
             self.conf_loaded_condition.notify_all()
 
@@ -175,9 +201,7 @@ class CuemsEngine():
         logger.info(f'Cuems {self.node_conf} config loaded')
 
     def mtc_step_callback(self, mtc):
-        if self.main_queue.running:
-            logger.info(f'MTC step callback {mtc}')
-            self.ossia_server.engine_oscquery_nodes['/engine/status/timecode'].parameter.value = mtc.milliseconds
+        self.ossia_server.osc_registered_nodes['/engine/status/timecode'][0].parameter.value = str(mtc)
 
     ########################################################
     # System signals handlers
@@ -193,6 +217,8 @@ class CuemsEngine():
             print('ossia alive')
         if self.ws_server.process.is_alive():
             print('ws alive')
+        if self.mtclistener.is_alive():
+            print('mtcl alive')
         exit()
 
     def sigIntHandler(self, sigNum, frame):
@@ -207,6 +233,8 @@ class CuemsEngine():
             print('ossia alive')
         if self.ws_server.process.is_alive():
             print('ws alive')
+        if self.mtclistener.is_alive():
+            print('mtcl alive')
         exit()
 
     def sigChldHandler(self, sigNum, frame):
@@ -224,6 +252,64 @@ class CuemsEngine():
     def sigUsr2Handler(self, sigNum, frame):
         self.print_all_status()
     ########################################################
+
+    ########################################################
+    # OSC messages handlers
+    def load(self, **kwargs):
+        logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
+        try:
+            self.script = XmlReader(self.cuems_path + 'script.xsd', self.cuems_path + '/projects/' + kwargs['value'])
+        except FileNotFoundError:
+            logger.error('Project file not found')
+
+    def go(self, **kwargs):
+        logger.info(f'OSC GO! -> CUE : {kwargs["value"]}')
+        try:
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = True
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def preload(self, **kwargs):
+        logger.info(f'OSC PRELOAD! -> CUE : {kwargs["value"]}')
+
+    def pause(self, **kwargs):
+        logger.info('OSC PAUSE!')
+        try:
+            libmtcmaster.MTCSender_pause(self.mtcmaster)
+            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def stop(self, **kwargs):
+        logger.info('OSC STOP!')
+        try:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = False
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def reset_all(self, **kwargs):
+        logger.info('OSC RESETALL!')
+        try:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+        except:
+            logger.info('NO MTCMASTER ASSIGNED!')
+
+    def timecode(self, **kwargs):
+        logger.info('OSC TIMECODE!')
+
+    def currentcue(self, **kwargs):
+        logger.info('OSC CURRENTCUE!')
+
+    def nextcue(self, **kwargs):
+        logger.info('OSC NEXTCUE!')
+
+    def running(self, **kwargs):
+        logger.info(f'OSC RUNNING: {kwargs["value"]}')
+    ########################################################
+
+
 
 
 # %%
@@ -250,10 +336,9 @@ def print_dict(d, depth = 0):
     return outstring
 
 class RunningQueue():
-    def __init__(self, main_flag, name, ossia_server, mtcmaster):
+    def __init__(self, main_flag, name, mtcmaster):
         self.main_flag = main_flag
         self.queue_name = name
-        self.ossia_server = ossia_server
         self.mtcmaster = mtcmaster
 
         self.queue = CuePriorityQueue()
@@ -265,27 +350,19 @@ class RunningQueue():
         self.current_cue_uuid = None
         self.next_cue_uuid = None
 
-    def load(self, **kwargs):
-        logger.info(f'{self.queue_name} queue LOAD! -> PROJECT : {kwargs["value"]}')
-
     def go(self, **kwargs):
         logger.info(f'{self.queue_name} queue GO! -> CUE : {kwargs["value"]}')
         try:
             libmtcmaster.MTCSender_play(self.mtcmaster)
             self.running_flag = True
-            self.ossia_server.engine_oscquery_nodes['/engine/status/running'][0].parameter.value = True
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
-
-    def preload(self, **kwargs):
-        logger.info(f'{self.queue_name} queue PRELOAD! -> CUE : {kwargs["value"]}')
 
     def pause(self, **kwargs):
         logger.info(f'{self.queue_name} queue PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
             self.running_flag = False
-            self.ossia_server.engine_oscquery_nodes['/engine/status/running'][0].parameter.value = False
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -294,7 +371,6 @@ class RunningQueue():
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.running_flag = False
-            self.ossia_server.engine_oscquery_nodes['/engine/status/running'][0].parameter.value = False
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
