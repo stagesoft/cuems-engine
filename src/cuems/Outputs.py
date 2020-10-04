@@ -1,6 +1,11 @@
 from .log import logger
+<<<<<<< HEAD:src/cuems/Outputs.py
 
+=======
+>>>>>>> master:src/Outputs.py
 OUTPUTS_SUFFIX = 'Outputs'
+
+
 
 class Outputs():
     def __init__(self, caller_class, init_dict = None):

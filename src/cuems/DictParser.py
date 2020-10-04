@@ -1,7 +1,11 @@
 from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
+<<<<<<< HEAD:src/cuems/DictParser.py
 from .Outputs import CueOutputs, AudioCueOutputs, DmxCueOutputs
+=======
+from .Outputs import *
+>>>>>>> master:src/DictParser.py
 from .AudioCue import AudioCue
 from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from .CTimecode import CTimecode

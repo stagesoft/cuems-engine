@@ -1,5 +1,9 @@
 
 from .Cue import Cue
+<<<<<<< HEAD:src/cuems/CueList.py
+=======
+
+>>>>>>> master:src/CueList.py
 class CueList(list):
     
     def __init__(self, *args):

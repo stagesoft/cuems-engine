@@ -6,6 +6,8 @@
           <xs:complexType>
             <xs:sequence>
               <xs:element type="xs:string" name="uuid"/>
+              <xs:element type="xs:string" name="name"/>
+              <xs:element type="xs:string" name="date"/>
               <xs:element name="timecode_cuelist">
                 <xs:complexType>
                   <xs:sequence>
@@ -26,6 +28,7 @@
                                 </xs:element>
                                 <xs:element type="xs:string" name="type"/>
                                 <xs:element type="xs:string" name="loop"/>
+                                <xs:element type="xs:string" name="media" minOccurs="0"/>
                                 <xs:element name="outputs">
                                   <xs:complexType>
                                     <xs:sequence>
@@ -58,6 +61,7 @@
                                 </xs:element>
                                 <xs:element type="xs:string" name="type"/>
                                 <xs:element type="xs:string" name="loop"/>
+                                <xs:element type="xs:string" name="media" minOccurs="0"/>
                                 <xs:element name="outputs">
                                   <xs:complexType>
                                     <xs:sequence>
@@ -154,6 +158,7 @@
                                 </xs:element>
                                 <xs:element type="xs:string" name="type"/>
                                 <xs:element type="xs:string" name="loop"/>
+                                <xs:element type="xs:string" name="media" minOccurs="0"/>
                                 <xs:element name="outputs">
                                   <xs:complexType>
                                     <xs:sequence>

@@ -1,110 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<cms:CuemsScript xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems script.xsd">
-    <Script uuid="76861217-2d40-47a2-bdb5-8f9c91293855">
-        <name>"Proyecto test 0"</name>
-        <date></date>
-        <timecode_cuelist>
-            <Cue>
-                <CTimecode>
-    
-                </CTimecode>
-            </Cue>
-        </timecode_cuelist>
-        <floating_cuelist>
-            <AudioCue>
-                <CTimecode>
-                    
-                </CTimecode>
-    
-            </AudioCue>
-        </floating_cuelist>
-    </Script>
-</cms:CuemsScript>
+<cms:Settings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">
+    <Cue>
+        <CTimecode>
 
+        </CTimecode>
+    </Cue>
+    <AudioCue>
+        <CTimecode>
+            
+        </CTimecode>
 
-{"CuemsScript": 
-    {"uuid": "76861217-2d40-47a2-bdb5-8f9c91293855", 
-    "name": "Proyecto test 0", 
-    "date": "14/08/2020 11:18:16", 
-    "timecode_cuelist": 
-        {"CueList": 
-            {"Cue": 
-            [
-                {"uuid": "bf2d217f-881d-47c1-9ad1-f5999769bcc5", 
-                "time": 
-                    {"CTimecode": "00:00:33:00"}, 
-                "type": "mtc", 
-                "loop": "False", 
-                "outputs": 
-                    {"CueOutputs": {
-                        "id": 5, "bla": "ble"}}}, 
-                {"uuid": "8ace53f3-74f5-4195-822e-93c12fdf3725", 
-                "time": 
-                    {"NoneType": "None"}, 
-                "type": "floating", 
-                "loop": "False", 
-                "outputs": 
-                    {"CueOutputs": 
-                        {"physiscal": 1, "virtual": 3}
-                    }
-                }
-            ], 
-            "AudioCue": 
-                {"uuid": "be288e38-887a-446f-8cbf-c16c9ec6724a", 
-                "time": 
-                    {"CTimecode": "00:00:45:00"}, 
-                "type": "virtual", 
-                "loop": "True", 
-                "outputs": 
-                    {"AudioCueOutputs": {"stereo": 1}}
-                }
-            }
-        }, 
-    "floating_cuelist": 
-        {"CueList": 
-            {"DmxCue": 
-                {"uuid": "f36fa4b3-e220-4d75-bff1-210e14655c11", 
-                "time": 
-                    {"CTimecode": "00:00:23:00"}, 
-                "dmx_scene": 
-                    {"DmxScene": 
-                        {"DmxUniverse": 
-                        [
-                            {"id": 0, 
-                            "DmxChannel": 
-                            [
-                                {"id": 0, "&": 10}, 
-                                {"id": 1, "&": 50}
-                            ]}, 
-                            {"id": 1, 
-                            "DmxChannel": 
-                            [
-                                {"id": 20, "&": 23}, 
-                                {"id": 21, "&": 255}
-                            ]}, 
-                            {"id": 2, 
-                            "DmxChannel": 
-                            [
-                                {"id": 5, "&": 10}, 
-                                {"id": 6, "&": 23}, 
-                                {"id": 7, "&": 125}, 
-                                {"id": 8, "&": 200}
-                            ]}
-                        ]}
-                    }, 
-                "outputs": 
-                    {"DmxCueOutputs": {"universe0": 3}}
-                }, 
-            "Cue": 
-                {"uuid": "17376d8f-84c6-4f28-859a-a01260a1dadb", 
-                "time": 
-                    {"CTimecode": "00:00:05:00"}, 
-                "type": "virtual", 
-                "loop": "False", 
-                "outputs": 
-                    {"CueOutputs": {"id": 3}}
-                }
-            }
-        }
-    }
-}
+    </AudioCue>
+</cms:Settings>

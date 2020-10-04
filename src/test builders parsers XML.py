@@ -1,18 +1,18 @@
 #%%
-from Cue import Cue
-from AudioCue import AudioCue
-from DmxCue import DmxCue
-from CuemsScript import CuemsScript
-from CueList import CueList
-from CTimecode import CTimecode
-from Settings import Settings
-from DictParser import CuemsParser
-from XmlBuilder import XmlBuilder
-from XmlReaderWriter import XmlReader, XmlWriter
+from cuems import Cue
+from cuems import AudioCue
+from cuems import DmxCue
+from cuems import CuemsScript
+from cuems import CueList
+from cuems import CTimecode
+from cuems import Settings
+from cuems import CuemsParser
+from cuems.XmlBuilder import XmlBuilder
+from cuems import XmlReader, XmlWriter
 
 
 
-c = Cue(33, {'type': 'mtc', 'loop': 'False'})
+c = Cue(33, {'type': 'mtc', 'loop': 'False', 'media': "file.ext"})
 c.outputs = {'id': 5, 'bla':'ble'}
 c2 = Cue(None, {'type': 'floating', 'loop': 'False'})
 c2.outputs = {'physiscal': 1, 'virtual': 3}
@@ -31,17 +31,19 @@ custom_cue_list + [d_c, c3, g]
 float_cue_list = CueList([d_c, c3])
 
 float_cuelist = CueList([ac, c3 ])
-script = CuemsScript(custom_cue_list, float_cue_list)
+script = CuemsScript(timecode_cuelist=custom_cue_list, floating_cuelist=float_cue_list)
+script.name = "Test Script"
+script['date']= "the date of todayclea"
 print('OBJECT:')
 print(script)
 
 xml_data = XmlBuilder(script).build()
 
-writer = XmlWriter(schema = 'cues.xsd', xmlfile = 'cues.xml')
+writer = XmlWriter(schema = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xsd', xmlfile = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xml')
 
 writer.write(xml_data)
 
-reader = XmlReader(schema = 'cues.xsd', xmlfile = 'cues.xml')
+reader = XmlReader(schema = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xsd', xmlfile = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xml')
 xml_dict = reader.read()
 print("-------++++++---------")
 print('DICT from XML:')
@@ -58,16 +60,7 @@ if str(script) == str(store):
 else:
     print('original object and rebuilt object are NOT equal :(')
 
-print("-----^^^^^^^^------")
-print("*******************")
-print('JSON:')
-xmlschema_json = writer.to_json(xml_data)
-print(xmlschema_json)
 
-print("*******************")
-print('recreated dict from json')
-#xml_dict_from_json = reader.from_json(xmlschema_json)
-#print(xml_dict_from_json)
 
 print('xxxxxxxxxxxxxxxxxxxx')
 for o in store.timecode_cuelist:

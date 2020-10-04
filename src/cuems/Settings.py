@@ -6,7 +6,11 @@ import xmlschema
 import datetime  as DT
 import os
 import json
+<<<<<<< HEAD:src/cuems/Settings.py
 from .log import *
+=======
+from .log import logger
+>>>>>>> master:src/Settings.py
 
 from .CTimecode import CTimecode
 

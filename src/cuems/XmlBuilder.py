@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 
-from log import logger
+from .log import logger
 
 
 
@@ -19,7 +19,7 @@ class XmlBuilder():
         try:
             builder_class = globals()[builder_class_name]
         except KeyError as err:
-            logger.info("Could not find class {0}, reverting to generic builder class".format(err))
+            logger.debug("Could not find class {0}, reverting to generic builder class".format(err))
             builder_class = globals()[GENERIC_BUILDER]
         return builder_class
     

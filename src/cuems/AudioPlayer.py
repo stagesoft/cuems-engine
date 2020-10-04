@@ -3,7 +3,11 @@ import threading
 import os
 import pyossia as ossia
 
+<<<<<<< HEAD:src/cuems/AudioPlayer.py
 from .log import *
+=======
+from .log import logger
+>>>>>>> master:src/AudioPlayer.py
 
 import time
 
