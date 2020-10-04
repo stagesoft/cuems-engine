@@ -1,4 +1,4 @@
-from Cue import Cue
+from .Cue import Cue
 from collections.abc import Mapping
 
 

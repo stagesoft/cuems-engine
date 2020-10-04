@@ -34,7 +34,7 @@ class OssiaServer(threading.Thread):
         self.server_running = True
 
         # Message loop
-        self.thread = threading.Thread(target=self.threaded_loop, name='OSCQueryLoop')
+        self.thread = threading.Thread(target=self.threaded_loop, name='OSCQuery')
         self.thread.start()
 
     def stop(self):

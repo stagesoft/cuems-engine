@@ -39,7 +39,7 @@ class CuemsEngine():
         self.cuems_path=os.environ['HOME'] + '/cuems/'
         logger.info(f'Cuems path: {self.cuems_path}')
         self.stop_requested = False
-        self.conf_loaded_condition = threading.Condition()
+
         self.script = {}
 
         # MTC master object creation through bound library and open port
@@ -60,16 +60,24 @@ class CuemsEngine():
         self.project_conf = {}
 
         # Conf load manager
-        self.cm = threading.Thread(target = self.config_manager, name = 'confman')
-        self.cm.start()
-
-        with self.conf_loaded_condition:
-            while self.node_conf == None:
-                self.conf_loaded_condition.wait()
+        self.config_manager = ConfigManager(path=self.cuems_path)
+        try:
+            self.node_conf = self.config_manager.load_node_settings()
+        except FileNotFoundError:
+            message = 'Node config file could not be found. Exiting.'
+            print('\n\n' + message + '\n\n')
+            logger.error(message)
+            exit(-1)
 
         # Our MTC objects
         # logger.info('Starting MTC listener')
-        self.mtclistener = MtcListener(port=self.node_conf['mtc_port'], step_callback=partial(CuemsEngine.mtc_step_callback, self), reset_callback=partial(CuemsEngine.mtc_step_callback, self, CTimecode('0:0:0:0')))
+        try:
+            self.mtclistener = MtcListener( port=self.node_conf['mtc_port'], 
+                                            step_callback=partial(CuemsEngine.mtc_step_callback, self), 
+                                            reset_callback=partial(CuemsEngine.mtc_step_callback, self, CTimecode('0:0:0:0')))
+        except KeyError:
+            logger.error('Node config could bot be properly loaded. Exiting.')
+            exit(-1)
 
         # WebSocket server
         self.ws_server = CuemsWsServer.CuemsWsServer()
@@ -135,7 +143,7 @@ class CuemsEngine():
         self.mtclistener.stop()
         self.mtclistener.join()
 
-        self.cm.join()
+        self.config_manager.join()
 
         try:
             self.ws_server.stop()
@@ -155,11 +163,11 @@ class CuemsEngine():
     # Status check functions
     def print_all_status(self):
         logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
-        if self.cm.is_alive():
-            logger.info(self.cm.getName() + ' is alive)')
+        if self.config_manager.is_alive():
+            logger.info(self.config_manager.getName() + ' is alive)')
         else:
-            logger.info(self.cm.getName() + ' is not alive, trying to restore it')
-            self.cm.start()
+            logger.info(self.config_manager.getName() + ' is not alive, trying to restore it')
+            self.config_manager.start()
 
         if self.ws_server.is_alive():
             logger.info(self.ws_server.getName() + ' is alive')
@@ -178,28 +186,7 @@ class CuemsEngine():
         logger.info(f'MTC: {self.mtclistener.timecode()}')
 
     #########################################################
-    # Managers threaded functions and callbacks
-    def config_manager(self):
-        with self.conf_loaded_condition:
-            try:
-                engine_settings = Settings(self.cuems_path + 'settings.xsd', self.cuems_path + 'settings.xml')
-                engine_settings.read()
-            except FileNotFoundError:
-                message = 'Cuems configuration files could not be found. Exiting with error -1.'
-                print('\n\n' + message + '\n\n')
-                logger.error(message)
-                exit(-1)
-
-            self.node_conf = engine_settings['node'][0]
-            self.conf_loaded_condition.notify_all()
-
-        if self.node_conf['master'] == 1:
-            self.master_flag = True
-        else:
-            self.master_flag = False
-
-        logger.info(f'Cuems {self.node_conf} config loaded')
-
+    # Usefull callbacks
     def mtc_step_callback(self, mtc):
         self.ossia_server.osc_registered_nodes['/engine/status/timecode'][0].parameter.value = str(mtc)
 
@@ -211,7 +198,7 @@ class CuemsEngine():
         string = f'SIGTERM received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.cm.is_alive():
+        if self.config_manager.is_alive():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
@@ -227,7 +214,7 @@ class CuemsEngine():
         string = f'SIGINT received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.cm.is_alive():
+        if self.config_manager.is_alive():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
@@ -335,6 +322,26 @@ def print_dict(d, depth = 0):
 
     return outstring
 
+########################################################
+class ConfigManager(threading.Thread):
+    def __init__(self, path, *args, **kwargs):
+        super().__init__(name='CfgMan', args=args, kwargs=kwargs)
+        self.cuems_path = path
+        self.start()
+
+    def load_node_settings(self):
+        try:
+            engine_settings = Settings(self.cuems_path + 'settings.xsd', self.cuems_path + 'settings.xml')
+            engine_settings.read()
+        except FileNotFoundError as e:
+            raise e
+
+        logger.info(f'Cuems {engine_settings["node"][0]} config loaded')
+
+        return engine_settings['node'][0]
+
+
+########################################################
 class RunningQueue():
     def __init__(self, main_flag, name, mtcmaster):
         self.main_flag = main_flag

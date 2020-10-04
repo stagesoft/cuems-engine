@@ -1,4 +1,4 @@
-from CueList import CueList
+from .CueList import CueList
 import uuid
 
 class CuemsScript(dict):
