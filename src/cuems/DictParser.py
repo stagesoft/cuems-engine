@@ -47,9 +47,11 @@ class CuemsScriptParser(CuemsParser):
     def parse(self):
         for dict_key, dict_value in self.init_dict.items():
             if type(dict_value) is dict:
-                parser_class, class_string = self.get_parser_class(list(dict_value)[0])
-                class_dict = list(dict_value.values())[0]
-                self.item[dict_key] = parser_class(init_dict=class_dict, class_string=class_string).parse()
+
+                if (len(list(dict_value))> 0):
+                    parser_class, class_string = self.get_parser_class(list(dict_value)[0])
+                    class_dict = list(dict_value.values())[0]
+                    self.item[dict_key] = parser_class(init_dict=class_dict, class_string=class_string).parse()
             else:
                 self.item[dict_key] = dict_value
         
