@@ -76,7 +76,7 @@ class XmlReader(CuemsXml):
       super().__init__(schema, xmlfile)
 
     def read(self):
-        xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=True)
+        xml_dict = self.schema_object.to_dict(self.xmlfile, validation='skip',  strip_namespaces=True)
         return xml_dict
 
     def read_to_objects(self):
