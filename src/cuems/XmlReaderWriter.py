@@ -58,7 +58,7 @@ class XmlWriter(CuemsXml):
 
 
     def write(self, xml_data, ):
-        self.schema_object.validate(xml_data)
+       # self.schema_object.validate(xml_data)
         ET.ElementTree(xml_data).write(self.xmlfile)
 
     def write_from_dict(self, project_dict):
