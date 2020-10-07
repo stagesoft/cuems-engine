@@ -48,15 +48,17 @@ class CuemsScript(dict):
             raise NotImplementedError
 
     def get_media(self):
-        media_dict = dict()
         
-        for cue in self.timecode_cuelist:
-            if cue.media:
-                media_dict[cue.media] = type(cue)
+        media_dict = dict()
+        if self.timecode_cuelist is not None:
+            for cue in self.timecode_cuelist:
+                if cue.media:
+                    media_dict[cue.media] = type(cue)
 
-        for cue in self.floating_cuelist:
-            if cue.media:
-                media_dict[cue.media] = type(cue)
+        if self.floating_cuelist is not None:
+            for cue in self.floating_cuelist:
+                if cue.media:
+                    media_dict[cue.media] = type(cue)
 
         return media_dict
 
