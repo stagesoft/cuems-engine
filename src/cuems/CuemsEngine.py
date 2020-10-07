@@ -24,20 +24,21 @@ from .Settings import Settings
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 
+LIBRARY_PATH = os.environ['HOME'] + '/cuems_library/'
+
+
 # %%
 class CuemsEngine():
     def __init__(self):
         logger.info('CUEMS ENGINE INITIALIZATION')
-
         # Main thread ids
-        self.main_thread_pid = os.getpid()
-        os.name
-        
-        logger.info(f'Main thread PID: {self.main_thread_pid}')
+        logger.info(f'Main thread PID: {os.getpid()}')
+
+        # Utility calls
+        check_dir_hierarchy()
 
         # Main thread conf and flags
-        self.cuems_path=os.environ['HOME'] + '/cuems/'
-        logger.info(f'Cuems path: {self.cuems_path}')
+        logger.info(f'Cuems path: {LIBRARY_PATH}')
         self.stop_requested = False
 
         self.script = {}
@@ -60,9 +61,9 @@ class CuemsEngine():
         self.project_conf = {}
 
         # Conf load manager
-        self.config_manager = ConfigManager(path=self.cuems_path)
+        self.cm = ConfigManager(path=LIBRARY_PATH)
         try:
-            self.node_conf = self.config_manager.load_node_settings()
+            self.cm.load_node_settings()
         except FileNotFoundError:
             message = 'Node config file could not be found. Exiting.'
             print('\n\n' + message + '\n\n')
@@ -72,17 +73,17 @@ class CuemsEngine():
         # Our MTC objects
         # logger.info('Starting MTC listener')
         try:
-            self.mtclistener = MtcListener( port=self.node_conf['mtc_port'], 
+            self.mtclistener = MtcListener( port=self.cm.node_conf['mtc_port'], 
                                             step_callback=partial(CuemsEngine.mtc_step_callback, self), 
                                             reset_callback=partial(CuemsEngine.mtc_step_callback, self, CTimecode('0:0:0:0')))
         except KeyError:
-            logger.error('Node config could bot be properly loaded. Exiting.')
+            logger.error('mtc_port config could bot be properly loaded. Exiting.')
             exit(-1)
 
         # WebSocket server
-        self.ws_server = CuemsWsServer.CuemsWsServer()
+        self.ws_server = CuemsWsServer()
         try:
-            self.ws_server.start(self.node_conf['websocket_port'])
+            self.ws_server.start(self.cm.node_conf['websocket_port'])
         except KeyError:
             self.stop_all_threads()
             logger.error('Config error, websocket_port key not found. Exiting.')
@@ -90,7 +91,10 @@ class CuemsEngine():
 
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
-        self.ossia_server = OssiaServer(self.node_conf, self.ossia_queue)
+        self.ossia_server = OssiaServer(    self.cm.node_conf['id'], 
+                                            self.cm.node_conf['oscquery_port'], 
+                                            self.cm.node_conf['oscquery_out_port'], 
+                                            self.ossia_queue)
         self.ossia_server.start()
 
         # Initial OSC nodes to tell ossia to configure
@@ -143,7 +147,7 @@ class CuemsEngine():
         self.mtclistener.stop()
         self.mtclistener.join()
 
-        self.config_manager.join()
+        self.cm.join()
 
         try:
             self.ws_server.stop()
@@ -163,25 +167,25 @@ class CuemsEngine():
     # Status check functions
     def print_all_status(self):
         logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
-        if self.config_manager.is_alive():
-            logger.info(self.config_manager.getName() + ' is alive)')
+        if self.cm.is_alive():
+            logger.info(self.cm.getName() + ' is alive)')
         else:
-            logger.info(self.config_manager.getName() + ' is not alive, trying to restore it')
-            self.config_manager.start()
+            logger.info(self.cm.getName() + ' is not alive, trying to restore it')
+            self.cm.start()
 
+        '''
         if self.ws_server.is_alive():
             logger.info(self.ws_server.getName() + ' is alive')
-            '''
             try:
                 # os.kill(self.ws_pid, 0)
             except OSError:
                 logger.info('\tws child process is NOT running')
             else:
                 logger.info('\tws child process is running')
-            '''
         else:
             logger.info(self.ws_server.getName() + ' is not alive, trying to restore it')
             # self.ws_server.start()
+        '''
 
         logger.info(f'MTC: {self.mtclistener.timecode()}')
 
@@ -198,7 +202,7 @@ class CuemsEngine():
         string = f'SIGTERM received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.config_manager.is_alive():
+        if self.cm.is_alive():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
@@ -214,7 +218,7 @@ class CuemsEngine():
         string = f'SIGINT received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.config_manager.is_alive():
+        if self.cm.is_alive():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
@@ -245,7 +249,10 @@ class CuemsEngine():
     def load(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
         try:
-            self.script = XmlReader(self.cuems_path + 'script.xsd', self.cuems_path + '/projects/' + kwargs['value'])
+            self.cm.load_project_mappings(kwargs["value"])
+            self.cm.load_project_settings(kwargs["value"])
+            self.script = XmlReader(    LIBRARY_PATH + 'script.xsd', 
+                                        LIBRARY_PATH + 'projects/' + kwargs['value'] + '/script.xml')
         except FileNotFoundError:
             logger.error('Project file not found')
 
@@ -322,11 +329,39 @@ def print_dict(d, depth = 0):
 
     return outstring
 
+def check_dir_hierarchy():
+    try:
+        if not os.path.exists(LIBRARY_PATH):
+            os.mkdir(LIBRARY_PATH)
+            logger.info(f'Creating library forlder {LIBRARY_PATH}')
+
+        if not os.path.exists( os.path.join(LIBRARY_PATH, 'projects') ) :
+            os.mkdir(os.path.join(LIBRARY_PATH, 'projects'))
+
+        if not os.path.exists( os.path.join(LIBRARY_PATH, 'media') ) :
+            os.mkdir(os.path.join(LIBRARY_PATH, 'media'))
+
+        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash') ) :
+            os.mkdir(os.path.join(LIBRARY_PATH, 'trash'))
+
+        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash', 'projects') ) :
+            os.mkdir(os.path.join(LIBRARY_PATH, 'trash', 'projects'))
+
+        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash', 'media') ) :
+            os.mkdir(os.path.join(LIBRARY_PATH, 'trash', 'media'))
+
+    except Exception as e:
+        logger.error("error: {} {}".format(type(e), e))
+
+
 ########################################################
 class ConfigManager(threading.Thread):
     def __init__(self, path, *args, **kwargs):
         super().__init__(name='CfgMan', args=args, kwargs=kwargs)
         self.cuems_path = path
+        self.node_conf = {}
+        self.project_conf = {}
+        self.project_maps = {}
         self.start()
 
     def load_node_settings(self):
@@ -336,10 +371,44 @@ class ConfigManager(threading.Thread):
         except FileNotFoundError as e:
             raise e
 
-        logger.info(f'Cuems {engine_settings["node"][0]} config loaded')
+        self.node_conf = engine_settings['node'][0]
 
-        return engine_settings['node'][0]
+        logger.info(f'Cuems node {self.node_conf["id"]} config loaded')
+        logger.info(f'Node conf: {self.node_conf}')
 
+    def load_project_settings(self, project_uname):
+        try:
+            settings_schema = os.path.join(self.cuems_path, 'project_settings.xsd')
+            settings_path = os.path.join(self.cuems_path, 'projects', project_uname, 'settings.xml')
+            self.project_conf = Settings(settings_schema, settings_path)
+            self.project_conf.read()
+        except FileNotFoundError as e:
+            raise e
+        except Exception as e:
+            logger.error(e)
+
+        self.project_conf.pop('xmlns:cms')
+        self.project_conf.pop('xmlns:xsi')
+        self.project_conf.pop('xsi:schemaLocation')
+
+        logger.info(f'Project settings loaded:  {self.project_conf}')
+
+    def load_project_mappings(self, project_uname):
+        try:
+            mappings_schema = os.path.join(self.cuems_path, 'project_mappings.xsd')
+            mappings_path = os.path.join(self.cuems_path, 'projects', project_uname, 'mappings.xml')
+            self.project_maps = Settings(mappings_schema, mappings_path)
+            self.project_maps.read()
+        except FileNotFoundError as e:
+            raise e
+        except Exception as e:
+            logger.error(e)
+
+        self.project_maps.pop('xmlns:cms')
+        self.project_maps.pop('xmlns:xsi')
+        self.project_maps.pop('xsi:schemaLocation')
+
+        logger.info(f'Project mappings loaded:  {self.project_maps}')
 
 ########################################################
 class RunningQueue():

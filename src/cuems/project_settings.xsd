@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- describing schema for sample xml -->
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
+    <xs:element name="ProjectSettings">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="node" minOccurs="1" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="osc_dest_host" type="NonEmptyString"></xs:element>
+                            <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
+                            <xs:element name="mtc_port" type="xs:string"></xs:element>
+                            <xs:element name="videoplayer" minOccurs="0" maxOccurs="1">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="outputs" type="xs:positiveInteger"></xs:element>
+                                        <xs:element name="instance" minOccurs="1" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="osc_in_port" type="xs:positiveInteger"></xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="id" type="xs:int" use="required"></xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="audioplayer" minOccurs="0" maxOccurs="1">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="audio_cards" type="xs:positiveInteger"></xs:element>
+                                        <xs:element name="instance" minOccurs="1" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="osc_in_port" type="xs:positiveInteger"></xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="id" type="xs:int" use="required"></xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="dmxplayer" minOccurs="0" maxOccurs="1">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="universes" type="xs:positiveInteger"></xs:element>
+                                        <xs:element name="instance" minOccurs="1" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="osc_in_port" type="xs:positiveInteger"></xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="id" type="xs:int" use="required"></xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="id" type="xs:int"></xs:attribute>
+                        <xs:attribute name="master" type="xs:boolean"></xs:attribute>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:simpleType name="NonEmptyString">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1" />
+            <xs:pattern value=".*[^\s].*" />
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="UniqueID">
+        <xs:restriction base="xs:int">
+        </xs:restriction>
+    </xs:simpleType>
+</xs:schema>

@@ -8,7 +8,7 @@ import threading
 from .log import logger
 
 class OssiaServer(threading.Thread):
-    def __init__(self, node_config, queue):
+    def __init__(self, node_id, in_port, out_port, queue):
         super().__init__(name='ossia')
         self.server_running = True
 
@@ -21,11 +21,11 @@ class OssiaServer(threading.Thread):
         self.osc_registered_nodes = dict()
 
         # Ossia Device and OSCQuery server creation
-        self.oscquery_device = ossia.LocalDevice(f'node_{node_config["id"]:03}_oscquery')
-        self.oscquery_device.create_oscquery_server(    node_config['oscquery_port'], 
-                                                        node_config['oscquery_out_port'], 
+        self.oscquery_device = ossia.LocalDevice(f'node_{node_id:03}_oscquery')
+        self.oscquery_device.create_oscquery_server(    in_port, 
+                                                        out_port, 
                                                         False)
-        logger.info(f'OscQuery device listening on port {node_config["oscquery_port"]}')
+        logger.info(f'OscQuery device listening on port {in_port}')
 
         # OSC messages queue
         self.oscquery_messageq = ossia.MessageQueue(self.oscquery_device)

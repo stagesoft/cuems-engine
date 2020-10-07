@@ -39,11 +39,11 @@ print(script)
 
 xml_data = XmlBuilder(script).build()
 
-writer = XmlWriter(schema = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xsd', xmlfile = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xml')
+writer = XmlWriter(schema = './cuems/cues.xsd', xmlfile = './cuems/cues.xml')
 
 writer.write(xml_data)
 
-reader = XmlReader(schema = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xsd', xmlfile = '/home/ion/src/cuems/python/osc-control/src/cuems/cues.xml')
+reader = XmlReader(schema = './cuems/cues.xsd', xmlfile = './cuems/cues.xml')
 xml_dict = reader.read()
 print("-------++++++---------")
 print('DICT from XML:')

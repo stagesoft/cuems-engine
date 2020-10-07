@@ -1,9 +1,5 @@
 from .CueList import CueList
-<<<<<<< HEAD:src/cuems/CuemsScript.py
-import uuid
-=======
 import uuid as uuid_module
->>>>>>> master:src/CuemsScript.py
 
 class CuemsScript(dict):
     def __init__(self, uuid=None, name=None, date=None, timecode_cuelist=None, floating_cuelist=None ):

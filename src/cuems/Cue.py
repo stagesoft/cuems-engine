@@ -1,12 +1,8 @@
 from .CTimecode import CTimecode
 from .Outputs import Outputs
-<<<<<<< HEAD:src/cuems/Cue.py
-import uuid
-=======
 from .log import logger
 import uuid as uuid_module
 
->>>>>>> master:src/Cue.py
 class Cue(dict):
     def __init__(self, time=None, init_dict = None, uuid=None ):
         if uuid is None:

@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
-
 # %%
+import cuems
 
-from cuems.CuemsEngine import CuemsEngine
-
-my_engine = CuemsEngine()
-
+my_engine = cuems.CuemsEngine()
 # %%

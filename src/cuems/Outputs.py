@@ -1,8 +1,4 @@
 from .log import logger
-<<<<<<< HEAD:src/cuems/Outputs.py
-
-=======
->>>>>>> master:src/Outputs.py
 OUTPUTS_SUFFIX = 'Outputs'
 
 
