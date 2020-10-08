@@ -21,11 +21,16 @@ from .log import logger
 from .OssiaServer import OssiaServer
 from .OscServer import OscServer
 from .Settings import Settings
+from .Cue import Cue
+from .AudioCue import AudioCue
+from .VideoCue import VideoCue
+from .DmxCue import DmxCue
+from .AudioPlayer import AudioPlayer, AudioPlayerRemote
+from .VideoPlayer import VideoPlayer, VideoPlayerRemote
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 
-LIBRARY_PATH = os.environ['HOME'] + '/cuems_library/'
-
+CUEMS_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
 # %%
 class CuemsEngine():
@@ -34,17 +39,19 @@ class CuemsEngine():
         # Main thread ids
         logger.info(f'Main thread PID: {os.getpid()}')
 
-        # Utility calls
-        check_dir_hierarchy()
-
-        # Main thread conf and flags
-        logger.info(f'Cuems path: {LIBRARY_PATH}')
+        # Running flag
         self.stop_requested = False
 
-        self.script = {}
+        # Conf load manager
+        try:
+            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
+        except FileNotFoundError:
+            message = 'Node config file could not be found. Exiting.'
+            print('\n\n' + message + '\n\n')
+            logger.error(message)
+            exit(-1)
 
-        # MTC master object creation through bound library and open port
-        self.mtcmaster = libmtcmaster.MTCSender_create()
+        logger.info(f'Cuems library path: {self.cm.library_path}')
 
         #########################################################
         # System signals handlers
@@ -54,24 +61,17 @@ class CuemsEngine():
         signal.signal(signal.SIGUSR2, self.sigUsr2Handler)
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
 
-        # Conf
-        self.general_conf = {}
-        self.node_conf = {}
-        self.master_flag = False
-        self.project_conf = {}
+        # Our empty script object
+        self.script = {}
 
-        # Conf load manager
-        self.cm = ConfigManager(path=LIBRARY_PATH)
-        try:
-            self.cm.load_node_settings()
-        except FileNotFoundError:
-            message = 'Node config file could not be found. Exiting.'
-            print('\n\n' + message + '\n\n')
-            logger.error(message)
-            exit(-1)
+        self.node_audio_players = {}
+        self.node_video_players = {}
+        self.node_dmx_players = {}
 
-        # Our MTC objects
-        # logger.info('Starting MTC listener')
+        # MTC master object creation through bound library and open port
+        self.mtcmaster = libmtcmaster.MTCSender_create()
+
+        # MTC listener (could be usefull)
         try:
             self.mtclistener = MtcListener( port=self.cm.node_conf['mtc_port'], 
                                             step_callback=partial(CuemsEngine.mtc_step_callback, self), 
@@ -117,13 +117,17 @@ class CuemsEngine():
         self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
         self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
 
+        # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
             time.sleep(0.005)
 
         self.stop_all_threads()
 
     #########################################################
-    # Init check functions
+    # Check functions
+    def check_project_mappings(self):
+        pass
+
     def check_audio_devs(self):
         pass
 
@@ -250,11 +254,25 @@ class CuemsEngine():
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
         try:
             self.cm.load_project_mappings(kwargs["value"])
-            self.cm.load_project_settings(kwargs["value"])
-            self.script = XmlReader(    LIBRARY_PATH + 'script.xsd', 
-                                        LIBRARY_PATH + 'projects/' + kwargs['value'] + '/script.xml')
+            logger.info(self.cm.project_maps)
         except FileNotFoundError:
-            logger.error('Project file not found')
+            logger.error('Project mappings file not found')
+
+        try:
+            self.cm.load_project_settings(kwargs["value"])
+            logger.info(self.cm.project_conf)
+        except FileNotFoundError:
+            logger.error('Project settings file not found')
+
+        try:
+            schema = os.path.join(self.cm.library_path, 'script.xsd')
+            xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
+            reader = XmlReader( schema, xml_file )
+            self.script = reader.read_to_objects()
+        except FileNotFoundError:
+            logger.error('Project script file not found')
+
+        self.process_script()
 
     def go(self, **kwargs):
         logger.info(f'OSC GO! -> CUE : {kwargs["value"]}')
@@ -303,6 +321,41 @@ class CuemsEngine():
         logger.info(f'OSC RUNNING: {kwargs["value"]}')
     ########################################################
 
+    ########################################################
+    # Script treating methods
+    def process_script(self):
+        logger.info('Timecode Cuelist:')
+        for item in self.script['timecode_cuelist']:
+            logger.info(f'Class: {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
+        logger.info('Floating Cuelist:')
+        for item in self.script['floating_cuelist']:
+            if isinstance(item, AudioCue):
+                n = len(self.node_audio_players.items())
+                self.node_audio_players[f'{item.uuid}'] = AudioPlayerRemote(
+                    self.cm.node_conf['audioplayer']['osc_in_port_base'] + (n*2), 
+                    'base_card', 
+                    self.cm.node_conf['audioplayer']['path'],
+                    os.path.join(self.cm.library_path, 'media', item.media))
+                self.node_audio_players[f'{item.uuid}'].start()
+            elif isinstance(item, VideoCue):
+                n = len(self.node_video_players.items())
+                self.node_video_players[f'{item.uuid}'] = VideoPlayerRemote(
+                    self.cm.node_conf['videoplayer']['osc_in_port_base'] + (n*2), 
+                    '1', 
+                    self.cm.node_conf['videoplayer']['path'])
+                self.node_video_players[f'{item.uuid}'].start()
+            elif isinstance(item, DmxCue):
+                pass
+                '''n = len(self.node_dmx_players.items())
+                self.node_dmx_players[f'{item.uuid}'] = DmxPlayerRemote(
+                    self.cm.node_conf['dmxplayer']['osc_in_port_base'] + (n*2), 
+                    'base_card', 
+                    self.cm.node_conf['dmxplayer']['path'])
+                self.node_dmx_players[f'{item.uuid}'].start()
+                '''
+
+    ########################################################
+
 
 
 
@@ -329,57 +382,47 @@ def print_dict(d, depth = 0):
 
     return outstring
 
-def check_dir_hierarchy():
-    try:
-        if not os.path.exists(LIBRARY_PATH):
-            os.mkdir(LIBRARY_PATH)
-            logger.info(f'Creating library forlder {LIBRARY_PATH}')
-
-        if not os.path.exists( os.path.join(LIBRARY_PATH, 'projects') ) :
-            os.mkdir(os.path.join(LIBRARY_PATH, 'projects'))
-
-        if not os.path.exists( os.path.join(LIBRARY_PATH, 'media') ) :
-            os.mkdir(os.path.join(LIBRARY_PATH, 'media'))
-
-        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash') ) :
-            os.mkdir(os.path.join(LIBRARY_PATH, 'trash'))
-
-        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash', 'projects') ) :
-            os.mkdir(os.path.join(LIBRARY_PATH, 'trash', 'projects'))
-
-        if not os.path.exists( os.path.join(LIBRARY_PATH, 'trash', 'media') ) :
-            os.mkdir(os.path.join(LIBRARY_PATH, 'trash', 'media'))
-
-    except Exception as e:
-        logger.error("error: {} {}".format(type(e), e))
-
-
 ########################################################
 class ConfigManager(threading.Thread):
     def __init__(self, path, *args, **kwargs):
         super().__init__(name='CfgMan', args=args, kwargs=kwargs)
-        self.cuems_path = path
+        self.cuems_conf_path = path
+        self.library_path = None
         self.node_conf = {}
         self.project_conf = {}
         self.project_maps = {}
+        self.load_node_conf()
         self.start()
 
-    def load_node_settings(self):
+    def load_node_conf(self):
+        settings_schema = os.path.join(self.cuems_conf_path, 'settings.xsd')
+        settings_file = os.path.join(self.cuems_conf_path, 'settings.xml')
         try:
-            engine_settings = Settings(self.cuems_path + 'settings.xsd', self.cuems_path + 'settings.xml')
+            engine_settings = Settings(settings_schema, settings_file)
             engine_settings.read()
         except FileNotFoundError as e:
             raise e
 
+        if engine_settings['library_path'] == None:
+            logger.warning('No library path specified in settings. Assuming default ~/cuems_library/.')
+        else:
+            self.library_path = engine_settings['library_path']
+
+        # Now we know where the library is, let's check it out
+        self.check_dir_hierarchy()
+
         self.node_conf = engine_settings['node'][0]
 
-        logger.info(f'Cuems node {self.node_conf["id"]} config loaded')
+        logger.info(f'Cuems node_{self.node_conf["id"]:03} config loaded')
         logger.info(f'Node conf: {self.node_conf}')
+        logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
+        logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
+        logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
     def load_project_settings(self, project_uname):
         try:
-            settings_schema = os.path.join(self.cuems_path, 'project_settings.xsd')
-            settings_path = os.path.join(self.cuems_path, 'projects', project_uname, 'settings.xml')
+            settings_schema = os.path.join(self.library_path, 'project_settings.xsd')
+            settings_path = os.path.join(self.library_path, 'projects', project_uname, 'settings.xml')
             self.project_conf = Settings(settings_schema, settings_path)
             self.project_conf.read()
         except FileNotFoundError as e:
@@ -391,12 +434,12 @@ class ConfigManager(threading.Thread):
         self.project_conf.pop('xmlns:xsi')
         self.project_conf.pop('xsi:schemaLocation')
 
-        logger.info(f'Project settings loaded:  {self.project_conf}')
+        logger.info(f'Project {project_uname} settings loaded')
 
     def load_project_mappings(self, project_uname):
         try:
-            mappings_schema = os.path.join(self.cuems_path, 'project_mappings.xsd')
-            mappings_path = os.path.join(self.cuems_path, 'projects', project_uname, 'mappings.xml')
+            mappings_schema = os.path.join(self.library_path, 'project_mappings.xsd')
+            mappings_path = os.path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
             self.project_maps = Settings(mappings_schema, mappings_path)
             self.project_maps.read()
         except FileNotFoundError as e:
@@ -408,7 +451,31 @@ class ConfigManager(threading.Thread):
         self.project_maps.pop('xmlns:xsi')
         self.project_maps.pop('xsi:schemaLocation')
 
-        logger.info(f'Project mappings loaded:  {self.project_maps}')
+        logger.info(f'Project {project_uname} mappings loaded')
+
+    def check_dir_hierarchy(self):
+        try:
+            if not os.path.exists(self.library_path):
+                os.mkdir(self.library_path)
+                logger.info(f'Creating library forlder {self.library_path}')
+
+            if not os.path.exists( os.path.join(self.library_path, 'projects') ) :
+                os.mkdir(os.path.join(self.library_path, 'projects'))
+
+            if not os.path.exists( os.path.join(self.library_path, 'media') ) :
+                os.mkdir(os.path.join(self.library_path, 'media'))
+
+            if not os.path.exists( os.path.join(self.library_path, 'trash') ) :
+                os.mkdir(os.path.join(self.library_path, 'trash'))
+
+            if not os.path.exists( os.path.join(self.library_path, 'trash', 'projects') ) :
+                os.mkdir(os.path.join(self.library_path, 'trash', 'projects'))
+
+            if not os.path.exists( os.path.join(self.library_path, 'trash', 'media') ) :
+                os.mkdir(os.path.join(self.library_path, 'trash', 'media'))
+
+        except Exception as e:
+            logger.error("error: {} {}".format(type(e), e))
 
 ########################################################
 class RunningQueue():

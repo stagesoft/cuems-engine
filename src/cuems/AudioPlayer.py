@@ -3,11 +3,7 @@ import threading
 import os
 import pyossia as ossia
 
-<<<<<<< HEAD:src/cuems/AudioPlayer.py
-from .log import *
-=======
 from .log import logger
->>>>>>> master:src/AudioPlayer.py
 
 import time
 
@@ -15,13 +11,14 @@ import time
 class AudioPlayer(threading.Thread):
     # class that runs the player in its own thread
 
-    def __init__(self, port, card_id, path):
+    def __init__(self, port, card_id, path, media):
         self.port = port
         self.stdout = None
         self.stderr = None
         self.card_id = card_id
         self.firstrun = True
         self.path = path
+        self.media = media
         
         
     def __init_trhead(self):
@@ -30,12 +27,12 @@ class AudioPlayer(threading.Thread):
 
     def run(self):
         if __debug__:
-            logger.debug('AudioPlayer starting on card:{}'.format(self.card_id))
+            logger.info('AudioPlayer starting on card:{}'.format(self.card_id))
            
         try:
             # exec call -- ad command line args here as list 
             # TODO: get command line args from xml
-            self.p=subprocess.Popen([self.path, str(self.port), "/audioplayer"], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.p=subprocess.Popen([self.path, '-p', str(self.port), self.media], shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logger.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
@@ -64,10 +61,10 @@ class AudioPlayer(threading.Thread):
 
 class AudioPlayerRemote():
     # class that exposes osc control of the player and manages the player
-    def __init__(self, port, card_id, path):
+    def __init__(self, port, card_id, path, media):
         self.port = port
         self.card_id = card_id
-        self.audioplayer = AudioPlayer(self.port, self.card_id, path)
+        self.audioplayer = AudioPlayer(self.port, self.card_id, path, media)
         self.__start_remote()
 
     def __start_remote(self):

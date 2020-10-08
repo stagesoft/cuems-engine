@@ -1,34 +1,4 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <cms:ProjectSettings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems project_settings.xsd">
-    <node id="0" master="1">
-        <osc_dest_host>localhost</osc_dest_host>
-        <oscquery_port>7700</oscquery_port>
-        <oscquery_out_port>7701</oscquery_out_port>
-        <websocket_port>9092</websocket_port>
-        <mtc_port>Midi Through Port-0</mtc_port>
-        <videoplayer>
-            <path>/usr/bin/xjadeo</path>
-            <outputs>2</outputs>
-            <instance id="0">
-                <osc_in_port>7710</osc_in_port>
-            </instance>
-            <instance id="1">
-                <osc_in_port>7720</osc_in_port>
-            </instance>
-        </videoplayer>
-        <audioplayer>
-            <path>/usr/bin/audioplayer</path>
-            <audio_cards>1</audio_cards>
-            <instance id="0">
-                <osc_in_port>7730</osc_in_port>
-            </instance>
-        </audioplayer>
-        <dmxplayer>
-            <path>/path/to</path>
-            <universes>1</universes>
-            <instance id="0">
-                <osc_in_port>7740</osc_in_port>
-            </instance>
-        </dmxplayer>
-    </node>
+    <setting name="A" value="A" />
 </cms:ProjectSettings>

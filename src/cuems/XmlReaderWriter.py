@@ -6,11 +6,14 @@ import xmlschema
 import datetime  as DT
 import os
 import json
-from .log import *
 
+from .log import logger
 from .CTimecode import CTimecode
-
 from .CMLCuemsConverter import CMLCuemsConverter
+from .DictParser import CuemsParser
+from .XmlBuilder import XmlBuilder
+
+
 class CuemsXml():
     def __init__(self,schema=None,xmlfile=None):
         self.converter = CMLCuemsConverter
@@ -19,6 +22,7 @@ class CuemsXml():
         self.schema = schema
         self.xmlfile = xmlfile
         self.xmldata = None
+        self._schema = None
         
     
     @property
@@ -31,8 +35,7 @@ class CuemsXml():
         if path is not None:
             if os.path.isfile(path):
                 self._schema = path
-                schema_file = open(self.schema)
-                self.schema_object = xmlschema.XMLSchema(schema_file, converter=self.converter)
+                self.schema_object = xmlschema.XMLSchema(self._schema, converter=self.converter)
             else:
                 raise FileNotFoundError("schema file not found")
 
@@ -43,15 +46,10 @@ class CuemsXml():
 
     @xmlfile.setter
     def xmlfile(self, path):
-        if os.path.isfile(path): #TODO: clean this and backup
-            self._xmlfile = path
-        else:
-            logging.debug("xml file {} not found, creating new".format(self.xmlfile))
-            self._xmlfile = path
+        self._xmlfile = path
             
     def validate(self):
-        xml_file = open(self.xmlfile)
-        return self.schema_object.validate(xml_file)
+        return self.schema_object.validate(self.xmlfile)
     
 class XmlWriter(CuemsXml):
 
@@ -59,28 +57,28 @@ class XmlWriter(CuemsXml):
       super().__init__(schema, xmlfile)
 
 
-    def write(self, xmldata):
+    def write(self, xml_data, ):
+        self.schema_object.validate(xml_data)
+        ET.ElementTree(xml_data).write(self.xmlfile)
 
-       # self.__backup()
-        ET.ElementTree(xmldata).write(self.xmlfile)
+    def write_from_dict(self, project_dict):
+        project_object = CuemsParser(project_dict).parse()
+        xml_data = XmlBuilder(project_object).build()
+        self.write(xml_data)
 
-    def to_json(self, xmldata):
+    def write_from_object(self, project_object):
+        xml_data = XmlBuilder(project_object).build()
+        self.write(xml_data)
 
-       return xmlschema.to_json(xmldata, schema=self.schema)
 
 class XmlReader(CuemsXml):
     def __init__(self,schema=None,xmlfile=None):
       super().__init__(schema, xmlfile)
 
     def read(self):
-        xml_file = open(self.xmlfile)
-        xml_dict = self.schema_object.to_dict(xml_file, validation='strict',  strip_namespaces=True)
+        xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=True)
         return xml_dict
 
-    def from_json(self, _json):
-        xml_element = xmlschema.from_json(_json, xmlschema.XMLSchema(self.schema), converter=self.converter)
-        xml_dict = self.schema_object.to_dict(xml_element, validation='strict',  strip_namespaces=True, converter=self.converter)
-        return xml_dict
-
-
-    # include preserve_root !!! to json
+    def read_to_objects(self):
+        xml_dict = self.read()
+        return CuemsParser(xml_dict).parse()
