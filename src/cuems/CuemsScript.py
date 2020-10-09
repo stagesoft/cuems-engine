@@ -8,7 +8,8 @@ class CuemsScript(dict):
         else:
             super().__setitem__('uuid', uuid)
         super().__setitem__('name', name)
-        super().__setitem__('date', date)
+        super().__setitem__('created', date)
+        super().__setitem__('modified', date)
         super().__setitem__('timecode_cuelist', timecode_cuelist)
         super().__setitem__('floating_cuelist', floating_cuelist)
         

@@ -7,7 +7,8 @@
             <xs:sequence>
               <xs:element type="xs:string" name="uuid"/>
               <xs:element type="xs:string" name="name"/>
-              <xs:element type="xs:string" name="date"/>
+              <xs:element type="xs:string" name="created"/>
+              <xs:element type="xs:string" name="modified"/>
               <xs:element name="timecode_cuelist">
                 <xs:complexType>
                   <xs:sequence>
