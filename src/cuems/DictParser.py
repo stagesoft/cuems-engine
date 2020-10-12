@@ -33,9 +33,16 @@ class CuemsParser():
 
         return _class
 
+    def get_first_key(self, _dict):
+        return list(_dict.keys())[0]
+
+
+    def get_contained_dict(self, _dict):
+        return list(_dict.values())[0]
+
     def parse(self):
-        parser_class, class_string = self.get_parser_class(next(iter(self.init_dict.keys())))
-        item_obj = parser_class(init_dict=next(iter(self.init_dict.values())), class_string=class_string).parse()
+        parser_class, class_string = self.get_parser_class(self.get_first_key(self.init_dict))
+        item_obj = parser_class(init_dict=self.get_contained_dict(self.init_dict), class_string=class_string).parse()
         return item_obj
 
 class CuemsScriptParser(CuemsParser):
@@ -49,9 +56,8 @@ class CuemsScriptParser(CuemsParser):
             if type(dict_value) is dict:
 
                 if (len(list(dict_value))> 0):
-                    parser_class, class_string = self.get_parser_class(list(dict_value)[0])
-                    class_dict = list(dict_value.values())[0]
-                    self.item[dict_key] = parser_class(init_dict=class_dict, class_string=class_string).parse()
+                    parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
+                    self.item[dict_key] = parser_class(init_dict=self.get_contained_dict(dict_value), class_string=class_string).parse()
             else:
                 self.item[dict_key] = dict_value
         
@@ -69,9 +75,11 @@ class CueListParser(CuemsParser):
     
     def parse(self):
         for class_string, class_items_list in self.init_dict.items():
+            print(f'XXXXXXXXXXXXXXX{class_string}')
             if isinstance(class_items_list, list):
                 for class_item in class_items_list:
                     parser_class, unused_class_string = self.get_parser_class(class_string)
+                    print(f'XXXXXXXXXXXXXXX{unused_class_string}')
                     item_obj = parser_class(init_dict=class_item, class_string=class_string).parse()
                     self.cuelist.append(item_obj)
             else:
@@ -86,9 +94,8 @@ class GenericCueParser(CuemsScriptParser):
     def parse(self):
         for dict_key, dict_value in self.init_dict.items():
             if type(dict_value) is dict:
-                parser_class, class_string = self.get_parser_class(list(dict_value)[0])
-                class_dict = list(dict_value.values())[0]
-                self.item[dict_key] = parser_class(init_dict=class_dict, class_string=class_string).parse()
+                parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
+                self.item[dict_key] = parser_class(init_dict=self.get_contained_dict(dict_value), class_string=class_string).parse()
             else:
                 self.item[dict_key] = dict_value
         
