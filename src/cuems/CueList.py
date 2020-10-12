@@ -29,9 +29,15 @@ class CueList(list):
         return timelist
 
     def append(self, item):
-        if not isinstance(item, Cue):
-            raise TypeError('item is not of type %s' % Cue)
         super().append(item)  #append the item to itself (the list)
 
     def extend(self, other):
         super().extend(other)
+
+    def find(self, uuid):
+        for item in self:
+            if item.uuid == uuid:
+                return item
+        
+        return None
+

@@ -17,6 +17,14 @@ class CuemsScript(dict):
         # self.floating_list = floating_list
 
     @property
+    def uuid(self):
+        return super().__getitem__('uuid')
+
+    @uuid.setter
+    def uuid(self, uuid):
+        super().__setitem__('uuid', uuid)
+
+    @property
     def name(self):
         return super().__getitem__('name')
 
@@ -24,7 +32,6 @@ class CuemsScript(dict):
     def name(self, name):
         super().__setitem__('name', name)
 
-    
     @property
     def timecode_cuelist(self):
         return super().__getitem__('timecode_cuelist')
@@ -62,4 +69,14 @@ class CuemsScript(dict):
 
         return media_dict
 
+    def find(self, uuid):
+        if uuid == self.uuid:
+            return self
+        else:
+            item_to_return = self.floating_cuelist.find(uuid)
+
+        if item_to_return is None:
+            item_to_return = self.timecode_cuelist.find(uuid)
+
+        return item_to_return
         

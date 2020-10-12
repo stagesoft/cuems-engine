@@ -74,12 +74,18 @@ class CueListParser(CuemsParser):
                 for class_item in class_items_list:
                     parser_class, unused_class_string = self.get_parser_class(class_string)
                     item_obj = parser_class(init_dict=class_item, class_string=class_string).parse()
-                    self.cuelist.append(item_obj)
+                    if not isinstance(item_obj, Cue) and not isinstance(item_obj, CuemsScript):
+                        raise TypeError(f'item is not of type {Cue} nor {CuemsScript}')
+                    else:
+                        self.cuelist.append(item_obj)
             else:
                 parser_class, unused_class_string = self.get_parser_class(class_string)
                 item_obj = parser_class(init_dict=class_items_list, class_string=class_string).parse()
-                self.cuelist.append(item_obj)
-            
+                if not isinstance(item_obj, Cue) and not isinstance(item_obj, CuemsScript):
+                    raise TypeError(f'item is not of type {Cue} nor {CuemsScript}')
+                else:
+                    self.cuelist.append(item_obj)
+
         return self.cuelist
 
 class GenericCueParser(CuemsScriptParser): 
@@ -140,6 +146,8 @@ class CueOutputsParser(GenericSubObjectParser):
 class AudioCueOutputsParser(GenericSubObjectParser):
     pass
 
+class VideoCueOutputsParser(GenericSubObjectParser):
+    pass
 class DmxCueOutputsParser(GenericSubObjectParser):
     pass
 

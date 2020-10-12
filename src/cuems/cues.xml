@@ -1,8 +1,8 @@
 <CueMs>
     <CuemsScript>
         <uuid>12345678-1234-1234-aaaa-000000000001</uuid>
-        <name>Test Script</name>
-        <date>the date of todayclea</date>
+        <name>Test Main Script</name>
+        <date>Main script date</date>
         <timecode_cuelist>
             <CueList>
                 <Cue>
@@ -93,22 +93,63 @@
         </timecode_cuelist>
         <floating_cuelist>
             <CueList>
+                <CuemsScript>
+                    <uuid>12345678-1234-1234-iiii-000000000001</uuid>
+                    <name>Test inner Script</name>
+                    <date>the date of todayclea</date>
+                    <timecode_cuelist>
+                        <CueList>
+                            <AudioCue>
+                                <uuid>12345678-1234-1234-iiiit-000000000001</uuid>
+                                <time>
+                                    <CTimecode>00:00:45:00</CTimecode>
+                                </time>
+                                <type>virtual</type>
+                                <loop>False</loop>
+                                <media>sposa_non_mi_conosci.16.s.wav</media>
+                                <outputs>
+                                    <AudioCueOutputs>
+                                        <stereo>1</stereo>
+                                    </AudioCueOutputs>
+                                </outputs>
+                            </AudioCue>
+                        </CueList>
+                    </timecode_cuelist>
+                    <floating_cuelist>
+                        <CueList>
+                            <AudioCue>
+                                <uuid>12345678-1234-1234-iiiif-000000000001</uuid>
+                                <time>
+                                    <CTimecode>00:00:45:00</CTimecode>
+                                </time>
+                                <type>virtual</type>
+                                <loop>False</loop>
+                                <media>sposa_non_mi_conosci.16.s.wav</media>
+                                <outputs>
+                                    <AudioCueOutputs>
+                                        <stereo>1</stereo>
+                                    </AudioCueOutputs>
+                                </outputs>
+                            </AudioCue>
+                            <VideoCue>
+                                <uuid>12345678-1234-1234-iiiif-000000000002</uuid>
+                                <time>
+                                    <CTimecode>00:00:45:00</CTimecode>
+                                </time>
+                                <type>virtual</type>
+                                <loop>False</loop>
+                                <media>sposa_non_mi_conosci.mp4</media>
+                                <outputs>
+                                    <VideoCueOutputs>
+                                        <stereo>1</stereo>
+                                    </VideoCueOutputs>
+                                </outputs>
+                            </VideoCue>
+                        </CueList>
+                    </floating_cuelist>
+                </CuemsScript>
                 <AudioCue>
                     <uuid>12345678-1234-1234-ffff-000000000001</uuid>
-                    <time>
-                        <CTimecode>00:00:45:00</CTimecode>
-                    </time>
-                    <type>virtual</type>
-                    <loop>False</loop>
-                    <media>sposa_non_mi_conosci.16.s.wav</media>
-                    <outputs>
-                        <AudioCueOutputs>
-                            <stereo>1</stereo>
-                        </AudioCueOutputs>
-                    </outputs>
-                </AudioCue>
-                <AudioCue>
-                    <uuid>12345678-1234-1234-ffff-000000000002</uuid>
                     <time>
                         <CTimecode>00:00:45:00</CTimecode>
                     </time>
@@ -121,6 +162,20 @@
                         </AudioCueOutputs>
                     </outputs>
                 </AudioCue>
+                <VideoCue>
+                    <uuid>12345678-1234-1234-ffff-000000000002</uuid>
+                    <time>
+                        <CTimecode>00:00:45:00</CTimecode>
+                    </time>
+                    <type>virtual</type>
+                    <loop>False</loop>
+                    <media>daft.mp4</media>
+                    <outputs>
+                        <VideoCueOutputs>
+                            <stereo>1</stereo>
+                        </VideoCueOutputs>
+                    </outputs>
+                </VideoCue>
             </CueList>
         </floating_cuelist>
     </CuemsScript>

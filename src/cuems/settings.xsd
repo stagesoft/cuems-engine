@@ -17,6 +17,7 @@
                                 <xs:complexType>
                                     <xs:sequence>
                                         <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="args" type="xs:string"></xs:element>
                                         <xs:element name="outputs" type="xs:positiveInteger"></xs:element>
                                         <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
                                     </xs:sequence>
@@ -26,6 +27,7 @@
                                 <xs:complexType>
                                     <xs:sequence>
                                         <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="args" type="xs:string"></xs:element>
                                         <xs:element name="audio_cards" type="xs:positiveInteger"></xs:element>
                                         <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
                                     </xs:sequence>
@@ -35,6 +37,7 @@
                                 <xs:complexType>
                                     <xs:sequence>
                                         <xs:element name="path" type="NonEmptyString"></xs:element>
+                                        <xs:element name="args" type="xs:string"></xs:element>
                                         <xs:element name="universes" type="xs:positiveInteger"></xs:element>
                                         <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
                                     </xs:sequence>

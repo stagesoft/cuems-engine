@@ -9,16 +9,19 @@
         <mtc_port>Midi Through Port-0</mtc_port>
         <videoplayer>
             <path>/usr/bin/xjadeo</path>
+            <args>--no-splash --no-initial-sync</args>
             <outputs>2</outputs>
             <osc_in_port_base>7710</osc_in_port_base>
         </videoplayer>
         <audioplayer>
             <path>/usr/local/bin/audioplayer-cuems</path>
+            <args></args>
             <audio_cards>1</audio_cards>
             <osc_in_port_base>7730</osc_in_port_base>
         </audioplayer>
         <dmxplayer>
             <path>/usr/local/bin/dmxplayer-cuems</path>
+            <args></args>
             <universes>1</universes>
             <osc_in_port_base>7740</osc_in_port_base>
         </dmxplayer>

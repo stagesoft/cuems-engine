@@ -2,37 +2,37 @@
   xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="CueMs">
     <xs:complexType>
-      <xs:sequence>
-        <xs:element name="CuemsScript">
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element type="xs:string" name="uuid"/>
-              <xs:element type="xs:string" name="name"/>
-              <xs:element type="xs:string" name="date"/>
-              <xs:element name="timecode_cuelist">
-                <xs:complexType>
-                  <xs:sequence>
-                    <xs:element name="CueList" type="CueListType" />
-                  </xs:sequence>
-                </xs:complexType>
-              </xs:element>
-              <xs:element name="floating_cuelist">
-                <xs:complexType>
-                  <xs:sequence>
-                    <xs:element name="CueList" type="CueListType" />
-                  </xs:sequence>
-                </xs:complexType>
-              </xs:element>
-            </xs:sequence>
-          </xs:complexType>
-        </xs:element>
+      <xs:sequence minOccurs="1" maxOccurs="1">
+        <xs:element name="CuemsScript" type="CuemsScriptType"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
 
+  <xs:complexType name="CuemsScriptType">
+    <xs:sequence minOccurs="1" maxOccurs="1">
+      <xs:element type="xs:string" name="uuid"/>
+      <xs:element type="xs:string" name="name"/>
+      <xs:element type="xs:string" name="date"/>
+      <xs:element name="timecode_cuelist">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="CueList" type="CueListType" />
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="floating_cuelist">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="CueList" type="CueListType" />
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
 
   <xs:complexType name="CueListType">
     <xs:choice maxOccurs="unbounded" minOccurs="0">
+      <xs:element name="CuemsScript" type="CuemsScriptType" />
       <xs:element name="Cue">
         <xs:complexType>
           <xs:sequence>
@@ -40,7 +40,7 @@
             <xs:element name="time">
               <xs:complexType>
                 <xs:sequence>
-                  <xs:element type="xs:string" name="CTimecode" minOccurs="0"/>
+                  <xs:element type="timecodeType" name="CTimecode" minOccurs="0"/>
                   <xs:element type="xs:string" name="NoneType" minOccurs="0"/>
                 </xs:sequence>
               </xs:complexType>
@@ -74,7 +74,7 @@
             <xs:element name="time">
               <xs:complexType>
                 <xs:sequence>
-                  <xs:element type="xs:string" name="CTimecode"/>
+                  <xs:element type="timecodeType" name="CTimecode"/>
                 </xs:sequence>
               </xs:complexType>
             </xs:element>
@@ -104,7 +104,7 @@
             <xs:element name="time">
               <xs:complexType>
                 <xs:sequence>
-                  <xs:element type="xs:string" name="CTimecode"/>
+                  <xs:element type="timecodeType" name="CTimecode"/>
                 </xs:sequence>
               </xs:complexType>
             </xs:element>
@@ -159,7 +159,7 @@
             <xs:element name="time">
               <xs:complexType>
                 <xs:sequence>
-                  <xs:element type="xs:string" name="CTimecode"/>
+                  <xs:element type="timecodeType" name="CTimecode"/>
                 </xs:sequence>
               </xs:complexType>
             </xs:element>
@@ -184,4 +184,10 @@
       </xs:element>
     </xs:choice>
   </xs:complexType>
+
+  <xs:simpleType name="timecodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2}"/>
+    </xs:restriction>
+  </xs:simpleType>
 </xs:schema>

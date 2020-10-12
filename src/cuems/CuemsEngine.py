@@ -18,19 +18,22 @@ from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
 
 from .log import logger
-from .OssiaServer import OssiaServer
+from .OssiaServer import OssiaServer, QueueData, QueueOSCData
 from .OscServer import OscServer
 from .Settings import Settings
+from .CuemsScript import CuemsScript
+from .CueList import CueList
 from .Cue import Cue
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
 from .DmxCue import DmxCue
-from .AudioPlayer import AudioPlayer, AudioPlayerRemote
-from .VideoPlayer import VideoPlayer, VideoPlayerRemote
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
+from .ConfigManager import ConfigManager
 
 CUEMS_CONF_PATH = os.environ['HOME'] + '/.cuems/'
+
+
 
 # %%
 class CuemsEngine():
@@ -62,11 +65,16 @@ class CuemsEngine():
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
 
         # Our empty script object
-        self.script = {}
+        self.script = CuemsScript()
+        self.currentcues = CueList()
+        self.nextcues = CueList()
+        self.armedcues = CueList()
 
-        self.node_audio_players = {}
+        self.audio_players_port_index = int(self.cm.node_conf['audioplayer']['osc_in_port_base'])
         self.node_video_players = {}
+        self.video_players_port_index = int(self.cm.node_conf['videoplayer']['osc_in_port_base'])
         self.node_dmx_players = {}
+        self.dmx_players_port_index = int(self.cm.node_conf['dmxplayer']['osc_in_port_base'])
 
         # MTC master object creation through bound library and open port
         self.mtcmaster = libmtcmaster.MTCSender_create()
@@ -98,24 +106,25 @@ class CuemsEngine():
         self.ossia_server.start()
 
         # Initial OSC nodes to tell ossia to configure
-        self.osc_bridge_conf = {'/engine' : [ossia.ValueType.Impulse, None],
-                                '/engine/command' : [ossia.ValueType.Impulse, None],
-                                '/engine/command/load' : [ossia.ValueType.String, self.load],
-                                '/engine/command/go' : [ossia.ValueType.String, self.go],
-                                '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause],
-                                '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop],
-                                '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all],
-                                '/engine/command/preload' : [ossia.ValueType.String, self.preload],
-                                '/engine/status/timecode' : [ossia.ValueType.String, None], 
-                                '/engine/status/currentcue' : [ossia.ValueType.String, None],
-                                '/engine/status/nextcue' : [ossia.ValueType.String, None],
-                                '/engine/status/running' : [ossia.ValueType.Bool, None]
-                                }
-        self.ossia_queue.put(['add', self.osc_bridge_conf])
+        OSC_ENGINE_CONF = { '/engine' : [ossia.ValueType.Impulse, None],
+                            '/engine/command' : [ossia.ValueType.Impulse, None],
+                            '/engine/command/load' : [ossia.ValueType.String, self.load_callback],
+                            '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
+                            '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
+                            '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
+                            '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
+                            '/engine/command/preload' : [ossia.ValueType.String, self.preload_callback],
+                            '/engine/status/timecode' : [ossia.ValueType.String, None], 
+                            '/engine/status/currentcue' : [ossia.ValueType.String, None],
+                            '/engine/status/nextcue' : [ossia.ValueType.String, None],
+                            '/engine/status/running' : [ossia.ValueType.Bool, None]
+                            }
+
+        self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
 
         # Execution Queues
-        self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
-        self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
+        # self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
+        # self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -196,7 +205,8 @@ class CuemsEngine():
     #########################################################
     # Usefull callbacks
     def mtc_step_callback(self, mtc):
-        self.ossia_server.osc_registered_nodes['/engine/status/timecode'][0].parameter.value = str(mtc)
+        # self.timecode(value = str(mtc))
+        self.ossia_server.oscquery_registered_nodes['/engine/status/timecode'][0].parameter.value = mtc.milliseconds
 
     ########################################################
     # System signals handlers
@@ -250,7 +260,7 @@ class CuemsEngine():
 
     ########################################################
     # OSC messages handlers
-    def load(self, **kwargs):
+    def load_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
         try:
             self.cm.load_project_mappings(kwargs["value"])
@@ -272,78 +282,126 @@ class CuemsEngine():
         except FileNotFoundError:
             logger.error('Project script file not found')
 
-        self.process_script()
+        self.process_script(self.script)
 
-    def go(self, **kwargs):
-        logger.info(f'OSC GO! -> CUE : {kwargs["value"]}')
-        try:
-            libmtcmaster.MTCSender_play(self.mtcmaster)
-            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = True
-        except:
-            logger.info('NO MTCMASTER ASSIGNED!')
+        # We directly start the MTC! we are on running mode, right now
+        libmtcmaster.MTCSender_play(self.mtcmaster)
 
-    def preload(self, **kwargs):
+    def go_callback(self, **kwargs):
+        cue_to_go = self.script['floating_cuelist'].find(kwargs['value'])
+        if cue_to_go is None:
+            cue_to_go = self.script['timecode_cuelist'].find(kwargs['value'])
+            if cue_to_go is None:
+                logger.error(f'Cue {kwargs["value"]} does not exist.')
+            else:
+                logger.error(f'Cue {kwargs["value"]} not prepared. Prepare it first.')
+        else:
+            logger.info(f'OSC GO! -> CUE : {cue_to_go.uuid}')
+            try:
+                key = f'{cue_to_go.osc_route}{cue_to_go.offset_route}'
+                self.ossia_server.osc_registered_nodes[key][0].parameter.value = cue_to_go.review_offset(self.mtclistener.main_tc)
+                logger.info(key + " " + self.ossia_server.osc_registered_nodes[key][0].parameter.value)
+            except KeyError:
+                logger.debug(f'Key error 1 in go_callback {key}')
+
+            try:
+                key = f'{cue_to_go.osc_route}/mtcfollow'
+                self.ossia_server.osc_registered_nodes[key][0].parameter.value = True
+            except:
+                try: 
+                    key = f'{cue_to_go.osc_route}/jadeo/midi/connect'
+                    self.ossia_server.osc_registered_nodes[key][0].parameter.value = "Midi Through Port-0"
+                except KeyError:
+                    logger.debug(f'Key error 2 in go_callback {key}')
+
+            try:
+                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = True
+                self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value += kwargs['value']
+            except:
+                logger.info('NO MTCMASTER ASSIGNED!')
+
+                self.currentcues.append(cue_to_go)
+                logger.info(f'Current Cues CueList: {self.currentcues}')
+
+    def preload_callback(self, **kwargs):
         logger.info(f'OSC PRELOAD! -> CUE : {kwargs["value"]}')
 
-    def pause(self, **kwargs):
+    def pause_callback(self, **kwargs):
         logger.info('OSC PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
-            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
-    def stop(self, **kwargs):
+    def stop_callback(self, **kwargs):
         logger.info('OSC STOP!')
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
-            self.ossia_server.osc_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
-    def reset_all(self, **kwargs):
+    def reset_all_callback(self, **kwargs):
         logger.info('OSC RESETALL!')
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
-    def timecode(self, **kwargs):
-        logger.info('OSC TIMECODE!')
-
-    def currentcue(self, **kwargs):
-        logger.info('OSC CURRENTCUE!')
-
-    def nextcue(self, **kwargs):
-        logger.info('OSC NEXTCUE!')
-
-    def running(self, **kwargs):
-        logger.info(f'OSC RUNNING: {kwargs["value"]}')
     ########################################################
 
     ########################################################
     # Script treating methods
-    def process_script(self):
-        logger.info('Timecode Cuelist:')
-        for item in self.script['timecode_cuelist']:
+    def process_script(self, script):
+        #######################################
+        # Timecode cues review
+        logger.info('Listing Timecode Cuelist:')
+        for item in script['timecode_cuelist']:
+            '''Just listing them by now'''
             logger.info(f'Class: {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
-        logger.info('Floating Cuelist:')
-        for item in self.script['floating_cuelist']:
+
+        #######################################
+        # Floating cues preparation
+        logger.info('Preparing Floating Cuelist:')
+        for item in script['floating_cuelist']:
+            '''Each item in the floating list must be prepared when the script
+            is just loaded to allow the user to play any of those cues, so...'''
+            if isinstance(item, CuemsScript):
+                self.process_script(item)
+            elif isinstance(item, Cue):
+                logger.info(f'Class: {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
+            
+            
+            #######################################
+            # Audio Cues preparation
             if isinstance(item, AudioCue):
-                n = len(self.node_audio_players.items())
+                # Assign its own audioplayer object
+                item.prepare(self.cm, self.ossia_queue)
+                
+                '''
                 self.node_audio_players[f'{item.uuid}'] = AudioPlayerRemote(
                     self.cm.node_conf['audioplayer']['osc_in_port_base'] + (n*2), 
                     'base_card', 
                     self.cm.node_conf['audioplayer']['path'],
+                    str(self.cm.node_conf['audioplayer']['args']),
                     os.path.join(self.cm.library_path, 'media', item.media))
                 self.node_audio_players[f'{item.uuid}'].start()
+                '''
             elif isinstance(item, VideoCue):
+                item.prepare(self.cm, self.ossia_queue)
+                '''
                 n = len(self.node_video_players.items())
                 self.node_video_players[f'{item.uuid}'] = VideoPlayerRemote(
                     self.cm.node_conf['videoplayer']['osc_in_port_base'] + (n*2), 
                     '1', 
-                    self.cm.node_conf['videoplayer']['path'])
+                    self.cm.node_conf['videoplayer']['path'],
+                    str(self.cm.node_conf['videoplayer']['args']),
+                    os.path.join(self.cm.library_path, 'media', item.media))
                 self.node_video_players[f'{item.uuid}'].start()
+                '''
             elif isinstance(item, DmxCue):
                 pass
                 '''n = len(self.node_dmx_players.items())
@@ -383,101 +441,7 @@ def print_dict(d, depth = 0):
     return outstring
 
 ########################################################
-class ConfigManager(threading.Thread):
-    def __init__(self, path, *args, **kwargs):
-        super().__init__(name='CfgMan', args=args, kwargs=kwargs)
-        self.cuems_conf_path = path
-        self.library_path = None
-        self.node_conf = {}
-        self.project_conf = {}
-        self.project_maps = {}
-        self.load_node_conf()
-        self.start()
-
-    def load_node_conf(self):
-        settings_schema = os.path.join(self.cuems_conf_path, 'settings.xsd')
-        settings_file = os.path.join(self.cuems_conf_path, 'settings.xml')
-        try:
-            engine_settings = Settings(settings_schema, settings_file)
-            engine_settings.read()
-        except FileNotFoundError as e:
-            raise e
-
-        if engine_settings['library_path'] == None:
-            logger.warning('No library path specified in settings. Assuming default ~/cuems_library/.')
-        else:
-            self.library_path = engine_settings['library_path']
-
-        # Now we know where the library is, let's check it out
-        self.check_dir_hierarchy()
-
-        self.node_conf = engine_settings['node'][0]
-
-        logger.info(f'Cuems node_{self.node_conf["id"]:03} config loaded')
-        logger.info(f'Node conf: {self.node_conf}')
-        logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
-        logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
-        logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
-
-    def load_project_settings(self, project_uname):
-        try:
-            settings_schema = os.path.join(self.library_path, 'project_settings.xsd')
-            settings_path = os.path.join(self.library_path, 'projects', project_uname, 'settings.xml')
-            self.project_conf = Settings(settings_schema, settings_path)
-            self.project_conf.read()
-        except FileNotFoundError as e:
-            raise e
-        except Exception as e:
-            logger.error(e)
-
-        self.project_conf.pop('xmlns:cms')
-        self.project_conf.pop('xmlns:xsi')
-        self.project_conf.pop('xsi:schemaLocation')
-
-        logger.info(f'Project {project_uname} settings loaded')
-
-    def load_project_mappings(self, project_uname):
-        try:
-            mappings_schema = os.path.join(self.library_path, 'project_mappings.xsd')
-            mappings_path = os.path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
-            self.project_maps = Settings(mappings_schema, mappings_path)
-            self.project_maps.read()
-        except FileNotFoundError as e:
-            raise e
-        except Exception as e:
-            logger.error(e)
-
-        self.project_maps.pop('xmlns:cms')
-        self.project_maps.pop('xmlns:xsi')
-        self.project_maps.pop('xsi:schemaLocation')
-
-        logger.info(f'Project {project_uname} mappings loaded')
-
-    def check_dir_hierarchy(self):
-        try:
-            if not os.path.exists(self.library_path):
-                os.mkdir(self.library_path)
-                logger.info(f'Creating library forlder {self.library_path}')
-
-            if not os.path.exists( os.path.join(self.library_path, 'projects') ) :
-                os.mkdir(os.path.join(self.library_path, 'projects'))
-
-            if not os.path.exists( os.path.join(self.library_path, 'media') ) :
-                os.mkdir(os.path.join(self.library_path, 'media'))
-
-            if not os.path.exists( os.path.join(self.library_path, 'trash') ) :
-                os.mkdir(os.path.join(self.library_path, 'trash'))
-
-            if not os.path.exists( os.path.join(self.library_path, 'trash', 'projects') ) :
-                os.mkdir(os.path.join(self.library_path, 'trash', 'projects'))
-
-            if not os.path.exists( os.path.join(self.library_path, 'trash', 'media') ) :
-                os.mkdir(os.path.join(self.library_path, 'trash', 'media'))
-
-        except Exception as e:
-            logger.error("error: {} {}".format(type(e), e))
-
-########################################################
+'''
 class RunningQueue():
     def __init__(self, main_flag, name, mtcmaster):
         self.main_flag = main_flag
@@ -540,3 +504,5 @@ class RunningQueue():
     def running(self, **kwargs):
         logger.info(f'{self.queue_name} queue RUNNING!')
         # libmtcmaster.MTCSender_stop(self.mtcmaster)
+'''
+

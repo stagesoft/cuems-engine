@@ -18,6 +18,10 @@ class OssiaServer(threading.Thread):
         self.conf_queue_loop.start()
 
         # OSC nodes dicts
+        # for the oscquery connection
+        self.oscquery_registered_nodes = dict()
+        # and for the dinamically registered osc devices
+        self.osc_devices = dict()
         self.osc_registered_nodes = dict()
 
         # Ossia Device and OSCQuery server creation
@@ -46,8 +50,8 @@ class OssiaServer(threading.Thread):
             oscq_message = self.oscquery_messageq.pop()
             while (oscq_message != None):
                 parameter, value = oscq_message
-                if self.osc_registered_nodes[str(parameter.node)][1] is not None:
-                    self.osc_registered_nodes[str(parameter.node)][1](value=value)
+                if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
+                    self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
                 '''
                 try:                
                     self.engine_osc_nodes[str(parameter.node)][0].parameter.value = value
@@ -64,27 +68,62 @@ class OssiaServer(threading.Thread):
     def conf_queue_consumer(self):
         while self.server_running:
             item = self.conf_queue.get()
-            if item[0] == 'add':
-                self.add_nodes(item[1])
-            elif item[0] == 'remove':
-                self.add_nodes(item[1])
+            if item.action == 'add':
+                self.add_nodes(item)
+            elif item.action == 'remove':
+                self.remove_nodes(item)
             self.conf_queue.task_done()
             time.sleep(0.004)
 
-    def add_nodes(self, nodes_dict):
-        for route, conf in nodes_dict.items():
-            temp_node = self.oscquery_device.add_node(route)
-            temp_node.create_parameter(conf[0])
-            temp_node.parameter.access_mode = ossia.AccessMode.Bi
-            temp_node.parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
-            self.oscquery_messageq.register(temp_node.parameter)
-            
-            self.osc_registered_nodes[route] = [temp_node, conf[1]]
-        logger.info(f'OSC Nodes registered: {nodes_dict}')
+    def add_nodes(self, qdata):
+        if isinstance(qdata, QueueOSCData):
+            self.osc_devices[qdata.device_name] = ossia.ossia.OSCDevice(
+                                                        f'remoteAudioPlayer{qdata.device_name}', 
+                                                        qdata.host, 
+                                                        qdata.in_port, 
+                                                        qdata.out_port)
+            for route, conf in qdata.items():
+                temp_node = self.osc_devices[qdata.device_name].add_node(route)
+                # conf[0] holds the OSC type of data
+                temp_node.create_parameter(conf[0])
+                temp_node.parameter.access_mode = ossia.AccessMode.Bi
+                temp_node.parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
 
-    def remove_nodes(self, nodes_dict):
-        for route, conf in nodes_dict.items():
-            try:
-                self.osc_registered_nodes.pop(route)
-            except:
-                pass
+                # conf[1] holds the method to call when received such a route
+                self.osc_registered_nodes[qdata.device_name + route] = [temp_node, conf[1]]
+
+            logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
+        elif isinstance(qdata, QueueData):
+            for route, conf in qdata.items():
+                temp_node = self.oscquery_device.add_node(route)
+                temp_node.create_parameter(conf[0])
+                temp_node.parameter.access_mode = ossia.AccessMode.Bi
+                temp_node.parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
+                self.oscquery_messageq.register(temp_node.parameter)
+                
+                self.oscquery_registered_nodes[route] = [temp_node, conf[1]]
+
+            logger.info(f'OSCQuery Nodes registered: {qdata}')
+
+    def remove_nodes(self, qdata):
+        if isinstance(qdata, QueueOSCData):
+            pass
+        elif isinstance(qdata, QueueData):
+            for route, conf in qdata.items():
+                try:
+                    self.oscquery_registered_nodes.pop(route)
+                except:
+                    pass
+
+class QueueData(dict):
+    def __init__(self, action, dictionary):
+        self.action = action
+        super().__init__(dictionary)
+
+class QueueOSCData(QueueData):
+    def __init__(self, action, device_name, host, in_port, out_port, dictionary):
+        self.device_name = device_name
+        self.host = host
+        self.in_port = in_port
+        self.out_port = out_port
+        super().__init__(action, dictionary)
