@@ -32,11 +32,18 @@ class VideoCue(Cue):
     def offset_route(self, offset_route):
         super().__setitem__('offset_route', offset_route)
 
-        return '/jadeo/offset'
-    
+    def review_offset(self, timecode):
+        return -(int(timecode.frames))
 
+    @property
+    def armed(self):
+        return super().__getitem__('armed')
 
-    def prepare(self, conf, queue):
+    @armed.setter
+    def armed(self, armed):
+        super().__setitem__('armed', armed)
+
+    def arm(self, conf, queue):
         # Assign its own videoplayer object
         self.player = VideoPlayer(  conf.players_port_index['video'], 
                                     self.outputs,
@@ -74,5 +81,8 @@ class VideoCue(Cue):
 
         conf.players_port_index['video'] = conf.players_port_index['video'] + 2
 
-    def review_offset(self, timecode):
-        return -(int(timecode.frames))
+        self.armed = True
+
+    def disarm(self, cm, queue):
+        self.armed = False
+

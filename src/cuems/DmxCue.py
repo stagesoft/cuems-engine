@@ -1,5 +1,9 @@
-from .Cue import Cue
 from collections.abc import Mapping
+from os import path
+from pyossia import ossia
+from .Cue import Cue
+from .DmxPlayer import DmxPlayer
+from .OssiaServer import QueueOSCData
 
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
@@ -7,6 +11,8 @@ from collections.abc import Mapping
 class DmxCue(Cue):
     def __init__(self, time=None, scene=None, in_time=0, out_time=0, init_dict=None):
         super().__init__(time, init_dict)
+        self.offset_route = '/offset'
+
         if scene:
                 self.scene = scene
         
@@ -26,9 +32,79 @@ class DmxCue(Cue):
             super().__setitem__('dmx_scene', DmxScene(init_dict=scene))
         else:
             raise NotImplementedError
-    
 
-    
+    @property
+    def player(self):
+        return super().__getitem__('player')
+
+    @player.setter
+    def player(self, player):
+        super().__setitem__('player', player)
+
+    @property
+    def osc_route(self):
+        return super().__getitem__('osc_route')
+
+    @osc_route.setter
+    def osc_route(self, osc_route):
+        super().__setitem__('osc_route', osc_route)
+
+    @property
+    def offset_route(self):
+        return super().__getitem__('offset_route')
+
+    @offset_route.setter
+    def offset_route(self, offset_route):
+        super().__setitem__('offset_route', offset_route)
+
+    def review_offset(self, timecode):
+        return -(float(timecode.milliseconds))
+
+    @property
+    def armed(self):
+        return super().__getitem__('armed')
+
+    @armed.setter
+    def armed(self, armed):
+        super().__setitem__('armed', armed)
+
+    def arm(self, conf, queue):
+        # Assign its own audioplayer object
+        self.player = DmxPlayer(    conf.players_port_index['dmx'], 
+                                    conf.node_conf['dmxplayer']['path'],
+                                    str(conf.node_conf['dmxplayer']['args']),
+                                    str(path.join(conf.library_path, 'media', self.media)))
+
+        self.player.start()
+
+        # And dinamically attach it to the ossia for remote control it
+        OSC_DMXPLAYER_CONF = {  '/quit' : [ossia.ValueType.Impulse, None],
+                                '/load' : [ossia.ValueType.String, None], 
+                                self.offset_route : [ossia.ValueType.Float, None],
+                                '/wait' : [ossia.ValueType.Float, None],
+                                '/play' : [ossia.ValueType.Impulse, None],
+                                '/stop' : [ossia.ValueType.Impulse, None],
+                                '/stoponlost' : [ossia.ValueType.Bool, None],
+                                # TODO '/mtcfollow' : [ossia.ValueType.Bool, None],
+                                '/check' : [ossia.ValueType.Impulse, None]
+                                }
+
+        self.osc_route = f'/node{conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
+
+        queue.put(   QueueOSCData(  'add', 
+                                    self.osc_route, 
+                                    conf.node_conf['osc_dest_host'], 
+                                    conf.players_port_index['dmx'],
+                                    conf.players_port_index['dmx'] + 1, 
+                                    OSC_DMXPLAYER_CONF))
+
+        conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
+
+        self.armed = True
+
+    def disarm(self, cm, queue):
+        self.armed = False
+
 
 class DmxScene(dict):
     def __init__(self, init_dict=None):

@@ -31,8 +31,9 @@ class VideoPlayer(Thread):
         try:
             # Calling xjadeo in a subprocess
             process_call_list = [self.path]
-            for arg in self.args.split():
-                process_call_list.append(arg)
+            if self.args is not None:
+                for arg in self.args.split():
+                    process_call_list.append(arg)
             process_call_list.extend(['--osc', str(self.port), self.media])
             self.p=subprocess.Popen(process_call_list,  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             # self.p=subprocess.Popen([self.path, '--no-splash --no-initial-sync', '--osc', str(self.port), self.media],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

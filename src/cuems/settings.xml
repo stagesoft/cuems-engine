@@ -9,7 +9,7 @@
         <mtc_port>Midi Through Port-0</mtc_port>
         <videoplayer>
             <path>/usr/bin/xjadeo</path>
-            <args>--no-splash --no-initial-sync</args>
+            <args>--no-splash --no-initial-sync --quiet --no-letterbox --midi-driver alsa-seq --midifps 0 --ignore-file-offset</args>
             <outputs>2</outputs>
             <osc_in_port_base>7710</osc_in_port_base>
         </videoplayer>

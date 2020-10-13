@@ -10,6 +10,7 @@ class Cue(dict):
         self.time = time
         if init_dict is not None:
             super().__init__(init_dict)
+        self.armed = False
 
     @classmethod
     def from_dict(cls, init_dict):
@@ -66,11 +67,25 @@ class Cue(dict):
     def type(self):
         return type(self)
 
-
     def __setitem__(self, key, value):
         if key == 'time':
             self.time = value
         else:
             super().__setitem__(key, value)
 
+    @property
+    def armed(self):
+        return super().__getitem__('armed')
+
+    @armed.setter
+    def armed(self, armed):
+        super().__setitem__('armed', armed)
+
+    def arm(self, conf, queue):
+        logger.info('Standard Cue has not yet an arming method')
+        self.armed = True
+
+    def disarm(self, conf, queue):
+        logger.info('Standard Cue has not yet an disarming method')
+        self.armed = False
 

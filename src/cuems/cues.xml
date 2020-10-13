@@ -1,12 +1,12 @@
 <CueMs>
     <CuemsScript>
-        <uuid>12345678-1234-1234-aaaa-000000000001</uuid>
+        <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
         <name>Test Main Script</name>
         <date>Main script date</date>
         <timecode_cuelist>
             <CueList>
                 <Cue>
-                    <uuid>12345678-1234-1234-cccc-000000000001</uuid>
+                    <uuid>12345678-MAIN-TIME-ccue-000000000001</uuid>
                     <time>
                         <CTimecode>00:00:33:00</CTimecode>
                     </time>
@@ -21,7 +21,7 @@
                     </outputs>
                 </Cue>
                 <Cue>
-                    <uuid>12345678-1234-1234-cccc-000000000002</uuid>
+                    <uuid>12345678-MAIN-TIME-ccue-000000000002</uuid>
                     <time>
                         <NoneType>None</NoneType>
                     </time>
@@ -35,7 +35,7 @@
                     </outputs>
                 </Cue>
                 <AudioCue>
-                    <uuid>12345678-1234-1234-cccc-000000000003</uuid>
+                    <uuid>12345678-MAIN-TIME-audi-000000000003</uuid>
                     <time>
                         <CTimecode>00:00:45:00</CTimecode>
                     </time>
@@ -48,7 +48,7 @@
                     </outputs>
                 </AudioCue>
                 <DmxCue>
-                    <uuid>12345678-1234-1234-cccc-000000000004</uuid>
+                    <uuid>12345678-MAIN-TIME-dmxc-000000000004</uuid>
                     <time>
                         <CTimecode>00:00:23:00</CTimecode>
                     </time>
@@ -77,7 +77,7 @@
                     </outputs>
                 </DmxCue>
                 <Cue>
-                    <uuid>12345678-1234-1234-cccc-000000000005</uuid>
+                    <uuid>12345678-MAIN-TIME-ccue-000000000005</uuid>
                     <time>
                         <CTimecode>00:00:05:00</CTimecode>
                     </time>
@@ -94,19 +94,19 @@
         <floating_cuelist>
             <CueList>
                 <CuemsScript>
-                    <uuid>12345678-1234-1234-iiii-000000000001</uuid>
+                    <uuid>12345678-INNR-SCRI-ssss-000000000001</uuid>
                     <name>Test inner Script</name>
                     <date>the date of todayclea</date>
                     <timecode_cuelist>
                         <CueList>
                             <AudioCue>
-                                <uuid>12345678-1234-1234-iiiit-000000000001</uuid>
+                                <uuid>12345678-INNR-TIME-audi-000000000001</uuid>
                                 <time>
                                     <CTimecode>00:00:45:00</CTimecode>
                                 </time>
                                 <type>virtual</type>
                                 <loop>False</loop>
-                                <media>sposa_non_mi_conosci.16.s.wav</media>
+                                <media></media>
                                 <outputs>
                                     <AudioCueOutputs>
                                         <stereo>1</stereo>
@@ -118,7 +118,7 @@
                     <floating_cuelist>
                         <CueList>
                             <AudioCue>
-                                <uuid>12345678-1234-1234-iiiif-000000000001</uuid>
+                                <uuid>12345678-INNR-FLOAT-audi-000000000001</uuid>
                                 <time>
                                     <CTimecode>00:00:45:00</CTimecode>
                                 </time>
@@ -132,7 +132,7 @@
                                 </outputs>
                             </AudioCue>
                             <VideoCue>
-                                <uuid>12345678-1234-1234-iiiif-000000000002</uuid>
+                                <uuid>12345678-INNR-FLOAT-vide-000000000002</uuid>
                                 <time>
                                     <CTimecode>00:00:45:00</CTimecode>
                                 </time>
@@ -149,7 +149,7 @@
                     </floating_cuelist>
                 </CuemsScript>
                 <AudioCue>
-                    <uuid>12345678-1234-1234-ffff-000000000001</uuid>
+                    <uuid>12345678-MAIN-FLOAT-audi-000000000001</uuid>
                     <time>
                         <CTimecode>00:00:45:00</CTimecode>
                     </time>
@@ -163,7 +163,7 @@
                     </outputs>
                 </AudioCue>
                 <VideoCue>
-                    <uuid>12345678-1234-1234-ffff-000000000002</uuid>
+                    <uuid>12345678-MAIN-FLOAT-vide-000000000002</uuid>
                     <time>
                         <CTimecode>00:00:45:00</CTimecode>
                     </time>

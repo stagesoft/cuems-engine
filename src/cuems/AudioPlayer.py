@@ -32,8 +32,9 @@ class AudioPlayer(Thread):
         try:
             # Calling audioplayer-cuems in a subprocess
             process_call_list = [self.path]
-            for arg in self.args.split():
-                process_call_list.append(arg)
+            if self.args is not None:
+                for arg in self.args.split():
+                    process_call_list.append(arg)
             process_call_list.extend(['--port', str(self.port), self.media])
             self.p=subprocess.Popen(process_call_list, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()

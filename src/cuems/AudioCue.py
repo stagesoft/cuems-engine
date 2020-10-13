@@ -9,7 +9,7 @@ from .OssiaServer import QueueOSCData
 class AudioCue(Cue):
     def __init__(self, time=None, init_dict=None):
         super().__init__(time, init_dict)
-        self.offset_route = '/jadeo/offset'
+        self.offset_route = '/offset'
 
     @property
     def player(self):
@@ -35,7 +35,18 @@ class AudioCue(Cue):
     def offset_route(self, offset_route):
         super().__setitem__('offset_route', offset_route)
 
-    def prepare(self, conf, queue):
+    def review_offset(self, timecode):
+        return -(float(timecode.milliseconds))
+
+    @property
+    def armed(self):
+        return super().__getitem__('armed')
+
+    @armed.setter
+    def armed(self, armed):
+        super().__setitem__('armed', armed)
+
+    def arm(self, conf, queue):
         # Assign its own audioplayer object
         self.player = AudioPlayer(  conf.players_port_index['audio'], 
                                     conf.node_conf['audioplayer']['path'],
@@ -50,7 +61,7 @@ class AudioCue(Cue):
                                 '/vol0' : [ossia.ValueType.Float, None],
                                 '/vol1' : [ossia.ValueType.Float, None],
                                 '/volmaster' : [ossia.ValueType.Float, None],
-                                '/offset' : [ossia.ValueType.Float, None],
+                                self.offset_route : [ossia.ValueType.Float, None],
                                 '/play' : [ossia.ValueType.Impulse, None],
                                 '/stop' : [ossia.ValueType.Impulse, None],
                                 '/stoponlost' : [ossia.ValueType.Bool, None],
@@ -69,5 +80,8 @@ class AudioCue(Cue):
 
         conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
 
-    def review_offset(self, timecode):
-        return -(float(timecode.milliseconds))
+        self.armed = True
+
+    def disarm(self, cm, queue):
+        self.armed = False
+

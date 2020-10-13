@@ -288,9 +288,8 @@ class CuemsEngine():
         libmtcmaster.MTCSender_play(self.mtcmaster)
 
     def go_callback(self, **kwargs):
-        cue_to_go = self.script['floating_cuelist'].find(kwargs['value'])
+        cue_to_go = self.script.find(kwargs['value'])
         if cue_to_go is None:
-            cue_to_go = self.script['timecode_cuelist'].find(kwargs['value'])
             if cue_to_go is None:
                 logger.error(f'Cue {kwargs["value"]} does not exist.')
             else:
@@ -300,7 +299,7 @@ class CuemsEngine():
             try:
                 key = f'{cue_to_go.osc_route}{cue_to_go.offset_route}'
                 self.ossia_server.osc_registered_nodes[key][0].parameter.value = cue_to_go.review_offset(self.mtclistener.main_tc)
-                logger.info(key + " " + self.ossia_server.osc_registered_nodes[key][0].parameter.value)
+                logger.info(key + " " + str(self.ossia_server.osc_registered_nodes[key][0].parameter.value))
             except KeyError:
                 logger.debug(f'Key error 1 in go_callback {key}')
 
@@ -370,52 +369,13 @@ class CuemsEngine():
             '''Each item in the floating list must be prepared when the script
             is just loaded to allow the user to play any of those cues, so...'''
             if isinstance(item, CuemsScript):
+                logger.info(f'Arming : {item.__class__.__name__} UUID: {item.uuid}')
                 self.process_script(item)
-            elif isinstance(item, Cue):
-                logger.info(f'Class: {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
+            elif isinstance(item, Cue) and not item.armed:
+                logger.info(f'Arming : {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
+                item.arm(self.cm, self.ossia_queue)
             
-            
-            #######################################
-            # Audio Cues preparation
-            if isinstance(item, AudioCue):
-                # Assign its own audioplayer object
-                item.prepare(self.cm, self.ossia_queue)
-                
-                '''
-                self.node_audio_players[f'{item.uuid}'] = AudioPlayerRemote(
-                    self.cm.node_conf['audioplayer']['osc_in_port_base'] + (n*2), 
-                    'base_card', 
-                    self.cm.node_conf['audioplayer']['path'],
-                    str(self.cm.node_conf['audioplayer']['args']),
-                    os.path.join(self.cm.library_path, 'media', item.media))
-                self.node_audio_players[f'{item.uuid}'].start()
-                '''
-            elif isinstance(item, VideoCue):
-                item.prepare(self.cm, self.ossia_queue)
-                '''
-                n = len(self.node_video_players.items())
-                self.node_video_players[f'{item.uuid}'] = VideoPlayerRemote(
-                    self.cm.node_conf['videoplayer']['osc_in_port_base'] + (n*2), 
-                    '1', 
-                    self.cm.node_conf['videoplayer']['path'],
-                    str(self.cm.node_conf['videoplayer']['args']),
-                    os.path.join(self.cm.library_path, 'media', item.media))
-                self.node_video_players[f'{item.uuid}'].start()
-                '''
-            elif isinstance(item, DmxCue):
-                pass
-                '''n = len(self.node_dmx_players.items())
-                self.node_dmx_players[f'{item.uuid}'] = DmxPlayerRemote(
-                    self.cm.node_conf['dmxplayer']['osc_in_port_base'] + (n*2), 
-                    'base_card', 
-                    self.cm.node_conf['dmxplayer']['path'])
-                self.node_dmx_players[f'{item.uuid}'].start()
-                '''
-
     ########################################################
-
-
-
 
 # %%
 

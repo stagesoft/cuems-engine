@@ -36,8 +36,11 @@ class CueList(list):
 
     def find(self, uuid):
         for item in self:
-            if item.uuid == uuid:
-                return item
+            if isinstance(item, Cue):
+                if item.uuid == uuid:
+                    return item
+            else:
+                return item.find(uuid)
         
         return None
 
