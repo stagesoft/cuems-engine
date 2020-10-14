@@ -75,11 +75,9 @@ class CueListParser(CuemsParser):
     
     def parse(self):
         for class_string, class_items_list in self.init_dict.items():
-            print(f'XXXXXXXXXXXXXXX{class_string}')
             if isinstance(class_items_list, list):
                 for class_item in class_items_list:
                     parser_class, unused_class_string = self.get_parser_class(class_string)
-                    print(f'XXXXXXXXXXXXXXX{unused_class_string}')
                     item_obj = parser_class(init_dict=class_item, class_string=class_string).parse()
                     self.cuelist.append(item_obj)
             else:

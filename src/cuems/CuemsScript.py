@@ -1,5 +1,6 @@
 from .CueList import CueList
 import uuid as uuid_module
+from .cuems_editor.CuemsUtils import now_formated
 
 class CuemsScript(dict):
     def __init__(self, uuid=None, name=None, date=None, timecode_cuelist=None, floating_cuelist=None ):
@@ -8,6 +9,9 @@ class CuemsScript(dict):
         else:
             super().__setitem__('uuid', uuid)
         super().__setitem__('name', name)
+        if date is None:
+            date = now_formated()
+
         super().__setitem__('created', date)
         super().__setitem__('modified', date)
         super().__setitem__('timecode_cuelist', timecode_cuelist)
