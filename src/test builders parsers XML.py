@@ -1,14 +1,14 @@
 #%%
-from cuems import Cue
-from cuems import AudioCue
-from cuems import DmxCue
-from cuems import CuemsScript
-from cuems import CueList
-from cuems import CTimecode
-from cuems import Settings
-from cuems import CuemsParser
+from cuems.Cue import Cue
+from cuems.AudioCue import AudioCue
+from cuems.DmxCue import DmxCue
+from cuems.CuemsScript import CuemsScript
+from cuems.CueList import CueList
+from cuems.CTimecode import CTimecode
+from cuems.Settings import Settings
+from cuems.DictParser import CuemsParser
 from cuems.XmlBuilder import XmlBuilder
-from cuems import XmlReader, XmlWriter
+from cuems.XmlReaderWriter import XmlReader, XmlWriter
 
 
 
@@ -33,7 +33,6 @@ float_cue_list = CueList([d_c, c3])
 float_cuelist = CueList([ac, c3 ])
 script = CuemsScript(timecode_cuelist=custom_cue_list, floating_cuelist=float_cue_list)
 script.name = "Test Script"
-script['date']= "the date of todayclea"
 print('OBJECT:')
 print(script)
 
