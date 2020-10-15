@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- describing schema for sample xml -->
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
+<xs:schema targetNamespace="http://stagelab.net/cuems"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns="http://stagelab.net/cuems">
     <xs:element name="Settings">
         <xs:complexType>
             <xs:sequence>

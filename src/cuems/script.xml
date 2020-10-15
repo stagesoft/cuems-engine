@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cms:CueMs xmlns:cms="http://stagelab.net/cuems"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems script.xsd">
+    <CuemsScript>
+        <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
+        <name>Test Main Script</name>
+        <date>Main script date</date>
+        <CueList>
+            <Cue>
+                <uuid>12345678-MAIN-TIME-ccue-000000000001</uuid>
+                <time>
+                    <CTimecode>00:00:33:00</CTimecode>
+                </time>
+                <type>Timecode</type>
+                <loop>0</loop>
+                <init_arm>0</init_arm>
+                <exec_options>
+                    <prewait></prewait>
+                    <autofollow>0</autofollow>
+                    <autocontinue>0</autocontinue>
+                    <postwait></postwait>
+                </exec_options>
+            </Cue>
+            <Cue>
+                <uuid>12345678-MAIN-TIME-ccue-000000000002</uuid>
+                <time>
+                    <NoneType>None</NoneType>
+                </time>
+                <type>Floating</type>
+                <loop>0</loop>
+                <init_arm>0</init_arm>
+                <exec_options>
+                    <prewait></prewait>
+                    <autofollow>0</autofollow>
+                    <autocontinue>0</autocontinue>
+                    <postwait></postwait>
+                </exec_options>
+            </Cue>
+            <AudioCue>
+                <uuid>12345678-MAIN-TIME-audi-000000000003</uuid>
+                <time>
+                    <CTimecode>00:00:45:00</CTimecode>
+                </time>
+                <type>Floating</type>
+                <loop>1</loop>
+                <init_arm>1</init_arm>
+                <exec_options>
+                    <prewait></prewait>
+                    <autofollow>0</autofollow>
+                    <autocontinue>0</autocontinue>
+                    <postwait></postwait>
+                </exec_options>
+                <media>daft.wav</media>
+                <master_vol></master_vol>
+                <outputs>
+                    <id>1</id>
+                    <virtual_audio_device>1</virtual_audio_device>
+                </outputs>
+            </AudioCue>
+            <DmxCue>
+                <uuid>12345678-MAIN-TIME-dmxc-000000000004</uuid>
+                <time>
+                    <CTimecode>00:00:23:00</CTimecode>
+                </time>
+                <type>Floating</type>
+                <loop>0</loop>
+                <init_arm>0</init_arm>
+                <exec_options>
+                    <prewait></prewait>
+                    <autofollow>0</autofollow>
+                    <autocontinue>0</autocontinue>
+                    <postwait></postwait>
+                </exec_options>
+                <media></media>
+                <outputs>
+                    <id>1</id>
+                    <virtual_dmx_device>1</virtual_dmx_device>
+                </outputs>
+                <dmx_scene>
+                    <DmxUniverse id="0">
+                        <DmxChannel id="0">10</DmxChannel>
+                        <DmxChannel id="1">50</DmxChannel>
+                        <DmxChannel id="1">50</DmxChannel>
+                    </DmxUniverse>
+                    <DmxUniverse id="1">
+                        <DmxChannel id="20">23</DmxChannel>
+                        <DmxChannel id="21">255</DmxChannel>
+                    </DmxUniverse>
+                    <DmxUniverse id="2">
+                        <DmxChannel id="5">10</DmxChannel>
+                        <DmxChannel id="6">23</DmxChannel>
+                        <DmxChannel id="7">125</DmxChannel>
+                        <DmxChannel id="8">200</DmxChannel>
+                    </DmxUniverse>
+                </dmx_scene>
+            </DmxCue>
+            <Cue>
+                <uuid>12345678-MAIN-TIME-ccue-000000000005</uuid>
+                <time>
+                    <CTimecode>00:00:05:00</CTimecode>
+                </time>
+                <type>virtual</type>
+                <loop>False</loop>
+            </Cue>
+            <TimecodeCueList>
+                <AudioCue>
+                    <uuid>12345678-INNR-TIME-audi-000000000001</uuid>
+                    <time>
+                        <CTimecode>00:00:45:00</CTimecode>
+                    </time>
+                    <type>virtual</type>
+                    <loop>False</loop>
+                    <media></media>
+                    <outputs>
+                        <AudioCueOutputs>
+                            <stereo>1</stereo>
+                        </AudioCueOutputs>
+                    </outputs>
+                </AudioCue>
+            </TimecodeCueList>
+            <FloatingCueList>
+                <AudioCue>
+                    <uuid>12345678-INNR-FLOAT-audi-000000000001</uuid>
+                    <time>
+                        <CTimecode>00:00:45:00</CTimecode>
+                    </time>
+                    <type>virtual</type>
+                    <loop>False</loop>
+                    <media>sposa_non_mi_conosci.16.s.wav</media>
+                    <outputs>
+                        <AudioCueOutputs>
+                            <stereo>1</stereo>
+                        </AudioCueOutputs>
+                    </outputs>
+                </AudioCue>
+                <VideoCue>
+                    <uuid>12345678-INNR-FLOAT-vide-000000000002</uuid>
+                    <time>
+                        <CTimecode>00:00:45:00</CTimecode>
+                    </time>
+                    <type>virtual</type>
+                    <loop>False</loop>
+                    <media>sposa_non_mi_conosci.mp4</media>
+                    <outputs>
+                        <VideoCueOutputs>
+                            <stereo>1</stereo>
+                        </VideoCueOutputs>
+                    </outputs>
+                </VideoCue>
+            </FloatingCueList>
+            <AudioCue>
+                <uuid>12345678-MAIN-FLOAT-audi-000000000001</uuid>
+                <time>
+                    <CTimecode>00:00:45:00</CTimecode>
+                </time>
+                <type>virtual</type>
+                <loop>False</loop>
+                <media>daft.wav</media>
+                <outputs>
+                    <AudioCueOutputs>
+                        <stereo>1</stereo>
+                    </AudioCueOutputs>
+                </outputs>
+            </AudioCue>
+            <VideoCue>
+                <uuid>12345678-MAIN-FLOAT-vide-000000000002</uuid>
+                <time>
+                    <CTimecode>00:00:45:00</CTimecode>
+                </time>
+                <type>virtual</type>
+                <loop>False</loop>
+                <media>daft.mp4</media>
+                <outputs>
+                    <VideoCueOutputs>
+                        <stereo>1</stereo>
+                    </VideoCueOutputs>
+                </outputs>
+            </VideoCue>
+        </CueList>
+    </CuemsScript>
+</cms:CueMs>

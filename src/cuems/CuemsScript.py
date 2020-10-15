@@ -1,4 +1,5 @@
-from .CueList import CueList
+from .Cue import Cue
+from .CueList import CueList, TimecodeCueList, FloatingCueList
 import uuid as uuid_module
 
 class CuemsScript(dict):
@@ -9,10 +10,8 @@ class CuemsScript(dict):
             super().__setitem__('uuid', uuid)
         super().__setitem__('name', name)
         super().__setitem__('date', date)
-        super().__setitem__('timecode_cuelist', timecode_cuelist)
-        super().__setitem__('floating_cuelist', floating_cuelist)
-        
-
+        # super().__setitem__('timecode_cuelist', timecode_cuelist)
+        # super().__setitem__('floating_cuelist', floating_cuelist)
         # self.timecode_list = timecode_list
         # self.floating_list = floating_list
 
@@ -32,6 +31,7 @@ class CuemsScript(dict):
     def name(self, name):
         super().__setitem__('name', name)
 
+    '''
     @property
     def timecode_cuelist(self):
         return super().__getitem__('timecode_cuelist')
@@ -53,10 +53,11 @@ class CuemsScript(dict):
             super().__setitem__('floating_cuelist', cuelist)
         else:
             raise NotImplementedError
+    '''
 
     def get_media(self):
-        
         media_dict = dict()
+        '''
         if self.timecode_cuelist is not None:
             for cue in self.timecode_cuelist:
                 if cue.media:
@@ -66,6 +67,13 @@ class CuemsScript(dict):
             for cue in self.floating_cuelist:
                 if cue.media:
                     media_dict[cue.media] = type(cue)
+        '''
+
+        for item in self:
+            if isinstance(item, Cue):
+                media_dict[item.media] = type(item)
+            elif isinstance(item, CueList):
+                media_dict = {media_dict, CuemsScript.get_media(item)}
 
         return media_dict
 
@@ -73,10 +81,9 @@ class CuemsScript(dict):
         if uuid == self.uuid:
             return self
         else:
-            item_to_return = self.floating_cuelist.find(uuid)
+            for item in self:
+                if item.uuid == uuid:
+                    return item
 
-        if item_to_return is None:
-            item_to_return = self.timecode_cuelist.find(uuid)
-
-        return item_to_return
+        return None
         

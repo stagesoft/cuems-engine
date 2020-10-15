@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<cms:Settings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">
+<cms:Settings xmlns:cms="http://stagelab.net/cuems"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+    xsi:schemaLocation="http://stagelab.net/cuems settings.xsd">
     <library_path>/home/calamar/cuems_library/</library_path>
     <node id="0" master="1">
         <osc_dest_host>localhost</osc_dest_host>

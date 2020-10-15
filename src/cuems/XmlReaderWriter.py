@@ -77,8 +77,26 @@ class XmlReader(CuemsXml):
 
     def read(self):
         xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=True)
+        xml_dict = self.strip_headers(xml_dict)
         return xml_dict
 
     def read_to_objects(self):
         xml_dict = self.read()
+        xml_dict = self.strip_headers(xml_dict)
         return CuemsParser(xml_dict).parse()
+
+    def strip_headers(self, xml_dict):
+        try:
+            xml_dict.pop('xmlns:cms')
+        except KeyError:
+            pass
+        try:
+            xml_dict.pop('xmlns:xsi')
+        except KeyError:
+            pass
+        try:
+            xml_dict.pop('xsi:schemaLocation')
+        except KeyError:
+            pass
+
+        return xml_dict

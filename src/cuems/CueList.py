@@ -44,3 +44,10 @@ class CueList(list):
         
         return None
 
+class TimecodeCueList(CueList):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+class FloatingCueList(CueList):
+    def __init__(self, *args):
+        super().__init__(*args)
