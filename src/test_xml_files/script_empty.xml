@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cms:CueMs xmlns:cms="http://stagelab.net/cuems"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
+    <CuemsScript>
+        <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
+        <name>Test Main Script</name>
+        <date>Main script date</date>
+        <CueList>
+            <timecode>0</timecode>
+            <time>
+                <NoneType>None</NoneType>
+            </time>
+        </CueList>
+    </CuemsScript>
+</cms:CueMs>

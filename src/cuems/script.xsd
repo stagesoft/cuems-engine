@@ -29,19 +29,23 @@
   <!-- Our cuelist type -->
   <xs:complexType name="CueListType">
     <!-- Which contents un undefined number of the following thins in any order -->
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <!-- Can have any other cuelists, recursively -->
-      <xs:element name="CueList" type="CueListType" />
-      <!-- Can be also specific type cuelists -->
-      <xs:element name="TimecodeCueList" type="CueListType" />
-      <xs:element name="FloatingCueList" type="CueListType" />
-      <!-- Can have any cues -->
-      <xs:element name="Cue" type="CueType" />
-      <!-- Can be also specific type cues -->
-      <xs:element name="AudioCue" type="AudioCueType" />
-      <xs:element name="DmxCue" type="DmxCueType" />
-      <xs:element name="VideoCue" type="VideoCueType" />
-    </xs:choice>
+    <!-- A type string indicator -->
+    <xs:sequence>
+      <!-- Timecode behaviour flag -->
+      <xs:element name="timecode" type="xs:boolean" />
+      <!-- Its time mark -->
+      <xs:element name="time" type="CTimecodeType" />
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <!-- Can have any other cuelists, recursively -->
+        <xs:element name="CueList" type="CueListType" />
+        <!-- Can have any cues -->
+        <xs:element name="Cue" type="CueType" />
+        <!-- Can be also specific type cues -->
+        <xs:element name="AudioCue" type="AudioCueType" />
+        <xs:element name="DmxCue" type="DmxCueType" />
+        <xs:element name="VideoCue" type="VideoCueType" />
+      </xs:choice>
+    </xs:sequence>
   </xs:complexType>
 
   <!-- Our generic cue type -->
@@ -50,10 +54,10 @@
     <xs:sequence>
       <!-- Its own uuid -->
       <xs:element name="uuid" type="UuidType" />
+      <!-- Timecode behaviour flag -->
+      <xs:element name="timecode" type="xs:boolean" />
       <!-- Its time mark -->
       <xs:element name="time" type="CTimecodeType" />
-      <!-- A type string indicator -->
-      <xs:element name="type" type="CueTypeType" />
       <!-- A loop flag indicator -->
       <xs:element name="loop" type="xs:boolean" />
       <!-- A flag to indicate auto arming -->
@@ -120,13 +124,6 @@
     <xs:restriction base="xs:string">
       <!-- TODO, specify correctly -->
       <!-- <xs:pattern value=""/>  -->
-    </xs:restriction>
-  </xs:simpleType>
-
-  <xs:simpleType name="CueTypeType">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="Timecode" />
-      <xs:enumeration value="Floating" />
     </xs:restriction>
   </xs:simpleType>
 
