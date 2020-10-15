@@ -35,7 +35,7 @@ class CuemsXml():
         if path is not None:
             if os.path.isfile(path):
                 self._schema = path
-                self.schema_object = xmlschema.XMLSchema(self._schema, converter=self.converter)
+                self.schema_object = xmlschema.XMLSchema11(self._schema, converter=self.converter)
             else:
                 raise FileNotFoundError("schema file not found")
 
