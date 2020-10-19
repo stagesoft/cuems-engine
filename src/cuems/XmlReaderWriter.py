@@ -58,8 +58,8 @@ class XmlWriter(CuemsXml):
 
 
     def write(self, xml_data, ):
-        self.schema_object.validate(xml_data)
-        ET.ElementTree(xml_data).write(self.xmlfile)
+    #    self.schema_object.validate(xml_data)
+        ET.ElementTree(xml_data).write(self.xmlfile, encoding="unicode", xml_declaration=True)
 
     def write_from_dict(self, project_dict):
         project_object = CuemsParser(project_dict).parse()
@@ -77,26 +77,11 @@ class XmlReader(CuemsXml):
 
     def read(self):
         xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=True)
-        xml_dict = self.strip_headers(xml_dict)
+        # remove namespace infos from xml 
+        del xml_dict['xmlns:cms']
+        del xml_dict['xmlns:xsi']
+        del xml_dict['xsi:schemaLocation']
         return xml_dict
 
     def read_to_objects(self):
         xml_dict = self.read()
-        xml_dict = self.strip_headers(xml_dict)
-        return CuemsParser(xml_dict).parse()
-
-    def strip_headers(self, xml_dict):
-        try:
-            xml_dict.pop('xmlns:cms')
-        except KeyError:
-            pass
-        try:
-            xml_dict.pop('xmlns:xsi')
-        except KeyError:
-            pass
-        try:
-            xml_dict.pop('xsi:schemaLocation')
-        except KeyError:
-            pass
-
-        return xml_dict

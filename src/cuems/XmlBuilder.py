@@ -8,10 +8,12 @@ PARSER_SUFFIX = 'XmlBuilder'
 GENERIC_BUILDER = 'GenericCueXmlBuilder'
 
 class XmlBuilder():
-    def __init__(self, _object, xml_tree = None):
+    def __init__(self, _object, xml_tree = None, namespace='http://stagelab.net/cuems', xsd_path='/etc/cuems/script.xsd'):
         self._object = _object
         self.xml_tree = xml_tree
         self.class_name = type(_object).__name__
+        self.xsd_path = xsd_path
+        self.namespace =  namespace
 
     def get_builder_class(self, _object):
         object_class_name = type(_object).__name__
@@ -24,7 +26,12 @@ class XmlBuilder():
         return builder_class
     
     def build(self):
-        self.xml_tree = ET.Element('CueMs')
+        self.xml_tree = ET.Element('CuemsProject')
+        self.xml_tree.tag = "cms" + ":" + self.xml_tree.tag
+        xmlns_uris_dict = {'cms': self.namespace, 'xsi' : 'http://www.w3.org/2001/XMLSchema-instance'}
+        for prefix, uri in xmlns_uris_dict.items():
+            self.xml_tree.attrib['xmlns:' + prefix] = uri
+        self.xml_tree.attrib['xsi:schemaLocation'] = self.namespace + " " + self.xsd_path
         builder_class = self.get_builder_class(self._object)
         self.xml_tree = builder_class(self._object, xml_tree = self.xml_tree).build()
         return self.xml_tree
@@ -33,11 +40,15 @@ class CuemsScriptXmlBuilder(XmlBuilder):
 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
+        
+
         for key, value in self._object.items():
-            cue_subelement = ET.SubElement(cue_element, str(key))
+            
             if isinstance(value, (str, bool, int, float)):
+                cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
             else:
+                cue_subelement = cue_element
                 builder_class = self.get_builder_class(value)
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
         return self.xml_tree
@@ -47,9 +58,15 @@ class CueListXmlBuilder(XmlBuilder):
     
     def build(self):
         cuelist_element = ET.SubElement(self.xml_tree, self.class_name)
-        for cuelist_item in self._object:
-            builder_class = self.get_builder_class(cuelist_item)
-            self.xml_tree = builder_class(cuelist_item, xml_tree = cuelist_element).build()
+        for key, value in self._object.items():
+            cue_subelement = ET.SubElement(cuelist_element, str(key))          
+            if isinstance(value, (str, bool, int, float)):
+                cue_subelement.text = str(value)
+            else:
+                for cuelist_item in value:
+                    builder_class = self.get_builder_class(cuelist_item)
+                    sub_object_element = builder_class(cuelist_item, xml_tree = cue_subelement).build()
+
         return self.xml_tree
     
         
