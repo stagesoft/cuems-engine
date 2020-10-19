@@ -31,8 +31,8 @@ from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
-CUEMS_CONF_PATH = os.environ['HOME'] + '/.cuems/'
-
+CUEMS_CONF_PATH = '/etc/cuems/'
+CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
 
 # %%
@@ -275,7 +275,7 @@ class CuemsEngine():
             logger.error('Project settings file not found')
 
         try:
-            schema = os.path.join(self.cm.library_path, 'script.xsd')
+            schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()

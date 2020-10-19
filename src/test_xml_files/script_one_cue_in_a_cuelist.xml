@@ -1,42 +1,46 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<cms:CueMs xmlns:cms="http://stagelab.net/cuems"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
+<?xml version="1.0" encoding="UTF-8"?>
+<cms:CuemsProject xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
     <CuemsScript>
         <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
         <name>Test Main Script</name>
-        <date>Main script date</date>
-        <CueList>
+        <created>2020-01-01T00:00:00</created>
+        <modified>2020-01-01T00:00:00</modified>
+        <cuelist>
             <timecode>0</timecode>
             <time>
                 <NoneType>None</NoneType>
             </time>
-            <CueList>
-                <timecode>0</timecode>
-                <time>
-                    <NoneType>None</NoneType>
-                </time>
-                <AudioCue>
-                    <uuid>12345678-INNR-FLOAT-audi-000000000001</uuid>
+            <contents>
+                <CueList>
                     <timecode>0</timecode>
                     <time>
                         <NoneType>None</NoneType>
                     </time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
-                    <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
-                    </exec_options>
-                    <media>sposa_non_mi_conosci.16.s.wav</media>
-                    <master_vol></master_vol>
-                    <outputs>
-                        <id>0</id>
-                        <virtual_audio_device>0</virtual_audio_device>
-                    </outputs>
-                </AudioCue>
-            </CueList>
-        </CueList>
+                    <contents>
+                        <AudioCue>
+                            <uuid>12345678-INNR-FLOAT-audi-000000000001</uuid>
+                            <timecode>0</timecode>
+                            <time>
+                                <NoneType>None</NoneType>
+                            </time>
+                            <loop>0</loop>
+                            <init_arm>0</init_arm>
+                            <exec_options>
+                                <prewait></prewait>
+                                <autofollow>0</autofollow>
+                                <autocontinue>0</autocontinue>
+                                <postwait></postwait>
+                            </exec_options>
+                            <media>sposa_non_mi_conosci.16.s.wav</media>
+                            <master_vol></master_vol>
+                            <outputs>
+                                <id>0</id>
+                                <virtual_audio_device>0</virtual_audio_device>
+                            </outputs>
+                        </AudioCue>
+                    </contents>
+                </CueList>
+            </contents>
+        </cuelist>
     </CuemsScript>
-</cms:CueMs>
+</cms:CuemsProject>

@@ -45,7 +45,7 @@ class ConfigManager(Thread):
 
     def load_project_settings(self, project_uname):
         try:
-            settings_schema = path.join(self.library_path, 'project_settings.xsd')
+            settings_schema = path.join(self.cuems_conf_path, 'project_settings.xsd')
             settings_path = path.join(self.library_path, 'projects', project_uname, 'settings.xml')
             self.project_conf = Settings(settings_schema, settings_path)
             self.project_conf.read()
@@ -62,7 +62,7 @@ class ConfigManager(Thread):
 
     def load_project_mappings(self, project_uname):
         try:
-            mappings_schema = path.join(self.library_path, 'project_mappings.xsd')
+            mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
             mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
             self.project_maps = Settings(mappings_schema, mappings_path)
             self.project_maps.read()

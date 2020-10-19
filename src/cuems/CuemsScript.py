@@ -3,7 +3,7 @@ from .CueList import CueList, TimecodeCueList, FloatingCueList
 import uuid as uuid_module
 
 class CuemsScript(dict):
-    def __init__(self, uuid=None, name=None, date=None, timecode_cuelist=None, floating_cuelist=None ):
+    def __init__(self, uuid=None, name=None, date=None ):
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid1()))
         else:
@@ -11,8 +11,10 @@ class CuemsScript(dict):
         super().__setitem__('name', name)
         super().__setitem__('created', date)
         super().__setitem__('modified', date)
+        '''
         super().__setitem__('timecode_cuelist', timecode_cuelist)
         super().__setitem__('floating_cuelist', floating_cuelist)
+        '''
         
 
         # self.timecode_list = timecode_list
