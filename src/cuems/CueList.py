@@ -1,10 +1,34 @@
-
+import uuid as uuid_module
 from .Cue import Cue
+from .CTimecode import CTimecode
 
-class CueList(list):
+
+class CueList(dict):
     
-    def __init__(self, *args):
-        super().__init__(*args)
+    def __init__(self, contents=[], offset=None):
+        super().__setitem__('uuid', str(uuid_module.uuid1()))
+        if offset is not None:
+            super().__setitem__('timecode', True)
+            if  isinstance(offset, CTimecode):
+                super().__setitem__('offset', offset)
+            else:
+                super().__setitem__('offset', CTimecode(start_timecode=offset))
+        else:
+            super().__setitem__('timecode', False)
+
+        if isinstance(contents, list):
+            super().__setitem__('contents', contents)
+        else:
+            super().__setitem__('contents', [contents])
+
+    @property    
+    def contents(self):
+        return super().__getitem__('contents')
+
+    @contents.setter
+    def contents(self, contents):
+        super().__setitem__('contents', contents)
+        
     
     def __sorting(self, cue):
         if cue.time is None: # TODO: change this to somthing not so ugly
@@ -19,20 +43,20 @@ class CueList(list):
         return new_list
 
     def __iadd__(self, other):
-        super().__iadd__(other)
-        self.sort(key=self.__sorting)
+        self['contents'].__iadd__(other)
+        self['contents'].sort(key=self.__sorting)
         return self
 
     def times(self):
         timelist = list()
-        for cue in self:
+        for cue in self['contents']:
             timelist.append(cue.time)
         return timelist
 
     def append(self, item):
         if not isinstance(item, Cue):
             raise TypeError('item is not of type %s' % Cue)
-        super().append(item)  #append the item to itself (the list)
+        self['contents'].append(item)  #append the item to itself (the list)
 
     def extend(self, other):
-        super().extend(other)
+        self['contents'].extend(other)

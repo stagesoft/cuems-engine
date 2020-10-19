@@ -1,3 +1,5 @@
+import distutils.util
+
 from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
@@ -40,6 +42,17 @@ class CuemsParser():
     def get_contained_dict(self, _dict):
         return list(_dict.values())[0]
 
+    def convert_string_to_value(self, _string):
+        if isinstance(_string, str):
+            if (_string=='True' or _string=='False'):
+                return bool(distutils.util.strtobool(_string))
+            elif (_string.isdigit()):
+                return int(_string)
+            else:
+                return _string
+        else:
+            return _string
+
     def parse(self):
         parser_class, class_string = self.get_parser_class(self.get_first_key(self.init_dict))
         item_obj = parser_class(init_dict=self.get_contained_dict(self.init_dict), class_string=class_string).parse()
@@ -54,40 +67,31 @@ class CuemsScriptParser(CuemsParser):
     def parse(self):
         for dict_key, dict_value in self.init_dict.items():
             if type(dict_value) is dict:
-
                 if (len(list(dict_value))> 0):
-                    parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
-                    self.item[dict_key] = parser_class(init_dict=self.get_contained_dict(dict_value), class_string=class_string).parse()
+                    parser_class, class_string = self.get_parser_class(dict_key)
+                    self.item[dict_key.lower()] = parser_class(init_dict=dict_value, class_string=class_string).parse()
+                    
             else:
+                dict_value = self.convert_string_to_value(dict_value)
                 self.item[dict_key] = dict_value
-        
+                
         return self.item
 
-class CueListParser(CuemsParser):
-    def __init__(self, init_dict, class_string, cuelist=None): #TODO: make this standard?
-        if cuelist is None:
-            self.cuelist = CueList()
-        else:
-            self.cuelist = cuelist
-        self.init_dict=init_dict
+class CueListParser(CuemsScriptParser):
         
-        
-    
     def parse(self):
-        for class_string, class_items_list in self.init_dict.items():
-            print(f'XXXXXXXXXXXXXXX{class_string}')
-            if isinstance(class_items_list, list):
-                for class_item in class_items_list:
-                    parser_class, unused_class_string = self.get_parser_class(class_string)
-                    print(f'XXXXXXXXXXXXXXX{unused_class_string}')
-                    item_obj = parser_class(init_dict=class_item, class_string=class_string).parse()
-                    self.cuelist.append(item_obj)
+        for dict_key, dict_value in self.init_dict.items():
+            if isinstance(dict_value, list):
+                for cue in dict_value:
+                    parser_class, unused_class_string = self.get_parser_class(self.get_first_key(cue))
+                    item_obj = parser_class(init_dict=self.get_contained_dict(cue), class_string=self.get_first_key(cue)).parse()
+                    self.item['contents'].append(item_obj)
             else:
-                parser_class, unused_class_string = self.get_parser_class(class_string)
-                item_obj = parser_class(init_dict=class_items_list, class_string=class_string).parse()
-                self.cuelist.append(item_obj)
+                dict_value = self.convert_string_to_value(dict_value)
+                self.item[dict_key] = dict_value
+                
             
-        return self.cuelist
+        return self.item
 
 class GenericCueParser(CuemsScriptParser): 
 
@@ -97,6 +101,7 @@ class GenericCueParser(CuemsScriptParser):
                 parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
                 self.item[dict_key] = parser_class(init_dict=self.get_contained_dict(dict_value), class_string=class_string).parse()
             else:
+                dict_value = self.convert_string_to_value(dict_value)
                 self.item[dict_key] = dict_value
         
         return self.item
