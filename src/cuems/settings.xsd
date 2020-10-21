@@ -8,6 +8,8 @@
                         <xs:sequence>
                             <!-- Library path setting -->
                             <xs:element name="library_path" type="xs:string" minOccurs="1" maxOccurs="1" />
+                            <!-- Library path setting -->
+                            <xs:element name="tmp_upload_path" type="xs:string" minOccurs="1" maxOccurs="1" />
                             <!-- Node settings -->
                             <xs:element name="node" type="NodeConfType" minOccurs="1" maxOccurs="1"></xs:element>
                         </xs:sequence>

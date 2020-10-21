@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cms:CuemsSettings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/settings.xsd">
     <Settings>
-        <library_path>/home/calamar/cuems_library/</library_path>
+        <library_path>/home/calamar/cuems_library</library_path>
+        <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
         <node id="0" master="True">
             <osc_dest_host>localhost</osc_dest_host>
             <oscquery_port>7700</oscquery_port>

@@ -8,6 +8,7 @@ class ConfigManager(Thread):
         super().__init__(name='CfgMan', args=args, kwargs=kwargs)
         self.cuems_conf_path = path
         self.library_path = None
+        self.tmp_upload_path = None
         self.node_conf = {}
         self.project_conf = {}
         self.project_maps = {}
@@ -28,9 +29,14 @@ class ConfigManager(Thread):
             raise e
 
         if engine_settings['Settings']['library_path'] == None:
-            logger.warning('No library path specified in settings. Assuming default ~/cuems_library/.')
+            logger.warning('No library path specified in settings. Assuming default ~/cuems_library.')
         else:
             self.library_path = engine_settings['Settings']['library_path']
+
+        if engine_settings['Settings']['tmp_upload_path'] == None:
+            logger.warning('No temp upload path specified in settings. Assuming default /tmp/cuemsupload.')
+        else:
+            self.tmp_upload_path = engine_settings['Settings']['tmp_upload_path']
 
         # Now we know where the library is, let's check it out
         self.check_dir_hierarchy()
@@ -90,6 +96,9 @@ class ConfigManager(Thread):
 
             if not path.exists( path.join(self.library_path, 'trash', 'media') ) :
                 mkdir(path.join(self.library_path, 'trash', 'media'))
+
+            if not path.exists( self.tmp_upload_path ) :
+                mkdir( self.library_path )
 
         except Exception as e:
             logger.error("error: {} {}".format(type(e), e))
