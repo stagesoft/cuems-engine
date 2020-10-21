@@ -1,55 +1,68 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<cms:CuemsProject xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
+<?xml version="1.1" encoding="UTF-8"?>
+<cms:CuemsProject
+        xmlns:cms="http://stagelab.net/cuems"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
     <CuemsScript>
-        <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
+        <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
         <name>Test Main Script</name>
         <created>2020-01-01T00:00:00</created>
         <modified>2020-01-01T00:00:00</modified>
         <cuelist>
             <timecode>True</timecode>
-            <time>
-                <offset>00:00:33:00</offset>
-            </time>
+            <offset>
+                <CTimecode>00:00:33:00</CTimecode>
+            </offset>
             <contents>
                 <Cue>
-                    <uuid>12345678-MAIN-TIME-ccue-000000000001</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>True</timecode>
-                    <time>
-                        <offset>00:00:33:00</offset>
-                    </time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <offset>
+                        <CTimecode>00:00:33:00</CTimecode>
+                    </offset>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                 </Cue>
                 <Cue>
-                    <uuid>12345678-MAIN-TIME-ccue-000000000002</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>False</timecode>
-                    <time></time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                 </Cue>
                 <AudioCue>
-                    <uuid>12345678-MAIN-TIME-audi-000000000003</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>False</timecode>
-                    <time></time>
-                    <loop>1</loop>
-                    <init_arm>1</init_arm>
+                    <loop>True</loop>
+                    <init_arm>True</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                     <media>daft.wav</media>
                     <master_vol></master_vol>
@@ -59,16 +72,19 @@
                     </outputs>
                 </AudioCue>
                 <DmxCue>
-                    <uuid>12345678-MAIN-TIME-dmxc-000000000004</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>False</timecode>
-                    <time></time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                     <media></media>
                     <outputs>
@@ -100,37 +116,44 @@
                     </dmx_scene>
                 </DmxCue>
                 <Cue>
-                    <uuid>12345678-MAIN-TIME-ccue-000000000005</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>False</timecode>
-                    <time></time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                 </Cue>
                 <CueList>
                     <timecode>True</timecode>
-                    <time>
-                        <CTimecode>00:00:45:00</CTimecode>
-                    </time>
+                    <offset>
+                        <CTimecode>00:00:33:00</CTimecode>
+                    </offset>
                     <contents>
                         <AudioCue>
-                            <uuid>12345678-INNR-TIME-audi-000000000001</uuid>
+                            <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                             <timecode>True</timecode>
-                            <time>
-                                <CTimecode>00:00:45:00</CTimecode>
-                            </time>
-                            <loop>0</loop>
-                            <init_arm>0</init_arm>
+                            <offset>
+                                <CTimecode>00:00:33:00</CTimecode>
+                            </offset>
+                            <loop>False</loop>
+                            <init_arm>False</init_arm>
                             <exec_options>
-                                <prewait></prewait>
-                                <autofollow>0</autofollow>
-                                <autocontinue>0</autocontinue>
-                                <postwait></postwait>
+                                <prewait>
+                                    <CTimecode></CTimecode>
+                                </prewait>
+                                <autofollow>False</autofollow>
+                                <autocontinue>False</autocontinue>
+                                <postwait>
+                                    <CTimecode></CTimecode>
+                                </postwait>
                             </exec_options>
                             <media></media>
                             <master_vol></master_vol>
@@ -143,23 +166,27 @@
                 </CueList>
                 <CueList>
                     <timecode>True</timecode>
-                    <time>
-                        <CTimecode>00:00:45:00</CTimecode>
-                    </time>
+                    <offset>
+                        <CTimecode>00:00:33:00</CTimecode>
+                    </offset>
                     <contents>
                         <AudioCue>
-                            <uuid>12345678-INNR-FLOAT-audi-000000000001</uuid>
+                            <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                             <timecode>True</timecode>
-                            <time>
-                                <CTimecode>00:00:45:00</CTimecode>
-                            </time>
-                            <loop>0</loop>
-                            <init_arm>0</init_arm>
+                            <offset>
+                                <CTimecode>00:00:33:00</CTimecode>
+                            </offset>
+                            <loop>False</loop>
+                            <init_arm>False</init_arm>
                             <exec_options>
-                                <prewait></prewait>
-                                <autofollow>0</autofollow>
-                                <autocontinue>0</autocontinue>
-                                <postwait></postwait>
+                                <prewait>
+                                    <CTimecode></CTimecode>
+                                </prewait>
+                                <autofollow>False</autofollow>
+                                <autocontinue>False</autocontinue>
+                                <postwait>
+                                    <CTimecode></CTimecode>
+                                </postwait>
                             </exec_options>
                             <media>sposa_non_mi_conosci.16.s.wav</media>
                             <master_vol></master_vol>
@@ -169,18 +196,22 @@
                             </outputs>
                         </AudioCue>
                         <VideoCue>
-                            <uuid>12345678-INNR-FLOAT-vide-000000000002</uuid>
+                            <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                             <timecode>True</timecode>
-                            <time>
-                                <CTimecode>00:00:45:00</CTimecode>
-                            </time>
-                            <loop>0</loop>
-                            <init_arm>0</init_arm>
+                            <offset>
+                                <CTimecode>00:00:33:00</CTimecode>
+                            </offset>
+                            <loop>False</loop>
+                            <init_arm>False</init_arm>
                             <exec_options>
-                                <prewait></prewait>
-                                <autofollow>0</autofollow>
-                                <autocontinue>0</autocontinue>
-                                <postwait></postwait>
+                                <prewait>
+                                    <CTimecode></CTimecode>
+                                </prewait>
+                                <autofollow>False</autofollow>
+                                <autocontinue>False</autocontinue>
+                                <postwait>
+                                    <CTimecode></CTimecode>
+                                </postwait>
                             </exec_options>
                             <media>sposa_non_mi_conosci.mp4</media>
                             <corners></corners>
@@ -192,18 +223,22 @@
                     </contents>
                 </CueList>
                 <AudioCue>
-                    <uuid>12345678-MAIN-FLOAT-audi-000000000001</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>True</timecode>
-                    <time>
-                        <CTimecode>00:00:45:00</CTimecode>
-                    </time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <offset>
+                        <CTimecode>00:00:33:00</CTimecode>
+                    </offset>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                     <media>daft.wav</media>
                     <master_vol></master_vol>
@@ -213,18 +248,22 @@
                     </outputs>
                 </AudioCue>
                 <VideoCue>
-                    <uuid>12345678-MAIN-FLOAT-vide-000000000002</uuid>
+                    <uuid>12345678-abcd-abcd-abcd-123456789012</uuid>
                     <timecode>True</timecode>
-                    <time>
-                        <CTimecode>00:00:45:00</CTimecode>
-                    </time>
-                    <loop>0</loop>
-                    <init_arm>0</init_arm>
+                    <offset>
+                        <CTimecode>00:00:33:00</CTimecode>
+                    </offset>
+                    <loop>False</loop>
+                    <init_arm>False</init_arm>
                     <exec_options>
-                        <prewait></prewait>
-                        <autofollow>0</autofollow>
-                        <autocontinue>0</autocontinue>
-                        <postwait></postwait>
+                        <prewait>
+                            <CTimecode></CTimecode>
+                        </prewait>
+                        <autofollow>False</autofollow>
+                        <autocontinue>False</autocontinue>
+                        <postwait>
+                            <CTimecode></CTimecode>
+                        </postwait>
                     </exec_options>
                     <media>daft.mp4</media>
                     <corners></corners>

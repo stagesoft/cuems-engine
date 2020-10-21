@@ -77,11 +77,8 @@ class XmlReader(CuemsXml):
 
     def read(self):
         xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=True)
-        # remove namespace infos from xml 
-        del xml_dict['xmlns:cms']
-        del xml_dict['xmlns:xsi']
-        del xml_dict['xsi:schemaLocation']
         return xml_dict
 
     def read_to_objects(self):
         xml_dict = self.read()
+        return CuemsParser(xml_dict['CuemsScript']).parse()

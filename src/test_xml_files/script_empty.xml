@@ -1,12 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<cms:CuemsProject xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
+<cms:CuemsProject
+    xmlns:cms="http://stagelab.net/cuems"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://stagelab.net/cuems ../cuems/script.xsd">
     <CuemsScript>
-        <uuid>12345678-MAIN-SCRI-ssss-000000000001</uuid>
+        <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
         <name>Test Main Script</name>
-        <created>2020-01-01T00:00:00</created>
-        <modified>2020-01-01T00:00:00</modified>
+        <description>This is the description text of the project</description>
+        <created>2020-01-01T00:00:00.000</created>
+        <modified>2020-01-01T00:00:00.000</modified>
         <cuelist>
-            <timecode>False</timecode>
+            <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+            <name>Test script name</name>
+            <description>Cuelist description</description>
+            <disabled>false</disabled>
+            <loaded>false</loaded>
+            <timecode>true</timecode>
+            <offset>
+                <CTimecode>00:00:00:00</CTimecode>
+            </offset>
+            <loop>0</loop>
+            <prewait>
+                <CTimecode>00:00:00:00</CTimecode>
+            </prewait>
+            <postwait>
+                <CTimecode>00:00:00:00</CTimecode>
+            </postwait>
+            <post_action>pause</post_action>
+            <target>00000000-0000-0000-0000-000000000000</target>
+            <ui_properties>
+                <timeline_position>
+                    <x>0</x>
+                    <y>0</y>
+                </timeline_position>
+            </ui_properties>
             <contents>
                 <!-- Empty CueList -->
             </contents>

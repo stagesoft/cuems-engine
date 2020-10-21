@@ -12,7 +12,7 @@ from functools import partial
 
 from .CTimecode import CTimecode
 
-from .cuems_editor import CuemsWsServer
+from .cuems_editor.CuemsWsServer import CuemsWsServer
 
 from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
@@ -30,6 +30,8 @@ from .DmxCue import DmxCue
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
+
+from pprint import pprint
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
@@ -89,7 +91,8 @@ class CuemsEngine():
             exit(-1)
 
         # WebSocket server
-        self.ws_server = CuemsWsServer()
+        self.ws_queue = queue.Queue()
+        self.ws_server = CuemsWsServer(self.ws_queue)
         try:
             self.ws_server.start(self.cm.node_conf['websocket_port'])
         except KeyError:
@@ -279,6 +282,8 @@ class CuemsEngine():
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
+            pprint(self.script)
+
         except FileNotFoundError:
             logger.error('Project script file not found')
 
@@ -319,7 +324,7 @@ class CuemsEngine():
             except:
                 logger.info('NO MTCMASTER ASSIGNED!')
 
-                self.currentcues.append(cue_to_go)
+                self.currentcues.contents.append(cue_to_go)
                 logger.info(f'Current Cues CueList: {self.currentcues}')
 
     def preload_callback(self, **kwargs):
@@ -356,24 +361,12 @@ class CuemsEngine():
     # Script treating methods
     def process_script(self, script):
         #######################################
-        # Timecode cues review
-        logger.info('Listing Timecode Cuelist:')
-        for item in script['timecode_cuelist']:
-            '''Just listing them by now'''
-            logger.info(f'Class: {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
-
-        #######################################
         # Floating cues preparation
         logger.info('Preparing Floating Cuelist:')
-        for item in script['floating_cuelist']:
+        for item in script.cuelist.contents:
             '''Each item in the floating list must be prepared when the script
             is just loaded to allow the user to play any of those cues, so...'''
-            if isinstance(item, CuemsScript):
-                logger.info(f'Arming : {item.__class__.__name__} UUID: {item.uuid}')
-                self.process_script(item)
-            elif isinstance(item, Cue) and not item.armed:
-                logger.info(f'Arming : {item.__class__.__name__} UUID: {item.uuid} Outputs: {item.outputs} Time: {item.time} Media: {item.media}')
-                item.arm(self.cm, self.ossia_queue)
+            item.arm(self.cm, self.ossia_queue)
             
     ########################################################
 

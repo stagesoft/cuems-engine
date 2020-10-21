@@ -1,13 +1,19 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
 <!-- describing schema for sample xml -->
 <xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
-    <xs:element name="ProjectSettings">
+    <xs:element name="CuemsProjectSettings">
         <xs:complexType>
             <xs:sequence>
-                <xs:element name="setting" minOccurs="0" maxOccurs="unbounded">
+                <xs:element name="ProjectSettings">
                     <xs:complexType>
-                        <xs:attribute name="name" type="NonEmptyString"></xs:attribute>
-                        <xs:attribute name="value" type="NonEmptyString"></xs:attribute>
+                        <xs:sequence>
+                            <xs:element name="setting" minOccurs="0" maxOccurs="unbounded">
+                                <xs:complexType>
+                                    <xs:attribute name="name" type="NonEmptyString"></xs:attribute>
+                                    <xs:attribute name="value" type="NonEmptyString"></xs:attribute>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
                     </xs:complexType>
                 </xs:element>
             </xs:sequence>
@@ -17,10 +23,6 @@
         <xs:restriction base="xs:string">
             <xs:minLength value="1" />
             <xs:pattern value=".*[^\s].*" />
-        </xs:restriction>
-    </xs:simpleType>
-    <xs:simpleType name="UniqueID">
-        <xs:restriction base="xs:int">
         </xs:restriction>
     </xs:simpleType>
 </xs:schema>

@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning" vc:minVersion="1.1">
+<?xml version="1.1" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning" vc:minVersion="1.1" targetNamespace="http://stagelab.net/cuems" xmlns="http://stagelab.net/cuems">
   <!-- The main capsule to make it a whole, named CueMs -->
   <!-- Our main object the script-->
   <xs:annotation>
@@ -23,7 +23,9 @@
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
-              <xs:element name="name" type="xs:string" />
+              <xs:element name="name" type="NameStringType" /> <!-- 3 - 60 chars -->
+              <!-- Long description of the script -->
+              <xs:element name="description" type="DescriptionStringType" /> <!-- 0 - 255 chars -->
               <!-- The date, Todo specify the date formant in a type-->
               <xs:element name="created" type="DateType" />
               <xs:element name="modified" type="DateType" />
@@ -37,21 +39,85 @@
     </xs:complexType>
   </xs:element>
 
+  <!-- UUID string restrictions specs -->
+  <xs:simpleType name="UuidType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|" />
+      <xs:maxLength value="36" />
+      <xs:minLength value="36" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Target UUID string restrictions specs -->
+  <xs:simpleType name="TargetType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})|()" />
+      <xs:maxLength value="36" />
+      <xs:minLength value="0" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Name text string restrictions -->
+  <xs:simpleType name="NameStringType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="3" />
+      <xs:maxLength value="60" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Description text string restrictions -->
+  <xs:simpleType name="DescriptionStringType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="0" />
+      <xs:maxLength value="255" />
+    </xs:restriction>
+  </xs:simpleType>
+
   <!-- Our cuelist type -->
   <xs:complexType name="CueListType">
-    <!-- Which contents un undefined number of the following thins in any order -->
-    <!-- A type string indicator -->
-    <xs:sequence>
-      <!-- Timecode behaviour flag -->
-      <xs:element name="timecode" type="BoolType" />
-      <!-- Its time mark -->
-      <xs:element name="offset" type="CTimecodeType" minOccurs="0" />
-      <!-- List contents (to make it a list in python) -->
-      <xs:element name="contents" type="CueListContentsType" />
-    </xs:sequence>
-    <xs:assert test="(timecode = 'True' and exists(offset)) or (timecode = 'False' and not(exists(offset)))" />
+    <xs:complexContent>
+      <!-- Which is an extension of the base cue type -->
+      <xs:extension base="CueType">
+        <xs:sequence>
+          <xs:element name="contents" type="CueListContentsType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
   </xs:complexType>
 
+  <!-- Our generic cue type -->
+  <xs:complexType name="CueType">
+    <xs:complexContent>
+      <xs:extension base="CommonPropertiesType"></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="CommonPropertiesType">
+    <xs:sequence>
+      <!-- Its own uuid -->
+      <xs:element name="uuid" type="UuidType" />
+      <xs:element name="name" type="NameStringType" />
+      <xs:element name="description" type="DescriptionStringType" />
+      <!-- A flag to disable to cue -->
+      <xs:element name="disabled" type="xs:boolean" />
+      <!-- A flag to indicate auto arming -->
+      <xs:element name="loaded" type="xs:boolean" />
+      <!-- Timecode behaviour flag -->
+      <xs:element name="timecode" type="xs:boolean" />
+      <!-- Its time mark -->
+      <xs:element name="offset" type="CTimecodeType" minOccurs="0" />
+      <xs:element name="loop" type="LoopType" /> <!-- -1/0/n -->
+      <!-- Execution options -->
+      <xs:element name="prewait" type="CTimecodeType" /> <!-- After go before play -->
+      <xs:element name="postwait" type="CTimecodeType" /> <!-- After play before post go-->
+      <xs:element name="post_action" type="PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="target" type="TargetType" /> <!-- target uuid -->
+      <xs:element name="ui_properties" type="UiPropertiesType" />
+    </xs:sequence>
+    <xs:assert test="(timecode = xs:boolean('true') and exists(offset)) or (timecode = xs:boolean('false') and not(exists(offset)))" />
+  </xs:complexType>
+
+  <!-- Our cuelist contents type -->
   <xs:complexType name="CueListContentsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <!-- Can have any other cuelists, recursively -->
@@ -62,27 +128,29 @@
       <xs:element name="AudioCue" type="AudioCueType" />
       <xs:element name="DmxCue" type="DmxCueType" />
       <xs:element name="VideoCue" type="VideoCueType" />
+      <xs:element name="ActionCue" type="ActionCueType" />
     </xs:choice>
   </xs:complexType>
 
-  <!-- Our generic cue type -->
-  <xs:complexType name="CueType">
-    <!-- Which will have a sequence of the followin items -->
+  <xs:simpleType name="PostActionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="pause" />
+      <xs:enumeration value="go" />
+      <xs:enumeration value="go_at_end" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="UiPropertiesType">
     <xs:sequence>
-      <!-- Its own uuid -->
-      <xs:element name="uuid" type="UuidType" />
-      <!-- Timecode behaviour flag -->
-      <xs:element name="timecode" type="BoolType" />
-      <!-- Its time mark -->
-      <xs:element name="offset" type="CTimecodeType" minOccurs="0" />
-      <!-- A loop flag indicator -->
-      <xs:element name="loop" type="BoolType" />
-      <!-- A flag to indicate auto arming -->
-      <xs:element name="init_arm" type="BoolType" />
-      <!-- Execution options -->
-      <xs:element name="exec_options" type="ExecOptionsType" />
+      <xs:element name="timeline_position" type="Coordinates" />
     </xs:sequence>
-    <xs:assert test="(timecode = 'True' and exists(offset)) or (timecode = 'False' and not(exists(offset)))" />
+  </xs:complexType>
+
+  <xs:complexType name="Coordinates">
+    <xs:sequence>
+      <xs:element name="x" type="xs:integer" />
+      <xs:element name="y" type="xs:integer" />
+    </xs:sequence>
   </xs:complexType>
 
   <!-- Our audio cue type-->
@@ -91,14 +159,45 @@
       <xs:extension base="CueType">
         <xs:sequence>
           <!-- A media file path which can be none -->
-          <xs:element name="media" type="xs:string" minOccurs="0" />
+          <xs:element name="media" type="MediaType" />
           <!-- A master volume starting value -->
           <xs:element name="master_vol" type="PercentType" default="100" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="AudioOutputsType" />
+          <xs:element name="outputs" type="AudioCueOutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="MediaType">
+    <xs:sequence>
+      <xs:element name="file_name" type="xs:string" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioCueOutputsType">
+    <!-- Specify n virtual audio outputs -->
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <!-- Output name -->
+      <xs:element name="output_name" type="NameStringType" />
+      <!-- Output volume -->
+      <xs:element name="output_vol" type="PercentType" default="100" />
+      <xs:element name="channels" type="AudioChannelsType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioChannelsType">
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="channel" type="AudioChannelType" default="100" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioChannelType">
+    <xs:simpleContent>
+      <xs:extension base="PercentType">
+        <xs:attribute name="id" type="xs:positiveInteger" />
+      </xs:extension>
+    </xs:simpleContent>
   </xs:complexType>
 
   <xs:complexType name="VideoCueType">
@@ -106,14 +205,39 @@
       <xs:extension base="CueType">
         <xs:sequence>
           <!-- A video media file path which can be none -->
-          <xs:element name="media" type="xs:string" minOccurs="0" />
-          <!-- Initial corners definitions -->
-          <xs:element name="corners" type="VideoCornersType"></xs:element>
+          <xs:element name="media" type="MediaType" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="VideoOutputsType" />
+          <xs:element name="outputs" type="VideoCueOutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="VideoCueOutputsType">
+    <!-- Video outputs type -->
+    <!-- Specify n virtual video outputs -->
+    <xs:sequence minOccurs="1" maxOccurs="10">
+      <xs:element name="name" type="NameStringType" />
+      <xs:element name="output_geometry" type="VideoOutputGeometryType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="VideoOutputGeometryType">
+    <!-- Specs of the four corners of a media to display -->
+    <xs:sequence minOccurs="0" maxOccurs="1">
+      <xs:element name="x_scale" type="xs:integer" />
+      <xs:element name="y_scale" type="xs:integer" />
+      <xs:element name="corners" type="VideoCornersType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="VideoCornersType">
+    <xs:sequence>
+      <xs:element name="top_left" type="Coordinates" />
+      <xs:element name="top_right" type="Coordinates" />
+      <xs:element name="bott_left" type="Coordinates" />
+      <xs:element name="bott_right" type="Coordinates" />
+    </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="DmxCueType">
@@ -121,29 +245,90 @@
       <xs:extension base="CueType">
         <xs:sequence>
           <!-- A dmx media file path which can be none -->
-          <xs:element name="media" type="xs:string" minOccurs="0" />
-          <!-- An outputs section -->
-          <xs:element name="outputs" type="DmxOutputsType" />
-          <!-- A DMX scene -->
-          <xs:element name="dmx_scene" type="DmxSceneType" />
+          <xs:element name="media" type="MediaType" />
+          <xs:element name="fadein_time" type="xs:integer" default="0" />
+          <xs:element name="fadeout_time" type="xs:integer" default="0" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
 
-  <xs:simpleType name="UuidType">
-    <xs:restriction base="xs:string">
-      <!-- TODO, specify correctly -->
-      <!-- <xs:pattern value=""/>  -->
+  <!-- Dmx scene type -->
+  <xs:complexType name="DmxSceneType">
+    <xs:sequence>
+      <xs:element name="uuid" type="xs:string" />
+      <xs:element name="name" type="NameStringType" />
+      <xs:element name="description" type="DescriptionStringType" />
+      <!-- We allow a max of 10 universes un a scene by now -->
+      <xs:element name="DmxUniverse" type="DmxUniverseType">
+        <!-- They must be unique id's specs for the channels -->
+        <xs:unique name="unique_universe_number">
+          <xs:selector xpath="DmxUniverse" />
+          <xs:field xpath="@id" />
+        </xs:unique>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Dmx universe type -->
+  <xs:complexType name="DmxUniverseType">
+    <xs:sequence>
+      <xs:element name="id" type="xs:positiveInteger"></xs:element>
+      <!-- List contents (to make it a list in python) -->
+      <xs:element name="dmx_channels" type="DmxUniverseContentsType">
+        <xs:unique name="unique_channel_number">
+          <xs:selector xpath="dmx_channel" />
+          <xs:field xpath="@id" />
+        </xs:unique>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:byte" />
+  </xs:complexType>
+
+  <!-- DMX allows a max of 512 different channels in a universe -->
+  <xs:complexType name="DmxUniverseContentsType">
+    <xs:sequence>
+      <xs:element name="dmx_channel" type="DmxChannelType" minOccurs="0" maxOccurs="512">
+        <!-- They must be unique id's specs for the channels -->
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Dmx basic channel type -->
+  <xs:complexType name="DmxChannelType">
+    <xs:simpleContent>
+      <xs:extension base="xs:unsignedByte">
+        <xs:attribute name="id" type="ChannelNumber" />
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:simpleType name="ChannelNumber">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0" />
+      <xs:maxInclusive value="511" />
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:complexType name="ActionCueType">
+    <xs:complexContent>
+      <xs:extension base="CueType">
+        <xs:sequence>
+          <xs:element name="action_type" type="xs:string" minOccurs="0" />
+          <xs:element name="target" type="TargetType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <!-- 
   <xs:simpleType name="BoolType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="True" />
       <xs:enumeration value="False" />
     </xs:restriction>
   </xs:simpleType>
+  -->
 
   <xs:simpleType name="DateType">
     <xs:restriction base="xs:dateTime">
@@ -165,26 +350,6 @@
     </xs:choice>
   </xs:complexType>
 
-  <xs:complexType name="ExecOptionsType">
-    <!-- Execution options for a cue or cuelist -->
-    <xs:sequence minOccurs="1" maxOccurs="1">
-      <xs:element name="prewait" type="CTimecodeType" />
-      <xs:element name="autofollow" type="BoolType" />
-      <xs:element name="autocontinue" type="BoolType" />
-      <xs:element name="postwait" type="CTimecodeType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="VideoCornersType">
-    <!-- Specs of the four corners of a media to display -->
-    <xs:choice minOccurs="0" maxOccurs="1">
-      <xs:element name='UpperLeft' type="xs:float" default="0.0" />
-      <xs:element name='UpperRight' type="xs:float" default="0.0" />
-      <xs:element name='LowerLeft' type="xs:float" default="0.0" />
-      <xs:element name='LowerRight' type="xs:float" default="0.0" />
-    </xs:choice>
-  </xs:complexType>
-
   <xs:simpleType name="PercentType">
     <!-- Integer from 0 to 100 -->
     <xs:restriction base="xs:integer">
@@ -193,103 +358,16 @@
     </xs:restriction>
   </xs:simpleType>
 
-  <xs:complexType name="OutputsType">
-    <!-- Main outputs section type to inherit from -->
-    <xs:sequence>
-      <xs:element name="id" type="xs:byte" minOccurs="1" maxOccurs="1" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="AudioOutputsType">
-    <!-- Audio outputs type -->
-    <xs:complexContent>
-      <!-- Based on the generic outputs type -->
-      <xs:extension base="OutputsType">
-        <!-- Specify 1 to 10 virtual audio outputs -->
-        <xs:sequence minOccurs="1" maxOccurs="10">
-          <xs:element name="virtual_audio_device" type="xs:byte" />
-        </xs:sequence>
-      </xs:extension>
-    </xs:complexContent>
-  </xs:complexType>
-
-  <xs:complexType name="VideoOutputsType">
-    <!-- Video outputs type -->
-    <xs:complexContent>
-      <!-- Based on the generic outputs type -->
-      <xs:extension base="OutputsType">
-        <!-- Specify 1 to 10 virtual video outputs -->
-        <xs:sequence minOccurs="1" maxOccurs="10">
-          <xs:element name="virtual_video_device" type="xs:byte" />
-        </xs:sequence>
-      </xs:extension>
-    </xs:complexContent>
-  </xs:complexType>
-
-  <xs:complexType name="DmxOutputsType">
-    <!-- Dmx outputs type -->
-    <xs:complexContent>
-      <!-- Based on the generic outputs type -->
-      <xs:extension base="OutputsType">
-        <!-- Specify 1 to 10 virtual dmx outputs -->
-        <xs:sequence minOccurs="1" maxOccurs="10">
-          <xs:element name="virtual_dmx_device" type="xs:byte" />
-        </xs:sequence>
-      </xs:extension>
-    </xs:complexContent>
-  </xs:complexType>
-
-  <xs:simpleType name="ChannelNumber">
-    <xs:restriction base="xs:integer">
-      <xs:minInclusive value="0" />
-      <xs:maxInclusive value="511" />
+  <xs:simpleType name="EmptyStringType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="0"></xs:maxLength>
     </xs:restriction>
   </xs:simpleType>
 
-  <!-- Dmx basic channel type -->
-  <xs:complexType name="DmxChannelType">
-    <xs:simpleContent>
-      <xs:extension base="xs:unsignedByte">
-        <xs:attribute name="id" type="ChannelNumber" />
-      </xs:extension>
-    </xs:simpleContent>
-  </xs:complexType>
-
-  <!-- Dmx universe type -->
-  <xs:complexType name="DmxUniverseType">
-    <xs:sequence>
-      <!-- List contents (to make it a list in python) -->
-      <xs:element name="contents" type="DmxUniverseContentsType">
-        <xs:unique name="unique_channel_number">
-          <xs:selector xpath="DmxChannel" />
-          <xs:field xpath="@id" />
-        </xs:unique>
-      </xs:element>
-    </xs:sequence>
-    <xs:attribute type="xs:byte" name="id" use="optional" />
-  </xs:complexType>
-
-  <!-- DMX allows a max of 512 different channels in a universe -->
-  <xs:complexType name="DmxUniverseContentsType">
-    <xs:sequence>
-      <xs:element name="DmxChannel" type="DmxChannelType" minOccurs="0" maxOccurs="512">
-        <!-- They must be unique id's specs for the channels -->
-      </xs:element>
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- Dmx scene type -->
-  <xs:complexType name="DmxSceneType">
-    <xs:sequence>
-      <!-- We allow a max of 10 universes un a scene by now -->
-      <xs:element name="DmxUniverse" type="DmxUniverseType" minOccurs="0" maxOccurs="10">
-        <!-- They must be unique id's specs for the channels -->
-        <xs:unique name="unique_channel_universe">
-          <xs:selector xpath="DmxUniverse" />
-          <xs:field xpath="@id" />
-        </xs:unique>
-      </xs:element>
-    </xs:sequence>
-  </xs:complexType>
+  <xs:simpleType name="LoopType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="-1" />
+    </xs:restriction>
+  </xs:simpleType>
 
 </xs:schema>

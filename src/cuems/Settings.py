@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 import xmlschema
 import datetime  as DT
 import os
-import json
 from .log import logger
 
 from .CTimecode import CTimecode
@@ -13,24 +12,24 @@ from .CTimecode import CTimecode
 from .CMLCuemsConverter import CMLCuemsConverter
 
 class Settings(dict):
-
-    def __init__(self,schema=None,xmlfile=None,*arg,**kw):
+    def __init__(self, schema = None, xmlfile = None, *arg, **kw):
       super().__init__(*arg, **kw)
       self.loaded = False
       self.schema = schema
       self.xmlfile = xmlfile
       self.xmldata = None
-      
+      if self.schema is not None and self.xmlfile is not None:
+          self.read()
     
     def __backup(self):
         if os.path.isfile(self.xmlfile):
-            logger.debug("File exist")
+            logger.info("File exist")
             try:
                 os.rename(self.xmlfile, "{}.back".format(self.xmlfile))
             except OSError:
-                logger.debug("cannot create settings backup")
+                logger.error("Cannot create settings backup")
         else:
-            logger.debug("settings file not found")
+            logger.error("Settings file not found")
     
     @property
     def schema(self):
@@ -42,7 +41,7 @@ class Settings(dict):
         if os.path.isfile(path):
             self._schema = path
         else:
-            raise FileNotFoundError("schema file not found")
+            raise FileNotFoundError("Schema file not found")
 
 
     @property
@@ -65,20 +64,26 @@ class Settings(dict):
 
     def validate(self):
         schema_file = open(self.schema)
-        schema = xmlschema.XMLSchema(schema_file, base_url='/home/ion/src/cuems/python/python-osc-ossia/')
+        schema = xmlschema.XMLSchema(schema_file, base_url='')
         xml_file = open(self.xmlfile)
         return schema.validate(xml_file)
 
     def read(self):
-        schema_file = open(self.schema)
-        #schema = xmlschema.XMLSchema(schema_file, converter=xmlschema.JsonMLConverter)
-        schema = xmlschema.XMLSchema(schema_file, base_url='/home/ion/src/cuems/python/python-osc-ossia/', converter=CMLCuemsConverter)
+        try:
+            schema_file = open(self.schema)
+        except FileNotFoundError:
+            logger.error(f'{self.schema} XSD file not found')
 
-        xml_file = open(self.xmlfile)
-        xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True)
+        #schema = xmlschema.XMLSchema(schema_file, base_url='', converter=CMLCuemsConverter)
+        schema = xmlschema.XMLSchema(schema_file, base_url='')
 
+        try:
+            xml_file = open(self.xmlfile)
+        except FileNotFoundError:
+            logger.error(f'{self.xmlfile} XML file not found')
 
-       # print(json.dumps(xml_dict))
+        xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True, attr_prefix='')
+
         super().__init__(xml_dict)
         self.loaded = True
         return self
