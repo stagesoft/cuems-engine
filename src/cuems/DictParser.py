@@ -43,13 +43,20 @@ class CuemsParser():
         return list(_dict.values())[0]
 
     def convert_string_to_value(self, _string):
+        bool_strings = ['true', 'false']
+        null_strings = ['none', 'null']
         if isinstance(_string, str):
-            if (_string=='True' or _string=='False'):
-                return bool(distutils.util.strtobool(_string))
+            if (_string.lower() in bool_strings):
+                return bool(distutils.util.strtobool(_string.lower()))
+            elif (_string.lower() in null_strings):
+                return None
             elif (_string.isdigit()):
                 return int(_string)
             else:
-                return _string
+                try:
+                    return float(_string)
+                except ValueError:
+                    return _string
         else:
             return _string
 
