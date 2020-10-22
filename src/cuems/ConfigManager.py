@@ -1,5 +1,5 @@
 from threading import Thread
-from os import path, mkdir
+from os import path, mkdir, environ
 from .Settings import Settings
 from .log import logger
 
@@ -9,6 +9,7 @@ class ConfigManager(Thread):
         self.cuems_conf_path = path
         self.library_path = None
         self.tmp_upload_path = None
+        self.database_name = None
         self.node_conf = {}
         self.project_conf = {}
         self.project_maps = {}
@@ -30,13 +31,21 @@ class ConfigManager(Thread):
 
         if engine_settings['Settings']['library_path'] == None:
             logger.warning('No library path specified in settings. Assuming default ~/cuems_library.')
+            self.library_path = path.join(environ['HOME'], 'cuems_library')
         else:
             self.library_path = engine_settings['Settings']['library_path']
 
         if engine_settings['Settings']['tmp_upload_path'] == None:
             logger.warning('No temp upload path specified in settings. Assuming default /tmp/cuemsupload.')
+            self.tmp_upload_path = path.join('/', 'tmp', 'cuemsupload')
         else:
             self.tmp_upload_path = engine_settings['Settings']['tmp_upload_path']
+
+        if engine_settings['Settings']['database_name'] == None:
+            logger.warning('No database name specified in settings. Assuming default project-manager.db.')
+            self.database_name = 'project-manager.db'
+        else:
+            self.database_name = engine_settings['Settings']['database_name']
 
         # Now we know where the library is, let's check it out
         self.check_dir_hierarchy()

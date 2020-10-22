@@ -38,14 +38,6 @@ class AudioCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    @property
-    def armed(self):
-        return super().__getitem__('armed')
-
-    @armed.setter
-    def armed(self, armed):
-        super().__setitem__('armed', armed)
-
     def arm(self, conf, queue):
         # Assign its own audioplayer object
         self.player = AudioPlayer(  conf.players_port_index['audio'], 

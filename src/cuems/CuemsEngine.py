@@ -8,6 +8,7 @@ import signal
 import time
 import os
 import pyossia as ossia
+from uuid import uuid1
 from functools import partial
 
 from .CTimecode import CTimecode
@@ -91,8 +92,13 @@ class CuemsEngine():
             exit(-1)
 
         # WebSocket server
+        settings_dict = {}
+        settings_dict['session_uuid'] = str(uuid1())
+        settings_dict['library_path'] = self.cm.library_path
+        settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
+        settings_dict['database_name'] = self.cm.database_name
         self.ws_queue = queue.Queue()
-        self.ws_server = CuemsWsServer(self.ws_queue)
+        self.ws_server = CuemsWsServer(self.ws_queue, settings_dict)
         try:
             self.ws_server.start(self.cm.node_conf['websocket_port'])
         except KeyError:
@@ -102,10 +108,10 @@ class CuemsEngine():
 
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
-        self.ossia_server = OssiaServer(    self.cm.node_conf['id'], 
-                                            self.cm.node_conf['oscquery_port'], 
-                                            self.cm.node_conf['oscquery_out_port'], 
-                                            self.ossia_queue)
+        self.ossia_server = OssiaServer(self.cm.node_conf['id'], 
+                                        self.cm.node_conf['oscquery_port'], 
+                                        self.cm.node_conf['oscquery_out_port'], 
+                                        self.ossia_queue)
         self.ossia_server.start()
 
         # Initial OSC nodes to tell ossia to configure
@@ -282,7 +288,7 @@ class CuemsEngine():
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
-            pprint(self.script)
+            pprint(self.script, sort_dicts=False)
 
         except FileNotFoundError:
             logger.error('Project script file not found')
@@ -366,7 +372,7 @@ class CuemsEngine():
         for item in script.cuelist.contents:
             '''Each item in the floating list must be prepared when the script
             is just loaded to allow the user to play any of those cues, so...'''
-            item.arm(self.cm, self.ossia_queue)
+            # item.arm(self.cm, self.ossia_queue)
             
     ########################################################
 

@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
     <xs:element name="CuemsSettings">
         <xs:complexType>
             <xs:sequence>
                 <xs:element name="Settings">
                     <xs:complexType>
                         <xs:sequence>
-                            <!-- Library path setting -->
                             <xs:element name="library_path" type="xs:string" minOccurs="1" maxOccurs="1" />
-                            <!-- Library path setting -->
                             <xs:element name="tmp_upload_path" type="xs:string" minOccurs="1" maxOccurs="1" />
+                            <xs:element name="database_name" type="xs:string" minOccurs="1" maxOccurs="1" />
                             <!-- Node settings -->
-                            <xs:element name="node" type="NodeConfType" minOccurs="1" maxOccurs="1"></xs:element>
+                            <xs:element name="node" type="cms:NodeConfType" minOccurs="1" maxOccurs="1"></xs:element>
                         </xs:sequence>
                     </xs:complexType>
                 </xs:element>
@@ -23,25 +22,25 @@
     <!-- TYPES DEFINITIONS -->
     <xs:complexType name="NodeConfType">
         <xs:sequence>
-            <xs:element name="osc_dest_host" type="NonEmptyString"></xs:element>
+            <xs:element name="osc_dest_host" type="cms:NonEmptyString"></xs:element>
             <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
             <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
             <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
             <xs:element name="mtc_port" type="xs:string"></xs:element>
             <!-- VIDEO PLAYER SETTINGS -->
-            <xs:element name="videoplayer" type="VideoPlayerType" minOccurs="0" maxOccurs="1" />
+            <xs:element name="videoplayer" type="cms:VideoPlayerType" minOccurs="0" maxOccurs="1" />
             <!-- AUDIO PLAYER SETTINGS -->
-            <xs:element name="audioplayer" type="AudioPlayerType" minOccurs="0" maxOccurs="1" />
+            <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
             <!-- DMX PLAYER SETTINGS -->
-            <xs:element name="dmxplayer" type="DmxPlayerType" minOccurs="0" maxOccurs="1" />
+            <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
         </xs:sequence>
         <xs:attribute name="id" type="xs:int"></xs:attribute>
-        <xs:attribute name="master" type="BoolType"></xs:attribute>
+        <xs:attribute name="master" type="cms:BoolType" />
     </xs:complexType>
 
     <xs:complexType name="PlayerType">
         <xs:sequence>
-            <xs:element name="path" type="NonEmptyString"></xs:element>
+            <xs:element name="path" type="cms:NonEmptyString"></xs:element>
             <xs:element name="args" type="xs:string"></xs:element>
             <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
         </xs:sequence>
@@ -49,7 +48,7 @@
 
     <xs:complexType name="VideoPlayerType">
         <xs:complexContent>
-            <xs:extension base="PlayerType">
+            <xs:extension base="cms:PlayerType">
                 <xs:sequence>
                     <xs:element name="outputs" type="xs:positiveInteger"></xs:element>
                 </xs:sequence>
@@ -59,7 +58,7 @@
 
     <xs:complexType name="AudioPlayerType">
         <xs:complexContent>
-            <xs:extension base="PlayerType">
+            <xs:extension base="cms:PlayerType">
                 <xs:sequence>
                     <xs:element name="audio_cards" type="xs:positiveInteger"></xs:element>
                 </xs:sequence>
@@ -69,7 +68,7 @@
 
     <xs:complexType name="DmxPlayerType">
         <xs:complexContent>
-            <xs:extension base="PlayerType">
+            <xs:extension base="cms:PlayerType">
                 <xs:sequence>
                     <xs:element name="universes" type="xs:positiveInteger"></xs:element>
                 </xs:sequence>
@@ -99,7 +98,7 @@
     <xs:complexType name="CTimecodeType">
         <!-- Can be a timecode field or an empty NoneType field -->
         <xs:choice>
-            <xs:element name="CTimecode" type="TimecodeType" default="00:00:00:00" />
+            <xs:element name="CTimecode" type="cms:TimecodeType" default="00:00:00:00" />
             <xs:element name="NoneType" type="xs:string" />
         </xs:choice>
     </xs:complexType>

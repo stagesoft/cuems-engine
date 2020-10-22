@@ -3,7 +3,7 @@ from .Cue import Cue
 from .CTimecode import CTimecode
 
 
-class CueList(dict):
+class CueList(Cue):
     
     def __init__(self, contents=[], offset=None):
         super().__setitem__('uuid', str(uuid_module.uuid1()))
@@ -31,16 +31,16 @@ class CueList(dict):
         
     
     def __sorting(self, cue):
-        if cue.time is None: # TODO: change this to somthing not so ugly
+        if cue.offset is None: # TODO: change this to somthing not so ugly
             return -99999
         else:
-            return cue.time
+            return cue.offset
     
     def __add__(self, other):
-        new_list = self.copy()
-        new_list.extend(other)
-        new_list.sort(key=self.__sorting)
-        return new_list
+        new_contents = self['contents'].copy()
+        new_contents.append(other)
+        new_contents.sort(key=self.__sorting)
+        return new_contents
 
     def __iadd__(self, other):
         self['contents'].__iadd__(other)
@@ -49,46 +49,12 @@ class CueList(dict):
 
     def times(self):
         timelist = list()
-        for cue in self['contents']:
-            timelist.append(cue.time)
+        for item in self['contents']:
+            timelist.append(item.offset)
         return timelist
 
-    '''
-    def append(self, item):
-        if not isinstance(item, Cue):
-            raise TypeError('item is not of type %s' % Cue)
-        self['contents'].append(item)  #append the item to itself (the list)
-
-    def extend(self, other):
-        super().extend(other)
-    '''
-
-    @property
-    def timecode(self):
-        return super().__getitem__('timecode')
-
-    @timecode.setter
-    def timecode(self, timecode):
-        super().__setitem__('timecode', bool(timecode))
-    
-    @property
-    def time(self):
-        return super().__getitem__('time')
-
-    @time.setter
-    def time(self, time):
-        super().__setitem__('time', time)
-    
-    @property
-    def contents(self):
-        return super().__getitem__('contents')
-
-    @contents.setter
-    def contents(self, contents):
-        super().__setitem__('contents', contents)
-    
     def find(self, uuid):
-        for item in self:
+        for item in self['contents']:
             if isinstance(item, Cue):
                 if item.uuid == uuid:
                     return item
@@ -96,11 +62,3 @@ class CueList(dict):
                 return item.find(uuid)
         
         return None
-
-class TimecodeCueList(CueList):
-    def __init__(self, *args):
-        super().__init__(*args)
-
-class FloatingCueList(CueList):
-    def __init__(self, *args):
-        super().__init__(*args)

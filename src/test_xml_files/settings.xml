@@ -3,6 +3,7 @@
     <Settings>
         <library_path>/home/calamar/cuems_library</library_path>
         <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
+        <database_name>project-manager.db</database_name>
         <node id="0" master="True">
             <osc_dest_host>localhost</osc_dest_host>
             <oscquery_port>7700</oscquery_port>

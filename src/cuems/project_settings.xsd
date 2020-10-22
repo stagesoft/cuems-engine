@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- describing schema for sample xml -->
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://stagelab.net/cuems">
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
     <xs:element name="CuemsProjectSettings">
         <xs:complexType>
             <xs:sequence>
@@ -9,8 +9,8 @@
                         <xs:sequence>
                             <xs:element name="setting" minOccurs="0" maxOccurs="unbounded">
                                 <xs:complexType>
-                                    <xs:attribute name="name" type="NonEmptyString"></xs:attribute>
-                                    <xs:attribute name="value" type="NonEmptyString"></xs:attribute>
+                                    <xs:attribute name="name" type="cms:NonEmptyString"></xs:attribute>
+                                    <xs:attribute name="value" type="cms:NonEmptyString"></xs:attribute>
                                 </xs:complexType>
                             </xs:element>
                         </xs:sequence>

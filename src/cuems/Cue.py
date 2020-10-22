@@ -28,6 +28,142 @@ class Cue(dict):
     def uuid(self):
         return super().__getitem__('uuid')
 
+    @uuid.setter
+    def uuid(self, uuid):
+        super().__setitem__('uuid', uuid)
+
+    @property
+    def id(self):
+        return super().__getitem__('id')
+
+    @id.setter
+    def id(self, id):
+        super().__setitem__('id', id)
+
+    @property
+    def name(self):
+        return super().__getitem__('name')
+
+    @name.setter
+    def name(self, name):
+        super().__setitem__('name', name)
+
+    @property
+    def description(self):
+        return super().__getitem__('description')
+
+    @description.setter
+    def description(self, description):
+        super().__setitem__('description', description)
+
+    @property
+    def disabled(self):
+        return super().__getitem__('disabled')
+
+    @disabled.setter
+    def disabled(self, disabled):
+        super().__setitem__('disabled', disabled)
+
+    @property
+    def loaded(self):
+        return super().__getitem__('loaded')
+
+    @loaded.setter
+    def loaded(self, loaded):
+        super().__setitem__('loaded', loaded)
+
+    @property
+    def armed(self):
+        return super().__getitem__('armed')
+
+    @armed.setter
+    def armed(self, armed):
+        super().__setitem__('armed', armed)
+
+    @property
+    def timecode(self):
+        return super().__getitem__('timecode')
+
+    @timecode.setter
+    def timecode(self, timecode):
+        super().__setitem__('timecode', timecode)
+
+    @property
+    def offset(self):
+        return super().__getitem__('offset')
+
+    @offset.setter #TODO: let te timecode object handle this
+    def offset(self, offset):
+        if isinstance(offset, CTimecode):
+            super().__setitem__('offset', offset)
+        elif isinstance(offset, (int, float)):
+            corrected_seconds = CTimecode(start_seconds=offset)
+            corrected_seconds.frames = corrected_seconds.frames + 1
+            super().__setitem__('offset', corrected_seconds) #TODO: discuss this
+        elif isinstance(offset, str):
+            super().__setitem__('offset', CTimecode(offset))
+        elif isinstance(offset, str):
+            super().__setitem__('offset', CTimecode(offset))
+        elif isinstance(offset, dict):
+            dict_timecode = offset.pop('CTimecode', None)
+            if dict_timecode is None:
+                super().__setitem__('offset', None)
+            else:
+                super().__setitem__('offset', CTimecode(dict_timecode))
+        elif offset == None:
+            super().__setitem__('offset', None)
+        else:
+            raise NotImplementedError #TODO: disscuss raised error
+
+
+    @property
+    def loop(self):
+        return super().__getitem__('loop')
+
+    @loop.setter
+    def loop(self, loop):
+        super().__setitem__('loop', loop)
+
+    @property
+    def prewait(self):
+        return super().__getitem__('prewait')
+
+    @prewait.setter
+    def prewait(self, prewait):
+        super().__setitem__('prewait', prewait)
+
+    @property
+    def postwait(self):
+        return super().__getitem__('postwait')
+
+    @postwait.setter
+    def postwait(self, postwait):
+        super().__setitem__('postwait', postwait)
+
+    @property
+    def post_action(self):
+        return super().__getitem__('post_action')
+
+    @post_action.setter
+    def post_action(self, post_action):
+        super().__setitem__('post_action', post_action)
+
+    @property
+    def target(self):
+        return super().__getitem__('target')
+
+    @target.setter
+    def target(self, target):
+        super().__setitem__('target', target)
+
+    @property
+    def ui_properties(self):
+        return super().__getitem__('ui_properties')
+
+    @ui_properties.setter
+    def ui_properties(self, ui_properties):
+        super().__setitem__('ui_properties', ui_properties)
+
     @property
     def outputs(self):
         return super().__getitem__('outputs')
@@ -37,42 +173,11 @@ class Cue(dict):
         super().__setitem__('outputs', Outputs(self, outputs).assign())
     
     @property
-    def time(self):
-        return super().__getitem__('time')
-
-    @time.setter #TODO: let te timecode object handle this
-    def time(self, time):
-        if isinstance(time, CTimecode):
-            super().__setitem__('time', time)
-        elif isinstance(time, (int, float)):
-            corrected_seconds = CTimecode(start_seconds=time)
-            corrected_seconds.frames = corrected_seconds.frames + 1
-            super().__setitem__('offset', corrected_seconds) #TODO: discuss this
-        elif isinstance(offset, str):
-            super().__setitem__('offset', CTimecode(offset))
-        elif isinstance(offset, dict):
-            dict_timecode = offset.pop('CTimecode', None)
-            super().__setitem__('time', corrected_seconds) #TODO: discuss this
-        elif isinstance(time, str):
-            super().__setitem__('time', CTimecode(time))
-        elif isinstance(time, dict):
-            dict_timecode = time.pop('CTimecode', None)
-            if dict_timecode is None:
-                super().__setitem__('offset', None)
-                super().__setitem__('time', None)
-            else:
-                super().__setitem__('time', CTimecode(dict_timecode))
-        elif time == None:
-            super().__setitem__('time', None)
-        else:
-            raise NotImplementedError #TODO: disscuss raised error
-
-    @property
     def media(self):
         try:
             return super().__getitem__('media')
         except KeyError:
-            logger.debug('{} {} with no media'.format(type(self), self.uuid))
+            logger.debug(f'{type(self)} {self.uuid} with no media')
 
     @media.setter
     def media(self, media):
@@ -80,7 +185,6 @@ class Cue(dict):
 
     def type(self):
         return type(self)
-
 
     def __setitem__(self, key, value):
         if key == 'offset':

@@ -35,14 +35,6 @@ class VideoCue(Cue):
     def review_offset(self, timecode):
         return -(int(timecode.frames))
 
-    @property
-    def armed(self):
-        return super().__getitem__('armed')
-
-    @armed.setter
-    def armed(self, armed):
-        super().__setitem__('armed', armed)
-
     def arm(self, conf, queue):
         # Assign its own videoplayer object
         self.player = VideoPlayer(  conf.players_port_index['video'], 

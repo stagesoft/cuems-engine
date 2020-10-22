@@ -74,8 +74,8 @@ class Settings(dict):
         except FileNotFoundError:
             logger.error(f'{self.schema} XSD file not found')
 
-        #schema = xmlschema.XMLSchema(schema_file, base_url='', converter=CMLCuemsConverter)
-        schema = xmlschema.XMLSchema(schema_file, base_url='')
+        schema = xmlschema.XMLSchema(schema_file, base_url='', converter=CMLCuemsConverter)
+        # schema = xmlschema.XMLSchema(schema_file, base_url='')
 
         try:
             xml_file = open(self.xmlfile)
