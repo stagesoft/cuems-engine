@@ -28,23 +28,14 @@ class CueList(Cue):
     @contents.setter
     def contents(self, contents):
         super().__setitem__('contents', contents)
-        
-    
-    def __sorting(self, cue):
-        if cue.offset is None: # TODO: change this to somthing not so ugly
-            return -99999
-        else:
-            return cue.offset
     
     def __add__(self, other):
         new_contents = self['contents'].copy()
         new_contents.append(other)
-        new_contents.sort(key=self.__sorting)
         return new_contents
 
     def __iadd__(self, other):
         self['contents'].__iadd__(other)
-        self['contents'].sort(key=self.__sorting)
         return self
 
     def times(self):
@@ -54,11 +45,22 @@ class CueList(Cue):
         return timelist
 
     def find(self, uuid):
-        for item in self['contents']:
-            if isinstance(item, Cue):
+        if self.uuid == uuid:
+            return self
+        else:
+            for item in self.contents:
                 if item.uuid == uuid:
                     return item
-            else:
-                return item.find(uuid)
+                elif isinstance(item, CueList):
+                    recursive = item.find(uuid)
+                    if recursive != None:
+                        return recursive
+            
+            return None
         
         return None
+
+    def arm(self, conf, queue):
+        for item in self.contents:
+            if item.timecode == False:
+                item.arm(conf, queue)

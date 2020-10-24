@@ -20,18 +20,31 @@ class DmxCue(Cue):
             super().__setitem__('in_time', in_time)
         if out_time:
             super().__setitem__('out_time', out_time)
-    @property
-    def scene(self):
-        return self['dmx_scene']
 
-    @scene.setter
-    def scene(self, scene):
-        if isinstance(scene, DmxScene):
-            super().__setitem__('dmx_scene', scene)
-        elif isinstance(scene, dict):
-            super().__setitem__('dmx_scene', DmxScene(init_dict=scene))
-        else:
-            raise NotImplementedError
+
+    @property
+    def media(self):
+        return super().__getitem__('media')
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('media', media)
+
+    @property
+    def fade_in(self):
+        return super().__getitem__('fade_in')
+
+    @fade_in.setter
+    def fade_in(self, fade_in):
+        super().__setitem__('fade_in', fade_in)
+
+    @property
+    def fade_out(self):
+        return super().__getitem__('fade_out')
+
+    @fade_out.setter
+    def fade_out(self, fade_out):
+        super().__setitem__('fade_out', fade_out)
 
     @property
     def player(self):
@@ -59,14 +72,6 @@ class DmxCue(Cue):
 
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
-
-    @property
-    def armed(self):
-        return super().__getitem__('armed')
-
-    @armed.setter
-    def armed(self, armed):
-        super().__setitem__('armed', armed)
 
     def arm(self, conf, queue):
         # Assign its own audioplayer object
@@ -100,11 +105,23 @@ class DmxCue(Cue):
 
         conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
 
-        self.armed = True
+        self.loaded = True
 
     def disarm(self, cm, queue):
-        self.armed = False
+        self.loaded = False
 
+    @property
+    def scene(self):
+        return self['dmx_scene']
+
+    @scene.setter
+    def scene(self, scene):
+        if isinstance(scene, DmxScene):
+            super().__setitem__('dmx_scene', scene)
+        elif isinstance(scene, dict):
+            super().__setitem__('dmx_scene', DmxScene(init_dict=scene))
+        else:
+            raise NotImplementedError
 
 class DmxScene(dict):
     def __init__(self, init_dict=None):

@@ -14,9 +14,8 @@ class ConfigManager(Thread):
         self.project_conf = {}
         self.project_maps = {}
         self.load_node_conf()
-        self.players_port_index = { "audio":int(self.node_conf['audioplayer']['osc_in_port_base']), 
-                                    "video":int(self.node_conf['videoplayer']['osc_in_port_base']), 
-                                    "dmx":int(self.node_conf['dmxplayer']['osc_in_port_base'])
+        self.players_port_index = { "start":int(self.node_conf['osc_in_port_base']), 
+                                    "used":[]
                                     }
         self.start()
 

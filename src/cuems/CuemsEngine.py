@@ -12,6 +12,7 @@ from uuid import uuid1
 from functools import partial
 
 from .CTimecode import CTimecode
+import xmlschema.exceptions
 
 from .cuems_editor.CuemsWsServer import CuemsWsServer
 
@@ -52,12 +53,8 @@ class CuemsEngine():
         try:
             self.cm = ConfigManager(path=CUEMS_CONF_PATH)
         except FileNotFoundError:
-            message = 'Node config file could not be found. Exiting.'
-            print('\n\n' + message + '\n\n')
-            logger.error(message)
+            logger.critical('Node config file could not be found. Exiting !!!!!')
             exit(-1)
-
-        logger.info(f'Cuems library path: {self.cm.library_path}')
 
         #########################################################
         # System signals handlers
@@ -68,16 +65,10 @@ class CuemsEngine():
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
 
         # Our empty script object
-        self.script = CuemsScript()
-        self.currentcues = CueList()
-        self.nextcues = CueList()
-        self.armedcues = CueList()
-
-        self.audio_players_port_index = int(self.cm.node_conf['audioplayer']['osc_in_port_base'])
-        self.node_video_players = {}
-        self.video_players_port_index = int(self.cm.node_conf['videoplayer']['osc_in_port_base'])
-        self.node_dmx_players = {}
-        self.dmx_players_port_index = int(self.cm.node_conf['dmxplayer']['osc_in_port_base'])
+        self.script = None
+        self.currentcues = list()
+        self.nextcues = list()
+        self.armedcues = list()
 
         # MTC master object creation through bound library and open port
         self.mtcmaster = libmtcmaster.MTCSender_create()
@@ -288,18 +279,21 @@ class CuemsEngine():
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
-            pprint(self.script, sort_dicts=False)
-
         except FileNotFoundError:
             logger.error('Project script file not found')
 
-        self.process_script(self.script)
+        self.process_script()
 
         # We directly start the MTC! we are on running mode, right now
         libmtcmaster.MTCSender_play(self.mtcmaster)
 
     def go_callback(self, **kwargs):
-        cue_to_go = self.script.find(kwargs['value'])
+        try:
+            cue_to_go = self.script.find(kwargs['value'])
+        except AttributeError:
+            logger.warning('Go method called with no script loaded')
+            return
+
         if cue_to_go is None:
             if cue_to_go is None:
                 logger.error(f'Cue {kwargs["value"]} does not exist.')
@@ -330,7 +324,7 @@ class CuemsEngine():
             except:
                 logger.info('NO MTCMASTER ASSIGNED!')
 
-                self.currentcues.contents.append(cue_to_go)
+                self.currentcues.append(cue_to_go)
                 logger.info(f'Current Cues CueList: {self.currentcues}')
 
     def preload_callback(self, **kwargs):
@@ -365,14 +359,18 @@ class CuemsEngine():
 
     ########################################################
     # Script treating methods
-    def process_script(self, script):
+    def process_script(self):
         #######################################
         # Floating cues preparation
-        logger.info('Preparing Floating Cuelist:')
-        for item in script.cuelist.contents:
-            '''Each item in the floating list must be prepared when the script
-            is just loaded to allow the user to play any of those cues, so...'''
-            # item.arm(self.cm, self.ossia_queue)
+        logger.info('Arming:')
+        try:
+            for item in self.script.cuelist.contents:
+                '''Each item in the floating list must be prepared when the script
+                is just loaded to allow the user to play any of those cues, so...'''
+                if item.timecode == False:
+                    item.arm(self.cm, self.ossia_queue)
+        except Exception as e:
+            logger.error(f'Error arming cue : {e}')
             
     ########################################################
 

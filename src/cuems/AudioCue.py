@@ -12,6 +12,30 @@ class AudioCue(Cue):
         self.offset_route = '/offset'
 
     @property
+    def media(self):
+        return super().__getitem__('media')
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('media', media)
+
+    @property
+    def master_vol(self):
+        return super().__getitem__('master_vol')
+
+    @master_vol.setter
+    def master_vol(self, master_vol):
+        super().__setitem__('master_vol', master_vol)
+
+    @property
+    def outputs(self):
+        return super().__getitem__('outputs')
+
+    @outputs.setter
+    def outputs(self, outputs):
+        super().__setitem__('outputs', outputs)
+
+    @property
     def player(self):
         return super().__getitem__('player')
 
@@ -40,10 +64,13 @@ class AudioCue(Cue):
 
     def arm(self, conf, queue):
         # Assign its own audioplayer object
-        self.player = AudioPlayer(  conf.players_port_index['audio'], 
-                                    conf.node_conf['audioplayer']['path'],
-                                    str(conf.node_conf['audioplayer']['args']),
-                                    str(path.join(conf.library_path, 'media', self.media)))
+        try:
+            self.player = AudioPlayer(  conf.players_port_index, 
+                                        conf.node_conf['audioplayer']['path'],
+                                        str(conf.node_conf['audioplayer']['args']),
+                                        str(path.join(conf.library_path, 'media', self.media['file_name'])))
+        except Exception as e:
+            raise e
 
         self.player.start()
 
@@ -66,14 +93,15 @@ class AudioCue(Cue):
         queue.put(   QueueOSCData(  'add', 
                                     self.osc_route, 
                                     conf.node_conf['osc_dest_host'], 
-                                    conf.players_port_index['audio'],
-                                    conf.players_port_index['audio'] + 1, 
+                                    self.player.port,
+                                    self.player.port + 1, 
                                     OSC_AUDIOPLAYER_CONF))
 
-        conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
-
-        self.armed = True
+        self.loaded = True
 
     def disarm(self, cm, queue):
-        self.armed = False
+        self.player.kill()
+        cm.osc_port_index['used'].pop(self.player.port)
+        del self.player
+        self.loaded = False
 

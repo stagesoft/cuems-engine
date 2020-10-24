@@ -9,8 +9,13 @@ import time
 
 
 class AudioPlayer(Thread):
-    def __init__(self, port, path, args, media):
-        self.port = port
+    def __init__(self, port_index, path, args, media):
+        self.port = port_index['start']
+        while self.port in port_index['used']:
+            self.port += 2
+
+        port_index['used'].append(self.port)
+            
         self.stdout = None
         self.stderr = None
         # self.card_id = card_id

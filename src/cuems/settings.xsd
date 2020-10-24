@@ -27,11 +27,9 @@
             <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
             <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
             <xs:element name="mtc_port" type="xs:string"></xs:element>
-            <!-- VIDEO PLAYER SETTINGS -->
+            <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
             <xs:element name="videoplayer" type="cms:VideoPlayerType" minOccurs="0" maxOccurs="1" />
-            <!-- AUDIO PLAYER SETTINGS -->
             <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
-            <!-- DMX PLAYER SETTINGS -->
             <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
         </xs:sequence>
         <xs:attribute name="id" type="xs:int"></xs:attribute>
@@ -42,7 +40,6 @@
         <xs:sequence>
             <xs:element name="path" type="cms:NonEmptyString"></xs:element>
             <xs:element name="args" type="xs:string"></xs:element>
-            <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
         </xs:sequence>
     </xs:complexType>
 
@@ -96,7 +93,6 @@
     </xs:simpleType>
 
     <xs:complexType name="CTimecodeType">
-        <!-- Can be a timecode field or an empty NoneType field -->
         <xs:choice>
             <xs:element name="CTimecode" type="cms:TimecodeType" default="00:00:00:00" />
             <xs:element name="NoneType" type="xs:string" />

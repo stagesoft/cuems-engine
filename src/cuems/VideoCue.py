@@ -9,6 +9,22 @@ class VideoCue(Cue):
       self.offset_route = '/jadeo/offset'
 
     @property
+    def media(self):
+        return super().__getitem__('media')
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('media', media)
+
+    @property
+    def outputs(self):
+        return super().__getitem__('outputs')
+
+    @outputs.setter
+    def outputs(self, outputs):
+        super().__setitem__('outputs', outputs)
+
+    @property
     def player(self):
         return super().__getitem__('player')
 
@@ -37,11 +53,11 @@ class VideoCue(Cue):
 
     def arm(self, conf, queue):
         # Assign its own videoplayer object
-        self.player = VideoPlayer(  conf.players_port_index['video'], 
+        self.player = VideoPlayer(  conf.players_port_index, 
                                     self.outputs,
                                     conf.node_conf['videoplayer']['path'],
                                     str(conf.node_conf['videoplayer']['args']),
-                                    str(path.join(conf.library_path, 'media', self.media)))
+                                    str(path.join(conf.library_path, 'media', self.media['file_name'])))
 
         self.player.start()
 
@@ -67,14 +83,15 @@ class VideoCue(Cue):
         queue.put(   QueueOSCData(  'add', 
                                     self.osc_route, 
                                     conf.node_conf['osc_dest_host'], 
-                                    conf.players_port_index['video'],
-                                    conf.players_port_index['video'] + 1, 
+                                    self.player.port,
+                                    self.player.port + 1, 
                                     OSC_VIDEOPLAYER_CONF))
 
-        conf.players_port_index['video'] = conf.players_port_index['video'] + 2
-
-        self.armed = True
+        self.loaded = True
 
     def disarm(self, cm, queue):
-        self.armed = False
+        self.player.kill()
+        cm.osc_port_index['used'].pop(self.player.port)
+        del self.player
+        self.loaded = False
 

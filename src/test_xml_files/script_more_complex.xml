@@ -37,7 +37,7 @@
             </ui_properties>
             <contents>
                 <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789002</uuid>
                     <id>2</id>
                     <name>Generic cue id 2</name>
                     <description>Generic cue desc id 2</description>
@@ -64,7 +64,7 @@
                     </ui_properties>
                 </Cue>
                 <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789003</uuid>
                     <id>3</id>
                     <name>Generic cue id 3</name>
                     <description>Generic cue desc id 3</description>
@@ -91,7 +91,7 @@
                     </ui_properties>
                 </Cue>
                 <AudioCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789004</uuid>
                     <id>4</id>
                     <name>Audio cue id 4</name>
                     <description>Audio cue desc id 4</description>
@@ -130,7 +130,7 @@
                     </outputs>
                 </AudioCue>
                 <DmxCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789005</uuid>
                     <id>5</id>
                     <name>Dmx cue id 5</name>
                     <description>Dmx cue desc id 5</description>
@@ -162,7 +162,7 @@
                     <fadeout_time>0</fadeout_time>
                 </DmxCue>
                 <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789006</uuid>
                     <id>6</id>
                     <name>Generic cue id 6</name>
                     <description>Generic cue desc id 6</description>
@@ -189,7 +189,7 @@
                     </ui_properties>
                 </Cue>
                 <CueList>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789007</uuid>
                     <id>7</id>
                     <name>Cuelist id 7</name>
                     <description>Cuelist desc id 7</description>
@@ -216,7 +216,7 @@
                     </ui_properties>
                     <contents>
                         <AudioCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                            <uuid>12345678-aaaa-aaaa-aaaa-123456789008</uuid>
                             <id>8</id>
                             <name>Audio cue id 8</name>
                             <description>Audio cue desc id 8</description>
@@ -257,7 +257,7 @@
                     </contents>
                 </CueList>
                 <CueList>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789009</uuid>
                     <id>9</id>
                     <name>Cuelist id 9</name>
                     <description>Cuelist desc id 9</description>
@@ -284,7 +284,7 @@
                     </ui_properties>
                     <contents>
                         <AudioCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                            <uuid>12345678-aaaa-aaaa-aaaa-123456789010</uuid>
                             <id>10</id>
                             <name>Audio cue id 10</name>
                             <description>Audio cue desc id 10</description>
@@ -323,7 +323,7 @@
                             </outputs>
                         </AudioCue>
                         <VideoCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                            <uuid>12345678-aaaa-aaaa-aaaa-123456789011</uuid>
                             <id>11</id>
                             <name>Video cue id 11</name>
                             <description>Video cue desc id 11</description>
@@ -386,10 +386,7 @@
                     <description>Audio cue desc id 12</description>
                     <disabled>false</disabled>
                     <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
+                    <timecode>false</timecode>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>00:00:00:00</CTimecode>
@@ -419,16 +416,13 @@
                     </outputs>
                 </AudioCue>
                 <VideoCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789013</uuid>
                     <id>13</id>
                     <name>Video cue id 13</name>
                     <description>Video cue desc id 13</description>
                     <disabled>false</disabled>
                     <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
+                    <timecode>false</timecode>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>00:00:00:00</CTimecode>

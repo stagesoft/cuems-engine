@@ -10,22 +10,20 @@
             <oscquery_out_port>7701</oscquery_out_port>
             <websocket_port>9092</websocket_port>
             <mtc_port>Midi Through Port-0</mtc_port>
+            <osc_in_port_base>7710</osc_in_port_base>
             <videoplayer>
                 <path>/usr/bin/xjadeo</path>
                 <args>--no-splash --no-initial-sync --quiet --no-letterbox --midi-driver alsa-seq --midifps 0 --ignore-file-offset</args>
-                <osc_in_port_base>7710</osc_in_port_base>
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
                 <path>/usr/local/bin/audioplayer-cuems</path>
                 <args></args>
-                <osc_in_port_base>7730</osc_in_port_base>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>
                 <path>/usr/local/bin/dmxplayer-cuems</path>
                 <args></args>
-                <osc_in_port_base>7740</osc_in_port_base>
                 <universes>1</universes>
             </dmxplayer>
         </node>

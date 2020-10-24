@@ -9,8 +9,13 @@ import time
 
 
 class VideoPlayer(Thread):
-    def __init__(self, port, monitor_id, path, args, media):
-        self.port = port
+    def __init__(self, port_index, monitor_id, path, args, media):
+        self.port = port_index['start']
+        while self.port in port_index['used']:
+            self.port += 2
+
+        port_index['used'].append(self.port)
+            
         self.stdout = None
         self.stderr = None
         self.monitor_id = monitor_id
