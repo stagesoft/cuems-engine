@@ -7,13 +7,17 @@ from .log import logger
 PARSER_SUFFIX = 'XmlBuilder'
 GENERIC_BUILDER = 'GenericCueXmlBuilder'
 
+SCHEMA_INSTANCE_URI = 'http://www.w3.org/2001/XMLSchema-instance'
+
+
 class XmlBuilder():
-    def __init__(self, _object, xml_tree = None, namespace='http://stagelab.net/cuems', xsd_path='/etc/cuems/script.xsd'):
+    def __init__(self, _object, namespace, xsd_path, xml_tree = None,):
         self._object = _object
         self.xml_tree = xml_tree
         self.class_name = type(_object).__name__
         self.xsd_path = xsd_path
         self.namespace =  namespace
+        ET.register_namespace(next(iter(self.namespace)), next(iter(self.namespace.values())))
 
     def get_builder_class(self, _object):
         object_class_name = type(_object).__name__
@@ -26,17 +30,20 @@ class XmlBuilder():
         return builder_class
     
     def build(self):
-        self.xml_tree = ET.Element('CuemsProject')
-        self.xml_tree.tag = "cms" + ":" + self.xml_tree.tag
-        xmlns_uris_dict = {'cms': self.namespace, 'xsi' : 'http://www.w3.org/2001/XMLSchema-instance'}
-        for prefix, uri in xmlns_uris_dict.items():
-            self.xml_tree.attrib['xmlns:' + prefix] = uri
-        self.xml_tree.attrib['xsi:schemaLocation'] = self.namespace + " " + self.xsd_path
+
+        xml_root = ET.Element(f'{{{next(iter(self.namespace.values()))}}}CuemsProject')
+        xml_root.attrib= {f'{{{SCHEMA_INSTANCE_URI}}}schemaLocation': next(iter(self.namespace.values())) + " " + self.xsd_path}   
         builder_class = self.get_builder_class(self._object)
-        self.xml_tree = builder_class(self._object, xml_tree = self.xml_tree).build()
+        self.xml_tree = builder_class(self._object, xml_tree = xml_root).build()
+        
+        self.xml_tree = ET.ElementTree(self.xml_tree)
         return self.xml_tree
 
 class CuemsScriptXmlBuilder(XmlBuilder):
+    def __init__(self, _object, xml_tree):
+        self._object = _object
+        self.xml_tree = xml_tree
+        self.class_name = type(_object).__name__
 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -53,7 +60,7 @@ class CuemsScriptXmlBuilder(XmlBuilder):
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
         return self.xml_tree
 
-class CueListXmlBuilder(XmlBuilder):
+class CueListXmlBuilder(CuemsScriptXmlBuilder):
 
     
     def build(self):
@@ -70,7 +77,7 @@ class CueListXmlBuilder(XmlBuilder):
         return self.xml_tree
     
         
-class GenericCueXmlBuilder(XmlBuilder):
+class GenericCueXmlBuilder(CuemsScriptXmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -83,7 +90,7 @@ class GenericCueXmlBuilder(XmlBuilder):
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
         return self.xml_tree
 
-class DmxSceneXmlBuilder(XmlBuilder):
+class DmxSceneXmlBuilder(CuemsScriptXmlBuilder):
  
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -94,7 +101,7 @@ class DmxSceneXmlBuilder(XmlBuilder):
             
         return self.xml_tree
 
-class DmxUniverseXmlBuilder(XmlBuilder):
+class DmxUniverseXmlBuilder(CuemsScriptXmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, type(self._object[1]).__name__, id=str(self._object[0]))
@@ -104,13 +111,13 @@ class DmxUniverseXmlBuilder(XmlBuilder):
             sub_object_element = builder_class(channel, xml_tree = cue_element).build()
         return self.xml_tree
     
-class DmxChannelXmlBuilder(XmlBuilder):
+class DmxChannelXmlBuilder(CuemsScriptXmlBuilder):
     
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, type(self._object[1]).__name__, id=str(self._object[0]))
         cue_element.text = str(self._object[1])
 
-class GenericSubObjectXmlBuilder(XmlBuilder):
+class GenericSubObjectXmlBuilder(CuemsScriptXmlBuilder):
         
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -120,7 +127,7 @@ class GenericSubObjectXmlBuilder(XmlBuilder):
 class CTimecodeXmlBuilder(GenericSubObjectXmlBuilder):
     pass
 
-class CueOutputsXmlBuilder(XmlBuilder):
+class CueOutputsXmlBuilder(CuemsScriptXmlBuilder):
 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)

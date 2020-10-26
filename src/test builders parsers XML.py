@@ -36,9 +36,8 @@ script.name = "Test Script"
 print('OBJECT:')
 print(script)
 
-xml_data = XmlBuilder(script).build()
+xml_data = XmlBuilder(script, {'cms':'http://stagelab.net/cuems'}, '/etc/cuems/script.xsd').build()
 
-print(ET.tostring(xml_data))
 
 writer = XmlWriter(schema = '/home/ion/src/cuems/python/cuems-engine/src/cuems/cues.xsd', xmlfile = '/home/ion/src/cuems/python/cuems-engine/src/cuems/cues.xml')
 
