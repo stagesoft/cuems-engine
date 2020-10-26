@@ -3,6 +3,7 @@ from pyossia import ossia
 from .Cue import Cue
 from .VideoPlayer import VideoPlayer
 from .OssiaServer import QueueOSCData
+from .log import logger
 class VideoCue(Cue):
     def __init__(self, time=None, init_dict=None):
       super().__init__(time, init_dict)
@@ -51,7 +52,12 @@ class VideoCue(Cue):
     def review_offset(self, timecode):
         return -(int(timecode.frames))
 
-    def arm(self, conf, queue):
+    def arm(self, conf, queue, init = False):
+        if self.disabled or (self.loaded != init and self.timecode == init):
+            if self.disabled and self.loaded:
+                self.disarm(conf, queue)
+            return False
+
         # Assign its own videoplayer object
         self.player = VideoPlayer(  conf.players_port_index, 
                                     self.outputs,
@@ -89,9 +95,20 @@ class VideoCue(Cue):
 
         self.loaded = True
 
+        return True
+
     def disarm(self, cm, queue):
-        self.player.kill()
-        cm.osc_port_index['used'].pop(self.player.port)
-        del self.player
-        self.loaded = False
+        if self.loaded is True:
+            try:
+                self.player.kill()
+                cm.osc_port_index['used'].pop(self.player.port)
+                del self.player
+            except:
+                logger.warning(f'Could not properly unload cue {self.uuid}')
+            
+            self.loaded = False
+
+            return self.uuid
+        else:
+            return None
 

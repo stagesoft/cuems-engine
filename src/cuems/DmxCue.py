@@ -4,7 +4,7 @@ from pyossia import ossia
 from .Cue import Cue
 from .DmxPlayer import DmxPlayer
 from .OssiaServer import QueueOSCData
-
+from .log import logger
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
 
@@ -73,12 +73,20 @@ class DmxCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, queue):
-        # Assign its own audioplayer object
-        self.player = DmxPlayer(    conf.players_port_index['dmx'], 
-                                    conf.node_conf['dmxplayer']['path'],
-                                    str(conf.node_conf['dmxplayer']['args']),
-                                    str(path.join(conf.library_path, 'media', self.media)))
+    def arm(self, conf, queue, init = False):
+        if self.disabled or (self.loaded != init and self.timecode == init):
+            if self.disabled and self.loaded:
+                self.disarm(conf, queue)
+            return False
+
+        try:
+            # Assign its own audioplayer object
+            self.player = DmxPlayer(    conf.players_port_index['dmx'], 
+                                        conf.node_conf['dmxplayer']['path'],
+                                        str(conf.node_conf['dmxplayer']['args']),
+                                        str(path.join(conf.library_path, 'media', self.media)))
+        except Exception as e:
+            raise e
 
         self.player.start()
 
@@ -106,9 +114,22 @@ class DmxCue(Cue):
         conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
 
         self.loaded = True
+        return True
 
     def disarm(self, cm, queue):
-        self.loaded = False
+        if self.loaded is True:
+            try:
+                self.player.kill()
+                cm.osc_port_index['used'].pop(self.player.port)
+                del self.player
+            except:
+                logger.warning(f'Could not properly unload cue {self.uuid}')
+            
+            self.loaded = False
+
+            return self.uuid
+        else:
+            return None
 
     @property
     def scene(self):

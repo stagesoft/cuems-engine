@@ -164,3 +164,19 @@ class Cue(dict):
 
         else:
             super().__setitem__(key, value)
+
+    def arm(self, conf, queue, init = False):
+        if self.disabled != True and self.loaded == init:
+            self.loaded = True
+
+            return self.uuid
+        else:
+            return None
+
+    def disarm(self, conf, queue):
+        if self.loaded is True:
+            self.loaded = False
+
+            return self.uuid
+        else:
+            return None

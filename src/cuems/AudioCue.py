@@ -5,6 +5,7 @@ from pyossia import ossia
 from .Cue import Cue
 from .AudioPlayer import AudioPlayer
 from .OssiaServer import QueueOSCData
+from .log import logger
 
 class AudioCue(Cue):
     def __init__(self, time=None, init_dict=None):
@@ -62,7 +63,16 @@ class AudioCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, queue):
+    def init_arm(self, conf, queue):
+        if self.loaded is True and self.disabled is not True:
+            self.arm(conf, queue)
+
+    def arm(self, conf, queue, init = False):
+        if self.disabled or (self.loaded != init and self.timecode == init):
+            if self.disabled and self.loaded:
+                self.disarm(conf, queue)
+            return False
+
         # Assign its own audioplayer object
         try:
             self.player = AudioPlayer(  conf.players_port_index, 
@@ -98,10 +108,20 @@ class AudioCue(Cue):
                                     OSC_AUDIOPLAYER_CONF))
 
         self.loaded = True
+        return True
 
     def disarm(self, cm, queue):
-        self.player.kill()
-        cm.osc_port_index['used'].pop(self.player.port)
-        del self.player
-        self.loaded = False
+        if self.loaded is True:
+            try:
+                self.player.kill()
+                cm.osc_port_index['used'].pop(self.player.port)
+                del self.player
+            except:
+                logger.warning(f'Could not properly unload cue {self.uuid}')
+            
+            self.loaded = False
+
+            return True
+        else:
+            return False
 

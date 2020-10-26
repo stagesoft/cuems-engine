@@ -60,7 +60,27 @@ class CueList(Cue):
         
         return None
 
-    def arm(self, conf, queue):
+    def arm(self, conf, queue, init = False):
+        if self.disabled != True and (self.loaded == init or self.timecode != init):
+            return_list = {}
+
+            for item in self.contents:
+                # We arm the item if :
+                # - is not disabled
+                # AND
+                # - is loaded at init or is not really loaded or it is forced to load
+                if item.disabled != True and item.loaded == init:
+                    return_list += item.arm(conf, queue)
+
+            return return_list
+        else:
+            return None
+
+    def disarm(self, conf, queue):
+        return_list = {}
+
         for item in self.contents:
-            if item.timecode == False:
-                item.arm(conf, queue)
+            if item.loaded == True:
+                return_list += item.arm(conf, queue)
+
+        return return_list

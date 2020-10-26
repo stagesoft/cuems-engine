@@ -108,7 +108,7 @@ class CuemsEngine():
         # Initial OSC nodes to tell ossia to configure
         OSC_ENGINE_CONF = { '/engine' : [ossia.ValueType.Impulse, None],
                             '/engine/command' : [ossia.ValueType.Impulse, None],
-                            '/engine/command/load' : [ossia.ValueType.String, self.load_callback],
+                            '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
                             '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
                             '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
                             '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
@@ -150,6 +150,8 @@ class CuemsEngine():
     # Ordered stopping
     def stop_all_threads(self):
         self.stop_requested = True
+
+        self.disarm_all()
 
         try:
             libmtcmaster.MTCSender_release(self.mtcmaster)
@@ -260,7 +262,7 @@ class CuemsEngine():
 
     ########################################################
     # OSC messages handlers
-    def load_callback(self, **kwargs):
+    def load_project_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
         try:
             self.cm.load_project_mappings(kwargs["value"])
@@ -282,7 +284,7 @@ class CuemsEngine():
         except FileNotFoundError:
             logger.error('Project script file not found')
 
-        self.process_script()
+        self.init_script_process()
 
         # We directly start the MTC! we are on running mode, right now
         libmtcmaster.MTCSender_play(self.mtcmaster)
@@ -359,45 +361,27 @@ class CuemsEngine():
 
     ########################################################
     # Script treating methods
-    def process_script(self):
-        #######################################
-        # Floating cues preparation
-        logger.info('Arming:')
+    def init_script_process(self):
+        logger.info('Initial arming:')
         try:
             for item in self.script.cuelist.contents:
                 '''Each item in the floating list must be prepared when the script
                 is just loaded to allow the user to play any of those cues, so...'''
-                if item.timecode == False:
-                    item.arm(self.cm, self.ossia_queue)
+                armed = item.arm(self.cm, self.ossia_queue, init = True)
+                if armed == True:
+                    self.armedcues.append(item)
         except Exception as e:
             logger.error(f'Error arming cue : {e}')
             
+    def disarm_all(self):
+        for item in self.armedcues:
+            item.disarm(self.cm, self.ossia_queue)
+
+
     ########################################################
 
 # %%
 
-########################################################
-# Utilities
-def print_dict(d, depth = 0):
-    outstring = ''
-    formattabs = '\t' * depth
-    for k, v in d.items():
-        if isinstance(v, dict):
-            outstring += formattabs + f'{k} :\n'
-            outstring += print_dict(v, depth + 1)
-        elif isinstance(v, list):
-            outstring += formattabs + f'{k} :\n'
-            for elem in v:
-                if isinstance(elem, dict):
-                    outstring += print_dict(elem, depth + 1)
-                else:
-                    outstring += formattabs + v
-        else:
-            outstring += formattabs + f'{k} : {v}\n'
-
-    return outstring
-
-########################################################
 '''
 class RunningQueue():
     def __init__(self, main_flag, name, mtcmaster):
