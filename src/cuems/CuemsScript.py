@@ -16,10 +16,13 @@ class CuemsScript(dict):
         super().__setitem__('modified', date)
         super().__setitem__('cuelist', cuelist)
         
-        
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
 
-        # self.timecode_list = timecode_list
-        # self.floating_list = floating_list
+    @uuid.setter
+    def uuid(self, uuid):
+        super().__setitem__('uuid', uuid)
 
     @property
     def name(self):
@@ -29,7 +32,30 @@ class CuemsScript(dict):
     def name(self, name):
         super().__setitem__('name', name)
 
-    
+    @property
+    def description(self):
+        return super().__getitem__('description')
+
+    @description.setter
+    def description(self, description):
+        super().__setitem__('description', description)
+
+    @property
+    def created(self):
+        return super().__getitem__('created')
+
+    @created.setter
+    def created(self, created):
+        super().__setitem__('created', created)
+
+    @property
+    def modified(self):
+        return super().__getitem__('modified')
+
+    @modified.setter
+    def modified(self, modified):
+        super().__setitem__('modified', modified)
+
     @property
     def cuelist(self):
         return super().__getitem__('cuelist')
@@ -41,16 +67,14 @@ class CuemsScript(dict):
         else:
             raise NotImplementedError
 
-
     def get_media(self):
-        
         media_dict = dict()
         if self.cuelist is not None:
             for cue in self.cuelist.contents:
                 if cue.media:
                     media_dict[cue.media] = type(cue)
 
-
         return media_dict
 
-        
+    def find(self, uuid):
+        return self.cuelist.find(uuid)

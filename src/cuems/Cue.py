@@ -22,64 +22,161 @@ class Cue(dict):
 
     @classmethod
     def from_dict(cls, init_dict):
-        return cls(init_dict =  init_dict)
+        return cls(init_dict = init_dict)
 
     @property
     def uuid(self):
         return super().__getitem__('uuid')
 
-    @property
-    def outputs(self):
-        return super().__getitem__('outputs')
-
-    @outputs.setter
-    def outputs(self, outputs):
-        super().__setitem__('outputs', Outputs(self, outputs).assign())
-    
-    @property
-    def time(self):
-        return super().__getitem__('time')
-
-    @time.setter #TODO: let te timecode object handle this
-    def time(self, time):
-        if isinstance(time, CTimecode):
-            super().__setitem__('time', time)
-        elif isinstance(time, (int, float)):
-            corrected_seconds = CTimecode(start_seconds=time)
-            corrected_seconds.frames = corrected_seconds.frames + 1
-            super().__setitem__('time', corrected_seconds) #TODO: discuss this
-        elif isinstance(time, str):
-            super().__setitem__('time', CTimecode(time))
-        elif isinstance(time, dict):
-            dict_timecode = time.pop('CTimecode', None)
-            if dict_timecode is None:
-                super().__setitem__('time', None)
-            else:
-                super().__setitem__('time', CTimecode(dict_timecode))
-        elif time == None:
-            super().__setitem__('time', None)
-        else:
-            raise NotImplementedError #TODO: disscuss raised error
+    @uuid.setter
+    def uuid(self, uuid):
+        super().__setitem__('uuid', uuid)
 
     @property
-    def media(self):
-        try:
-            return super().__getitem__('media')
-        except KeyError:
-            logger.debug('{} {} with no media'.format(type(self), self.uuid))
+    def id(self):
+        return super().__getitem__('id')
 
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
+    @id.setter
+    def id(self, id):
+        super().__setitem__('id', id)
+
+    @property
+    def name(self):
+        return super().__getitem__('name')
+
+    @name.setter
+    def name(self, name):
+        super().__setitem__('name', name)
+
+    @property
+    def description(self):
+        return super().__getitem__('description')
+
+    @description.setter
+    def description(self, description):
+        super().__setitem__('description', description)
+
+    @property
+    def disabled(self):
+        return super().__getitem__('disabled')
+
+    @disabled.setter
+    def disabled(self, disabled):
+        super().__setitem__('disabled', disabled)
+
+    @property
+    def loaded(self):
+        return super().__getitem__('loaded')
+
+    @loaded.setter
+    def loaded(self, loaded):
+        super().__setitem__('loaded', loaded)
+
+    @property
+    def timecode(self):
+        return super().__getitem__('timecode')
+
+    @timecode.setter
+    def timecode(self, timecode):
+        super().__setitem__('timecode', timecode)
+
+    @property
+    def offset(self):
+        return super().__getitem__('offset')
+
+    @offset.setter
+    def offset(self, offset):
+        super().__setitem__('offset', offset)
+
+    @property
+    def loop(self):
+        return super().__getitem__('loop')
+
+    @loop.setter
+    def loop(self, loop):
+        super().__setitem__('loop', loop)
+
+    @property
+    def prewait(self):
+        return super().__getitem__('prewait')
+
+    @prewait.setter
+    def prewait(self, prewait):
+        super().__setitem__('prewait', prewait)
+
+    @property
+    def postwait(self):
+        return super().__getitem__('postwait')
+
+    @postwait.setter
+    def postwait(self, postwait):
+        super().__setitem__('postwait', postwait)
+
+    @property
+    def post_action(self):
+        return super().__getitem__('post_action')
+
+    @post_action.setter
+    def posta_ction(self, post_action):
+        super().__setitem__('post_action', post_action)
+
+    @property
+    def target(self):
+        return super().__getitem__('target')
+
+    @target.setter
+    def target(self, target):
+        super().__setitem__('target', target)
+
+    @property
+    def ui_properties(self):
+        return super().__getitem__('ui_properties')
+
+    @ui_properties.setter
+    def ui_properties(self, ui_properties):
+        super().__setitem__('ui_properties', ui_properties)
 
     def type(self):
         return type(self)
 
-
     def __setitem__(self, key, value):
-        if key == 'time':
-            self.time = value
+        if key in ['offset', 'prewait', 'postwait']:
+            if isinstance(value, CTimecode):
+                ctime_value = value
+            else:
+                if isinstance(value, (int, float)):
+                    ctime_value = CTimecode(start_seconds = value)
+                    ctime_value.frames = ctime_value.frames + 1
+                elif isinstance(value, str):
+                    ctime_value = CTimecode(value)
+                elif isinstance(value, dict):
+                    dict_timecode = value.pop('CTimecode', None)
+                    if dict_timecode is None:
+                        ctime_value = CTimecode()
+                    else:
+                        ctime_value = CTimecode(dict_timecode)
+                elif value == None:
+                    ctime_value = CTimecode()
+
+            super().__setitem__(key, ctime_value)
+
+            '''self[key] = value'''
+
         else:
             super().__setitem__(key, value)
 
+    def arm(self, conf, queue, init = False):
+        if self.disabled != True and self.loaded == init:
+            self.loaded = True
 
+            return self.uuid
+        else:
+            return None
+
+    def disarm(self, conf, queue):
+        if self.loaded is True:
+            self.loaded = False
+
+            return self.uuid
+        else:
+            return None

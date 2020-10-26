@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cms:CuemsSettings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/settings.xsd">
+    <Settings>
+        <library_path>/home/calamar/cuems_library</library_path>
+        <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
+        <database_name>project-manager.db</database_name>
+        <node id="0" master="True">
+            <osc_dest_host>localhost</osc_dest_host>
+            <oscquery_port>7700</oscquery_port>
+            <oscquery_out_port>7701</oscquery_out_port>
+            <websocket_port>9092</websocket_port>
+            <mtc_port>Midi Through Port-0</mtc_port>
+            <osc_in_port_base>7710</osc_in_port_base>
+            <videoplayer>
+                <path>/usr/bin/xjadeo</path>
+                <args>--no-splash --no-initial-sync --quiet --no-letterbox --midi-driver alsa-seq --midifps 0 --ignore-file-offset</args>
+                <outputs>2</outputs>
+            </videoplayer>
+            <audioplayer>
+                <path>/usr/local/bin/audioplayer-cuems</path>
+                <args></args>
+                <audio_cards>1</audio_cards>
+            </audioplayer>
+            <dmxplayer>
+                <path>/usr/local/bin/dmxplayer-cuems</path>
+                <args></args>
+                <universes>1</universes>
+            </dmxplayer>
+        </node>
+    </Settings>
+</cms:CuemsSettings>

@@ -1,0 +1,374 @@
+<?xml version="1.1" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning" vc:minVersion="1.1" targetNamespace="http://stagelab.net/cuems" xmlns:cms="http://stagelab.net/cuems">
+  <!-- The main capsule to make it a whole, named CueMs -->
+  <!-- Our main object the script-->
+  <xs:annotation>
+    <xs:appinfo>StageLab CueMs v.0.1</xs:appinfo>
+    <xs:appinfo>https://github.com/stagesoft</xs:appinfo>
+    <xs:documentation xml:lang="en">
+        This schema defines the data structure for a script xml file to operate on
+        the CueMs system. https://www.stagelab.net/
+    </xs:documentation>
+  </xs:annotation>
+
+  <!-- Main and lonsome element in our schema containing all the others -->
+  <xs:element name="CuemsProject">
+    <xs:complexType>
+      <xs:sequence>
+        <!-- And our lonely script element, there should be just one per project -->
+        <xs:element name="CuemsScript">
+          <xs:complexType>
+            <!-- Which is a sequence of one of each of these objects -->
+            <xs:sequence minOccurs="1" maxOccurs="1">
+              <!-- The uuid, TODO specify the uuid format in a type -->
+              <xs:element name="uuid" type="cms:UuidType" />
+              <!-- The name, mainly a string, we can check lengths here too if desired -->
+              <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
+              <!-- Long description of the script -->
+              <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
+              <!-- The date, Todo specify the date formant in a type-->
+              <xs:element name="created" type="cms:DateType" />
+              <xs:element name="modified" type="cms:DateType" />
+              <!-- The root cuelist of our project, mainly a cuelist at the root -->
+              <xs:element name="CueList" type="cms:CueListType" />
+            </xs:sequence>
+            <xs:assert test="modified &gt;= created" />
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- UUID string restrictions specs -->
+  <xs:simpleType name="UuidType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|" />
+      <xs:maxLength value="36" />
+      <xs:minLength value="36" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Target UUID string restrictions specs -->
+  <xs:simpleType name="TargetType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})|()" />
+      <xs:maxLength value="36" />
+      <xs:minLength value="0" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Name text string restrictions -->
+  <xs:simpleType name="NameStringType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="3" />
+      <xs:maxLength value="60" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Description text string restrictions -->
+  <xs:simpleType name="DescriptionStringType">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="0" />
+      <xs:maxLength value="255" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Our cuelist type -->
+  <xs:complexType name="CueListType">
+    <xs:complexContent>
+      <!-- Which is an extension of the base cue type -->
+      <xs:extension base="cms:CueType">
+        <xs:sequence>
+          <xs:element name="contents" type="cms:CueListContentsType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <!-- Our generic cue type -->
+  <xs:complexType name="CueType">
+    <xs:complexContent>
+      <xs:extension base="cms:CommonPropertiesType"></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="CommonPropertiesType">
+    <xs:sequence>
+      <!-- Its own uuid -->
+      <xs:element name="uuid" type="cms:UuidType" />
+      <xs:element name="id" type="xs:string" />
+      <xs:element name="name" type="cms:NameStringType" />
+      <xs:element name="description" type="cms:DescriptionStringType" />
+      <!-- A flag to disable to cue -->
+      <xs:element name="disabled" type="xs:boolean" />
+      <!-- A flag to indicate auto arming -->
+      <xs:element name="loaded" type="xs:boolean" />
+      <!-- Timecode behaviour flag -->
+      <xs:element name="timecode" type="xs:boolean" />
+      <!-- Its time mark -->
+      <xs:element name="offset" type="cms:CTimecodeType" minOccurs="0" />
+      <xs:element name="loop" type="cms:LoopType" /> <!-- -1/0/n -->
+      <!-- Execution options -->
+      <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
+      <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
+      <xs:element name="post_action" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
+      <xs:element name="ui_properties" type="cms:UiPropertiesType" />
+    </xs:sequence>
+    <xs:assert test="(timecode = xs:boolean('true') and exists(offset)) or (timecode = xs:boolean('false') and not(exists(offset)))" />
+  </xs:complexType>
+
+  <!-- Our cuelist contents type -->
+  <xs:complexType name="CueListContentsType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <!-- Can have any other cuelists, recursively -->
+      <xs:element name="CueList" type="cms:CueListType" />
+      <!-- Can have any cues -->
+      <xs:element name="Cue" type="cms:CueType" />
+      <!-- Can be also specific type cues -->
+      <xs:element name="AudioCue" type="cms:AudioCueType" />
+      <xs:element name="DmxCue" type="cms:DmxCueType" />
+      <xs:element name="VideoCue" type="cms:VideoCueType" />
+      <xs:element name="ActionCue" type="cms:ActionCueType" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:simpleType name="PostActionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="pause" />
+      <xs:enumeration value="go" />
+      <xs:enumeration value="go_at_end" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="UiPropertiesType">
+    <xs:sequence>
+      <xs:element name="timeline_position" type="cms:Coordinates" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="Coordinates">
+    <xs:sequence>
+      <xs:element name="x" type="xs:integer" />
+      <xs:element name="y" type="xs:integer" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Our audio cue type-->
+  <xs:complexType name="AudioCueType">
+    <xs:complexContent>
+      <xs:extension base="cms:CueType">
+        <xs:sequence>
+          <!-- A media file path which can be none -->
+          <xs:element name="media" type="cms:MediaType" />
+          <!-- A master volume starting value -->
+          <xs:element name="master_vol" type="cms:PercentType" />
+          <!-- An outputs section -->
+          <xs:element name="outputs" type="cms:AudioCueOutputsType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="MediaType">
+    <xs:sequence>
+      <xs:element name="file_name" type="xs:string" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioCueOutputsType">
+    <!-- Specify n virtual audio outputs -->
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <!-- Output name -->
+      <xs:element name="output_name" type="cms:NameStringType" />
+      <!-- Output volume -->
+      <xs:element name="output_vol" type="cms:PercentType" />
+      <xs:element name="channels" type="cms:AudioChannelsType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioChannelsType">
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="channel" type="cms:AudioChannelType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioChannelType">
+    <xs:simpleContent>
+      <xs:extension base="cms:PercentType">
+        <xs:attribute name="id" type="xs:positiveInteger" />
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="VideoCueType">
+    <xs:complexContent>
+      <xs:extension base="cms:CueType">
+        <xs:sequence>
+          <!-- A video media file path which can be none -->
+          <xs:element name="media" type="cms:MediaType" />
+          <!-- An outputs section -->
+          <xs:element name="outputs" type="cms:VideoCueOutputsType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="VideoCueOutputsType">
+    <!-- Video outputs type -->
+    <!-- Specify n virtual video outputs -->
+    <xs:sequence minOccurs="1" maxOccurs="10">
+      <xs:element name="name" type="cms:NameStringType" />
+      <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="VideoOutputGeometryType">
+    <!-- Specs of the four corners of a media to display -->
+    <xs:sequence minOccurs="0" maxOccurs="1">
+      <xs:element name="x_scale" type="xs:float" />
+      <xs:element name="y_scale" type="xs:float" />
+      <xs:element name="corners" type="cms:VideoCornersType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="VideoCornersType">
+    <xs:sequence>
+      <xs:element name="top_left" type="cms:Coordinates" />
+      <xs:element name="top_right" type="cms:Coordinates" />
+      <xs:element name="bott_left" type="cms:Coordinates" />
+      <xs:element name="bott_right" type="cms:Coordinates" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DmxCueType">
+    <xs:complexContent>
+      <xs:extension base="cms:CueType">
+        <xs:sequence>
+          <!-- A dmx media file path which can be none -->
+          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="fadein_time" type="xs:integer" />
+          <xs:element name="fadeout_time" type="xs:integer" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <!-- Dmx scene type -->
+  <xs:complexType name="DmxSceneType">
+    <xs:sequence>
+      <xs:element name="uuid" type="xs:string" />
+      <xs:element name="name" type="cms:NameStringType" />
+      <xs:element name="description" type="cms:DescriptionStringType" />
+      <!-- We allow a max of 10 universes un a scene by now -->
+      <xs:element name="DmxUniverse" type="cms:DmxUniverseType">
+        <!-- They must be unique id's specs for the channels -->
+        <xs:unique name="unique_universe_number">
+          <xs:selector xpath="DmxUniverse" />
+          <xs:field xpath="@id" />
+        </xs:unique>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Dmx universe type -->
+  <xs:complexType name="DmxUniverseType">
+    <xs:sequence>
+      <xs:element name="id" type="xs:positiveInteger"></xs:element>
+      <!-- List contents (to make it a list in python) -->
+      <xs:element name="dmx_channels" type="cms:DmxUniverseContentsType">
+        <xs:unique name="unique_channel_number">
+          <xs:selector xpath="dmx_channel" />
+          <xs:field xpath="@id" />
+        </xs:unique>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:byte" />
+  </xs:complexType>
+
+  <!-- DMX allows a max of 512 different channels in a universe -->
+  <xs:complexType name="DmxUniverseContentsType">
+    <xs:sequence>
+      <xs:element name="dmx_channel" type="cms:DmxChannelType" minOccurs="0" maxOccurs="512">
+        <!-- They must be unique id's specs for the channels -->
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Dmx basic channel type -->
+  <xs:complexType name="DmxChannelType">
+    <xs:simpleContent>
+      <xs:extension base="xs:unsignedByte">
+        <xs:attribute name="id" type="cms:ChannelNumber" />
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:simpleType name="ChannelNumber">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0" />
+      <xs:maxInclusive value="511" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ActionCueType">
+    <xs:complexContent>
+      <xs:extension base="cms:CueType">
+        <xs:sequence>
+          <xs:element name="action_type" type="xs:string" minOccurs="0" />
+          <xs:element name="target" type="cms:TargetType" />
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <!-- 
+  <xs:simpleType name="BoolType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="True" />
+      <xs:enumeration value="False" />
+    </xs:restriction>
+  </xs:simpleType>
+  -->
+
+  <xs:simpleType name="DateType">
+    <xs:restriction base="xs:dateTime">
+      <xs:minInclusive value="2020-01-01T00:00:00"></xs:minInclusive>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TimecodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2}" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="CTimecodeType">
+    <!-- Can be a timecode field or an empty NoneType field -->
+    <xs:choice>
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+      <xs:element name="NoneType" type="cms:EmptyStringType" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:simpleType name="PercentType">
+    <!-- Integer from 0 to 100 -->
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0" />
+      <xs:maxInclusive value="100" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="EmptyStringType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="0"></xs:maxLength>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="LoopType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0" />
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

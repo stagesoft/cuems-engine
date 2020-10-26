@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- describing schema for sample xml -->
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
+    <xs:element name="CuemsProjectSettings">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="ProjectSettings">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="setting" minOccurs="0" maxOccurs="unbounded">
+                                <xs:complexType>
+                                    <xs:attribute name="name" type="cms:NonEmptyString"></xs:attribute>
+                                    <xs:attribute name="value" type="cms:NonEmptyString"></xs:attribute>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:simpleType name="NonEmptyString">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1" />
+            <xs:pattern value=".*[^\s].*" />
+        </xs:restriction>
+    </xs:simpleType>
+</xs:schema>

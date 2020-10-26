@@ -13,7 +13,6 @@ from .CTimecode import CTimecode
 from .log import logger
 
 class MtcListener(threading.Thread):
-    
     def __init__(self, step_callback=None, reset_callback=None, port=None):
         self.main_tc = CTimecode('0:0:0:0')
         self.__quarter_frames = [0,0,0,0,0,0,0,0]
@@ -22,9 +21,9 @@ class MtcListener(threading.Thread):
 
         self.step_callback = step_callback
         self.reset_callback = reset_callback
-        super().__init__()
-        self.daemon = False
-        threading.Thread.start(self)
+        super().__init__(name = 'mtclistener')
+        self.daemon = True
+        self.start()
 
 
     def timecode(self):
@@ -43,15 +42,18 @@ class MtcListener(threading.Thread):
             ports = mido.get_input_names() # pylint: disable=maybe-no-member
             mtc_ports = [s for s in ports if "mtc" in s.lower()]
             self.port_name = mtc_ports[-1] if mtc_ports else ports[-1]
-            logger.info ('Selected MIDI port: ' + self.port_name)
+            #logger.info ('Listener MIDI port: ' + self.port_name)
         else:
             self.port_name = port
-            print("hay port")
+            # print("hay port")
 
     def run(self):
-        port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member
+        self.port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member
 
         logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
+
+    def stop(self):
+        self.port.close()
 
     def __handle_message(self, message):
         if message.type == 'quarter_frame':

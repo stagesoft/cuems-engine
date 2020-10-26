@@ -16,7 +16,7 @@ c = Cue(33, {'type': 'virtual', 'loop': False})
 c2 = Cue(None, {'type': 'floating', 'loop': False})
 c3 = Cue(5, {'type': 'virtual', 'loop': False})
 ac = AudioCue(45, {'loop': False, 'channels': 2} )
-d_c = DmxCue(time=23, dmxscene={0:{0:10, 1:50}})
+d_c = DmxCue(time=23, scene={0:{0:10, 1:50}})
 
 print(c2)
 
