@@ -1,6 +1,3 @@
-""" For the moment it works with pip3 install xmlschema==1.1.2
- """
-
 import xmlschema
 from xmlschema.namespaces import XSI_NAMESPACE
 from xmlschema.etree import etree_element, lxml_etree_element, etree_register_namespace, \

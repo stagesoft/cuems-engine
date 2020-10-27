@@ -1,5 +1,5 @@
 
-from cuems.log import logger 
+from cuems.log import logger
 from cuems.cuems_editor.CuemsWsServer import CuemsWsServer
 
 from multiprocessing import Queue
