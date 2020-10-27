@@ -1,3 +1,4 @@
+from .log import logger
 from .CueList import CueList
 import uuid as uuid_module
 from .cuems_editor.CuemsUtils import date_now_iso_utc
@@ -71,8 +72,11 @@ class CuemsScript(dict):
         media_dict = dict()
         if self.cuelist is not None:
             for cue in self.cuelist.contents:
-                if cue.media:
-                    media_dict[cue.media] = type(cue)
+                try:
+                    if cue.media:
+                        media_dict[cue.media] = type(cue)
+                except KeyError:
+                    logger.debug('cue with no media')
 
         return media_dict
 

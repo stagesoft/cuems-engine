@@ -136,6 +136,14 @@ class Cue(dict):
     def ui_properties(self, ui_properties):
         super().__setitem__('ui_properties', ui_properties)
 
+    @property
+    def media(self):
+        return super().__getitem__('media')
+
+    @media.setter
+    def ui_properties(self, media):
+        super().__setitem__('media', media)
+
     def type(self):
         return type(self)
 

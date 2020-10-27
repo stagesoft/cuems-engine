@@ -19,7 +19,7 @@
         <xs:element name="CuemsScript">
           <xs:complexType>
             <!-- Which is a sequence of one of each of these objects -->
-            <xs:sequence minOccurs="1" maxOccurs="1">
+            <xs:all>
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
@@ -31,7 +31,7 @@
               <xs:element name="modified" type="cms:DateType" />
               <!-- The root cuelist of our project, mainly a cuelist at the root -->
               <xs:element name="CueList" type="cms:CueListType" />
-            </xs:sequence>
+            </xs:all>
             <xs:assert test="modified &gt;= created" />
           </xs:complexType>
         </xs:element>
@@ -93,18 +93,18 @@
   </xs:complexType>
 
   <xs:complexType name="CommonPropertiesType">
-    <xs:sequence>
+    <xs:all minOccurs="0">
       <!-- Its own uuid -->
       <xs:element name="uuid" type="cms:UuidType" />
       <xs:element name="id" type="xs:string" />
       <xs:element name="name" type="cms:NameStringType" />
       <xs:element name="description" type="cms:DescriptionStringType" />
       <!-- A flag to disable to cue -->
-      <xs:element name="disabled" type="xs:boolean" />
+      <xs:element name="disabled" type="cms:BoolType" />
       <!-- A flag to indicate auto arming -->
-      <xs:element name="loaded" type="xs:boolean" />
+      <xs:element name="loaded" type="cms:BoolType" />
       <!-- Timecode behaviour flag -->
-      <xs:element name="timecode" type="xs:boolean" />
+      <xs:element name="timecode" type="cms:BoolType" />
       <!-- Its time mark -->
       <xs:element name="offset" type="cms:CTimecodeType" minOccurs="0" />
       <xs:element name="loop" type="cms:LoopType" /> <!-- -1/0/n -->
@@ -114,8 +114,8 @@
       <xs:element name="post_action" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="ui_properties" type="cms:UiPropertiesType" />
-    </xs:sequence>
-    <xs:assert test="(timecode = xs:boolean('true') and exists(offset)) or (timecode = xs:boolean('false') and not(exists(offset)))" />
+    </xs:all>
+    <xs:assert test="(timecode = cms:BoolType('True') and exists(offset)) or (timecode = cms:BoolType('False') and not(exists(offset)))" />
   </xs:complexType>
 
   <!-- Our cuelist contents type -->
@@ -316,20 +316,20 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <xs:element name="action_type" type="xs:string" minOccurs="0" />
-          <xs:element name="target" type="cms:TargetType" />
+          <xs:element name="action_target" type="cms:TargetType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
 
-  <!-- 
+  
   <xs:simpleType name="BoolType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="True" />
       <xs:enumeration value="False" />
     </xs:restriction>
   </xs:simpleType>
-  -->
+  
 
   <xs:simpleType name="DateType">
     <xs:restriction base="xs:dateTime">

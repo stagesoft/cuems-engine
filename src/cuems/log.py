@@ -3,7 +3,7 @@ import logging
 import logging.handlers
 
 logger = logging.getLogger() # no name = root logger
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 handler = logging.handlers.SysLogHandler(address = '/dev/log', facility = 'local0')
