@@ -6,16 +6,10 @@ from .CTimecode import CTimecode
 class CueList(Cue):
     
     def __init__(self, contents=[], offset=None):
+        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "ui_properties": "", "contents": []}
+        super().__init__(init_dict=empty_keys)
         super().__setitem__('uuid', str(uuid_module.uuid1()))
-        if offset is not None:
-            super().__setitem__('timecode', True)
-            if  isinstance(offset, CTimecode):
-                super().__setitem__('offset', offset)
-            else:
-                super().__setitem__('offset', CTimecode(start_timecode=offset))
-        else:
-            super().__setitem__('timecode', False)
-
+        
         if isinstance(contents, list):
             super().__setitem__('contents', contents)
         else:

@@ -23,6 +23,7 @@
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
+              <xs:element name="unix_name" type="cms:NameStringType" />
               <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
               <!-- Long description of the script -->
               <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
@@ -93,29 +94,28 @@
   </xs:complexType>
 
   <xs:complexType name="CommonPropertiesType">
-    <xs:all minOccurs="0">
+    <xs:sequence>
       <!-- Its own uuid -->
       <xs:element name="uuid" type="cms:UuidType" />
       <xs:element name="id" type="xs:string" />
       <xs:element name="name" type="cms:NameStringType" />
       <xs:element name="description" type="cms:DescriptionStringType" />
       <!-- A flag to disable to cue -->
-      <xs:element name="disabled" type="cms:BoolType" />
+      <xs:element name="enabled" type="cms:BoolType" />
       <!-- A flag to indicate auto arming -->
       <xs:element name="loaded" type="cms:BoolType" />
       <!-- Timecode behaviour flag -->
       <xs:element name="timecode" type="cms:BoolType" />
       <!-- Its time mark -->
-      <xs:element name="offset" type="cms:CTimecodeType" minOccurs="0" />
+      <xs:element name="offset" type="cms:CTimecodeType" />
       <xs:element name="loop" type="cms:LoopType" /> <!-- -1/0/n -->
       <!-- Execution options -->
       <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
-      <xs:element name="post_action" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="post_go" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="ui_properties" type="cms:UiPropertiesType" />
-    </xs:all>
-    <xs:assert test="(timecode = cms:BoolType('True') and exists(offset)) or (timecode = cms:BoolType('False') and not(exists(offset)))" />
+    </xs:sequence>
   </xs:complexType>
 
   <!-- Our cuelist contents type -->
@@ -142,9 +142,9 @@
   </xs:simpleType>
 
   <xs:complexType name="UiPropertiesType">
-    <xs:sequence>
+    <xs:all minOccurs="0">
       <xs:element name="timeline_position" type="cms:Coordinates" />
-    </xs:sequence>
+    </xs:all>
   </xs:complexType>
 
   <xs:complexType name="Coordinates">
@@ -345,9 +345,8 @@
 
   <xs:complexType name="CTimecodeType">
     <!-- Can be a timecode field or an empty NoneType field -->
-    <xs:choice>
+    <xs:choice minOccurs="0">
       <xs:element name="CTimecode" type="cms:TimecodeType" />
-      <xs:element name="NoneType" type="cms:EmptyStringType" />
     </xs:choice>
   </xs:complexType>
 

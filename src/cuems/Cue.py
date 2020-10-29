@@ -8,15 +8,6 @@ class Cue(dict):
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
         
-        if offset is not None:
-            super().__setitem__('timecode', True)
-            if  isinstance(offset, CTimecode):
-                super().__setitem__('offset', offset)
-            else:
-                super().__setitem__('offset', CTimecode(start_seconds=offset))
-        else:
-            super().__setitem__('timecode', False)
-        
         if init_dict is not None:
             super().__init__(init_dict)
 
@@ -148,7 +139,7 @@ class Cue(dict):
         return type(self)
 
     def __setitem__(self, key, value):
-        if key in ['offset', 'prewait', 'postwait']:
+        if (key in ['offset', 'prewait', 'postwait']) and (value not in (None, "")):
             if isinstance(value, CTimecode):
                 ctime_value = value
             else:
@@ -163,8 +154,6 @@ class Cue(dict):
                         ctime_value = CTimecode()
                     else:
                         ctime_value = CTimecode(dict_timecode)
-                elif value == None:
-                    ctime_value = CTimecode()
 
             super().__setitem__(key, ctime_value)
 

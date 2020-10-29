@@ -54,6 +54,8 @@ class CuemsScriptXmlBuilder(XmlBuilder):
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
+            elif isinstance(value, (type(None))):
+                cue_subelement = ET.SubElement(cue_element, str(key))
             else:
                 cue_subelement = cue_element
                 builder_class = self.get_builder_class(value)
@@ -69,10 +71,16 @@ class CueListXmlBuilder(CuemsScriptXmlBuilder):
             cue_subelement = ET.SubElement(cuelist_element, str(key))          
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement.text = str(value)
-            else:
+            elif isinstance(value, (type(None))):
+                pass
+            elif isinstance(value, list):
                 for cuelist_item in value:
                     builder_class = self.get_builder_class(cuelist_item)
                     sub_object_element = builder_class(cuelist_item, xml_tree = cue_subelement).build()
+            else:
+                builder_class = self.get_builder_class(value)
+                sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
+                
 
         return self.xml_tree
     
@@ -85,6 +93,8 @@ class GenericCueXmlBuilder(CuemsScriptXmlBuilder):
             cue_subelement = ET.SubElement(cue_element, str(key))
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement.text = str(value)
+            elif isinstance(value, (type(None))):
+                pass
             else:
                 builder_class = self.get_builder_class(value)
                 sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
@@ -147,5 +157,5 @@ class AudioCueOutputsXmlBuilder(CueOutputsXmlBuilder):
 class DmxCueOutputsXmlBuilder(CueOutputsXmlBuilder):
     pass
     
-class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder):
+class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder): # TODO: clean, not need anymore? 
     pass
