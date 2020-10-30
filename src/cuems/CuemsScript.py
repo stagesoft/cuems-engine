@@ -76,11 +76,10 @@ class CuemsScript(dict):
         if (self.cuelist is not None) and (self.cuelist.contents is not None):
             for cue in self.cuelist.contents:
                 try:
-                    if cue.media:
-                        media_dict[cue.media] = type(cue)
+                    if cue['Media']:
+                        media_dict[cue['Media']['file_name']] = type(cue)
                 except KeyError:
                     logger.debug('cue with no media')
-
         return media_dict
 
     def find(self, uuid):

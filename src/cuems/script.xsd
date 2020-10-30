@@ -160,11 +160,11 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <!-- A master volume starting value -->
           <xs:element name="master_vol" type="cms:PercentType" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="cms:AudioCueOutputsType" />
+          <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
@@ -176,9 +176,18 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="OutputsType">
+    <!-- Specify n virtual audio outputs -->
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="AudioCueOutput" type="cms:AudioCueOutputsType" />
+      <xs:element name="VideoCueOutput" type="cms:VideoCueOutputsType" />
+
+    </xs:choice>
+  </xs:complexType>
+
   <xs:complexType name="AudioCueOutputsType">
     <!-- Specify n virtual audio outputs -->
-    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <!-- Output name -->
       <xs:element name="output_name" type="cms:NameStringType" />
       <!-- Output volume -->
@@ -188,7 +197,7 @@
   </xs:complexType>
 
   <xs:complexType name="AudioChannelsType">
-    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <xs:element name="channel" type="cms:AudioChannelType" />
     </xs:sequence>
   </xs:complexType>
@@ -196,7 +205,8 @@
   <xs:complexType name="AudioChannelType">
     <xs:simpleContent>
       <xs:extension base="cms:PercentType">
-        <xs:attribute name="id" type="xs:positiveInteger" />
+        <xs:attribute name="channel_num" type="xs:positiveInteger" />
+        <xs:attribute name="channel_vol" type="xs:positiveInteger" />
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>

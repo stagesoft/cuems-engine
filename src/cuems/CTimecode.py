@@ -7,7 +7,6 @@ class CTimecode(Timecode):
         if init_dict is not None:
             super().__init__(framerate, init_dict, start_seconds, frames)
         else:
-            print(start_seconds)
             if start_seconds == 0:
                 start_seconds = None
                 frames = 0

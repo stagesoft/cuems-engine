@@ -79,8 +79,10 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                     except KeyError:
                         if xsd_child is None or has_single_group and xsd_child.is_single():
                             result_dict[name] = self.list([value]) if self.force_list else value
-                        else:
+                        elif xsd_child is not None and not has_single_group and not xsd_child.is_single():
                             result_dict = [{name:value}]
+                        else:
+                            result_dict[name] = self.list([value]) if self.force_list else value
                     else:
                         if isinstance(result, list_types) or not result:
                             result_dict.append({name:value})

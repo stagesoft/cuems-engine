@@ -1,5 +1,6 @@
 from .CTimecode import CTimecode
 from .Outputs import Outputs
+from .Media import Media
 from .log import logger
 import uuid as uuid_module
 
@@ -108,7 +109,7 @@ class Cue(dict):
         return super().__getitem__('post_action')
 
     @post_action.setter
-    def posta_ction(self, post_action):
+    def post_action(self, post_action):
         super().__setitem__('post_action', post_action)
 
     @property
@@ -132,7 +133,7 @@ class Cue(dict):
         return super().__getitem__('media')
 
     @media.setter
-    def ui_properties(self, media):
+    def media(self, media):
         super().__setitem__('media', media)
 
     def type(self):
@@ -156,8 +157,6 @@ class Cue(dict):
                         ctime_value = CTimecode(dict_timecode)
 
             super().__setitem__(key, ctime_value)
-
-            '''self[key] = value'''
 
         else:
             super().__setitem__(key, value)

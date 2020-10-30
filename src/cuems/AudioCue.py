@@ -13,14 +13,6 @@ class AudioCue(Cue):
         self.offset_route = '/offset'
 
     @property
-    def media(self):
-        return super().__getitem__('media')
-
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
-
-    @property
     def master_vol(self):
         return super().__getitem__('master_vol')
 
@@ -36,29 +28,6 @@ class AudioCue(Cue):
     def outputs(self, outputs):
         super().__setitem__('outputs', outputs)
 
-    @property
-    def player(self):
-        return super().__getitem__('player')
-
-    @player.setter
-    def player(self, player):
-        super().__setitem__('player', player)
-
-    @property
-    def osc_route(self):
-        return super().__getitem__('osc_route')
-
-    @osc_route.setter
-    def osc_route(self, osc_route):
-        super().__setitem__('osc_route', osc_route)
-
-    @property
-    def offset_route(self):
-        return super().__getitem__('offset_route')
-
-    @offset_route.setter
-    def offset_route(self, offset_route):
-        super().__setitem__('offset_route', offset_route)
 
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))

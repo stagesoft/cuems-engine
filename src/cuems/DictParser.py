@@ -3,7 +3,8 @@ import distutils.util
 from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
-from .Outputs import *
+from .Media import Media
+from .Outputs import Outputs
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
 from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
@@ -125,15 +126,22 @@ class GenericParser(CuemsScriptParser):
 
         elif isinstance(self.init_dict, dict):
             for dict_key, dict_value in self.init_dict.items():
-                if type(dict_value) is dict:
-                    parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
-                    self.item_gp[dict_key] = parser_class(init_dict=self.get_contained_dict(dict_value), class_string=class_string).parse()
+                if isinstance (dict_value, dict):
+                    parser_class, class_string = self.get_parser_class(dict_key)
+                    self.item_gp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
+                elif isinstance(dict_value, list):
+                    local_list = []
+                    parser_class, class_string = self.get_parser_class(dict_key)
+                    for list_item in dict_value:
+        
+                        item_obj = parser_class(init_dict=list_item, class_string=class_string, parent_class=self.class_string).parse()
+                        local_list.append(item_obj)
+                    self.item_gp[dict_key] = local_list
                 else:
                     dict_value = self.convert_string_to_value(dict_value)
                     self.item_gp[dict_key] = dict_value
 
         return self.item_gp
-
 
 class DmxSceneParser(GenericParser):
     pass
@@ -173,16 +181,25 @@ class CTimecodeParser(GenericSubObjectParser):
 
     pass
 
-class CueOutputsParser(GenericSubObjectParser):
+class OutputsParser(GenericSubObjectParser):
+    def __init__(self, init_dict, class_string, parent_class=None):
+        self.init_dict = init_dict
+        self.class_string = class_string
+        self._class = self.get_class(class_string)
+        self.item_op = self._class(caller_class=parent_class).assign()
+
+    def parse(self):
+        for dict_key, dict_value in self.init_dict.items():
+            self.item_op[dict_key] = dict_value
+
+        return self.item_op
+
+class AudioCueOutputParser(OutputsParser):
     pass
 
-
-class AudioCueOutputsParser(GenericSubObjectParser):
+class VideoCueOutputParser(OutputsParser):
     pass
-
-class VideoCueOutputsParser(GenericSubObjectParser):
-    pass
-class DmxCueOutputsParser(GenericSubObjectParser):
+class DmxCueOutputParser(OutputsParser):
     pass
 
 class NoneTypeParser():
