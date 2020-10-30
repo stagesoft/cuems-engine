@@ -2,14 +2,13 @@
 import logging
 import logging.handlers
 
-logger = logging.getLogger('Cuems_control')
+logger = logging.getLogger() # no name = root logger
 logger.setLevel(logging.DEBUG)
 
 
 handler = logging.handlers.SysLogHandler(address = '/dev/log', facility = 'local0')
 
-# set a format 
-formatter = logging.Formatter('Cuems:osc_control: (%(threadName)-9s) %(message)s')
-# tell the handler to use this format
+formatter = logging.Formatter('Cuems:engine: (PID: %(process)d)-%(threadName)-9s)-(%(funcName)s) %(message)s')
+
 handler.setFormatter(formatter)
 logger.addHandler(handler)

@@ -1,12 +1,11 @@
 from .log import logger
-OUTPUTS_SUFFIX = 'Outputs'
+OUTPUT_SUFFIX = 'Output'
 
 
 
 class Outputs():
     def __init__(self, caller_class, init_dict = None):
-        class_name = type(caller_class).__name__
-        class_name = class_name + OUTPUTS_SUFFIX
+        class_name = caller_class + OUTPUT_SUFFIX
         self._obj = None
         try:
             _class = globals()[class_name]
@@ -18,7 +17,7 @@ class Outputs():
     def assign(self):
         return self._obj
 
-class CueOutputs(dict):
+class CueOutput(dict):
     def __init__(self, init_dict = None):
         if init_dict is not None:
             if isinstance(init_dict, dict):
@@ -35,14 +34,14 @@ class CueOutputs(dict):
     def __str__(self):
         return super().__str__()
 
-class AudioCueOutputs(CueOutputs):
+class AudioCueOutput(CueOutput):
     def __init__(self, init_dict = None):
         super().__init__(init_dict)
 
-class VideoCueOutputs(CueOutputs):
+class VideoCueOutput(CueOutput):
     def __init__(self, init_dict = None):
         super().__init__(init_dict)
 
-class DmxCueOutputs(CueOutputs):
+class DmxCueOutput(CueOutput):
     def __init__(self, init_dict = None):
         super().__init__(init_dict)

@@ -1,4 +1,0 @@
-<!ELEMENT Settings (node,videoplayer,audioplayer)>
-<!ELEMENT node (#PCDATA)>
-<!ELEMENT videoplayer (#PCDATA)>
-<!ELEMENT audioplayer (#PCDATA)>

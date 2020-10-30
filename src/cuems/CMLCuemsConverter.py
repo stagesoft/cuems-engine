@@ -1,6 +1,3 @@
-""" For the moment it works with pip3 install xmlschema==1.1.2
- """
-
 import xmlschema
 from xmlschema.namespaces import XSI_NAMESPACE
 from xmlschema.etree import etree_element, lxml_etree_element, etree_register_namespace, \
@@ -14,7 +11,7 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
 
     def __init__(self, namespaces=None, dict_class=None, list_class=None,
                  etree_element_class=None, text_key='&', attr_prefix='',
-                 cdata_prefix=None, indent=4, strip_namespaces=False,
+                 cdata_prefix=None, indent=4, strip_namespaces=True,
                  preserve_root=False, force_dict=False, force_list=False, **kwargs):
 
         if etree_element_class is None or etree_element_class is etree_element:
@@ -75,15 +72,18 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
             if data.content:
                 for name, value, xsd_child in self.map_content(data.content):
                     try:
-                        result = result_dict[name]
-                    except KeyError:
-                        if xsd_child is None or has_single_group and xsd_child.is_single():
-                            result_dict[name] = self.list([value]) if self.force_list else value
+                        if isinstance(result_dict, list_types):
+                            result = result_dict
                         else:
-                            result_dict[name] = self.list([value])
+                            result = result_dict[name]
+                    except KeyError:
+                        if xsd_child is not None and not has_single_group and not xsd_child.is_single():
+                            result_dict = [{name:value}]
+                        else:
+                            result_dict[name] = self.list([value]) if self.force_list else value
                     else:
-                        if not isinstance(result, list_types) or not result:
-                            result_dict[name] = self.list([result, value])
+                        if isinstance(result, list_types) or not result:
+                            result_dict.append({name:value})
                         elif isinstance(result[0], list_types) or \
                                 not isinstance(value, list_types):
                             result.append(value)

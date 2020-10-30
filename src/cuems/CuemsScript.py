@@ -1,20 +1,32 @@
+from .log import logger
 from .CueList import CueList
 import uuid as uuid_module
+from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
-    def __init__(self, uuid=None, name=None, date=None, timecode_cuelist=None, floating_cuelist=None ):
+    def __init__(self, uuid=None, name=None, date=None, cuelist=None):
+        empty_keys = {"uuid":"", "unix_name":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
+        super().__init__(empty_keys)
+
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid1()))
         else:
             super().__setitem__('uuid', uuid)
         super().__setitem__('name', name)
-        super().__setitem__('date', date)
-        super().__setitem__('timecode_cuelist', timecode_cuelist)
-        super().__setitem__('floating_cuelist', floating_cuelist)
-        
+        if date is None:
+            date = date_now_iso_utc()
 
-        # self.timecode_list = timecode_list
-        # self.floating_list = floating_list
+        super().__setitem__('created', date)
+        super().__setitem__('modified', date)
+        super().__setitem__('cuelist', cuelist)
+        
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
+
+    @uuid.setter
+    def uuid(self, uuid):
+        super().__setitem__('uuid', uuid)
 
     @property
     def name(self):
@@ -24,42 +36,51 @@ class CuemsScript(dict):
     def name(self, name):
         super().__setitem__('name', name)
 
-    
     @property
-    def timecode_cuelist(self):
-        return super().__getitem__('timecode_cuelist')
+    def description(self):
+        return super().__getitem__('description')
 
-    @timecode_cuelist.setter
-    def timecode_cuelist(self, cuelist):
-        if isinstance(cuelist, CueList):
-            super().__setitem__('timecode_cuelist', cuelist)
-        else:
-            raise NotImplementedError
+    @description.setter
+    def description(self, description):
+        super().__setitem__('description', description)
 
     @property
-    def floating_cuelist(self):
-        return super().__getitem__('floating_cuelist')
+    def created(self):
+        return super().__getitem__('created')
 
-    @floating_cuelist.setter
-    def floating_cuelist(self, cuelist):
+    @created.setter
+    def created(self, created):
+        super().__setitem__('created', created)
+
+    @property
+    def modified(self):
+        return super().__getitem__('modified')
+
+    @modified.setter
+    def modified(self, modified):
+        super().__setitem__('modified', modified)
+
+    @property
+    def cuelist(self):
+        return super().__getitem__('cuelist')
+
+    @cuelist.setter
+    def cuelist(self, cuelist):
         if isinstance(cuelist, CueList):
-            super().__setitem__('floating_cuelist', cuelist)
+            super().__setitem__('cuelist', cuelist)
         else:
             raise NotImplementedError
 
     def get_media(self):
-        
         media_dict = dict()
-        if self.timecode_cuelist is not None:
-            for cue in self.timecode_cuelist:
-                if cue.media:
-                    media_dict[cue.media] = type(cue)
-
-        if self.floating_cuelist is not None:
-            for cue in self.floating_cuelist:
-                if cue.media:
-                    media_dict[cue.media] = type(cue)
-
+        if (self.cuelist is not None) and (self.cuelist.contents is not None):
+            for cue in self.cuelist.contents:
+                try:
+                    if cue['Media']:
+                        media_dict[cue['Media']['file_name']] = type(cue)
+                except KeyError:
+                    logger.debug('cue with no media')
         return media_dict
 
-        
+    def find(self, uuid):
+        return self.cuelist.find(uuid)

@@ -1,5 +1,5 @@
 import subprocess
-import threading
+from threading import Thread
 import os
 import pyossia as ossia
 
@@ -8,14 +8,21 @@ from .log import logger
 import time
 
 
-class VideoPlayer(threading.Thread):
-    def __init__(self, port, monitor_id, path):
-        self.port = port
+class VideoPlayer(Thread):
+    def __init__(self, port_index, monitor_id, path, args, media):
+        self.port = port_index['start']
+        while self.port in port_index['used']:
+            self.port += 2
+
+        port_index['used'].append(self.port)
+            
         self.stdout = None
         self.stderr = None
         self.monitor_id = monitor_id
         self.firstrun = True
         self.path = path
+        self.args = args
+        self.media = media
         
         
     def __init_trhead(self):
@@ -27,7 +34,14 @@ class VideoPlayer(threading.Thread):
             logger.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
            
         try:
-            self.p=subprocess.Popen([self.path, "--no-splash", "--osc", str(self.port), "--start-screen", str(self.monitor_id)],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Calling xjadeo in a subprocess
+            process_call_list = [self.path]
+            if self.args is not None:
+                for arg in self.args.split():
+                    process_call_list.append(arg)
+            process_call_list.extend(['--osc', str(self.port), self.media])
+            self.p=subprocess.Popen(process_call_list,  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # self.p=subprocess.Popen([self.path, '--no-splash --no-initial-sync', '--osc', str(self.port), self.media],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
             logger.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
@@ -44,21 +58,21 @@ class VideoPlayer(threading.Thread):
     def start(self):
         if self.firstrun:
             self.__init_trhead()
-            threading.Thread.start(self)
+            Thread.start(self)
             self.firstrun = False
         else:
             if not self.is_alive():
                 self.__init_trhead()
-                threading.Thread.start(self)
+                Thread.start(self)
             else:
                 logger.debug("VideoPlayer allready running")
 
-
+'''
 class VideoPlayerRemote():
-    def __init__(self, port, monitor_id, path):
+    def __init__(self, port, monitor_id, path, args, media):
         self.port = port
         self.monitor_id = monitor_id
-        self.videoplayer = VideoPlayer(self.port, self.monitor_id, path)
+        self.videoplayer = VideoPlayer(self.port, self.monitor_id, path, args, media)
         self.__start_remote()
 
     def __start_remote(self):
@@ -101,3 +115,4 @@ class NodeVideoPlayers():
 
     def len(self):
         return len(self.vplayer)
+'''

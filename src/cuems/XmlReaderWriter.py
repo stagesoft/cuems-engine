@@ -7,22 +7,27 @@ import datetime  as DT
 import os
 import json
 
-from .log import logger
+from .log import *
 from .CTimecode import CTimecode
 from .CMLCuemsConverter import CMLCuemsConverter
 from .DictParser import CuemsParser
 from .XmlBuilder import XmlBuilder
 
+xmlschema_logger = logging.getLogger('xmlschema')
+
+xmlschema_logger.setLevel(logging.INFO)
+
 
 class CuemsXml():
-    def __init__(self,schema=None,xmlfile=None):
+    def __init__(self, schema, xmlfile=None, namespace={'cms':'http://stagelab.net/cuems'}):
         self.converter = CMLCuemsConverter
         self.schema_object = None
         self._xmlfile = None
+        self._schema = None
         self.schema = schema
         self.xmlfile = xmlfile
         self.xmldata = None
-        self._schema = None
+        self.namespace = namespace
         
     
     @property
@@ -35,7 +40,7 @@ class CuemsXml():
         if path is not None:
             if os.path.isfile(path):
                 self._schema = path
-                self.schema_object = xmlschema.XMLSchema(self._schema, converter=self.converter)
+                self.schema_object = xmlschema.XMLSchema11(self._schema, converter=self.converter)
             else:
                 raise FileNotFoundError("schema file not found")
 
@@ -53,30 +58,33 @@ class CuemsXml():
     
 class XmlWriter(CuemsXml):
 
-    def __init__(self,schema=None,xmlfile=None):
-      super().__init__(schema, xmlfile)
-
-
     def write(self, xml_data, ):
-       # self.schema_object.validate(xml_data)
-        ET.ElementTree(xml_data).write(self.xmlfile)
+        self.schema_object.validate(xml_data)
+        xml_data.write(self.xmlfile, encoding="utf-8", xml_declaration=True)
 
     def write_from_dict(self, project_dict):
         project_object = CuemsParser(project_dict).parse()
-        xml_data = XmlBuilder(project_object).build()
+        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema).build()
         self.write(xml_data)
 
     def write_from_object(self, project_object):
-        xml_data = XmlBuilder(project_object).build()
+        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema).build()
         self.write(xml_data)
 
 
 class XmlReader(CuemsXml):
-    def __init__(self,schema=None,xmlfile=None):
-      super().__init__(schema, xmlfile)
+ 
 
     def read(self):
-        xml_dict = self.schema_object.to_dict(self.xmlfile, validation='skip',  strip_namespaces=True)
+        xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=False)
+        # remove namespace info from xml 
+        try:
+            del xml_dict['xmlns:cms']
+            del xml_dict['xmlns:xsi']
+            del xml_dict['xsi:schemaLocation']
+        except KeyError:
+            logger.warning('Error triying to remove namespace info on read')
+
         return xml_dict
 
     def read_to_objects(self):
