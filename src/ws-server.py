@@ -23,48 +23,8 @@ try:
 except Exception as e:
     print("error: {} {}".format(type(e), e))
 
-def f(text):
-    q.put(text)
+
 
 server = CuemsWsServer(q, settings_dict)
 logger.info('start server')
 server.start(9092)
-
-f('playing')
-
-time.sleep(5)
-f('cue 2 50%')
-time.sleep(1)
-f('cue 2 55%')
-
-time.sleep(1)
-f('cue 2 60%')
-f('cue 3 5%')
-f('cue 4 60%')
-time.sleep(1)
-f('cue 5 5%')
-time.sleep(2)
-f('cue 6 60%')
-time.sleep(2)
-f('cue 7 5%')
-time.sleep(1)
-f('cue 8 60%')
-time.sleep(1)
-f('cue 9 5%')
-time.sleep(2)
-f('cue 10 60%')
-time.sleep(2)
-f('cue 11 5%')
-time.sleep(2)
-f('cue 12 60%')
-time.sleep(2)
-f('cue 13 5%')
-time.sleep(2)
-f('cue 14 60%')
-f('cue 15 5%')
-
-
-time.sleep(20)
-f('cue 2 80%')
-
-#server.stop()
