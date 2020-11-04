@@ -1,5 +1,6 @@
 from .CTimecode import CTimecode
 from .Outputs import Outputs
+from .Media import Media
 from .log import logger
 import uuid as uuid_module
 from time import sleep
@@ -136,6 +137,13 @@ class Cue(dict):
     def ui_properties(self, ui_properties):
         super().__setitem__('ui_properties', ui_properties)
 
+    @property
+    def media(self):
+        return super().__getitem__('media')
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('media', media)
     def target_object(self, target_object):
         self._target_object = target_object
 
@@ -143,7 +151,7 @@ class Cue(dict):
         return type(self)
 
     def __setitem__(self, key, value):
-        if key in ['offset', 'prewait', 'postwait']:
+        if (key in ['offset', 'prewait', 'postwait']) and (value not in (None, "")):
             if isinstance(value, CTimecode):
                 ctime_value = value
             else:
@@ -158,8 +166,6 @@ class Cue(dict):
                         ctime_value = CTimecode()
                     else:
                         ctime_value = CTimecode(dict_timecode)
-                elif value == None:
-                    ctime_value = CTimecode()
 
             super().__setitem__(key, ctime_value)
 

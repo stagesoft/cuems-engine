@@ -1,9 +1,13 @@
+from .log import logger
 from .CueList import CueList
 import uuid as uuid_module
 from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
     def __init__(self, uuid=None, name=None, date=None, cuelist=None):
+        empty_keys = {"uuid":"", "unix_name":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
+        super().__init__(empty_keys)
+
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid1()))
         else:
@@ -77,11 +81,13 @@ class CuemsScript(dict):
 
     def get_media(self):
         media_dict = dict()
-        if self.cuelist is not None:
+        if (self.cuelist is not None) and (self.cuelist.contents is not None):
             for cue in self.cuelist.contents:
-                if cue.media:
-                    media_dict[cue.media] = type(cue)
-
+                try:
+                    if cue['Media']:
+                        media_dict[cue['Media']['file_name']] = type(cue)
+                except KeyError:
+                    logger.debug('cue with no media')
         return media_dict
 
     def find(self, uuid):

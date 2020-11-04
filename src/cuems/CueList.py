@@ -7,13 +7,9 @@ from .log import logger
 class CueList(Cue):
     
     def __init__(self, contents=[], offset=None):
+        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "ui_properties": "", "contents": []}
+        super().__init__(init_dict=empty_keys)
         super().__setitem__('uuid', str(uuid_module.uuid1()))
-        if offset is not None:
-            super().__setitem__('timecode', True)
-            super().__setitem__('offset', CTimecode(start_timecode=offset))
-        else:
-            super().__setitem__('timecode', False)
-
         if isinstance(contents, list):
             super().__setitem__('contents', contents)
         else:
@@ -34,14 +30,6 @@ class CueList(Cue):
 
     def __iadd__(self, other):
         self['contents'].__iadd__(other)
-        return self
-
-    def append(self, other):
-        self['contents'].append(other)
-        return self
-
-    def pop(self, other):
-        self['contents'].pop(other)
         return self
 
     def times(self):

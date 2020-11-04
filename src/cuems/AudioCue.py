@@ -36,14 +36,6 @@ class AudioCue(Cue):
         self.OSC_AUDIOPLAYER_CONF[self._offset_route] = [ossia.ValueType.Float, None]
 
     @property
-    def media(self):
-        return super().__getitem__('media')
-
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
-
-    @property
     def master_vol(self):
         return super().__getitem__('master_vol')
 

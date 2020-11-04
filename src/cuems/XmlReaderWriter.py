@@ -7,11 +7,15 @@ import datetime  as DT
 import os
 import json
 
-from .log import logger
+from .log import *
 from .CTimecode import CTimecode
 from .CMLCuemsConverter import CMLCuemsConverter
 from .DictParser import CuemsParser
 from .XmlBuilder import XmlBuilder
+
+xmlschema_logger = logging.getLogger('xmlschema')
+
+xmlschema_logger.setLevel(logging.INFO)
 
 
 class CuemsXml():
@@ -64,7 +68,6 @@ class XmlWriter(CuemsXml):
         self.write(xml_data)
 
     def write_from_object(self, project_object):
-        print(self.schema)
         xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema).build()
         self.write(xml_data)
 

@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 
 from .log import logger
-
+from .DictParser import GenericDict
 
 
 PARSER_SUFFIX = 'XmlBuilder'
@@ -54,6 +54,8 @@ class CuemsScriptXmlBuilder(XmlBuilder):
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
+            elif isinstance(value, (type(None))):
+                cue_subelement = ET.SubElement(cue_element, str(key))
             else:
                 cue_subelement = cue_element
                 builder_class = self.get_builder_class(value)
@@ -69,10 +71,16 @@ class CueListXmlBuilder(CuemsScriptXmlBuilder):
             cue_subelement = ET.SubElement(cuelist_element, str(key))          
             if isinstance(value, (str, bool, int, float)):
                 cue_subelement.text = str(value)
-            else:
+            elif isinstance(value, (type(None))):
+                pass
+            elif isinstance(value, list):
                 for cuelist_item in value:
                     builder_class = self.get_builder_class(cuelist_item)
                     sub_object_element = builder_class(cuelist_item, xml_tree = cue_subelement).build()
+            else:
+                builder_class = self.get_builder_class(value)
+                sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
+                
 
         return self.xml_tree
     
@@ -82,12 +90,24 @@ class GenericCueXmlBuilder(CuemsScriptXmlBuilder):
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
         for key, value in self._object.items():
-            cue_subelement = ET.SubElement(cue_element, str(key))
             if isinstance(value, (str, bool, int, float)):
+                cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
+            elif isinstance(value, (type(None))):
+                cue_subelement = ET.SubElement(cue_element, str(key))
+            elif isinstance(value, list):
+                cue_subelement = ET.SubElement(cue_element, str(key))
+                for list_item in value:
+                    builder_class = self.get_builder_class(list_item)
+                    sub_object_element = builder_class(list_item, xml_tree = cue_subelement).build()
+            elif isinstance(value, GenericDict):
+                cue_subelement = ET.SubElement(cue_element, str(key))
+                for key, value in value.items():
+                    sub_dict_element = ET.SubElement(cue_subelement, str(key))
+                    sub_dict_element.text = str(value)
             else:
                 builder_class = self.get_builder_class(value)
-                sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
+                sub_object_element = builder_class(value, xml_tree = cue_element).build()
         return self.xml_tree
 
 class DmxSceneXmlBuilder(CuemsScriptXmlBuilder):
@@ -133,19 +153,28 @@ class CueOutputsXmlBuilder(CuemsScriptXmlBuilder):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
 
         if isinstance(self._object, dict):
-            for key, item in self._object.items():
-                cue_sub_element = ET.SubElement(cue_element, key)
-                cue_sub_element.text = str(item)
-
+            
+            for dict_key, dict_item in self._object.items():
+                for key, value in dict_item.items():
+                    if isinstance(value, (str, bool, int, float)):
+                        cue_subelement = ET.SubElement(cue_element, key)
+                        cue_subelement.text = str(value)
+                    elif isinstance(value, (type(None))):
+                        cue_subelement = ET.SubElement(cue_element, key)
+                    
         else:
             cue_element.text = str(self._object)
         return self.xml_tree
 
-class AudioCueOutputsXmlBuilder(CueOutputsXmlBuilder):
+
+class AudioCueOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
 
-class DmxCueOutputsXmlBuilder(CueOutputsXmlBuilder):
+class VideoCueOutputXmlBuilder(CueOutputsXmlBuilder):
+    pass
+
+class DmxCueOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
     
-class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder):
+class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder): # TODO: clean, not need anymore? 
     pass

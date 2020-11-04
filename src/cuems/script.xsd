@@ -19,12 +19,11 @@
         <xs:element name="CuemsScript">
           <xs:complexType>
             <!-- Which is a sequence of one of each of these objects -->
-            <xs:sequence minOccurs="1" maxOccurs="1">
+            <xs:all>
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
-              <xs:element name="unix_name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
-              <!-- The name, mainly a string, we can check lengths here too if desired -->
+              <xs:element name="unix_name" type="cms:NameStringType" />
               <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
               <!-- Long description of the script -->
               <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
@@ -33,7 +32,7 @@
               <xs:element name="modified" type="cms:DateType" />
               <!-- The root cuelist of our project, mainly a cuelist at the root -->
               <xs:element name="CueList" type="cms:CueListType" />
-            </xs:sequence>
+            </xs:all>
             <xs:assert test="modified &gt;= created" />
           </xs:complexType>
         </xs:element>
@@ -108,16 +107,15 @@
       <!-- Timecode behaviour flag -->
       <xs:element name="timecode" type="cms:BoolType" />
       <!-- Its time mark -->
-      <xs:element name="offset" type="cms:CTimecodeType" minOccurs="0" />
+      <xs:element name="offset" type="cms:CTimecodeType" />
       <xs:element name="loop" type="cms:LoopType" /> <!-- -1/0/n -->
       <!-- Execution options -->
       <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
-      <xs:element name="post_go" type="cms:PostGoType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="post_go" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="ui_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
-    <!-- <xs:assert test="(timecode = cms:BoolType('True') and exists(offset)) or (timecode = cms:BoolType('False') and not(exists(offset)))" /> -->
   </xs:complexType>
 
   <!-- Our cuelist contents type -->
@@ -144,9 +142,9 @@
   </xs:simpleType>
 
   <xs:complexType name="UiPropertiesType">
-    <xs:sequence minOccurs="0">
+    <xs:all minOccurs="0">
       <xs:element name="timeline_position" type="cms:Coordinates" />
-    </xs:sequence>
+    </xs:all>
   </xs:complexType>
 
   <xs:complexType name="Coordinates">
@@ -162,11 +160,11 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <!-- A master volume starting value -->
           <xs:element name="master_vol" type="cms:PercentType" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="cms:AudioCueOutputsType" />
+          <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
@@ -178,9 +176,18 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="OutputsType">
+    <!-- Specify n virtual audio outputs -->
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="AudioCueOutput" type="cms:AudioCueOutputsType" />
+      <xs:element name="VideoCueOutput" type="cms:VideoCueOutputsType" />
+
+    </xs:choice>
+  </xs:complexType>
+
   <xs:complexType name="AudioCueOutputsType">
     <!-- Specify n virtual audio outputs -->
-    <xs:sequence minOccurs="1" maxOccurs="1">
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <!-- Output name -->
       <xs:element name="output_name" type="cms:NameStringType" />
       <!-- Output volume -->
@@ -190,7 +197,7 @@
   </xs:complexType>
 
   <xs:complexType name="AudioChannelsType">
-    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+    <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <xs:element name="channel" type="cms:AudioChannelType" />
     </xs:sequence>
   </xs:complexType>
@@ -198,7 +205,8 @@
   <xs:complexType name="AudioChannelType">
     <xs:simpleContent>
       <xs:extension base="cms:PercentType">
-        <xs:attribute name="id" type="xs:positiveInteger" />
+        <xs:attribute name="channel_num" type="xs:positiveInteger" />
+        <xs:attribute name="channel_vol" type="xs:positiveInteger" />
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
@@ -343,9 +351,8 @@
 
   <xs:complexType name="CTimecodeType">
     <!-- Can be a timecode field or an empty NoneType field -->
-    <xs:choice>
+    <xs:choice minOccurs="0">
       <xs:element name="CTimecode" type="cms:TimecodeType" />
-      <xs:element name="NoneType" type="cms:EmptyStringType" />
     </xs:choice>
   </xs:complexType>
 
