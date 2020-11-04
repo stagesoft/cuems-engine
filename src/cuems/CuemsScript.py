@@ -25,6 +25,14 @@ class CuemsScript(dict):
         super().__setitem__('uuid', uuid)
 
     @property
+    def unix_name(self):
+        return super().__getitem__('unix_name')
+
+    @unix_name.setter
+    def unix_name(self, unix_name):
+        super().__setitem__('unix_name', unix_name)
+
+    @property
     def name(self):
         return super().__getitem__('name')
 

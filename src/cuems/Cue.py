@@ -2,6 +2,7 @@ from .CTimecode import CTimecode
 from .Outputs import Outputs
 from .log import logger
 import uuid as uuid_module
+from time import sleep
 
 class Cue(dict):
     def __init__(self, offset=None, init_dict = None, uuid=None ):
@@ -10,12 +11,11 @@ class Cue(dict):
         
         if offset is not None:
             super().__setitem__('timecode', True)
-            if  isinstance(offset, CTimecode):
-                super().__setitem__('offset', offset)
-            else:
-                super().__setitem__('offset', CTimecode(start_seconds=offset))
+            self.__setitem__('offset', offset)
         else:
             super().__setitem__('timecode', False)
+
+        self._target_object = None
         
         if init_dict is not None:
             super().__init__(init_dict)
@@ -57,12 +57,12 @@ class Cue(dict):
         super().__setitem__('description', description)
 
     @property
-    def disabled(self):
-        return super().__getitem__('disabled')
+    def enabled(self):
+        return super().__getitem__('enabled')
 
-    @disabled.setter
-    def disabled(self, disabled):
-        super().__setitem__('disabled', disabled)
+    @enabled.setter
+    def enabled(self, enabled):
+        super().__setitem__('enabled', enabled)
 
     @property
     def loaded(self):
@@ -86,7 +86,7 @@ class Cue(dict):
 
     @offset.setter
     def offset(self, offset):
-        super().__setitem__('offset', offset)
+        self.__setitem__('offset', offset)
 
     @property
     def loop(self):
@@ -113,12 +113,12 @@ class Cue(dict):
         super().__setitem__('postwait', postwait)
 
     @property
-    def post_action(self):
-        return super().__getitem__('post_action')
+    def post_go(self):
+        return super().__getitem__('post_go')
 
-    @post_action.setter
-    def posta_ction(self, post_action):
-        super().__setitem__('post_action', post_action)
+    @post_go.setter
+    def posta_ction(self, post_go):
+        super().__setitem__('post_go', post_go)
 
     @property
     def target(self):
@@ -135,6 +135,9 @@ class Cue(dict):
     @ui_properties.setter
     def ui_properties(self, ui_properties):
         super().__setitem__('ui_properties', ui_properties)
+
+    def target_object(self, target_object):
+        self._target_object = target_object
 
     def type(self):
         return type(self)
@@ -160,23 +163,31 @@ class Cue(dict):
 
             super().__setitem__(key, ctime_value)
 
-            '''self[key] = value'''
-
         else:
             super().__setitem__(key, value)
 
-    def arm(self, conf, queue, init = False):
-        if self.disabled != True and self.loaded == init:
+    def arm(self, conf, queue, armed_list, init = False):
+        if self.enabled != False and self.loaded == init:
             self.loaded = True
 
-            return self.uuid
-        else:
-            return None
+            if not self in armed_list:
+                armed_list.append(self)
 
-    def disarm(self, conf, queue):
+            return True
+        else:
+            return False
+
+    def go(self, ossia, mtc):
+        logger.info(f'Go on a Generic "Empty" Cye : uuid : {self.uuid}')
+        sleep(3)
+
+    def disarm(self, conf, armed_list):
         if self.loaded is True:
             self.loaded = False
 
-            return self.uuid
+            if self in armed_list:
+                armed_list.remove(self)
+
+            return True
         else:
-            return None
+            return False

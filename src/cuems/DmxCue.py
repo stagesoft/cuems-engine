@@ -9,18 +9,33 @@ from .log import logger
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
 
 class DmxCue(Cue):
+    OSC_DMXPLAYER_CONF = {  '/quit' : [ossia.ValueType.Impulse, None],
+                            '/load' : [ossia.ValueType.String, None], 
+                            '/wait' : [ossia.ValueType.Float, None],
+                            '/play' : [ossia.ValueType.Impulse, None],
+                            '/stop' : [ossia.ValueType.Impulse, None],
+                            '/stoponlost' : [ossia.ValueType.Bool, None],
+                            # TODO '/mtcfollow' : [ossia.ValueType.Bool, None],
+                            '/check' : [ossia.ValueType.Impulse, None]
+                            }
+
     def __init__(self, time=None, scene=None, in_time=0, out_time=0, init_dict=None):
         super().__init__(time, init_dict)
-        self.offset_route = '/offset'
+        self._player = None
+        self._osc_route = None
+        self._offset_route = '/offset'
+
+        self.conf = None
+        self.ossia_queue = None
+        self.armed_list = None
+
+        self.OSC_DMXPLAYER_CONF[self._offset_route] = [ossia.ValueType.Float, None]
 
         if scene:
                 self.scene = scene
         
-        if in_time:
-            super().__setitem__('in_time', in_time)
-        if out_time:
-            super().__setitem__('out_time', out_time)
-
+        super().__setitem__('in_time', in_time)
+        super().__setitem__('out_time', out_time)
 
     @property
     def media(self):
@@ -31,105 +46,96 @@ class DmxCue(Cue):
         super().__setitem__('media', media)
 
     @property
-    def fade_in(self):
-        return super().__getitem__('fade_in')
+    def fadein_time(self):
+        return super().__getitem__('fadein_time')
 
-    @fade_in.setter
-    def fade_in(self, fade_in):
-        super().__setitem__('fade_in', fade_in)
-
-    @property
-    def fade_out(self):
-        return super().__getitem__('fade_out')
-
-    @fade_out.setter
-    def fade_out(self, fade_out):
-        super().__setitem__('fade_out', fade_out)
+    @fadein_time.setter
+    def fadein_time(self, fadein_time):
+        super().__setitem__('fadein_time', fadein_time)
 
     @property
-    def player(self):
-        return super().__getitem__('player')
+    def fadeout_time(self):
+        return super().__getitem__('fadeout_time')
 
-    @player.setter
+    @fadeout_time.setter
+    def fadeout_time(self, fadeout_time):
+        super().__setitem__('fadeout_time', fadeout_time)
+
     def player(self, player):
-        super().__setitem__('player', player)
+        self._player = player
 
-    @property
-    def osc_route(self):
-        return super().__getitem__('osc_route')
-
-    @osc_route.setter
     def osc_route(self, osc_route):
-        super().__setitem__('osc_route', osc_route)
+        self._osc_route = osc_route
 
-    @property
-    def offset_route(self):
-        return super().__getitem__('offset_route')
-
-    @offset_route.setter
     def offset_route(self, offset_route):
-        super().__setitem__('offset_route', offset_route)
+        self._offset_route = offset_route
 
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, queue, init = False):
-        if self.disabled or (self.loaded != init and self.timecode == init):
-            if self.disabled and self.loaded:
-                self.disarm(conf, queue)
+    def arm(self, conf, queue, armed_list):
+        self.conf = conf
+        self.ossia_queue = queue
+        self.armed_list = armed_list
+
+        if not self.enabled or not self.loaded:
+            if not self.enabled and self.loaded:
+                self.disarm(conf, queue, armed_list)
             return False
 
         try:
             # Assign its own audioplayer object
-            self.player = DmxPlayer(    conf.players_port_index['dmx'], 
+            self._player = DmxPlayer(    conf.players_port_index, 
                                         conf.node_conf['dmxplayer']['path'],
                                         str(conf.node_conf['dmxplayer']['args']),
-                                        str(path.join(conf.library_path, 'media', self.media)))
+                                        str(path.join(conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 
-        self.player.start()
+        self._player.start()
 
         # And dinamically attach it to the ossia for remote control it
-        OSC_DMXPLAYER_CONF = {  '/quit' : [ossia.ValueType.Impulse, None],
-                                '/load' : [ossia.ValueType.String, None], 
-                                self.offset_route : [ossia.ValueType.Float, None],
-                                '/wait' : [ossia.ValueType.Float, None],
-                                '/play' : [ossia.ValueType.Impulse, None],
-                                '/stop' : [ossia.ValueType.Impulse, None],
-                                '/stoponlost' : [ossia.ValueType.Bool, None],
-                                # TODO '/mtcfollow' : [ossia.ValueType.Bool, None],
-                                '/check' : [ossia.ValueType.Impulse, None]
-                                }
-
-        self.osc_route = f'/node{conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
+        self._osc_route = f'/node{conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
 
         queue.put(   QueueOSCData(  'add', 
-                                    self.osc_route, 
+                                    self._osc_route, 
                                     conf.node_conf['osc_dest_host'], 
-                                    conf.players_port_index['dmx'],
-                                    conf.players_port_index['dmx'] + 1, 
-                                    OSC_DMXPLAYER_CONF))
-
-        conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
+                                    self._player.port,
+                                    self._player.port + 1, 
+                                    self.OSC_DMXPLAYER_CONF))
 
         self.loaded = True
+        if not self in armed_list:
+            armed_list.append(self)
+
         return True
 
-    def disarm(self, cm, queue):
+    def disarm(self, conf, queue, armed_list):
         if self.loaded is True:
             try:
-                self.player.kill()
-                cm.osc_port_index['used'].pop(self.player.port)
-                del self.player
+                self._player.kill()
+                conf.players_port_index['used'].remove(self._player.port)
+                self._player.join()
+                self._player = None
+
+                queue.put(QueueOSCData( 'remove', 
+                                        self._osc_route, 
+                                        dictionary = self.OSC_DMXPLAYER_CONF))
+
+            except Exception as e:
+                logger.warning(f'Could not properly unload cue {self.uuid} : {e}')
+
+            try:
+                if self in armed_list:
+                    armed_list.remove(self)
             except:
-                logger.warning(f'Could not properly unload cue {self.uuid}')
+                pass
             
             self.loaded = False
 
-            return self.uuid
+            return True
         else:
-            return None
+            return False
 
     @property
     def scene(self):

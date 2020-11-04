@@ -107,7 +107,10 @@ class OssiaServer(threading.Thread):
 
     def remove_nodes(self, qdata):
         if isinstance(qdata, QueueOSCData):
-            pass
+            self.osc_devices.pop(qdata.device_name)
+            for route, conf in qdata.items():
+                self.osc_registered_nodes.pop(qdata.device_name + route)
+
         elif isinstance(qdata, QueueData):
             for route, conf in qdata.items():
                 try:
@@ -121,7 +124,7 @@ class QueueData(dict):
         super().__init__(dictionary)
 
 class QueueOSCData(QueueData):
-    def __init__(self, action, device_name, host, in_port, out_port, dictionary):
+    def __init__(self, action, device_name, host = '', in_port = 0, out_port = 0, dictionary = {}):
         self.device_name = device_name
         self.host = host
         self.in_port = in_port

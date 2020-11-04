@@ -66,8 +66,7 @@ class CuemsEngine():
 
         # Our empty script object
         self.script = None
-        self.currentcues = list()
-        self.nextcues = list()
+        self.currentcue = None
         self.armedcues = list()
 
         # MTC master object creation through bound library and open port
@@ -109,11 +108,14 @@ class CuemsEngine():
         OSC_ENGINE_CONF = { '/engine' : [ossia.ValueType.Impulse, None],
                             '/engine/command' : [ossia.ValueType.Impulse, None],
                             '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
-                            '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
+                            '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],
+                            '/engine/command/go' : [ossia.ValueType.Impulse, self.go_callback],
+                            '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
                             '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
                             '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
                             '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
-                            '/engine/command/preload' : [ossia.ValueType.String, self.preload_callback],
+                            '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
+                            '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
                             '/engine/status/timecode' : [ossia.ValueType.String, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
@@ -264,6 +266,10 @@ class CuemsEngine():
     # OSC messages handlers
     def load_project_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
+
+        if self.script != None:
+            self.disarm_all()
+
         try:
             self.cm.load_project_mappings(kwargs["value"])
             logger.info(self.cm.project_maps)
@@ -281,62 +287,70 @@ class CuemsEngine():
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
+
+            self.initial_cuelist_process(self.script.cuelist)
+
+            # Start MTC!
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+
         except FileNotFoundError:
             logger.error('Project script file not found')
+        except xmlschema.exceptions.XMLSchemaException as e:
+            logger.error(f'XML error: {e}')
+    
+    def load_cue_callback(self, **kwargs):
+        logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
 
-        self.init_script_process()
+        cue_to_load = self.script.find(kwargs['value'])
 
-        # We directly start the MTC! we are on running mode, right now
-        libmtcmaster.MTCSender_play(self.mtcmaster)
+        if cue_to_load != None:
+            if cue_to_load not in self.armedcues:
+                cue_to_load.arm(self.cm, self.ossia_queue, self.armedcues)
 
-    def go_callback(self, **kwargs):
-        try:
-            cue_to_go = self.script.find(kwargs['value'])
-        except AttributeError:
-            logger.warning('Go method called with no script loaded')
-            return
+    def unload_cue_callback(self, **kwargs):
+        logger.info(f'OSC UNLOAD! -> CUE : {kwargs["value"]}')
+
+        cue_to_unload = self.script.find(kwargs['value'])
+
+        if cue_to_unload != None:
+            if cue_to_unload in self.armedcues:
+                cue_to_unload.disarm(self.cm, self.ossia_queue, self.armedcues)
+
+    def go_cue_callback(self, **kwargs):
+        cue_to_go = self.script.find(kwargs['value'])
 
         if cue_to_go is None:
-            if cue_to_go is None:
-                logger.error(f'Cue {kwargs["value"]} does not exist.')
-            else:
-                logger.error(f'Cue {kwargs["value"]} not prepared. Prepare it first.')
+            logger.error(f'Cue {kwargs["value"]} does not exist.')
         else:
-            logger.info(f'OSC GO! -> CUE : {cue_to_go.uuid}')
-            try:
-                key = f'{cue_to_go.osc_route}{cue_to_go.offset_route}'
-                self.ossia_server.osc_registered_nodes[key][0].parameter.value = cue_to_go.review_offset(self.mtclistener.main_tc)
-                logger.info(key + " " + str(self.ossia_server.osc_registered_nodes[key][0].parameter.value))
-            except KeyError:
-                logger.debug(f'Key error 1 in go_callback {key}')
+            if cue_to_go not in self.armedcues:
+                logger.error(f'Cue {kwargs["value"]} not prepared. Prepare it first.')
+            else:
+                logger.info(f'Cue {kwargs["value"]} in armedcues list. Ready!')
+                logger.info(f'OSC GO! -> CUE : {cue_to_go.uuid}')
 
-            try:
-                key = f'{cue_to_go.osc_route}/mtcfollow'
-                self.ossia_server.osc_registered_nodes[key][0].parameter.value = True
-            except:
-                try: 
-                    key = f'{cue_to_go.osc_route}/jadeo/midi/connect'
-                    self.ossia_server.osc_registered_nodes[key][0].parameter.value = "Midi Through Port-0"
-                except KeyError:
-                    logger.debug(f'Key error 2 in go_callback {key}')
+                cue_to_go.go(self.ossia_server, self.mtclistener)
 
-            try:
-                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = True
-                self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value += kwargs['value']
-            except:
-                logger.info('NO MTCMASTER ASSIGNED!')
+                self.currentcue = cue_to_go
+                logger.info(f'Current Cue: {self.currentcue}')
 
-                self.currentcues.append(cue_to_go)
-                logger.info(f'Current Cues CueList: {self.currentcues}')
+    def go_callback(self, **kwargs):
+        if self.currentcue is None:
+            cue_to_go = self.script.cuelist.contents[0]
+        else:
+            cue_to_go = self.currentcue._target_object
 
-    def preload_callback(self, **kwargs):
-        logger.info(f'OSC PRELOAD! -> CUE : {kwargs["value"]}')
+        if cue_to_go not in self.armedcues:
+            logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
+        else:
+            self.currentcue = cue_to_go
+            cue_to_go.go(self.ossia_server, self.mtclistener)
+            cue_to_go._target_object.arm(self.cm, self.ossia_queue, self.armedcues)
 
     def pause_callback(self, **kwargs):
         logger.info('OSC PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
+            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -344,7 +358,7 @@ class CuemsEngine():
         logger.info('OSC STOP!')
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -352,30 +366,64 @@ class CuemsEngine():
         logger.info('OSC RESETALL!')
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.disarm_all()
+            self.armedcues.clear()
+            self.currentcue = None
+
+            self.initial_cuelist_process(self.script.cuelist)
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+
+            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
 
         except:
-            logger.info('NO MTCMASTER ASSIGNED!')
+            pass
 
     ########################################################
 
     ########################################################
     # Script treating methods
-    def init_script_process(self):
-        logger.info('Initial arming:')
+    def initial_cuelist_process(self, cuelist, caller = None):
+        ''' Review all the items recursively to update target uuids and objects
+            and to load all the "loaded" flagged '''
         try:
-            for item in self.script.cuelist.contents:
-                '''Each item in the floating list must be prepared when the script
-                is just loaded to allow the user to play any of those cues, so...'''
-                armed = item.arm(self.cm, self.ossia_queue, init = True)
-                if armed == True:
-                    self.armedcues.append(item)
+            for index, item in enumerate(cuelist.contents):
+                if not item in self.armedcues:
+                    item.arm(self.cm, self.ossia_queue, self.armedcues, init = True)
+
+                if item.target is None or item.target == "":
+                    if (index + 1) == len(cuelist.contents):
+                        target_index = 0
+                    else:
+                        target_index = index + 1
+                
+                    item.target = cuelist.contents[target_index].uuid
+                    item._target_object = cuelist.contents[target_index]
+                else:
+                    try:
+                        item._target_object = self.script.find(item.target)
+                    except:
+                        pass
+
+                if isinstance(item, CueList):
+                    self.initial_cuelist_process(item, cuelist)
+
+            if cuelist.target is None or cuelist.target == "":
+                if caller != None:
+                    cuelist.target = caller.uuid
+                    cuelist._target_object = caller
+                else:
+                    cuelist.target = cuelist.uuid
+                    cuelist._target_object = cuelist
+            
+            # Then we force-arm the first item in the main list
+            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
+
         except Exception as e:
             logger.error(f'Error arming cue : {e}')
             
     def disarm_all(self):
         for item in self.armedcues:
-            item.disarm(self.cm, self.ossia_queue)
+            item.disarm(self.cm, self.ossia_queue, self.armedcues)
 
 
     ########################################################

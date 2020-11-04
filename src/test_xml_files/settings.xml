@@ -13,12 +13,13 @@
             <osc_in_port_base>7710</osc_in_port_base>
             <videoplayer>
                 <path>/usr/bin/xjadeo</path>
-                <args>--no-splash --no-initial-sync --quiet --no-letterbox --midi-driver alsa-seq --midifps 0 --ignore-file-offset</args>
+                <args>--no-splash --quiet --no-initial-sync --no-letterbox --midi-driver alsa-seq --ignore-file-offset</args>
+                <!-- no-initial-sync ignore-file-offset midifps 1 -->
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
                 <path>/usr/local/bin/audioplayer-cuems</path>
-                <args></args>
+                <args>-w -1</args>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>

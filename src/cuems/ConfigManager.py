@@ -106,7 +106,7 @@ class ConfigManager(Thread):
                 mkdir(path.join(self.library_path, 'trash', 'media'))
 
             if not path.exists( self.tmp_upload_path ) :
-                mkdir( self.library_path )
+                mkdir( self.tmp_upload_path )
 
         except Exception as e:
             logger.error("error: {} {}".format(type(e), e))

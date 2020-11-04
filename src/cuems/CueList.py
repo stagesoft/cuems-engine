@@ -1,6 +1,7 @@
 import uuid as uuid_module
 from .Cue import Cue
 from .CTimecode import CTimecode
+from .log import logger
 
 
 class CueList(Cue):
@@ -9,10 +10,7 @@ class CueList(Cue):
         super().__setitem__('uuid', str(uuid_module.uuid1()))
         if offset is not None:
             super().__setitem__('timecode', True)
-            if  isinstance(offset, CTimecode):
-                super().__setitem__('offset', offset)
-            else:
-                super().__setitem__('offset', CTimecode(start_timecode=offset))
+            super().__setitem__('offset', CTimecode(start_timecode=offset))
         else:
             super().__setitem__('timecode', False)
 
@@ -38,6 +36,14 @@ class CueList(Cue):
         self['contents'].__iadd__(other)
         return self
 
+    def append(self, other):
+        self['contents'].append(other)
+        return self
+
+    def pop(self, other):
+        self['contents'].pop(other)
+        return self
+
     def times(self):
         timelist = list()
         for item in self['contents']:
@@ -60,27 +66,46 @@ class CueList(Cue):
         
         return None
 
-    def arm(self, conf, queue, init = False):
-        if self.disabled != True and (self.loaded == init or self.timecode != init):
-            return_list = {}
+    def arm(self, conf, queue, armed_list, init = False):
+        if self.enabled and self.loaded == init:
+            if not self in armed_list:
+                for item in self.contents:
+                    # We arm the item if :
+                    # - is enabled
+                    # AND
+                    # - is marked as loaded at init
+                    item.arm(conf, queue, armed_list, init)
 
-            for item in self.contents:
-                # We arm the item if :
-                # - is not disabled
-                # AND
-                # - is loaded at init or is not really loaded or it is forced to load
-                if item.disabled != True and item.loaded == init:
-                    return_list += item.arm(conf, queue)
+                self.loaded = True
 
-            return return_list
+                armed_list.append(self)
+
+            if self.post_go == 'go':
+                self._target_object.arm(conf, queue, armed_list)
+
+            return True
         else:
-            return None
+            return False
 
-    def disarm(self, conf, queue):
-        return_list = {}
+    def go(self, ossia, mtc):
+        for item in self.contents:
+            item.go(ossia, mtc)
 
+    def disarm(self, conf, queue, armed_list):
         for item in self.contents:
             if item.loaded == True:
-                return_list += item.arm(conf, queue)
+                if not item.disarm(conf, queue, armed_list):
+                    logger.error(f'Could not unload properly cue {item.uuid}')
+                
+                try:
+                    armed_list.remove(item)
+                except ValueError:
+                    logger.error(f'Trying to disarm {item.uuid} was not on armed list')
 
-        return return_list
+        try:
+            if self in armed_list:
+                armed_list.remove(self)
+        except:
+            pass
+        
+        self.loaded = False

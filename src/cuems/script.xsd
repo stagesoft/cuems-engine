@@ -23,6 +23,8 @@
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
+              <xs:element name="unix_name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
+              <!-- The name, mainly a string, we can check lengths here too if desired -->
               <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
               <!-- Long description of the script -->
               <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
@@ -100,22 +102,22 @@
       <xs:element name="name" type="cms:NameStringType" />
       <xs:element name="description" type="cms:DescriptionStringType" />
       <!-- A flag to disable to cue -->
-      <xs:element name="disabled" type="xs:boolean" />
+      <xs:element name="enabled" type="cms:BoolType" />
       <!-- A flag to indicate auto arming -->
-      <xs:element name="loaded" type="xs:boolean" />
+      <xs:element name="loaded" type="cms:BoolType" />
       <!-- Timecode behaviour flag -->
-      <xs:element name="timecode" type="xs:boolean" />
+      <xs:element name="timecode" type="cms:BoolType" />
       <!-- Its time mark -->
       <xs:element name="offset" type="cms:CTimecodeType" minOccurs="0" />
       <xs:element name="loop" type="cms:LoopType" /> <!-- -1/0/n -->
       <!-- Execution options -->
       <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
-      <xs:element name="post_action" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="post_go" type="cms:PostGoType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="ui_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
-    <xs:assert test="(timecode = xs:boolean('true') and exists(offset)) or (timecode = xs:boolean('false') and not(exists(offset)))" />
+    <!-- <xs:assert test="(timecode = cms:BoolType('True') and exists(offset)) or (timecode = cms:BoolType('False') and not(exists(offset)))" /> -->
   </xs:complexType>
 
   <!-- Our cuelist contents type -->
@@ -133,7 +135,7 @@
     </xs:choice>
   </xs:complexType>
 
-  <xs:simpleType name="PostActionType">
+  <xs:simpleType name="PostGoType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="pause" />
       <xs:enumeration value="go" />
@@ -142,7 +144,7 @@
   </xs:simpleType>
 
   <xs:complexType name="UiPropertiesType">
-    <xs:sequence>
+    <xs:sequence minOccurs="0">
       <xs:element name="timeline_position" type="cms:Coordinates" />
     </xs:sequence>
   </xs:complexType>
@@ -178,7 +180,7 @@
 
   <xs:complexType name="AudioCueOutputsType">
     <!-- Specify n virtual audio outputs -->
-    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+    <xs:sequence minOccurs="1" maxOccurs="1">
       <!-- Output name -->
       <xs:element name="output_name" type="cms:NameStringType" />
       <!-- Output volume -->
@@ -217,7 +219,7 @@
   <xs:complexType name="VideoCueOutputsType">
     <!-- Video outputs type -->
     <!-- Specify n virtual video outputs -->
-    <xs:sequence minOccurs="1" maxOccurs="10">
+    <xs:sequence minOccurs="1" maxOccurs="1">
       <xs:element name="name" type="cms:NameStringType" />
       <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
     </xs:sequence>
@@ -289,9 +291,7 @@
   <!-- DMX allows a max of 512 different channels in a universe -->
   <xs:complexType name="DmxUniverseContentsType">
     <xs:sequence>
-      <xs:element name="dmx_channel" type="cms:DmxChannelType" minOccurs="0" maxOccurs="512">
-        <!-- They must be unique id's specs for the channels -->
-      </xs:element>
+      <xs:element name="dmx_channel" type="cms:DmxChannelType" minOccurs="0" maxOccurs="512" />
     </xs:sequence>
   </xs:complexType>
 
@@ -316,20 +316,18 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <xs:element name="action_type" type="xs:string" minOccurs="0" />
-          <xs:element name="target" type="cms:TargetType" />
+          <xs:element name="action_target" type="cms:TargetType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
 
-  <!-- 
   <xs:simpleType name="BoolType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="True" />
       <xs:enumeration value="False" />
     </xs:restriction>
   </xs:simpleType>
-  -->
 
   <xs:simpleType name="DateType">
     <xs:restriction base="xs:dateTime">
@@ -338,8 +336,8 @@
   </xs:simpleType>
 
   <xs:simpleType name="TimecodeType">
-    <xs:restriction base="xs:string">
-      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2}" />
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0" />
     </xs:restriction>
   </xs:simpleType>
 
