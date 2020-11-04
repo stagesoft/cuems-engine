@@ -22,6 +22,10 @@ class CueList(Cue):
     @contents.setter
     def contents(self, contents):
         super().__setitem__('contents', contents)
+
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
     
     def __add__(self, other):
         new_contents = self['contents'].copy()

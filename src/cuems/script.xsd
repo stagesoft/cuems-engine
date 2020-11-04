@@ -171,7 +171,7 @@
   </xs:complexType>
 
   <xs:complexType name="MediaType">
-    <xs:sequence>
+    <xs:sequence minOccurs="0" maxOccurs="1">
       <xs:element name="file_name" type="xs:string" />
     </xs:sequence>
   </xs:complexType>
@@ -216,9 +216,9 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A video media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="cms:VideoCueOutputsType" />
+          <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
@@ -227,8 +227,8 @@
   <xs:complexType name="VideoCueOutputsType">
     <!-- Video outputs type -->
     <!-- Specify n virtual video outputs -->
-    <xs:sequence minOccurs="1" maxOccurs="10">
-      <xs:element name="name" type="cms:NameStringType" />
+    <xs:sequence minOccurs="0" maxOccurs="10">
+      <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
     </xs:sequence>
   </xs:complexType>
@@ -256,7 +256,7 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A dmx media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <xs:element name="fadein_time" type="xs:integer" />
           <xs:element name="fadeout_time" type="xs:integer" />
         </xs:sequence>

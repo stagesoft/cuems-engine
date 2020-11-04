@@ -130,11 +130,11 @@ class Cue(dict):
 
     @property
     def media(self):
-        return super().__getitem__('media')
+        return super().__getitem__('Media')
 
     @media.setter
     def media(self, media):
-        super().__setitem__('media', media)
+        super().__setitem__('Media', media)
 
     def type(self):
         return type(self)
