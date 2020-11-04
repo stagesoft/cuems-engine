@@ -1,7 +1,6 @@
 import subprocess
 from threading import Thread
 import os
-import pyossia as ossia
 
 from .log import logger
 

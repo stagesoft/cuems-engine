@@ -1,9 +1,6 @@
 from collections.abc import Mapping
 from os import path
-from pyossia import ossia
 from .Cue import Cue
-from .DmxPlayer import DmxPlayer
-from .OssiaServer import QueueOSCData
 from .log import logger
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
@@ -50,63 +47,10 @@ class DmxCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, queue, init = False):
-        if self.disabled or (self.loaded != init and self.timecode == init):
-            if self.disabled and self.loaded:
-                self.disarm(conf, queue)
-            return False
+   
 
-        try:
-            # Assign its own audioplayer object
-            self.player = DmxPlayer(    conf.players_port_index['dmx'], 
-                                        conf.node_conf['dmxplayer']['path'],
-                                        str(conf.node_conf['dmxplayer']['args']),
-                                        str(path.join(conf.library_path, 'media', self.media)))
-        except Exception as e:
-            raise e
-
-        self.player.start()
-
-        # And dinamically attach it to the ossia for remote control it
-        OSC_DMXPLAYER_CONF = {  '/quit' : [ossia.ValueType.Impulse, None],
-                                '/load' : [ossia.ValueType.String, None], 
-                                self.offset_route : [ossia.ValueType.Float, None],
-                                '/wait' : [ossia.ValueType.Float, None],
-                                '/play' : [ossia.ValueType.Impulse, None],
-                                '/stop' : [ossia.ValueType.Impulse, None],
-                                '/stoponlost' : [ossia.ValueType.Bool, None],
-                                # TODO '/mtcfollow' : [ossia.ValueType.Bool, None],
-                                '/check' : [ossia.ValueType.Impulse, None]
-                                }
-
-        self.osc_route = f'/node{conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
-
-        queue.put(   QueueOSCData(  'add', 
-                                    self.osc_route, 
-                                    conf.node_conf['osc_dest_host'], 
-                                    conf.players_port_index['dmx'],
-                                    conf.players_port_index['dmx'] + 1, 
-                                    OSC_DMXPLAYER_CONF))
-
-        conf.players_port_index['audio'] = conf.players_port_index['audio'] + 2
-
-        self.loaded = True
-        return True
-
-    def disarm(self, cm, queue):
-        if self.loaded is True:
-            try:
-                self.player.kill()
-                cm.osc_port_index['used'].pop(self.player.port)
-                del self.player
-            except:
-                logger.warning(f'Could not properly unload cue {self.uuid}')
-            
-            self.loaded = False
-
-            return self.uuid
-        else:
-            return None
+    
+   
 
     @property
     def scene(self):
