@@ -1,4 +1,3 @@
-
 from cuems.log import logger
 from cuems.cuems_editor.CuemsWsServer import CuemsWsServer
 
@@ -11,7 +10,7 @@ q = Queue()
 
 settings_dict = {}
 settings_dict['session_uuid'] = str(uuid.uuid1())
-settings_dict['library_path'] = '/home/ion/cuems_library'
+settings_dict['library_path'] = '/home/stagelab/cuems_library'
 settings_dict['tmp_upload_path'] = '/tmp/cuemsuploads'
 settings_dict['database_name'] = 'project-manager.db'
 
