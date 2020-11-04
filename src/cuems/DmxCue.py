@@ -31,44 +31,21 @@ class DmxCue(Cue):
         super().__setitem__('media', media)
 
     @property
-    def fade_in(self):
-        return super().__getitem__('fade_in')
+    def fadein_time(self):
+        return super().__getitem__('fadein_time')
 
-    @fade_in.setter
-    def fade_in(self, fade_in):
-        super().__setitem__('fade_in', fade_in)
-
-    @property
-    def fade_out(self):
-        return super().__getitem__('fade_out')
-
-    @fade_out.setter
-    def fade_out(self, fade_out):
-        super().__setitem__('fade_out', fade_out)
+    @fadein_time.setter
+    def fadein_time(self, fade_in):
+        super().__setitem__('fadein_time', fade_in)
 
     @property
-    def player(self):
-        return super().__getitem__('player')
+    def fadeout_time(self):
+        return super().__getitem__('fadeout_time')
 
-    @player.setter
-    def player(self, player):
-        super().__setitem__('player', player)
+    @fadeout_time.setter
+    def fadeout_time(self, fade_out):
+        super().__setitem__('fadeout_time', fade_out)
 
-    @property
-    def osc_route(self):
-        return super().__getitem__('osc_route')
-
-    @osc_route.setter
-    def osc_route(self, osc_route):
-        super().__setitem__('osc_route', osc_route)
-
-    @property
-    def offset_route(self):
-        return super().__getitem__('offset_route')
-
-    @offset_route.setter
-    def offset_route(self, offset_route):
-        super().__setitem__('offset_route', offset_route)
 
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
@@ -213,7 +190,6 @@ class DmxChannel():
     def __init__(self, value=None, init_dict = None):
         self._value = value
         if init_dict is not None:
-            print(init_dict)
             self.value = init_dict
 
     def __repr__(self):

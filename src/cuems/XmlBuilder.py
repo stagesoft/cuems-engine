@@ -161,10 +161,24 @@ class CueOutputsXmlBuilder(CuemsScriptXmlBuilder):
                         cue_subelement.text = str(value)
                     elif isinstance(value, (type(None))):
                         cue_subelement = ET.SubElement(cue_element, key)
-                    
-        else:
+                    elif isinstance(value, dict):
+                        cue_subelement = ET.SubElement(cue_element, key)
+                        self.recurser(value, cue_subelement)
+        else:   
             cue_element.text = str(self._object)
         return self.xml_tree
+
+    def recurser(self, _dict, xml_tree):
+        if isinstance(_dict, dict):
+            for key, value in _dict.items():
+                if isinstance(value, (str, bool, int, float)):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                    cue_subelement.text = str(value)
+                elif isinstance(value, (type(None))):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                elif isinstance(value, dict):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                    self.recurser(value, cue_subelement)
 
 
 class AudioCueOutputXmlBuilder(CueOutputsXmlBuilder):
@@ -174,6 +188,9 @@ class VideoCueOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
 
 class DmxCueOutputXmlBuilder(CueOutputsXmlBuilder):
+    pass
+
+class asdsadOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
     
 class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder): # TODO: clean, not need anymore? 

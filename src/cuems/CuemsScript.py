@@ -71,16 +71,37 @@ class CuemsScript(dict):
         else:
             raise NotImplementedError
 
+    # returns a dict of UNIQUE media (no duplicates)
+
     def get_media(self):
         media_dict = dict()
         if (self.cuelist is not None) and (self.cuelist.contents is not None):
+            
             for cue in self.cuelist.contents:
                 try:
-                    if cue['Media']:
-                        media_dict[cue['Media']['file_name']] = type(cue)
+                    if cue.media is not None:
+                        if type(cue)==CueList:
+                            media_dict.update(self.get_cuelist_media(cue))
+                        else:
+                            media_dict[cue.media.file_name] = type(cue)
                 except KeyError:
-                    logger.debug('cue with no media')
+                    logger.debug("cue with no media")
         return media_dict
+
+    def get_cuelist_media(self, cuelist):
+        media_dict = dict()
+        if (cuelist is not None) and (cuelist.contents is not None):
+            for cue in cuelist.contents:
+                try:
+                    if cue.media is not None:
+                        if type(cue)==CueList:
+                            media_dict.update(self.get_cuelist_media(cue))
+                        else:
+                            media_dict[cue.media.file_name] = type(cue)
+                except KeyError:
+                    logger.debug("cue with no media")
+        return media_dict
+
 
     def find(self, uuid):
         return self.cuelist.find(uuid)
