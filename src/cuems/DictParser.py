@@ -4,6 +4,7 @@ from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
 from .Media import Media
+from .UI_properties import UI_properties
 from .Outputs import Outputs
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
@@ -26,7 +27,7 @@ class CuemsParser():
         try:
             parser_class = (globals()[parser_name], class_string)
         except KeyError as err:
-            # logger.debug("Could not find class {0}, reverting to generic parser class".format(err))
+            logger.debug("Could not find class {0}, reverting to generic parser class".format(err))
             parser_class = (globals()[GENERIC_PARSER], class_string)
         return parser_class
 
@@ -35,7 +36,7 @@ class CuemsParser():
         try:
             _class = globals()[class_string]
         except KeyError as err:
-            # logger.debug("Could not find class {0}".format(err))
+            logger.debug("Could not find class {0}".format(err))
             _class = GenericDict
         return _class
 
@@ -106,6 +107,9 @@ class CueListParser(CuemsScriptParser):
                     local_list.append(item_obj)
 
                 self.item_clp['contents'] = local_list
+            elif isinstance(dict_value, dict):
+                parser_class, class_string = self.get_parser_class(dict_key)
+                self.item_clp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
 
             else:
                 dict_value = self.convert_string_to_value(dict_value)
