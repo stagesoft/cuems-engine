@@ -52,10 +52,10 @@ class ConfigManager(Thread):
         self.node_conf = engine_settings['Settings']['node']
 
         logger.info(f'Cuems node_{self.node_conf["id"]:03} config loaded')
-        logger.info(f'Node conf: {self.node_conf}')
-        logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
-        logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
-        logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
+        #logger.info(f'Node conf: {self.node_conf}')
+        #logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
+        #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
+        #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
     def load_project_settings(self, project_uname):
         try:

@@ -9,7 +9,7 @@ import time
 
 
 class VideoPlayer(Thread):
-    def __init__(self, port_index, monitor_id, path, args, media):
+    def __init__(self, port_index, outputs, path, args, media):
         self.port = port_index['start']
         while self.port in port_index['used']:
             self.port += 2
@@ -18,7 +18,7 @@ class VideoPlayer(Thread):
             
         self.stdout = None
         self.stderr = None
-        self.monitor_id = monitor_id
+        self.outputs = outputs
         self.firstrun = True
         self.path = path
         self.args = args
@@ -31,7 +31,7 @@ class VideoPlayer(Thread):
 
     def run(self):
         if __debug__:
-            logger.debug('VideoPlayer starting on display:{}'.format(self.monitor_id))
+            logger.info(f'VideoPlayer starting on display : {self.outputs[0]["VideoCueOutput"]["name"]}.')
            
         try:
             # Calling xjadeo in a subprocess
@@ -44,7 +44,7 @@ class VideoPlayer(Thread):
             # self.p=subprocess.Popen([self.path, '--no-splash --no-initial-sync', '--osc', str(self.port), self.media],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.stdout, self.stderr = self.p.communicate()
         except OSError as e:
-            logger.warning("Failed to start VideoPlayer on display:{}".format(self.monitor_id))
+            logger.info(f'Failed to start VideoPlayer on display : {self.outputs[0]["VideoCueOutput"]["name"]}.')
             if __debug__:
                 logger.debug(e)
 

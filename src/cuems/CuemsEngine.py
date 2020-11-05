@@ -272,13 +272,13 @@ class CuemsEngine():
 
         try:
             self.cm.load_project_mappings(kwargs["value"])
-            logger.info(self.cm.project_maps)
+            # logger.info(self.cm.project_maps)
         except FileNotFoundError:
             logger.error('Project mappings file not found')
 
         try:
             self.cm.load_project_settings(kwargs["value"])
-            logger.info(self.cm.project_conf)
+            # logger.info(self.cm.project_conf)
         except FileNotFoundError:
             logger.error('Project settings file not found')
 
@@ -288,16 +288,20 @@ class CuemsEngine():
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
 
-            self.initial_cuelist_process(self.script.cuelist)
-
-            # Start MTC!
-            libmtcmaster.MTCSender_play(self.mtcmaster)
-
         except FileNotFoundError:
             logger.error('Project script file not found')
         except xmlschema.exceptions.XMLSchemaException as e:
-            logger.error(f'XML error: {e}')
-    
+            logger.exception(f'XML error: {e}')
+
+        try:
+            self.script_media_check()
+        except FileNotFoundError:
+            logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+        else:
+            self.initial_cuelist_process(self.script.cuelist)
+            # Start MTC!
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
 
@@ -314,7 +318,7 @@ class CuemsEngine():
 
         if cue_to_unload != None:
             if cue_to_unload in self.armedcues:
-                cue_to_unload.disarm(self.cm, self.ossia_queue, self.armedcues)
+                cue_to_unload.disarm(self.ossia_queue)
 
     def go_cue_callback(self, **kwargs):
         cue_to_go = self.script.find(kwargs['value'])
@@ -334,17 +338,22 @@ class CuemsEngine():
                 logger.info(f'Current Cue: {self.currentcue}')
 
     def go_callback(self, **kwargs):
-        if self.currentcue is None:
-            cue_to_go = self.script.cuelist.contents[0]
-        else:
-            cue_to_go = self.currentcue._target_object
+        if self.script:
+            if self.currentcue is None:
+                cue_to_go = self.script.cuelist.contents[0]
+            else:
+                cue_to_go = self.currentcue._target_object
+                if self.currentcue in self.armedcues:
+                    self.currentcue.disarm(self.ossia_queue)
 
-        if cue_to_go not in self.armedcues:
-            logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
+            if cue_to_go not in self.armedcues:
+                logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
+            else:
+                self.currentcue = cue_to_go
+                cue_to_go.go(self.ossia_server, self.mtclistener)
+                cue_to_go._target_object.arm(self.cm, self.ossia_queue, self.armedcues)
         else:
-            self.currentcue = cue_to_go
-            cue_to_go.go(self.ossia_server, self.mtclistener)
-            cue_to_go._target_object.arm(self.cm, self.ossia_queue, self.armedcues)
+            logger.warning('No script loaded, cannot process GO command.')
 
     def pause_callback(self, **kwargs):
         logger.info('OSC PAUSE!')
@@ -382,12 +391,32 @@ class CuemsEngine():
 
     ########################################################
     # Script treating methods
+    def script_media_check(self):
+        '''
+        Checks for all the media files referred in the script.
+        Returns the list of those which were not found in the media library.
+        '''
+        media_list = self.script.get_media()
+
+        for key, value in media_list.copy().items():
+            if os.path.isfile(os.path.join(self.cm.library_path, 'media', value[0])):
+                media_list.pop(key)
+
+        if media_list:
+            string = f'These media files could not be found:'
+            for key, value in media_list.items():
+                string += f'\n{value[1]} : {key} : {value[0]}'
+            logger.error(string)
+            raise FileNotFoundError
+        
     def initial_cuelist_process(self, cuelist, caller = None):
-        ''' Review all the items recursively to update target uuids and objects
-            and to load all the "loaded" flagged '''
+        ''' 
+        Review all the items recursively to update target uuids and objects
+        and to load all the "loaded" flagged
+        '''
         try:
             for index, item in enumerate(cuelist.contents):
-                if not item in self.armedcues:
+                if item.loaded and not item in self.armedcues:
                     item.arm(self.cm, self.ossia_queue, self.armedcues, init = True)
 
                 if item.target is None or item.target == "":
@@ -423,7 +452,8 @@ class CuemsEngine():
             
     def disarm_all(self):
         for item in self.armedcues:
-            item.disarm(self.cm, self.ossia_queue, self.armedcues)
+            if item in self.armedcues:
+                item.disarm(self.ossia_queue)
 
 
     ########################################################

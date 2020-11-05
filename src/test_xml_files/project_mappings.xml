@@ -3,36 +3,32 @@
     <ProjectMappings>
         <Audio>
             <outputs>
-                <virtual>
-                    <name>L</name>
+                <mapping>
+                    <virtual_name>L</virtual_name>
                     <mapped_to>L</mapped_to>
-                </virtual>
-                <virtual>
-                    <name>R</name>
+                </mapping>
+                <mapping>
+                    <virtual_name>R</virtual_name>
                     <mapped_to>R</mapped_to>
-                </virtual>
+                </mapping>
             </outputs>
             <inputs></inputs>
         </Audio>
         <Video>
             <outputs>
-                <virtual>
-                    <name>1</name>
+                <mapping>
+                    <virtual_name>1</virtual_name>
                     <mapped_to>1</mapped_to>
-                </virtual>
-                <virtual>
-                    <name>2</name>
-                    <mapped_to>1</mapped_to>
-                </virtual>
+                </mapping>
             </outputs>
             <inputs></inputs>
         </Video>
         <DMX>
             <outputs>
-                <virtual>
-                    <name>1</name>
+                <mapping>
+                    <virtual_name>1</virtual_name>
                     <mapped_to>1</mapped_to>
-                </virtual>
+                </mapping>
             </outputs>
             <inputs></inputs>
         </DMX>

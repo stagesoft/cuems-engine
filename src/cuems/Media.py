@@ -1,5 +1,5 @@
 class Media(dict):
-    
+   
     def __init__(self, init_dict=None):
         empty_keys= {"file_name": ""}
         if (init_dict):

@@ -50,11 +50,26 @@ class CueList(Cue):
                     if recursive != None:
                         return recursive
             
-            return None
-        
         return None
 
-    def arm(self, conf, queue, armed_list, init = False):
+    def get_media(self):
+        media_dict = dict()
+        for item in self.contents:
+            if isinstance(item, CueList):
+                media_dict.update( item.get_media() )
+            else:
+                try:
+                    if item['Media']:
+                        media_dict[item.uuid] = [item['Media']['file_name'], item.__class__.__name__]
+                except KeyError:
+                        media_dict[item.uuid] = {'media' : None, 'type' : item.__class__.__name__}
+        
+        return media_dict
+
+    def arm(self, conf, ossia_queue, armed_list, init = False):
+        self.conf = conf
+        self.armed_list = armed_list
+
         if self.enabled and self.loaded == init:
             if not self in armed_list:
                 for item in self.contents:
@@ -62,14 +77,14 @@ class CueList(Cue):
                     # - is enabled
                     # AND
                     # - is marked as loaded at init
-                    item.arm(conf, queue, armed_list, init)
+                    item.arm(self.conf, ossia_queue, self.armed_list, init)
 
                 self.loaded = True
 
                 armed_list.append(self)
 
             if self.post_go == 'go':
-                self._target_object.arm(conf, queue, armed_list)
+                self._target_object.arm(self.conf, ossia_queue, self.armed_list)
 
             return True
         else:
@@ -79,20 +94,13 @@ class CueList(Cue):
         for item in self.contents:
             item.go(ossia, mtc)
 
-    def disarm(self, conf, queue, armed_list):
+    def disarm(self, ossia_queue):
         for item in self.contents:
-            if item.loaded == True:
-                if not item.disarm(conf, queue, armed_list):
-                    logger.error(f'Could not unload properly cue {item.uuid}')
-                
-                try:
-                    armed_list.remove(item)
-                except ValueError:
-                    logger.error(f'Trying to disarm {item.uuid} was not on armed list')
-
+            if item.loaded and item in self.armed_list:
+                item.disarm(ossia_queue)
         try:
-            if self in armed_list:
-                armed_list.remove(self)
+            if self in self.armed_list:
+                self.armed_list.remove(self)
         except:
             pass
         

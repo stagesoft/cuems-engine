@@ -118,7 +118,7 @@ class Cue(dict):
         return super().__getitem__('post_go')
 
     @post_go.setter
-    def posta_ction(self, post_go):
+    def post_go(self, post_go):
         super().__setitem__('post_go', post_go)
 
     @property
@@ -138,12 +138,12 @@ class Cue(dict):
         super().__setitem__('ui_properties', ui_properties)
 
     @property
-    def media(self):
-        return super().__getitem__('media')
+    def Media(self):
+        return super().__getitem__('Media')
 
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
+    @Media.setter
+    def Media(self, Media):
+        super().__setitem__('Media', Media)
     def target_object(self, target_object):
         self._target_object = target_object
 
@@ -173,7 +173,7 @@ class Cue(dict):
             super().__setitem__(key, value)
 
     def arm(self, conf, queue, armed_list, init = False):
-        if self.enabled != False and self.loaded == init:
+        if self.enabled and self.loaded == init:
             self.loaded = True
 
             if not self in armed_list:

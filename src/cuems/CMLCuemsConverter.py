@@ -82,13 +82,13 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                         else:
                             result_dict[name] = self.list([value]) if self.force_list else value
                     else:
-                        if isinstance(result, list_types) or not result:
+                        if isinstance(result_dict, dict):
+                            result_dict[name] = self.list([result, value])
+                        elif isinstance(result, list_types) or not result:
                             result_dict.append({name:value})
                         elif isinstance(result[0], list_types) or \
                                 not isinstance(value, list_types):
                             result.append(value)
-                        else:
-                            result_dict[name] = self.list([result, value])
 
             elif data.text is not None and data.text != '':
                 result_dict[self.text_key] = data.text

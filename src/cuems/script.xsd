@@ -112,7 +112,7 @@
       <!-- Execution options -->
       <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
-      <xs:element name="post_go" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="post_go" type="cms:PostGoType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="ui_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
@@ -188,9 +188,7 @@
   <xs:complexType name="AudioCueOutputsType">
     <!-- Specify n virtual audio outputs -->
     <xs:sequence minOccurs="0" maxOccurs="unbounded">
-      <!-- Output name -->
       <xs:element name="output_name" type="cms:NameStringType" />
-      <!-- Output volume -->
       <xs:element name="output_vol" type="cms:PercentType" />
       <xs:element name="channels" type="cms:AudioChannelsType" />
     </xs:sequence>
@@ -203,12 +201,10 @@
   </xs:complexType>
 
   <xs:complexType name="AudioChannelType">
-    <xs:simpleContent>
-      <xs:extension base="cms:PercentType">
-        <xs:attribute name="channel_num" type="xs:positiveInteger" />
-        <xs:attribute name="channel_vol" type="xs:positiveInteger" />
-      </xs:extension>
-    </xs:simpleContent>
+    <xs:sequence>
+        <xs:element name="channel_num" type="xs:integer" />
+        <xs:element name="channel_vol" type="xs:integer" />
+    </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="VideoCueType">
@@ -216,9 +212,9 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A video media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <!-- An outputs section -->
-          <xs:element name="outputs" type="cms:VideoCueOutputsType" />
+          <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
@@ -256,7 +252,7 @@
       <xs:extension base="cms:CueType">
         <xs:sequence>
           <!-- A dmx media file path which can be none -->
-          <xs:element name="media" type="cms:MediaType" />
+          <xs:element name="Media" type="cms:MediaType" />
           <xs:element name="fadein_time" type="xs:integer" />
           <xs:element name="fadeout_time" type="xs:integer" />
         </xs:sequence>

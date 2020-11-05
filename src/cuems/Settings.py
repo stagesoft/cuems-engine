@@ -64,7 +64,7 @@ class Settings(dict):
 
     def validate(self):
         schema_file = open(self.schema)
-        schema = xmlschema.XMLSchema(schema_file, base_url='')
+        schema = xmlschema.XMLSchema11(schema_file, base_url='')
         xml_file = open(self.xmlfile)
         return schema.validate(xml_file)
 
@@ -74,7 +74,7 @@ class Settings(dict):
         except FileNotFoundError:
             logger.error(f'{self.schema} XSD file not found')
 
-        schema = xmlschema.XMLSchema(schema_file, base_url='', converter=CMLCuemsConverter)
+        schema = xmlschema.XMLSchema11(schema_file, base_url='', converter=CMLCuemsConverter)
         # schema = xmlschema.XMLSchema(schema_file, base_url='')
 
         try:

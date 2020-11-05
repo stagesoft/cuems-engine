@@ -80,15 +80,7 @@ class CuemsScript(dict):
             raise NotImplementedError
 
     def get_media(self):
-        media_dict = dict()
-        if (self.cuelist is not None) and (self.cuelist.contents is not None):
-            for cue in self.cuelist.contents:
-                try:
-                    if cue['Media']:
-                        media_dict[cue['Media']['file_name']] = type(cue)
-                except KeyError:
-                    logger.debug('cue with no media')
-        return media_dict
+        return self.cuelist.get_media()
 
     def find(self, uuid):
         return self.cuelist.find(uuid)

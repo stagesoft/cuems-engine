@@ -18,6 +18,9 @@
             <enabled>True</enabled>
             <loaded>False</loaded>
             <timecode>False</timecode>
+            <offset>
+                <CTimecode>0</CTimecode>
+            </offset>
             <loop>0</loop>
             <prewait>
                 <CTimecode>0</CTimecode>
@@ -42,6 +45,9 @@
                     <enabled>True</enabled>
                     <loaded>False</loaded>
                     <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>0</CTimecode>
@@ -50,7 +56,7 @@
                         <CTimecode>0</CTimecode>
                     </postwait>
                     <post_go>pause</post_go>
-                    <target>12345678-aaaa-aaaa-aaaa-123456789007</target>
+                    <target></target>
                     <ui_properties></ui_properties>
                     <contents>
                         <AudioCue>
@@ -61,6 +67,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -76,18 +85,26 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>strokes.wav</file_name>
-                            </media>
+                            </Media>
                             <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
+                            <Outputs>
+                                <AudioCueOutput>
+                                    <output_name>Out1</output_name>
+                                    <output_vol>100</output_vol>
+                                    <channels>
+                                        <channel>
+                                            <channel_num>1</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                        <channel>
+                                            <channel_num>2</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                    </channels>
+                                </AudioCueOutput>
+                            </Outputs>
                         </AudioCue>
                         <VideoCue>
                             <uuid>12345678-aaaa-aaaa-aaaa-123456789003</uuid>
@@ -97,6 +114,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -112,34 +132,36 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>strokes.mp4</file_name>
-                            </media>
-                            <outputs>
-                                <name>Video1</name>
-                                <output_geometry>
-                                    <x_scale>1</x_scale>
-                                    <y_scale>1</y_scale>
-                                    <corners>
-                                        <top_left>
-                                            <x>0</x>
-                                            <y>0</y>
-                                        </top_left>
-                                        <top_right>
-                                            <x>1</x>
-                                            <y>0</y>
-                                        </top_right>
-                                        <bott_left>
-                                            <x>0</x>
-                                            <y>1</y>
-                                        </bott_left>
-                                        <bott_right>
-                                            <x>1</x>
-                                            <y>1</y>
-                                        </bott_right>
-                                    </corners>
-                                </output_geometry>
-                            </outputs>
+                            </Media>
+                            <Outputs>
+                                <VideoCueOutput>
+                                    <name>Video1</name>
+                                    <output_geometry>
+                                        <x_scale>1</x_scale>
+                                        <y_scale>1</y_scale>
+                                        <corners>
+                                            <top_left>
+                                                <x>0</x>
+                                                <y>0</y>
+                                            </top_left>
+                                            <top_right>
+                                                <x>1</x>
+                                                <y>0</y>
+                                            </top_right>
+                                            <bott_left>
+                                                <x>0</x>
+                                                <y>1</y>
+                                            </bott_left>
+                                            <bott_right>
+                                                <x>1</x>
+                                                <y>1</y>
+                                            </bott_right>
+                                        </corners>
+                                    </output_geometry>
+                                </VideoCueOutput>
+                            </Outputs>
                         </VideoCue>
                     </contents>
                 </CueList>
@@ -151,6 +173,9 @@
                     <enabled>True</enabled>
                     <loaded>False</loaded>
                     <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>0</CTimecode>
@@ -159,7 +184,7 @@
                         <CTimecode>0</CTimecode>
                     </postwait>
                     <post_go>pause</post_go>
-                    <target>12345678-aaaa-aaaa-aaaa-123456789001</target>
+                    <target></target>
                     <ui_properties></ui_properties>
                     <contents>
                         <AudioCue>
@@ -170,6 +195,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -185,18 +213,26 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>sposa_non_mi_conosci.16.s.wav</file_name>
-                            </media>
+                            </Media>
                             <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
+                            <Outputs>
+                                <AudioCueOutput>
+                                    <output_name>Out1</output_name>
+                                    <output_vol>100</output_vol>
+                                    <channels>
+                                        <channel>
+                                            <channel_num>1</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                        <channel>
+                                            <channel_num>2</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                    </channels>
+                                </AudioCueOutput>
+                            </Outputs>
                         </AudioCue>
                         <VideoCue>
                             <uuid>12345678-aaaa-aaaa-aaaa-123456789006</uuid>
@@ -206,6 +242,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -221,34 +260,36 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>sposa_non_mi_conosci.mp4</file_name>
-                            </media>
-                            <outputs>
-                                <name>Video1</name>
-                                <output_geometry>
-                                    <x_scale>1</x_scale>
-                                    <y_scale>1</y_scale>
-                                    <corners>
-                                        <top_left>
-                                            <x>0</x>
-                                            <y>0</y>
-                                        </top_left>
-                                        <top_right>
-                                            <x>1</x>
-                                            <y>0</y>
-                                        </top_right>
-                                        <bott_left>
-                                            <x>0</x>
-                                            <y>1</y>
-                                        </bott_left>
-                                        <bott_right>
-                                            <x>1</x>
-                                            <y>1</y>
-                                        </bott_right>
-                                    </corners>
-                                </output_geometry>
-                            </outputs>
+                            </Media>
+                            <Outputs>
+                                <VideoCueOutput>
+                                    <name>Video1</name>
+                                    <output_geometry>
+                                        <x_scale>1</x_scale>
+                                        <y_scale>1</y_scale>
+                                        <corners>
+                                            <top_left>
+                                                <x>0</x>
+                                                <y>0</y>
+                                            </top_left>
+                                            <top_right>
+                                                <x>1</x>
+                                                <y>0</y>
+                                            </top_right>
+                                            <bott_left>
+                                                <x>0</x>
+                                                <y>1</y>
+                                            </bott_left>
+                                            <bott_right>
+                                                <x>1</x>
+                                                <y>1</y>
+                                            </bott_right>
+                                        </corners>
+                                    </output_geometry>
+                                </VideoCueOutput>
+                            </Outputs>
                         </VideoCue>
                     </contents>
                 </CueList>
@@ -260,6 +301,9 @@
                     <enabled>True</enabled>
                     <loaded>False</loaded>
                     <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>0</CTimecode>
@@ -268,7 +312,7 @@
                         <CTimecode>0</CTimecode>
                     </postwait>
                     <post_go>pause</post_go>
-                    <target>12345678-aaaa-aaaa-aaaa-123456789004</target>
+                    <target></target>
                     <ui_properties></ui_properties>
                     <contents>
                         <AudioCue>
@@ -279,6 +323,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -294,18 +341,26 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>sync.2.wav</file_name>
-                            </media>
+                            </Media>
                             <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
+                            <Outputs>
+                                <AudioCueOutput>
+                                    <output_name>Out1</output_name>
+                                    <output_vol>100</output_vol>
+                                    <channels>
+                                        <channel>
+                                            <channel_num>1</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                        <channel>
+                                            <channel_num>2</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                    </channels>
+                                </AudioCueOutput>
+                            </Outputs>
                         </AudioCue>
                         <VideoCue>
                             <uuid>12345678-aaaa-aaaa-aaaa-123456789009</uuid>
@@ -315,6 +370,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -330,34 +388,36 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>sync.2.mp4</file_name>
-                            </media>
-                            <outputs>
-                                <name>Video1</name>
-                                <output_geometry>
-                                    <x_scale>1</x_scale>
-                                    <y_scale>1</y_scale>
-                                    <corners>
-                                        <top_left>
-                                            <x>0</x>
-                                            <y>0</y>
-                                        </top_left>
-                                        <top_right>
-                                            <x>1</x>
-                                            <y>0</y>
-                                        </top_right>
-                                        <bott_left>
-                                            <x>0</x>
-                                            <y>1</y>
-                                        </bott_left>
-                                        <bott_right>
-                                            <x>1</x>
-                                            <y>1</y>
-                                        </bott_right>
-                                    </corners>
-                                </output_geometry>
-                            </outputs>
+                            </Media>
+                            <Outputs>
+                                <VideoCueOutput>
+                                    <name>Video1</name>
+                                    <output_geometry>
+                                        <x_scale>1</x_scale>
+                                        <y_scale>1</y_scale>
+                                        <corners>
+                                            <top_left>
+                                                <x>0</x>
+                                                <y>0</y>
+                                            </top_left>
+                                            <top_right>
+                                                <x>1</x>
+                                                <y>0</y>
+                                            </top_right>
+                                            <bott_left>
+                                                <x>0</x>
+                                                <y>1</y>
+                                            </bott_left>
+                                            <bott_right>
+                                                <x>1</x>
+                                                <y>1</y>
+                                            </bott_right>
+                                        </corners>
+                                    </output_geometry>
+                                </VideoCueOutput>
+                            </Outputs>
                         </VideoCue>
                     </contents>
                 </CueList>
@@ -369,6 +429,9 @@
                     <enabled>True</enabled>
                     <loaded>False</loaded>
                     <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
                     <loop>0</loop>
                     <prewait>
                         <CTimecode>0</CTimecode>
@@ -388,6 +451,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -403,18 +469,26 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>daft.wav</file_name>
-                            </media>
+                            </Media>
                             <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
+                            <Outputs>
+                                <AudioCueOutput>
+                                    <output_name>Out1</output_name>
+                                    <output_vol>100</output_vol>
+                                    <channels>
+                                        <channel>
+                                            <channel_num>1</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                        <channel>
+                                            <channel_num>2</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                    </channels>
+                                </AudioCueOutput>
+                            </Outputs>
                         </AudioCue>
                         <VideoCue>
                             <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
@@ -424,6 +498,9 @@
                             <enabled>True</enabled>
                             <loaded>False</loaded>
                             <timecode>False</timecode>
+                            <offset>
+                                <CTimecode>0</CTimecode>
+                            </offset>
                             <loop>0</loop>
                             <prewait>
                                 <CTimecode>0</CTimecode>
@@ -439,34 +516,36 @@
                                     <y>0</y>
                                 </timeline_position>
                             </ui_properties>
-                            <media>
+                            <Media>
                                 <file_name>daft25.m4v</file_name>
-                            </media>
-                            <outputs>
-                                <name>Video1</name>
-                                <output_geometry>
-                                    <x_scale>1</x_scale>
-                                    <y_scale>1</y_scale>
-                                    <corners>
-                                        <top_left>
-                                            <x>0</x>
-                                            <y>0</y>
-                                        </top_left>
-                                        <top_right>
-                                            <x>1</x>
-                                            <y>0</y>
-                                        </top_right>
-                                        <bott_left>
-                                            <x>0</x>
-                                            <y>1</y>
-                                        </bott_left>
-                                        <bott_right>
-                                            <x>1</x>
-                                            <y>1</y>
-                                        </bott_right>
-                                    </corners>
-                                </output_geometry>
-                            </outputs>
+                            </Media>
+                            <Outputs>
+                                <VideoCueOutput>
+                                    <name>Video1</name>
+                                    <output_geometry>
+                                        <x_scale>1</x_scale>
+                                        <y_scale>1</y_scale>
+                                        <corners>
+                                            <top_left>
+                                                <x>0</x>
+                                                <y>0</y>
+                                            </top_left>
+                                            <top_right>
+                                                <x>1</x>
+                                                <y>0</y>
+                                            </top_right>
+                                            <bott_left>
+                                                <x>0</x>
+                                                <y>1</y>
+                                            </bott_left>
+                                            <bott_right>
+                                                <x>1</x>
+                                                <y>1</y>
+                                            </bott_right>
+                                        </corners>
+                                    </output_geometry>
+                                </VideoCueOutput>
+                            </Outputs>
                         </VideoCue>
                     </contents>
                 </CueList>

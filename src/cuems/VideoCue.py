@@ -36,20 +36,20 @@ class VideoCue(Cue):
         self.OSC_VIDEOPLAYER_CONF[self._offset_route] = [ossia.ValueType.Int, None]
 
     @property
-    def media(self):
-        return super().__getitem__('media')
+    def Media(self):
+        return super().__getitem__('Media')
 
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
+    @Media.setter
+    def Media(self, Media):
+        super().__setitem__('Media', Media)
 
     @property
-    def outputs(self):
-        return super().__getitem__('outputs')
+    def Outputs(self):
+        return super().__getitem__('Outputs')
 
-    @outputs.setter
-    def outputs(self, outputs):
-        super().__setitem__('outputs', outputs)
+    @Outputs.setter
+    def Outputs(self, Outputs):
+        super().__setitem__('Outputs', Outputs)
 
     def player(self, player):
         self._player = player
@@ -63,27 +63,26 @@ class VideoCue(Cue):
     def review_offset(self, timecode):
         return -(int(timecode.frame_number))
 
-    def arm(self, conf, queue, armed_list, init = False):
+    def arm(self, conf, ossia_queue, armed_list, init = False):
         self.conf = conf
-        self.queue = queue
         self.armed_list = armed_list
 
         if not self.enabled:
-            if self.loaded:
-                self.disarm(conf, queue, armed_list)
+            if self.loaded and self in self.armed_list:
+                    self.disarm(ossia_queue)
             return False
         elif self.loaded and not init:
-            if not self in armed_list:
-                armed_list.append(self)
+            if not self in self.armed_list:
+                self.armed_list.append(self)
             return True
 
         # Assign its own videoplayer object
         try:
-            self._player = VideoPlayer(  conf.players_port_index, 
-                                        self.outputs,
-                                        conf.node_conf['videoplayer']['path'],
-                                        str(conf.node_conf['videoplayer']['args']),
-                                        str(path.join(conf.library_path, 'media', self.media['file_name'])))
+            self._player = VideoPlayer( self.conf.players_port_index, 
+                                        self.Outputs,
+                                        self.conf.node_conf['videoplayer']['path'],
+                                        str(self.conf.node_conf['videoplayer']['args']),
+                                        str(path.join(self.conf.library_path, 'media', self.Media['file_name'])))
         except Exception as e:
             raise e
 
@@ -92,7 +91,7 @@ class VideoCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/node{conf.node_conf["id"]:03}/videoplayer-{self.uuid}'
 
-        queue.put(   QueueOSCData(  'add', 
+        ossia_queue.put(   QueueOSCData(  'add', 
                                     self._osc_route, 
                                     conf.node_conf['osc_dest_host'], 
                                     self._player.port,
@@ -100,8 +99,8 @@ class VideoCue(Cue):
                                     self.OSC_VIDEOPLAYER_CONF))
 
         self.loaded = True
-        if not self in armed_list:
-            armed_list.append(self)
+        if not self in self.armed_list:
+            self.armed_list.append(self)
 
         return True
 
@@ -127,7 +126,7 @@ class VideoCue(Cue):
             sleep(self.prewait.milliseconds() / 1000)
 
         if self.post_go == 'pause':
-            self._target_object.arm(self.conf, self.ossia_queue, self.armed_list)
+            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
         elif self.post_go == 'go':
             self._target_object.go(ossia, mtc)
 
@@ -150,26 +149,27 @@ class VideoCue(Cue):
         except AttributeError:
             return
         
-        self.disarm(self.conf, self.ossia_queue, self.armed_list)
+        if self in self.armed_list:
+            self.disarm(ossia.conf_queue)
 
-    def disarm(self, conf, queue, armed_list):
+    def disarm(self, ossia_queue):
         if self.loaded is True:
             try:
                 self._player.kill()
-                conf.players_port_index['used'].remove(self._player.port)
+                self.conf.players_port_index['used'].remove(self._player.port)
                 self._player.join()
                 self._player = None
 
-                queue.put(QueueOSCData( 'remove', 
-                                        self._osc_route, 
-                                        dictionary = self.OSC_VIDEOPLAYER_CONF))
+                ossia_queue.put(QueueOSCData(   'remove', 
+                                                self._osc_route, 
+                                                dictionary = self.OSC_VIDEOPLAYER_CONF))
 
             except Exception as e:
                 logger.warning(f'Could not properly unload cue {self.uuid} : {e}')
 
             try:
-                if self in armed_list:
-                    armed_list.remove(self)
+                if self in self.armed_list:
+                    self.armed_list.remove(self)
             except:
                 pass
             
