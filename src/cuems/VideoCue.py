@@ -9,13 +9,6 @@ class VideoCue(Cue):
       super().__init__(time, init_dict)
       self.offset_route = '/jadeo/offset'
 
-    @property
-    def media(self):
-        return super().__getitem__('media')
-
-    @media.setter
-    def media(self, media):
-        super().__setitem__('media', media)
 
     @property
     def outputs(self):
