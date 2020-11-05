@@ -23,7 +23,6 @@
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
-              <xs:element name="unix_name" type="cms:NameStringType" />
               <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
               <!-- Long description of the script -->
               <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
@@ -114,7 +113,7 @@
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
       <xs:element name="post_go" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
-      <xs:element name="ui_properties" type="cms:UiPropertiesType" />
+      <xs:element name="UI_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
   </xs:complexType>
 
@@ -203,12 +202,10 @@
   </xs:complexType>
 
   <xs:complexType name="AudioChannelType">
-    <xs:simpleContent>
-      <xs:extension base="cms:PercentType">
-        <xs:attribute name="channel_num" type="xs:positiveInteger" />
-        <xs:attribute name="channel_vol" type="xs:positiveInteger" />
-      </xs:extension>
-    </xs:simpleContent>
+    <xs:sequence>
+        <xs:element name="channel_num" type="xs:integer" />
+        <xs:element name="channel_vol" type="xs:integer" />
+    </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="VideoCueType">

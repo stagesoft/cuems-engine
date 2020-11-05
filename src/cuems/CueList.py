@@ -6,7 +6,7 @@ from .CTimecode import CTimecode
 class CueList(Cue):
     
     def __init__(self, contents=[], offset=None):
-        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "ui_properties": "", "contents": []}
+        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "UI_properties": "", "contents": []}
         super().__init__(init_dict=empty_keys)
         super().__setitem__('uuid', str(uuid_module.uuid1()))
         

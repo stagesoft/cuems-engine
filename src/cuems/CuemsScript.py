@@ -5,7 +5,7 @@ from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
     def __init__(self, uuid=None, name=None, date=None, cuelist=None):
-        empty_keys = {"uuid":"", "unix_name":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
+        empty_keys = {"uuid":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
         super().__init__(empty_keys)
 
         if uuid is None:
