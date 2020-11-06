@@ -106,30 +106,28 @@ class VideoCue(Cue):
 
     def go(self, ossia, mtc):
         if not self.loaded:
-            logger.error(f'Cue {self.uuid} not loaded to go...')
-            raise Exception(f'Cue {self.uuid} not loaded to go')
+            logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
+            raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
 
         else:
+            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+
+            # PREWAIT
+            if self.prewait > 0:
+                sleep(self.prewait.milliseconds / 1000)
+
             # GO
-            thread = Thread(name = f'Go:uuid:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
+            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
             thread.start()
 
             # POSTWAIT
             if self.postwait > 0:
-                sleep(self.postwait.milliseconds() / 1000)
+                sleep(self.postwait.milliseconds / 1000)
+
+            if self.post_go == 'go':
                 self._target_object.go(ossia, mtc)
 
-
     def go_thread(self, ossia, mtc):
-        # PREWAIT
-        if self.prewait > 0:
-            sleep(self.prewait.milliseconds() / 1000)
-
-        if self.post_go == 'pause':
-            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
-        elif self.post_go == 'go':
-            self._target_object.go(ossia, mtc)
-
         try:
             key = f'{self._osc_route}{self._offset_route}'
             ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc.main_tc)
@@ -166,6 +164,9 @@ class VideoCue(Cue):
 
             except Exception as e:
                 logger.warning(f'Could not properly unload cue {self.uuid} : {e}')
+
+            if self.post_go == 'go':
+                self._target_object.disarm(ossia_queue)
 
             try:
                 if self in self.armed_list:

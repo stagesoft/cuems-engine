@@ -293,6 +293,10 @@ class CuemsEngine():
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
 
+        if self.script is None:
+            logger.warning(f'Script could not be loaded. Check consistency and retry please.')
+            raise Exception('Script could not be loaded.')
+        
         try:
             self.script_media_check()
         except FileNotFoundError:
@@ -342,7 +346,7 @@ class CuemsEngine():
             if self.currentcue is None:
                 cue_to_go = self.script.cuelist.contents[0]
             else:
-                cue_to_go = self.currentcue._target_object
+                cue_to_go = self.currentcue.get_next_cue()
                 if self.currentcue in self.armedcues:
                     self.currentcue.disarm(self.ossia_queue)
 

@@ -4,6 +4,7 @@ from .Media import Media
 from .log import logger
 import uuid as uuid_module
 from time import sleep
+from threading import Thread
 
 class Cue(dict):
     def __init__(self, offset=None, init_dict = None, uuid=None ):
@@ -20,6 +21,9 @@ class Cue(dict):
         
         if init_dict is not None:
             super().__init__(init_dict)
+
+        self.conf = None
+        self.armed_list = None
 
     @classmethod
     def from_dict(cls, init_dict):
@@ -164,6 +168,8 @@ class Cue(dict):
                     dict_timecode = value.pop('CTimecode', None)
                     if dict_timecode is None:
                         ctime_value = CTimecode()
+                    elif isinstance(dict_timecode, int):
+                        ctime_value = CTimecode(start_seconds = dict_timecode)
                     else:
                         ctime_value = CTimecode(dict_timecode)
 
@@ -172,28 +178,69 @@ class Cue(dict):
         else:
             super().__setitem__(key, value)
 
-    def arm(self, conf, queue, armed_list, init = False):
-        if self.enabled and self.loaded == init:
-            self.loaded = True
+    def arm(self, conf, ossia_queue, armed_list, init = False):
+        self.conf = conf
+        self.armed_list = armed_list
 
-            if not self in armed_list:
-                armed_list.append(self)
-
-            return True
-        else:
+        if not self.enabled:
+            if self.loaded and self in self.armed_list:
+                self.disarm(ossia_queue)
             return False
+        elif self.loaded and not init:
+            if not self in self.armed_list:
+                self.armed_list.append(self)
+            return True
+
+        return True
 
     def go(self, ossia, mtc):
-        logger.info(f'Go on a Generic "Empty" Cye : uuid : {self.uuid}')
-        sleep(3)
+        if not self.loaded:
+            logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
+            raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
 
-    def disarm(self, conf, armed_list):
+        else:
+            # ARM NEXT TARGET
+            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+
+            # GO
+            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
+
+            # PREWAIT
+            if self.prewait > 0:
+                sleep(self.prewait.milliseconds / 1000)
+
+            # PLAY
+            thread.start()
+
+            # POSTWAIT
+            if self.postwait > 0:
+                sleep(self.postwait.milliseconds / 1000)
+
+            if self.post_go == 'go':
+                self._target_object.go(ossia, mtc)
+
+    def go_thread(self, ossia, mtc):
+
+        if self in self.armed_list:
+            self.disarm(ossia.conf_queue)
+
+
+    def disarm(self, ossia_queue):
         if self.loaded is True:
             self.loaded = False
 
-            if self in armed_list:
-                armed_list.remove(self)
+            if self.post_go == 'go':
+                self._target_object.disarm(ossia_queue)
+
+            if self in self.armed_list:
+                self.armed_list.remove(self)
 
             return True
         else:
             return False
+
+    def get_next_cue(self):
+        if self.post_go == 'pause':
+            return self._target_object
+        else:
+            return self._target_object.get_next_cue()

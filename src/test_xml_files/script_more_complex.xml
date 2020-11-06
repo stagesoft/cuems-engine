@@ -50,12 +50,12 @@
                     </offset>
                     <loop>0</loop>
                     <prewait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>3</CTimecode>
                     </prewait>
                     <postwait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>10</CTimecode>
                     </postwait>
-                    <post_go>pause</post_go>
+                    <post_go>go</post_go>
                     <target></target>
                     <ui_properties></ui_properties>
                     <contents>
