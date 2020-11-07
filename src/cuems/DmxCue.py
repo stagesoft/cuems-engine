@@ -1,3 +1,6 @@
+from threading import Thread
+from time import sleep
+
 from collections.abc import Mapping
 from os import path
 from pyossia import ossia
@@ -73,61 +76,111 @@ class DmxCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, queue, armed_list):
+    def arm(self, conf, ossia_queue, armed_list, init = False):
         self.conf = conf
-        self.ossia_queue = queue
         self.armed_list = armed_list
 
-        if not self.enabled or not self.loaded:
-            if not self.enabled and self.loaded:
-                self.disarm(conf, queue, armed_list)
+        if not self.enabled:
+            if self.loaded and self in self.armed_list:
+                    self.disarm(ossia_queue)
             return False
+        elif self.loaded and not init:
+            if not self in self.armed_list:
+                self.armed_list.append(self)
+            return True
 
+        # Assign its own audioplayer object
         try:
-            # Assign its own audioplayer object
-            self._player = DmxPlayer(    conf.players_port_index, 
-                                        conf.node_conf['dmxplayer']['path'],
-                                        str(conf.node_conf['dmxplayer']['args']),
-                                        str(path.join(conf.library_path, 'media', self.Media['file_name'])))
+            self._player = DmxPlayer(   self.conf.players_port_index, 
+                                        self.conf.node_conf['dmxplayer']['path'],
+                                        str(self.conf.node_conf['dmxplayer']['args']),
+                                        str(path.join(self.conf.library_path, 'media', self.Media['file_name'])))
         except Exception as e:
             raise e
 
         self._player.start()
 
         # And dinamically attach it to the ossia for remote control it
-        self._osc_route = f'/node{conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
+        self._osc_route = f'/node{self.conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
 
-        queue.put(   QueueOSCData(  'add', 
+        ossia_queue.put(   QueueOSCData(  'add', 
                                     self._osc_route, 
-                                    conf.node_conf['osc_dest_host'], 
+                                    self.conf.node_conf['osc_dest_host'], 
                                     self._player.port,
                                     self._player.port + 1, 
                                     self.OSC_DMXPLAYER_CONF))
 
         self.loaded = True
-        if not self in armed_list:
-            armed_list.append(self)
+        if not self in self.armed_list:
+            self.armed_list.append(self)
 
         return True
 
-    def disarm(self, conf, queue, armed_list):
+    def go(self, ossia, mtc):
+        if not self.loaded:
+            logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
+            raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
+
+        else:
+            if self._target_object is not None:
+                self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+
+            # PREWAIT
+            if self.prewait > 0:
+                sleep(self.prewait.milliseconds / 1000)
+
+            # GO
+            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
+            thread.start()
+
+            # POSTWAIT
+            if self.postwait > 0:
+                sleep(self.postwait.milliseconds / 1000)
+
+            if self.post_go == 'go':
+                self._target_object.go(ossia, mtc)
+
+    def go_thread(self, ossia, mtc):
+        try:
+            key = f'{self._osc_route}{self._offset_route}'
+            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc)
+            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
+        except KeyError:
+            logger.debug(f'OSC key error 1 in go_callback {key}')
+
+        try:
+            key = f'{self._osc_route}/mtcfollow'
+            ossia.osc_registered_nodes[key][0].parameter.value = True
+        except KeyError:
+            logger.debug(f'OSC key error 2 in go_callback {key}')
+
+        try:
+            while self._player.is_alive():
+                sleep(0.05)
+        except AttributeError:
+            return
+        
+        if self in self.armed_list:
+            self.disarm(ossia.conf_queue)
+
+    def disarm(self, ossia_queue):
         if self.loaded is True:
             try:
                 self._player.kill()
-                conf.players_port_index['used'].remove(self._player.port)
+                self.conf.players_port_index['used'].remove(self._player.port)
                 self._player.join()
                 self._player = None
 
-                queue.put(QueueOSCData( 'remove', 
-                                        self._osc_route, 
-                                        dictionary = self.OSC_DMXPLAYER_CONF))
+                ossia_queue.put(QueueOSCData(   'remove', 
+                                                self._osc_route, 
+                                                dictionary = self.OSC_DMXPLAYER_CONF))
 
             except Exception as e:
-                logger.warning(f'Could not properly unload cue {self.uuid} : {e}')
+                logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
 
             try:
-                if self in armed_list:
-                    armed_list.remove(self)
+                if self in self.armed_list:
+                    self.armed_list.remove(self)
             except:
                 pass
             

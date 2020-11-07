@@ -110,7 +110,8 @@ class VideoCue(Cue):
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
 
         else:
-            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+            if self._target_object is not None:
+                self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
 
             # PREWAIT
             if self.prewait > 0:
@@ -163,10 +164,7 @@ class VideoCue(Cue):
                                                 dictionary = self.OSC_VIDEOPLAYER_CONF))
 
             except Exception as e:
-                logger.warning(f'Could not properly unload cue {self.uuid} : {e}')
-
-            if self.post_go == 'go':
-                self._target_object.disarm(ossia_queue)
+                logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
 
             try:
                 if self in self.armed_list:

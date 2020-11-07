@@ -200,7 +200,8 @@ class Cue(dict):
 
         else:
             # ARM NEXT TARGET
-            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+            if self._target_object is not None:
+                self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
 
             # GO
             thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
@@ -229,9 +230,6 @@ class Cue(dict):
         if self.loaded is True:
             self.loaded = False
 
-            if self.post_go == 'go':
-                self._target_object.disarm(ossia_queue)
-
             if self in self.armed_list:
                 self.armed_list.remove(self)
 
@@ -240,7 +238,10 @@ class Cue(dict):
             return False
 
     def get_next_cue(self):
-        if self.post_go == 'pause':
-            return self._target_object
+        if self.target is None:
+            return None
         else:
-            return self._target_object.get_next_cue()
+            if self.post_go == 'pause':
+                return self._target_object
+            else:
+                return self._target_object.get_next_cue()

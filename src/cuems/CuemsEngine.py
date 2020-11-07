@@ -347,6 +347,13 @@ class CuemsEngine():
                 cue_to_go = self.script.cuelist.contents[0]
             else:
                 cue_to_go = self.currentcue.get_next_cue()
+                if not cue_to_go:
+                    logger.info(f'Reached end of playing at {self.currentcue.__class__.__name__} {self.currentcue.uuid}')
+                    if self.currentcue in self.armedcues:
+                        self.currentcue.disarm(self.ossia_queue)
+                    self.currentcue = None
+                    return
+
                 if self.currentcue in self.armedcues:
                     self.currentcue.disarm(self.ossia_queue)
 
@@ -425,12 +432,16 @@ class CuemsEngine():
 
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
-                        target_index = 0
+                        '''
+                        If the item is the last in the cuelist we leave the
+                        target fields as None
+                        '''
+                        item.target = None
+                        item._target_object = None
                     else:
-                        target_index = index + 1
+                        item.target = cuelist.contents[index + 1].uuid
+                        item._target_object = cuelist.contents[index + 1]
                 
-                    item.target = cuelist.contents[target_index].uuid
-                    item._target_object = cuelist.contents[target_index]
                 else:
                     try:
                         item._target_object = self.script.find(item.target)
