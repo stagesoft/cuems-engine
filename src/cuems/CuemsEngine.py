@@ -302,6 +302,10 @@ class CuemsEngine():
             logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
         else:
             self.initial_cuelist_process(self.script.cuelist)
+
+            # Then we force-arm the first item in the main list
+            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
+
             # Start MTC!
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
@@ -458,9 +462,6 @@ class CuemsEngine():
                     cuelist.target = cuelist.uuid
                     cuelist._target_object = cuelist
             
-            # Then we force-arm the first item in the main list
-            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
-
         except Exception as e:
             logger.error(f'Error arming cue : {e}')
             
