@@ -21,7 +21,6 @@ from .mtcmaster import libmtcmaster
 
 from .log import logger
 from .OssiaServer import OssiaServer, QueueData, QueueOSCData
-from .OscServer import OscServer
 from .Settings import Settings
 from .CuemsScript import CuemsScript
 from .CueList import CueList
