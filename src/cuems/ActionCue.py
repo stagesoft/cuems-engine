@@ -50,25 +50,25 @@ class ActionCue(Cue):
         return -(float(mtc.milliseconds()))
 
     def arm(self, conf, ossia_queue, armed_list, init = False):
-        self.conf = conf
-        self.armed_list = armed_list
+        self._conf = conf
+        self._armed_list = armed_list
 
         if not self.enabled:
-            if self.loaded and self in self.armed_list:
+            if self.loaded and self in self._armed_list:
                 self.disarm(ossia_queue)
             return False
         elif self.loaded and not init:
-            if not self in self.armed_list:
-                self.armed_list.append(self)
+            if not self in self._armed_list:
+                self._armed_list.append(self)
             return True
 
         # Assign its own player object
         '''
         try:
-            self._player = AudioPlayer( self.conf.players_port_index, 
-                                        self.conf.node_conf['audioplayer']['path'],
-                                        str(self.conf.node_conf['audioplayer']['args']),
-                                        str(path.join(self.conf.library_path, 'media', self.Media['file_name'])))
+            self._player = AudioPlayer( self._conf.players_port_index, 
+                                        self._conf.node_conf['audioplayer']['path'],
+                                        str(self._conf.node_conf['audioplayer']['args']),
+                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
         except Exception as e:
             raise e
 
@@ -76,18 +76,18 @@ class ActionCue(Cue):
         '''
 
         # And dinamically attach it to the ossia for remote control it
-        self._osc_route = f'/node{self.conf.node_conf["id"]:03}/actionplayer-{self.uuid}'
+        self._osc_route = f'/node{self._conf.node_conf["id"]:03}/actionplayer-{self.uuid}'
 
         ossia_queue.put(   QueueOSCData(  'add', 
                                             self._osc_route, 
-                                            self.conf.node_conf['osc_dest_host'], 
+                                            self._conf.node_conf['osc_dest_host'], 
                                             self._player.port,
                                             self._player.port + 1, 
                                             self.OSC_ACTIONPLAYER_CONF))
 
         self.loaded = True
-        if not self in self.armed_list:
-            self.armed_list.append(self)
+        if not self in self._armed_list:
+            self._armed_list.append(self)
 
         return True
 
@@ -98,7 +98,7 @@ class ActionCue(Cue):
 
         else:
             if self._target_object is not None:
-                self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+                self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
 
             # PREWAIT
             if self.prewait > 0:
@@ -135,13 +135,13 @@ class ActionCue(Cue):
         except AttributeError:
             return
         
-        if self in self.armed_list:
+        if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 
     def disarm(self, ossia_queue):
         if self.loaded is True:
             try:
-                self.conf.players_port_index['used'].remove(self._player.port)
+                self._conf.players_port_index['used'].remove(self._player.port)
                 self._player.kill()
                 self._player.join()
                 self._player = None
@@ -154,8 +154,8 @@ class ActionCue(Cue):
                 logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
             
             try:
-                if self in self.armed_list:
-                    self.armed_list.remove(self)
+                if self in self._armed_list:
+                    self._armed_list.remove(self)
             except:
                 pass
 

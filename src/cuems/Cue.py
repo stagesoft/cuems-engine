@@ -22,8 +22,9 @@ class Cue(dict):
         if init_dict is not None:
             super().__init__(init_dict)
 
-        self.conf = None
-        self.armed_list = None
+        self._conf = None
+        self._armed_list = None
+        self._offset_when_go = CTimecode()
 
     @classmethod
     def from_dict(cls, init_dict):
@@ -179,16 +180,16 @@ class Cue(dict):
             super().__setitem__(key, value)
 
     def arm(self, conf, ossia_queue, armed_list, init = False):
-        self.conf = conf
-        self.armed_list = armed_list
+        self._conf = conf
+        self._armed_list = armed_list
 
         if not self.enabled:
-            if self.loaded and self in self.armed_list:
+            if self.loaded and self in self._armed_list:
                 self.disarm(ossia_queue)
             return False
         elif self.loaded and not init:
-            if not self in self.armed_list:
-                self.armed_list.append(self)
+            if not self in self._armed_list:
+                self._armed_list.append(self)
             return True
 
         return True
@@ -199,30 +200,30 @@ class Cue(dict):
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
 
         else:
-            # ARM NEXT TARGET
-            if self._target_object is not None:
-                self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
-
-            # GO
+            # THREADED GO
             thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
-
-            # PREWAIT
-            if self.prewait > 0:
-                sleep(self.prewait.milliseconds / 1000)
-
-            # PLAY
             thread.start()
 
-            # POSTWAIT
-            if self.postwait > 0:
-                sleep(self.postwait.milliseconds / 1000)
-
-            if self.post_go == 'go':
-                self._target_object.go(ossia, mtc)
-
     def go_thread(self, ossia, mtc):
+        # ARM NEXT TARGET
+        if self._target_object is not None:
+            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
 
-        if self in self.armed_list:
+        # PREWAIT
+        if self.prewait > 0:
+            sleep(self.prewait.milliseconds / 1000)
+
+        # PLAY WHATEVER A SIMPLE CUE WOULD PLAY
+
+        # POSTWAIT
+        if self.postwait > 0:
+            sleep(self.postwait.milliseconds / 1000)
+
+        # POST-GO GO
+        if self.post_go == 'go':
+            self._target_object.go(ossia, mtc)
+
+        if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 
 
@@ -230,8 +231,8 @@ class Cue(dict):
         if self.loaded is True:
             self.loaded = False
 
-            if self in self.armed_list:
-                self.armed_list.remove(self)
+            if self in self._armed_list:
+                self._armed_list.remove(self)
 
             return True
         else:
