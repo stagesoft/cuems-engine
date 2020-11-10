@@ -7,6 +7,7 @@ from .Media import Media
 from .Outputs import Outputs
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
+from .ActionCue import ActionCue
 from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from .CTimecode import CTimecode
 from .log import logger
