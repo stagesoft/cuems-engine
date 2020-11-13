@@ -65,7 +65,14 @@ class CuemsEngine():
 
         # Our empty script object
         self.script = None
-        self.currentcue = None
+        '''
+        CUE "POINTERS":
+        here we use the "standard" point of view that there is an
+        ongoing cue already running (one or many, at least the last to be gone)
+        and a pointer indicating which is the next to be gone when go is pressed
+        '''
+        self.ongoing_cue = None
+        self.next_cue_pointer = None
         self.armedcues = list()
 
         # MTC master object creation through bound library and open port
@@ -341,31 +348,26 @@ class CuemsEngine():
 
                 cue_to_go.go(self.ossia_server, self.mtclistener)
 
-                self.currentcue = cue_to_go
-                logger.info(f'Current Cue: {self.currentcue}')
+                self.ongoing_cue = cue_to_go
+                logger.info(f'Current Cue: {self.ongoing_cue}')
 
     def go_callback(self, **kwargs):
         if self.script:
-            if self.currentcue is None:
+            if not self.ongoing_cue:
                 cue_to_go = self.script.cuelist.contents[0]
             else:
-                cue_to_go = self.currentcue.get_next_cue()
+                cue_to_go = self.next_cue_pointer
                 if not cue_to_go:
-                    logger.info(f'Reached end of playing at {self.currentcue.__class__.__name__} {self.currentcue.uuid}')
-                    if self.currentcue in self.armedcues:
-                        self.currentcue.disarm(self.ossia_queue)
-                    self.currentcue = None
+                    logger.info(f'Reached end of playing at {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
+                    self.ongoing_cue = None
                     return
-
-                if self.currentcue in self.armedcues:
-                    self.currentcue.disarm(self.ossia_queue)
 
             if cue_to_go not in self.armedcues:
                 logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
             else:
-                self.currentcue = cue_to_go
-                cue_to_go.go(self.ossia_server, self.mtclistener)
-                cue_to_go._target_object.arm(self.cm, self.ossia_queue, self.armedcues)
+                self.ongoing_cue = cue_to_go
+                self.ongoing_cue.go(self.ossia_server, self.mtclistener)
+                self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         else:
             logger.warning('No script loaded, cannot process GO command.')
 
@@ -391,9 +393,9 @@ class CuemsEngine():
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
             self.armedcues.clear()
-            self.currentcue = None
+            self.ongoing_cue = None
 
-            self.initial_cuelist_process(self.script.cuelist)
+            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
@@ -444,26 +446,14 @@ class CuemsEngine():
                     else:
                         item.target = cuelist.contents[index + 1].uuid
                         item._target_object = cuelist.contents[index + 1]
-                
                 else:
-                    try:
-                        item._target_object = self.script.find(item.target)
-                    except:
-                        pass
+                    item._target_object = self.script.find(item.target)
 
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item, cuelist)
 
-            if cuelist.target is None or cuelist.target == "":
-                if caller != None:
-                    cuelist.target = caller.uuid
-                    cuelist._target_object = caller
-                else:
-                    cuelist.target = cuelist.uuid
-                    cuelist._target_object = cuelist
-            
         except Exception as e:
-            logger.error(f'Error arming cue : {e}')
+            logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
             
     def disarm_all(self):
         for item in self.armedcues:

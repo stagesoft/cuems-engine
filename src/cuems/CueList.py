@@ -74,19 +74,14 @@ class CueList(Cue):
 
         if self.enabled and self.loaded == init:
             if not self in armed_list:
-                for item in self.contents:
-                    # We arm the item if :
-                    # - is enabled
-                    # AND
-                    # - is marked as loaded at init
-                    item.arm(self.conf, ossia_queue, self.armed_list, init)
+                self.contents[0].arm(self.conf, ossia_queue, self.armed_list, init)
 
                 self.loaded = True
 
                 armed_list.append(self)
 
             if self.post_go == 'go':
-                self._target_object.arm(self.conf, ossia_queue, self.armed_list)
+                self._target_object.arm(self.conf, ossia_queue, self.armed_list, init)
 
             return True
         else:
@@ -96,33 +91,33 @@ class CueList(Cue):
         if not self.loaded:
             logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
-
         else:
-            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
-
-            # GO
+            # THREADED GO
             thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
-
-            # PREWAIT
-            if self.prewait > 0:
-                sleep(self.prewait.milliseconds / 1000)
-
-            # PLAY
             thread.start()
 
-            # POSTWAIT
-            if self.postwait > 0:
-                sleep(self.postwait.milliseconds / 1000)
-
-            if self.post_go == 'go':
-                self._target_object.go(ossia, mtc)
-
     def go_thread(self, ossia, mtc):
+        # ARM NEXT TARGET
+        if self._target_object:
+            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+
+        # PREWAIT
+        if self.prewait > 0:
+            sleep(self.prewait.milliseconds / 1000)
+
+        # PLAY : specific go the first cue in the list
         try:
-            for item in self.contents:
-                item.go(ossia, mtc)
+            if self.contents:
+                self.contents[0].go(ossia, mtc)
         except Exception as e:
             logger.exception(e)
+
+        # POSTWAIT
+        if self.postwait > 0:
+            sleep(self.postwait.milliseconds / 1000)
+
+        if self.post_go == 'go':
+            self._target_object.go(ossia, mtc)
 
         try:
             while self._player.is_alive():
@@ -148,3 +143,22 @@ class CueList(Cue):
             pass
         
         self.loaded = False
+
+    def get_next_cue(self):
+        cue_to_return = None
+        if self.contents:
+            if self.contents[0].post_go == 'pause':
+                cue_to_return = self.contents[0]._target_object
+            else:
+                cue_to_return = self.contents[0].get_next_cue()
+            
+            if cue_to_return:
+                return cue_to_return       
+
+        if self.target:
+            if self.post_go == 'pause':
+                return self._target_object
+            else:
+                return self._target_object.get_next_cue()
+        else:
+            return None

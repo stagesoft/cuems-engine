@@ -114,6 +114,9 @@ class DmxCue(Cue):
         if not self in self._armed_list:
             self._armed_list.append(self)
 
+        if self.post_go == 'go' and self._target_object:
+            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list, init)
+
         return True
 
     def go(self, ossia, mtc):
@@ -127,7 +130,7 @@ class DmxCue(Cue):
 
     def go_thread(self, ossia, mtc):
         # ARM NEXT TARGET
-        if self._target_object is not None:
+        if self._target_object:
             self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
 
         # PREWAIT
@@ -153,7 +156,7 @@ class DmxCue(Cue):
             sleep(self.postwait.milliseconds / 1000)
 
         # POST-GO GO
-        if self.post_go == 'go':
+        if self.post_go == 'go' and self._target_object:
             self._target_object.go(ossia, mtc)
 
         try:
