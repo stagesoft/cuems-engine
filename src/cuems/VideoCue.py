@@ -76,6 +76,7 @@ class VideoCue(Cue):
                 self._armed_list.append(self)
             return True
 
+        '''
         # Assign its own videoplayer object
         try:
             self._player = VideoPlayer( self._conf.players_port_index, 
@@ -97,6 +98,7 @@ class VideoCue(Cue):
                                     self._player.port,
                                     self._player.port + 1, 
                                     self.OSC_VIDEOPLAYER_CONF))
+        '''
 
         self.loaded = True
         if not self in self._armed_list:

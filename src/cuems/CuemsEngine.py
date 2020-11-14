@@ -27,6 +27,7 @@ from .CueList import CueList
 from .Cue import Cue
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
+from .VideoPlayer import VideoPlayer
 from .DmxCue import DmxCue
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
@@ -48,13 +49,6 @@ class CuemsEngine():
         # Running flag
         self.stop_requested = False
 
-        # Conf load manager
-        try:
-            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
-        except FileNotFoundError:
-            logger.critical('Node config file could not be found. Exiting !!!!!')
-            exit(-1)
-
         #########################################################
         # System signals handlers
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -62,6 +56,13 @@ class CuemsEngine():
         signal.signal(signal.SIGUSR1, self.sigUsr1Handler)
         signal.signal(signal.SIGUSR2, self.sigUsr2Handler)
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
+
+        # Conf load manager
+        try:
+            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
+        except FileNotFoundError:
+            logger.critical('Node config file could not be found. Exiting !!!!!')
+            exit(-1)
 
         # Our empty script object
         self.script = None
@@ -130,9 +131,12 @@ class CuemsEngine():
 
         self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
 
-        # Execution Queues
-        # self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
-        # self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
+        # Check, start and OSC register video devices/players
+        self._video_players = {}
+        try:
+            self.check_video_devs()
+        except Exception as e:
+            logger.exception(e)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -143,13 +147,57 @@ class CuemsEngine():
     #########################################################
     # Check functions
     def check_project_mappings(self):
-        pass
+        for output in self.cm.project_maps['Video']['outputs']['mapping']:
+            print(output)
 
     def check_audio_devs(self):
         pass
 
     def check_video_devs(self):
-        pass
+        for item in self.cm.node_conf['video_outputs']['output']:
+            # Assign a videoplayer object
+            try:
+                self._video_players[item] = VideoPlayer(    self.cm.players_port_index, 
+                                                            item,
+                                                            self.cm.node_conf['videoplayer']['path'],
+                                                            str(self.cm.node_conf['videoplayer']['args']),
+                                                            '')
+            except Exception as e:
+                raise e
+
+            self._video_players[item].start()
+
+            # And dinamically attach it to the ossia for remote control it
+            self._osc_route = f'/node{self.cm.node_conf["id"]:03}/videoplayer-{item}'
+
+            OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
+                                        '/jadeo/yscale' : [ossia.ValueType.Float, None], 
+                                        '/jadeo/corners' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner1' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner2' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner3' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner4' : [ossia.ValueType.List, None],
+                                        '/jadeo/start' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/load' : [ossia.ValueType.String, None],
+                                        '/jadeo/quit' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/offset' : [ossia.ValueType.String, None],
+                                        '/jadeo/offset' : [ossia.ValueType.Int, None],
+                                        '/jadeo/midi/connect' : [ossia.ValueType.String, None],
+                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Impulse, None]
+                                        }
+
+            port = self.cm.players_port_index['start']
+            while port in self.cm.players_port_index['used']:
+                port += 2
+
+            self.cm.players_port_index['used'].append(port)
+
+            self.ossia_queue.put(   QueueOSCData(   'add', 
+                                                    self._osc_route, 
+                                                    self.cm.node_conf['osc_dest_host'], 
+                                                    port,
+                                                    port + 1, 
+                                                    OSC_VIDEOPLAYER_CONF))
 
     def check_dmx_devs(self):
         pass
@@ -277,16 +325,21 @@ class CuemsEngine():
             self.disarm_all()
 
         try:
+            self.cm.load_project_settings(kwargs["value"])
+            # logger.info(self.cm.project_conf)
+        except FileNotFoundError as e:
+            logger.exception(f'Project settings file not found : {e}')
+
+        try:
             self.cm.load_project_mappings(kwargs["value"])
             # logger.info(self.cm.project_maps)
         except FileNotFoundError:
-            logger.error('Project mappings file not found')
+            logger.exception(f'Project mappings file not found . {e}')
 
         try:
-            self.cm.load_project_settings(kwargs["value"])
-            # logger.info(self.cm.project_conf)
-        except FileNotFoundError:
-            logger.error('Project settings file not found')
+            self.check_project_mappings()
+        except Exception as e:
+            logger.exception(e)
 
         try:
             schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')

@@ -11,10 +11,15 @@
             <websocket_port>9092</websocket_port>
             <mtc_port>Midi Through Port-0</mtc_port>
             <osc_in_port_base>7710</osc_in_port_base>
+            <video_outputs>
+                <output>:0</output>
+                <output>:1</output>
+            </video_outputs>
+            <audio_outputs>2</audio_outputs>
             <videoplayer>
                 <path>/usr/bin/xjadeo</path>
                 <args>--no-splash --quiet --no-initial-sync --no-letterbox --midi-driver alsa-seq --ignore-file-offset</args>
-                <!-- no-initial-sync ignore-file-offset midifps 1 -->
+                <!--  no-initial-sync ignore-file-offset midifps 1 -->
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
