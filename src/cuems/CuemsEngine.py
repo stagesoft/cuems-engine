@@ -415,7 +415,7 @@ class CuemsEngine():
         media_list = self.script.get_media()
 
         for key, value in media_list.copy().items():
-            if os.path.isfile(os.path.join(self.cm.library_path, 'media', value[0])):
+            if os.path.isfile(os.path.join(self.cm.library_path, 'media', key)):
                 media_list.pop(key)
 
         if media_list:
