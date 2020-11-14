@@ -69,6 +69,7 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
 
             has_single_group = xsd_type.content_type.is_single()
             list_types = list if self.list is list else (self.list, list)
+            dict_types = dict if self.dict is dict else (self.dict, dict)
             if data.content:
                 for name, value, xsd_child in self.map_content(data.content):
                     try:
@@ -82,13 +83,13 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                         else:
                             result_dict[name] = self.list([value]) if self.force_list else value
                     else:
-                        if isinstance(result_dict, dict):
+                        if isinstance(result, dict_types):
                             result_dict[name] = self.list([result, value])
                         elif isinstance(result, list_types) or not result:
                             result_dict.append({name:value})
-                        elif isinstance(result[0], list_types) or \
-                                not isinstance(value, list_types):
+                        else:
                             result.append(value)
+                  
 
             elif data.text is not None and data.text != '':
                 result_dict[self.text_key] = data.text

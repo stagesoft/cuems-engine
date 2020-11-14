@@ -114,7 +114,7 @@
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
       <xs:element name="post_go" type="cms:PostGoType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
-      <xs:element name="ui_properties" type="cms:UiPropertiesType" />
+      <xs:element name="UI_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
   </xs:complexType>
 
@@ -171,7 +171,7 @@
   </xs:complexType>
 
   <xs:complexType name="MediaType">
-    <xs:sequence>
+    <xs:sequence minOccurs="0" maxOccurs="1">
       <xs:element name="file_name" type="xs:string" />
     </xs:sequence>
   </xs:complexType>

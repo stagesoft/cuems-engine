@@ -277,7 +277,6 @@ class DmxChannel():
     def __init__(self, value=None, init_dict = None):
         self._value = value
         if init_dict is not None:
-            print(init_dict)
             self.value = init_dict
 
     def __repr__(self):

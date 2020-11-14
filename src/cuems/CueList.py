@@ -9,7 +9,7 @@ from .log import logger
 class CueList(Cue):
     
     def __init__(self, contents=[], offset=None):
-        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "ui_properties": "", "contents": []}
+        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "UI_properties": "", "contents": []}
         super().__init__(init_dict=empty_keys)
         super().__setitem__('uuid', str(uuid_module.uuid1()))
         if isinstance(contents, list):
@@ -24,6 +24,10 @@ class CueList(Cue):
     @contents.setter
     def contents(self, contents):
         super().__setitem__('contents', contents)
+
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
     
     def __add__(self, other):
         new_contents = self['contents'].copy()

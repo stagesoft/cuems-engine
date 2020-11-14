@@ -102,13 +102,13 @@ class GenericCueXmlBuilder(CuemsScriptXmlBuilder):
                     sub_object_element = builder_class(list_item, xml_tree = cue_subelement).build()
             elif isinstance(value, GenericDict):
                 cue_subelement = ET.SubElement(cue_element, str(key))
-                for key, value in value.items():
-                    sub_dict_element = ET.SubElement(cue_subelement, str(key))
-                    sub_dict_element.text = str(value)
+                for sub_key, sub_value in value.items():
+                    sub_dict_element = ET.SubElement(cue_subelement, str(sub_key))
+                    sub_dict_element.text = str(sub_value)
             else:
+                cue_subelement = ET.SubElement(cue_element, str(key))
                 builder_class = self.get_builder_class(value)
-                sub_object_element = builder_class(value, xml_tree = cue_element).build()
-        return self.xml_tree
+                sub_object_element = builder_class(value, xml_tree = cue_subelement).build()
 
 class DmxSceneXmlBuilder(CuemsScriptXmlBuilder):
  
@@ -119,7 +119,6 @@ class DmxSceneXmlBuilder(CuemsScriptXmlBuilder):
             builder_class = self.get_builder_class(universe[1])
             sub_object_element = builder_class(universe, xml_tree = cue_element).build()
             
-        return self.xml_tree
 
 class DmxUniverseXmlBuilder(CuemsScriptXmlBuilder):
         
@@ -129,7 +128,6 @@ class DmxUniverseXmlBuilder(CuemsScriptXmlBuilder):
         for channel in channel_list:
             builder_class = self.get_builder_class(channel[1])
             sub_object_element = builder_class(channel, xml_tree = cue_element).build()
-        return self.xml_tree
     
 class DmxChannelXmlBuilder(CuemsScriptXmlBuilder):
     
@@ -137,17 +135,56 @@ class DmxChannelXmlBuilder(CuemsScriptXmlBuilder):
         cue_element = ET.SubElement(self.xml_tree, type(self._object[1]).__name__, id=str(self._object[0]))
         cue_element.text = str(self._object[1])
 
-class GenericSubObjectXmlBuilder(CuemsScriptXmlBuilder):
-        
+
+
+class GenericSimpleSubObjectXmlBuilder(CuemsScriptXmlBuilder):
+    
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
         cue_element.text = str(self._object)
-        return self.xml_tree
 
-class CTimecodeXmlBuilder(GenericSubObjectXmlBuilder):
+class GenericComplexSubObjectXmlBuilder(CuemsScriptXmlBuilder):
+    
+    def build(self):
+        if isinstance(self._object, dict):
+            for key, value in self._object.items():
+                if isinstance(value, (str, bool, int, float)):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    sub_dict_element.text = str(value)
+                elif isinstance(value, (type(None))):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                elif isinstance(value, dict):
+                    self.recurser(value, self.xml_tree)
+                elif isinstance(value, list):
+                    self.recurser(value, self.xml_tree)
+
+    def recurser(self, group, xml_tree):
+        if isinstance(group, dict):
+            for key, value in group.items():
+                if isinstance(value, (str, bool, int, float)):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                    cue_subelement.text = str(value)
+                elif isinstance(value, (type(None))):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                elif isinstance(value, dict):
+                    cue_subelement = ET.SubElement(xml_tree, key)
+                    self.recurser(value, cue_subelement)
+        elif isinstance(group, list):
+            for item in group:
+                if isinstance(item, dict):
+                    self.recurser(item, xml_tree)
+
+class CTimecodeXmlBuilder(GenericSimpleSubObjectXmlBuilder):
     pass
 
-class CueOutputsXmlBuilder(CuemsScriptXmlBuilder):
+class MediaXmlBuilder(GenericComplexSubObjectXmlBuilder):
+    pass
+
+class UI_propertiesXmlBuilder(GenericComplexSubObjectXmlBuilder):
+    pass
+
+
+class CueOutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
 
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
@@ -161,10 +198,15 @@ class CueOutputsXmlBuilder(CuemsScriptXmlBuilder):
                         cue_subelement.text = str(value)
                     elif isinstance(value, (type(None))):
                         cue_subelement = ET.SubElement(cue_element, key)
-                    
-        else:
+                    elif isinstance(value, dict):
+                        cue_subelement = ET.SubElement(cue_element, key)
+                        self.recurser(value, cue_subelement)
+                    elif isinstance(value, list):
+                        cue_subelement = ET.SubElement(cue_element, key)
+                        self.recurser(value, cue_subelement)
+
+        else:   
             cue_element.text = str(self._object)
-        return self.xml_tree
 
 
 class AudioCueOutputXmlBuilder(CueOutputsXmlBuilder):
@@ -175,6 +217,7 @@ class VideoCueOutputXmlBuilder(CueOutputsXmlBuilder):
 
 class DmxCueOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
+
     
-class NoneTypeXmlBuilder(GenericSubObjectXmlBuilder): # TODO: clean, not need anymore? 
+class NoneTypeXmlBuilder(GenericSimpleSubObjectXmlBuilder): # TODO: clean, not need anymore? 
     pass
