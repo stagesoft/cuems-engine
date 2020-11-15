@@ -86,7 +86,10 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                         if isinstance(result, dict_types):
                             result_dict[name] = self.list([result, value])
                         elif isinstance(result, list_types) or not result:
-                            result_dict.append({name:value})
+                            try:
+                                result_dict.append({name:value})
+                            except AttributeError:
+                                result_dict[name].append(value)
                         else:
                             result.append(value)
                   
