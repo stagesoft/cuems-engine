@@ -91,7 +91,10 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                             except AttributeError:
                                 result_dict[name].append(value)
                         else:
-                            result.append(value)
+                            try:
+                                result.append(value)
+                            except AttributeError:
+                                result = self.list([result, value])
                   
 
             elif data.text is not None and data.text != '':
