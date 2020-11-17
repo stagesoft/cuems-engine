@@ -166,3 +166,4 @@ class CueList(Cue):
                 return self._target_object.get_next_cue()
         else:
             return None
+

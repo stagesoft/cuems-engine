@@ -179,13 +179,13 @@ class Cue(dict):
         else:
             super().__setitem__(key, value)
 
-    def arm(self, conf, ossia_queue, armed_list, init = False):
+    def arm(self, conf, ossia, armed_list, init = False):
         self._conf = conf
         self._armed_list = armed_list
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                self.disarm(ossia_queue)
+                self.disarm(ossia.conf_queue)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -193,7 +193,7 @@ class Cue(dict):
             return True
 
         if self.post_go == 'go':
-            self._target_object.arm(self._conf, ossia_queue, self._armed_list, init)
+            self._target_object.arm(self._conf, ossia, self._armed_list, init)
 
         return True
 
@@ -210,7 +210,7 @@ class Cue(dict):
     def go_thread(self, ossia, mtc):
         # ARM NEXT TARGET
         if self._target_object:
-            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
+            self._target_object.arm(self._conf, ossia, self._armed_list)
 
         # PREWAIT
         if self.prewait > 0:
@@ -249,3 +249,6 @@ class Cue(dict):
                 return self._target_object.get_next_cue()
         else:
             return None
+
+    def check_mappings(self, mappings):
+        return True

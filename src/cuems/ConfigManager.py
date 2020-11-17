@@ -84,6 +84,13 @@ class ConfigManager(Thread):
         self.project_maps = maps['ProjectMappings']
         logger.info(f'Project {project_uname} mappings loaded')
 
+    def get_video_player_id(self, mapping_name):
+        for item in self.project_maps['Video']['outputs']['mapping']:
+            if mapping_name == item['virtual_name']:
+                return item['mapped_to']
+
+        raise Exception(f'Video output wrongly mapped')
+
     def check_dir_hierarchy(self):
         try:
             if not path.exists(self.library_path):

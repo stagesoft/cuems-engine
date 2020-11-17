@@ -1,6 +1,7 @@
-import subprocess
+from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 from threading import Thread
 import os
+from sys import stdout, stderr
 import pyossia as ossia
 
 from .log import logger
@@ -9,21 +10,16 @@ import time
 
 
 class VideoPlayer(Thread):
-    def __init__(self, port_index, outputs, path, args, media):
-        self.port = port_index['start']
-        while self.port in port_index['used']:
-            self.port += 2
-
-        port_index['used'].append(self.port)
-            
-        self.stdout = None
-        self.stderr = None
-        self.outputs = outputs
-        self.firstrun = True
+    def __init__(self, port, output, path, args, media):
+        self._port = port
+        self.output = output
         self.path = path
         self.args = args
         self.media = media
-        
+
+        self.firstrun = True
+        self.stdout = None
+        self.stderr = None
         
     def __init_trhead(self):
         super().__init__()
@@ -31,27 +27,32 @@ class VideoPlayer(Thread):
 
     def run(self):
         if __debug__:
-            logger.info(f'VideoPlayer starting on display : {self.outputs[0]["VideoCueOutput"]["name"]}.')
+            logger.info(f'VideoPlayer starting on display : {self.output}.')
            
         try:
             # Calling xjadeo in a subprocess
             process_call_list = [self.path]
-            if self.args is not None:
+            if self.args:
                 for arg in self.args.split():
                     process_call_list.append(arg)
-            process_call_list.extend(['--osc', str(self.port), self.media])
-            self.p=subprocess.Popen(process_call_list,  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # self.p=subprocess.Popen([self.path, '--no-splash --no-initial-sync', '--osc', str(self.port), self.media],  shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.stdout, self.stderr = self.p.communicate()
-        except OSError as e:
-            logger.info(f'Failed to start VideoPlayer on display : {self.outputs[0]["VideoCueOutput"]["name"]}.')
-            if __debug__:
-                logger.debug(e)
+            process_call_list.extend(['--osc', str(self._port), self.media])
+            # self.p = Popen(process_call_list, shell=False, stdout=PIPE, stderr=PIPE)
+            # self.stdout, self.stderr = self.p.communicate()
 
-        if __debug__:
-            logger.debug(self.stdout)
-            logger.debug(self.stderr)
-    
+            self.p = Popen(process_call_list, stdout=PIPE, stderr=STDOUT, env={'DISPLAY' : f'{self.output}'})
+            stdout_lines_iterator = iter(self.p.stdout.readline, b'')
+            while self.p.poll() is None:
+                for line in stdout_lines_iterator:
+                    logger.info(line)
+
+            if self.p.returncode != 0:
+                raise CalledProcessError(self.p.returncode, self.p.args)
+
+        except OSError as e:
+            logger.info(f'Failed to start VideoPlayer on display : {self.output[0]["VideoCueOutput"]["name"]}.')
+            if __debug__:
+                logger.exception(e)
+
     def kill(self):
         self.p.kill()
         self.started = False
@@ -66,6 +67,9 @@ class VideoPlayer(Thread):
                 Thread.start(self)
             else:
                 logger.debug("VideoPlayer allready running")
+
+    def port(self):
+        return self._port
 
 '''
 class VideoPlayerRemote():

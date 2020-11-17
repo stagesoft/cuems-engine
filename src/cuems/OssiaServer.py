@@ -92,7 +92,7 @@ class OssiaServer(threading.Thread):
                 # conf[1] holds the method to call when received such a route
                 self.osc_registered_nodes[qdata.device_name + route] = [temp_node, conf[1]]
 
-            logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
+            # logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
         elif isinstance(qdata, QueueData):
             for route, conf in qdata.items():
                 temp_node = self.oscquery_device.add_node(route)
@@ -103,7 +103,7 @@ class OssiaServer(threading.Thread):
                 
                 self.oscquery_registered_nodes[route] = [temp_node, conf[1]]
 
-            logger.info(f'OSCQuery Nodes registered: {qdata}')
+            # logger.info(f'OSCQuery Nodes registered: {qdata}')
 
     def remove_nodes(self, qdata):
         if isinstance(qdata, QueueOSCData):

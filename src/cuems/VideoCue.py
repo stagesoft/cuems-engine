@@ -8,6 +8,7 @@ from .VideoPlayer import VideoPlayer
 from .OssiaServer import QueueOSCData
 from .log import logger
 class VideoCue(Cue):
+    '''
     OSC_VIDEOPLAYER_CONF = {'/jadeo/xscale' : [ossia.ValueType.Float, None],
                             '/jadeo/yscale' : [ossia.ValueType.Float, None], 
                             '/jadeo/corners' : [ossia.ValueType.List, None],
@@ -21,6 +22,7 @@ class VideoCue(Cue):
                             '/jadeo/midi/connect' : [ossia.ValueType.String, None],
                             '/jadeo/midi/disconnect' : [ossia.ValueType.Impulse, None]
                             }
+    '''
 
     def __init__(self, time=None, init_dict=None):
         super().__init__(time, init_dict)
@@ -29,11 +31,12 @@ class VideoCue(Cue):
         self._offset_route = '/jadeo/offset'
 
         self._conf = None
-        self.ossia_queue = None
         self._armed_list = None
 
+        '''
         self.OSC_VIDEOPLAYER_CONF[self._offset_route] = [ossia.ValueType.String, None]
         self.OSC_VIDEOPLAYER_CONF[self._offset_route] = [ossia.ValueType.Int, None]
+        '''
 
     @property
     def Media(self):
@@ -63,19 +66,34 @@ class VideoCue(Cue):
     def review_offset(self, timecode):
         return -(int(timecode.frame_number))
 
-    def arm(self, conf, ossia_queue, armed_list, init = False):
+    def arm(self, conf, ossia, armed_list, init = False):
         self._conf = conf
         self._armed_list = armed_list
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                    self.disarm(ossia_queue)
+                    self.disarm(ossia.conf_queue)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
                 self._armed_list.append(self)
             return True
 
+        try:
+            key = f'{self._osc_route}/jadeo/midi/disconnect'
+            ossia.osc_registered_nodes[key][0].parameter.value = True
+        except KeyError:
+            logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
+
+        try:
+            key = f'{self._osc_route}/jadeo/load'
+            ossia.osc_registered_nodes[key][0].parameter.value = str(path.join(self._conf.library_path, 'media', self.Media['file_name']))
+            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
+        except KeyError:
+            logger.debug(f'Key error 2 (load) in arm_callback {key}')
+
+
+        '''
         # Assign its own videoplayer object
         try:
             self._player = VideoPlayer( self._conf.players_port_index, 
@@ -97,13 +115,14 @@ class VideoCue(Cue):
                                     self._player.port,
                                     self._player.port + 1, 
                                     self.OSC_VIDEOPLAYER_CONF))
+        '''
 
         self.loaded = True
         if not self in self._armed_list:
             self._armed_list.append(self)
 
         if self.post_go == 'go' and self._target_object:
-            self._target_object.arm(self._conf, ossia_queue, self._armed_list, init)
+            self._target_object.arm(self._conf, ossia, self._armed_list, init)
 
         return True
 
@@ -119,7 +138,7 @@ class VideoCue(Cue):
     def go_thread(self, ossia, mtc):
         # ARM NEXT TARGET
         if self._target_object:
-            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
+            self._target_object.arm(self._conf, ossia, self._armed_list)
 
         # PREWAIT
         if self.prewait > 0:
@@ -131,13 +150,13 @@ class VideoCue(Cue):
             ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc.main_tc)
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
-            logger.debug(f'Key error 1 in go_callback {key}')
+            logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/midi/connect'
             ossia.osc_registered_nodes[key][0].parameter.value = "Midi Through"
         except KeyError:
-            logger.debug(f'Key error 2 in go_callback {key}')
+            logger.debug(f'Key error 2 (connect) in go_callback {key}')
 
         # POSTWAIT
         if self.postwait > 0:
@@ -146,17 +165,20 @@ class VideoCue(Cue):
         if self.post_go == 'go' and self._target_object:
             self._target_object.go(ossia, mtc)
 
+        '''
         try:
             while self._player.is_alive():
                 sleep(0.05)
         except AttributeError:
             return
+        '''
         
         if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 
     def disarm(self, ossia_queue):
         if self.loaded is True:
+            '''
             try:
                 self._player.kill()
                 self._conf.players_port_index['used'].remove(self._player.port)
@@ -169,6 +191,7 @@ class VideoCue(Cue):
 
             except Exception as e:
                 logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
+            '''
 
             try:
                 if self in self._armed_list:
@@ -181,4 +204,11 @@ class VideoCue(Cue):
             return True
         else:
             return False
+
+    def check_mappings(self, mappings):
+        for output in self.Outputs:
+            for item in mappings['Video']['outputs']['mapping']:
+                if output['VideoCueOutput']['name'] == item['virtual_name']:
+                    return True
+        return False
 

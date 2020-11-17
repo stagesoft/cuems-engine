@@ -76,13 +76,13 @@ class DmxCue(Cue):
     def review_offset(self, timecode):
         return -(float(timecode.milliseconds))
 
-    def arm(self, conf, ossia_queue, armed_list, init = False):
+    def arm(self, conf, ossia, armed_list, init = False):
         self._conf = conf
         self._armed_list = armed_list
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                    self.disarm(ossia_queue)
+                    self.disarm(ossia.conf_queue)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -103,7 +103,7 @@ class DmxCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/node{self._conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
 
-        ossia_queue.put(   QueueOSCData(  'add', 
+        ossia.conf_queue.put(   QueueOSCData(  'add', 
                                     self._osc_route, 
                                     self._conf.node_conf['osc_dest_host'], 
                                     self._player.port,
@@ -115,7 +115,7 @@ class DmxCue(Cue):
             self._armed_list.append(self)
 
         if self.post_go == 'go' and self._target_object:
-            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list, init)
+            self._target_object.arm(self._conf, ossia, self._armed_list, init)
 
         return True
 
@@ -131,7 +131,7 @@ class DmxCue(Cue):
     def go_thread(self, ossia, mtc):
         # ARM NEXT TARGET
         if self._target_object:
-            self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
+            self._target_object.arm(self._conf, ossia, self._armed_list)
 
         # PREWAIT
         if self.prewait > 0:

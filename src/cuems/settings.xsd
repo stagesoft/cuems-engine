@@ -22,12 +22,14 @@
     <!-- TYPES DEFINITIONS -->
     <xs:complexType name="NodeConfType">
         <xs:sequence>
-            <xs:element name="osc_dest_host" type="cms:NonEmptyString"></xs:element>
-            <xs:element name="oscquery_port" type="xs:positiveInteger"></xs:element>
-            <xs:element name="oscquery_out_port" type="xs:positiveInteger"></xs:element>
-            <xs:element name="websocket_port" type="xs:positiveInteger"></xs:element>
-            <xs:element name="mtc_port" type="xs:string"></xs:element>
-            <xs:element name="osc_in_port_base" type="xs:positiveInteger"></xs:element>
+            <xs:element name="osc_dest_host" type="cms:NonEmptyString" />
+            <xs:element name="oscquery_port" type="xs:positiveInteger" />
+            <xs:element name="oscquery_out_port" type="xs:positiveInteger" />
+            <xs:element name="websocket_port" type="xs:positiveInteger" />
+            <xs:element name="mtc_port" type="xs:string" />
+            <xs:element name="osc_in_port_base" type="xs:positiveInteger" />
+            <xs:element name="video_outputs" type="cms:OutputsType" />
+            <xs:element name="audio_outputs" type="xs:nonNegativeInteger" />
             <xs:element name="videoplayer" type="cms:VideoPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
@@ -36,10 +38,16 @@
         <xs:attribute name="master" type="cms:BoolType" />
     </xs:complexType>
 
+    <xs:complexType name="OutputsType">
+        <xs:sequence>
+            <xs:element name="output" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:complexType name="PlayerType">
         <xs:sequence>
-            <xs:element name="path" type="cms:NonEmptyString"></xs:element>
-            <xs:element name="args" type="xs:string"></xs:element>
+            <xs:element name="path" type="cms:NonEmptyString" />
+            <xs:element name="args" type="xs:string" />
         </xs:sequence>
     </xs:complexType>
 

@@ -27,6 +27,7 @@ from .CueList import CueList
 from .Cue import Cue
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
+from .VideoPlayer import VideoPlayer
 from .DmxCue import DmxCue
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
@@ -48,13 +49,6 @@ class CuemsEngine():
         # Running flag
         self.stop_requested = False
 
-        # Conf load manager
-        try:
-            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
-        except FileNotFoundError:
-            logger.critical('Node config file could not be found. Exiting !!!!!')
-            exit(-1)
-
         #########################################################
         # System signals handlers
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -62,6 +56,13 @@ class CuemsEngine():
         signal.signal(signal.SIGUSR1, self.sigUsr1Handler)
         signal.signal(signal.SIGUSR2, self.sigUsr2Handler)
         signal.signal(signal.SIGCHLD, self.sigChldHandler)
+
+        # Conf load manager
+        try:
+            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
+        except FileNotFoundError:
+            logger.critical('Node config file could not be found. Exiting !!!!!')
+            exit(-1)
 
         # Our empty script object
         self.script = None
@@ -130,9 +131,12 @@ class CuemsEngine():
 
         self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
 
-        # Execution Queues
-        # self.main_queue = RunningQueue(True, 'Main', self.mtcmaster)
-        # self.preview_queue = RunningQueue(False, 'Preview', self.mtcmaster)
+        # Check, start and OSC register video devices/players
+        self._video_players = {}
+        try:
+            self.check_video_devs()
+        except Exception as e:
+            logger.exception(e)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -143,13 +147,96 @@ class CuemsEngine():
     #########################################################
     # Check functions
     def check_project_mappings(self):
-        pass
+        if self.cm.project_maps['Audio']['inputs']:
+            '''
+            for item in self.cm.project_maps['Audio']['inputs']['mapping']:
+                if item['mapped_to'] is in self.cm.node_conf['audio_inputs']['input']:
+                    raise Exception(f'Audio input mapping incorrect')
+            '''
+            pass
+        if self.cm.project_maps['Audio']['outputs']:
+            '''
+            for item in self.cm.project_maps['Audio']['outputs']['mapping']:
+                if item['mapped_to'] is in self.cm.node_conf['audio_outputs']['output']:
+                    raise Exception(f'Audio output mapping incorrect')
+            '''
+            pass
+
+        if self.cm.project_maps['Video']['inputs']:
+            for item in self.cm.project_maps['Video']['inputs']['mapping']:
+                if item['mapped_to'] not in self.cm.node_conf['video_inputs']['input']:
+                    raise Exception(f'Video input mapping incorrect')
+        if self.cm.project_maps['Video']['outputs']:
+            for item in self.cm.project_maps['Video']['outputs']['mapping']:
+                if item['mapped_to'] not in self._video_players.keys():
+                    raise Exception(f'Video output mapping incorrect')
+        
+        if self.cm.project_maps['DMX']['inputs']:
+            '''
+            for item in self.cm.project_maps['DMX']['inputs']['mapping']:
+                if item['mapped_to'] is in self.cm.node_conf['dmx_inputs']['input']:
+                    raise Exception(f'DMX input mapping incorrect')
+            '''
+            pass
+        if self.cm.project_maps['DMX']['outputs']:
+            '''
+            for item in self.cm.project_maps['DMX']['outputs']['mapping']:
+                if item['mapped_to'] is in self.cm.node_conf['dmx_outputs']['output']:
+                    raise Exception(f'DMX output mapping incorrect')
+            '''
+            pass
 
     def check_audio_devs(self):
         pass
 
     def check_video_devs(self):
-        pass
+        for index, item in enumerate(self.cm.node_conf['video_outputs']['output']):
+            # Assign a videoplayer object
+            port = self.cm.players_port_index['start']
+            while port in self.cm.players_port_index['used']:
+                port += 2
+
+            player_id = f'{item}:{index}'
+            self._video_players[player_id] = dict()
+
+            try:
+                self._video_players[player_id]['player'] = VideoPlayer(  port, 
+                                                                    item,
+                                                                    self.cm.node_conf['videoplayer']['path'],
+                                                                    str(self.cm.node_conf['videoplayer']['args']),
+                                                                    '')
+            except Exception as e:
+                raise e
+
+            self._video_players[player_id]['player'].start()
+
+            # And dinamically attach it to the ossia for remote control it
+            self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["id"]:03}/videoplayer-{index}'
+
+            OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
+                                        '/jadeo/yscale' : [ossia.ValueType.Float, None], 
+                                        '/jadeo/corners' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner1' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner2' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner3' : [ossia.ValueType.List, None],
+                                        '/jadeo/corner4' : [ossia.ValueType.List, None],
+                                        '/jadeo/start' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/load' : [ossia.ValueType.String, None],
+                                        '/jadeo/quit' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/offset' : [ossia.ValueType.String, None],
+                                        '/jadeo/offset' : [ossia.ValueType.Int, None],
+                                        '/jadeo/midi/connect' : [ossia.ValueType.String, None],
+                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Impulse, None]
+                                        }
+
+            self.cm.players_port_index['used'].append(port)
+
+            self.ossia_queue.put(   QueueOSCData(   'add', 
+                                                    self._video_players[player_id]['route'], 
+                                                    self.cm.node_conf['osc_dest_host'], 
+                                                    port,
+                                                    port + 1, 
+                                                    OSC_VIDEOPLAYER_CONF))
 
     def check_dmx_devs(self):
         pass
@@ -277,16 +364,22 @@ class CuemsEngine():
             self.disarm_all()
 
         try:
-            self.cm.load_project_mappings(kwargs["value"])
-            # logger.info(self.cm.project_maps)
-        except FileNotFoundError:
-            logger.error('Project mappings file not found')
-
-        try:
             self.cm.load_project_settings(kwargs["value"])
             # logger.info(self.cm.project_conf)
+        except FileNotFoundError as e:
+            logger.exception(f'Project settings file not found : {e}')
+
+        try:
+            self.cm.load_project_mappings(kwargs["value"])
+            logger.info(self.cm.project_maps)
         except FileNotFoundError:
-            logger.error('Project settings file not found')
+            logger.exception(f'Project mappings file not found . {e}')
+
+        try:
+            self.check_project_mappings()
+        except Exception as e:
+            logger.exception(e)
+            raise Exception('Script could not be loaded.')
 
         try:
             schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')
@@ -311,7 +404,7 @@ class CuemsEngine():
             self.initial_cuelist_process(self.script.cuelist)
 
             # Then we force-arm the first item in the main list
-            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
+            self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
 
             # Start MTC!
             libmtcmaster.MTCSender_play(self.mtcmaster)
@@ -323,7 +416,7 @@ class CuemsEngine():
 
         if cue_to_load != None:
             if cue_to_load not in self.armedcues:
-                cue_to_load.arm(self.cm, self.ossia_queue, self.armedcues)
+                cue_to_load.arm(self.cm, self.ossia_server, self.armedcues)
 
     def unload_cue_callback(self, **kwargs):
         logger.info(f'OSC UNLOAD! -> CUE : {kwargs["value"]}')
@@ -395,7 +488,7 @@ class CuemsEngine():
             self.armedcues.clear()
             self.ongoing_cue = None
 
-            self.script.cuelist.contents[0].arm(self.cm, self.ossia_queue, self.armedcues)
+            self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
@@ -432,8 +525,19 @@ class CuemsEngine():
         '''
         try:
             for index, item in enumerate(cuelist.contents):
+                if item.check_mappings(self.cm.project_maps):
+                    if isinstance(item, VideoCue):
+                        try:
+                            for output in item.Outputs:
+                                video_player_id = self.cm.get_video_player_id(output['VideoCueOutput']['name'])
+                                item._player = self._video_players[video_player_id]['player']
+                                item._osc_route = self._video_players[video_player_id]['route']
+                        except Exception as e:
+                            logger.exception(e)
+                            raise e
+
                 if item.loaded and not item in self.armedcues:
-                    item.arm(self.cm, self.ossia_queue, self.armedcues, init = True)
+                    item.arm(self.cm, self.ossia_server, self.armedcues, init = True)
 
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
@@ -462,71 +566,3 @@ class CuemsEngine():
 
 
     ########################################################
-
-# %%
-
-'''
-class RunningQueue():
-    def __init__(self, main_flag, name, mtcmaster):
-        self.main_flag = main_flag
-        self.queue_name = name
-        self.mtcmaster = mtcmaster
-
-        self.queue = CuePriorityQueue()
-        self.processor = CueQueueProcessor(self.queue)
-
-        self.running_flag = False
-
-        self.previous_cue_uuid = None
-        self.current_cue_uuid = None
-        self.next_cue_uuid = None
-
-    def go(self, **kwargs):
-        logger.info(f'{self.queue_name} queue GO! -> CUE : {kwargs["value"]}')
-        try:
-            libmtcmaster.MTCSender_play(self.mtcmaster)
-            self.running_flag = True
-        except:
-            logger.info('NO MTCMASTER ASSIGNED!')
-
-    def pause(self, **kwargs):
-        logger.info(f'{self.queue_name} queue PAUSE!')
-        try:
-            libmtcmaster.MTCSender_pause(self.mtcmaster)
-            self.running_flag = False
-        except:
-            logger.info('NO MTCMASTER ASSIGNED!')
-
-    def stop(self, **kwargs):
-        logger.info(f'{self.queue_name} queue STOP!')
-        try:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
-            self.running_flag = False
-        except:
-            logger.info('NO MTCMASTER ASSIGNED!')
-
-    def reset_all(self, **kwargs):
-        logger.info(f'{self.queue_name} queue RESETALL!')
-        try:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
-            self.running_flag = False
-        except:
-            logger.info('NO MTCMASTER ASSIGNED!')
-
-    def timecode(self, **kwargs):
-        logger.info(f'{self.queue_name} queue TIMECODE!')
-        # libmtcmaster.MTCSender_stop(self.mtcmaster)
-
-    def currentcue(self, **kwargs):
-        logger.info(f'{self.queue_name} queue CURRENTCUE!')
-        # libmtcmaster.MTCSender_stop(self.mtcmaster)
-
-    def nextcue(self, **kwargs):
-        logger.info(f'{self.queue_name} queue NEXTCUE!')
-        # libmtcmaster.MTCSender_stop(self.mtcmaster)
-
-    def running(self, **kwargs):
-        logger.info(f'{self.queue_name} queue RUNNING!')
-        # libmtcmaster.MTCSender_stop(self.mtcmaster)
-'''
-
