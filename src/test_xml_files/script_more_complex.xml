@@ -50,12 +50,12 @@
                     </offset>
                     <loop>0</loop>
                     <prewait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>5</CTimecode>
                     </prewait>
                     <postwait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>10</CTimecode>
                     </postwait>
-                    <post_go>pause</post_go>
+                    <post_go>go</post_go>
                     <target></target>
                     <UI_properties>
                         <timeline_position>
@@ -68,7 +68,7 @@
                     </Media>
                     <Outputs>
                         <VideoCueOutput>
-                            <name>Video1</name>
+                            <name>VideoOut1</name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>
@@ -94,6 +94,64 @@
                         </VideoCueOutput>
                     </Outputs>
                 </VideoCue>
+                <ActionCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-1234567890a1</uuid>
+                    <id>A1</id>
+                    <name>Action cue id A1</name>
+                    <description>Action cue desc id A1</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
+                    <loop>0</loop>
+                    <prewait>
+                        <CTimecode>0</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>5</CTimecode>
+                    </postwait>
+                    <post_go>go</post_go>
+                    <target></target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <action_type>load</action_type>
+                    <action_target>12345678-aaaa-aaaa-aaaa-123456789002</action_target>
+                </ActionCue>
+                <ActionCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-1234567890a2</uuid>
+                    <id>A2</id>
+                    <name>Action cue id A2</name>
+                    <description>Action cue desc id A2</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>0</CTimecode>
+                    </offset>
+                    <loop>0</loop>
+                    <prewait>
+                        <CTimecode>3</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>0</CTimecode>
+                    </postwait>
+                    <post_go>pause</post_go>
+                    <target>12345678-aaaa-aaaa-aaaa-123456789003</target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <action_type>play</action_type>
+                    <action_target>12345678-aaaa-aaaa-aaaa-123456789002</action_target>
+                </ActionCue>
                 <VideoCue>
                     <uuid>12345678-aaaa-aaaa-aaaa-123456789002</uuid>
                     <id>V2</id>
@@ -125,7 +183,7 @@
                     </Media>
                     <Outputs>
                         <VideoCueOutput>
-                            <name>Video1</name>
+                            <name>VideoOut2</name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>
@@ -164,7 +222,7 @@
                     </offset>
                     <loop>0</loop>
                     <prewait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>3</CTimecode>
                     </prewait>
                     <postwait>
                         <CTimecode>0</CTimecode>
@@ -182,7 +240,7 @@
                     </Media>
                     <Outputs>
                         <VideoCueOutput>
-                            <name>Video1</name>
+                            <name>VideoOut3</name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>
@@ -210,9 +268,9 @@
                 </VideoCue>
                 <VideoCue>
                     <uuid>12345678-aaaa-aaaa-aaaa-123456789004</uuid>
-                    <id>V1</id>
-                    <name>Video cue id V1</name>
-                    <description>Video cue desc id V1</description>
+                    <id>V4</id>
+                    <name>Video cue id V4</name>
+                    <description>Video cue desc id V4</description>
                     <enabled>True</enabled>
                     <loaded>False</loaded>
                     <timecode>False</timecode>
@@ -221,7 +279,7 @@
                     </offset>
                     <loop>0</loop>
                     <prewait>
-                        <CTimecode>0</CTimecode>
+                        <CTimecode>4</CTimecode>
                     </prewait>
                     <postwait>
                         <CTimecode>0</CTimecode>
@@ -239,7 +297,7 @@
                     </Media>
                     <Outputs>
                         <VideoCueOutput>
-                            <name>Video1</name>
+                            <name>VideoOut4</name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>
@@ -265,7 +323,7 @@
                         </VideoCueOutput>
                     </Outputs>
                 </VideoCue>
-    </contents>
+            </contents>
         </CueList>
     </CuemsScript>
 </cms:CuemsProject>

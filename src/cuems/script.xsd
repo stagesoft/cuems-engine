@@ -319,12 +319,24 @@
     <xs:complexContent>
       <xs:extension base="cms:CueType">
         <xs:sequence>
-          <xs:element name="action_type" type="xs:string" minOccurs="0" />
+          <xs:element name="action_type" type="cms:ActionType" minOccurs="0" />
           <xs:element name="action_target" type="cms:TargetType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
+
+  <xs:simpleType name="ActionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="play" />
+      <xs:enumeration value="pause" />
+      <xs:enumeration value="stop" />
+      <xs:enumeration value="load" />
+      <xs:enumeration value="unload" />
+      <xs:enumeration value="enable" />
+      <xs:enumeration value="disable" />
+    </xs:restriction>
+  </xs:simpleType>
 
   <xs:simpleType name="BoolType">
     <xs:restriction base="xs:string">

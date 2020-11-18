@@ -82,6 +82,7 @@ class VideoCue(Cue):
         try:
             key = f'{self._osc_route}/jadeo/midi/disconnect'
             ossia.osc_registered_nodes[key][0].parameter.value = True
+            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
@@ -91,7 +92,6 @@ class VideoCue(Cue):
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 2 (load) in arm_callback {key}')
-
 
         '''
         # Assign its own videoplayer object
@@ -147,7 +147,9 @@ class VideoCue(Cue):
         # PLAY : specific video cue stuff
         try:
             key = f'{self._osc_route}{self._offset_route}'
-            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc.main_tc)
+            self._mtc_when_gone = mtc.main_tc
+            self._duration = self._end_time - self._start_time
+            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(self._mtc_when_gone)
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 1 (offset) in go_callback {key}')
@@ -165,14 +167,12 @@ class VideoCue(Cue):
         if self.post_go == 'go' and self._target_object:
             self._target_object.go(ossia, mtc)
 
-        '''
-        try:
-            while self._player.is_alive():
+        while not self._deadline_reached:
+            if mtc.main_tc < (self._mtc_when_gone + self._duration):
                 sleep(0.05)
-        except AttributeError:
-            return
-        '''
-        
+            else:
+                self._deadline_reached = True
+    
         if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 

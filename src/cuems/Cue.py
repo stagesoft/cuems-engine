@@ -24,7 +24,11 @@ class Cue(dict):
 
         self._conf = None
         self._armed_list = None
-        self._offset_when_go = CTimecode()
+        self._mtc_when_gone = CTimecode()
+        self._start_time = CTimecode('00:00:00:00')
+        self._end_time = CTimecode('00:00:20:00')
+        self._duration = self._end_time - self._start_time
+        self._deadline_reached = False
 
     @classmethod
     def from_dict(cls, init_dict):

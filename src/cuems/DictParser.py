@@ -128,7 +128,8 @@ class GenericParser(CuemsScriptParser):
         
     def parse(self):
         if self._class == GenericDict:
-            self.item_gp[self.class_string] = self.init_dict
+            # self.item_gp[self.class_string] = self.init_dict
+            self.item_gp = self.init_dict
 
         elif isinstance(self.init_dict, dict):
             for dict_key, dict_value in self.init_dict.items():
@@ -184,7 +185,7 @@ class GenericSubObjectParser(GenericParser):
         return self.item_gp
 
 class CTimecodeParser(GenericSubObjectParser):  
-
+    logger.debug(f'CTimecodeParser')
     pass
 
 class OutputsParser(GenericSubObjectParser):

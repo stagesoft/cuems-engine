@@ -10,80 +10,38 @@ from .OssiaServer import QueueOSCData
 from .log import logger
 
 class ActionCue(Cue):
-    # And dinamically attach it to the ossia for remote control it
-    OSC_ACTIONPLAYER_CONF = {}
-
     def __init__(self, time=None, init_dict=None):
         super().__init__(time, init_dict)
-        self._player = None
-        self._osc_route = None
-        self._offset_route = '/offset'
-
-        self.OSC_ACTIONPLAYER_CONF[self._offset_route] = [ossia.ValueType.Float, None]
+        self._action_target_object = None
 
     @property
-    def master_vol(self):
-        return super().__getitem__('master_vol')
+    def action_type(self):
+        return super().__getitem__('action_type')
 
-    @master_vol.setter
-    def master_vol(self, master_vol):
-        super().__setitem__('master_vol', master_vol)
+    @action_type.setter
+    def action_type(self, action_type):
+        super().__setitem__('action_type', action_type)
 
     @property
-    def Outputs(self):
-        return super().__getitem__('Outputs')
+    def action_target(self):
+        return super().__getitem__('action_target')
 
-    @Outputs.setter
-    def Outputs(self, Outputs):
-        super().__setitem__('Outputs', Outputs)
+    @action_target.setter
+    def action_target(self, action_target):
+        super().__setitem__('action_target', action_target)
 
-    def player(self, player):
-        self._player = player
-
-    def osc_route(self, osc_route):
-        self._osc_route = osc_route
-
-    def offset_route(self, offset_route):
-        self._offset_route = offset_route
-
-    def review_offset(self, mtc):
-        return -(float(mtc.milliseconds()))
-
-    def arm(self, conf, ossia_queue, armed_list, init = False):
+    def arm(self, conf, ossia, armed_list, init = False):
         self._conf = conf
         self._armed_list = armed_list
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                self.disarm(ossia_queue)
+                self.disarm(ossia.conf_queue)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
                 self._armed_list.append(self)
             return True
-
-        # Assign its own player object
-        '''
-        try:
-            self._player = AudioPlayer( self._conf.players_port_index, 
-                                        self._conf.node_conf['audioplayer']['path'],
-                                        str(self._conf.node_conf['audioplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
-        except Exception as e:
-            raise e
-
-        self._player.start()
-        '''
-
-        # And dinamically attach it to the ossia for remote control it
-        self._osc_route = f'/node{self._conf.node_conf["id"]:03}/actionplayer-{self.uuid}'
-
-        ossia_queue.put(   QueueOSCData(  'add', 
-                                            self._osc_route, 
-                                            self._conf.node_conf['osc_dest_host'], 
-                                            self._player.port,
-                                            self._player.port + 1, 
-                                            self.OSC_ACTIONPLAYER_CONF))
 
         self.loaded = True
         if not self in self._armed_list:
@@ -95,64 +53,50 @@ class ActionCue(Cue):
         if not self.loaded:
             logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
-
         else:
-            if self._target_object is not None:
-                self._target_object.arm(self._conf, ossia.conf_queue, self._armed_list)
-
-            # PREWAIT
-            if self.prewait > 0:
-                sleep(self.prewait.milliseconds / 1000)
-
-            # GO
+            # THREADED GO
             thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
             thread.start()
 
-            # POSTWAIT
-            if self.postwait > 0:
-                sleep(self.postwait.milliseconds / 1000)
-
-            if self.post_go == 'go':
-                self._target_object.go(ossia, mtc)
-
     def go_thread(self, ossia, mtc):
-        try:
-            key = f'{self._osc_route}{self._offset_route}'
-            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc)
-            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
-        except KeyError:
-            logger.debug(f'Key error 1 in go_callback {key}')
+        # ARM NEXT TARGET
+        if self._target_object is not None:
+            self._target_object.arm(self._conf, ossia, self._armed_list)
 
-        try:
-            key = f'{self._osc_route}/mtcfollow'
-            ossia.osc_registered_nodes[key][0].parameter.value = True
-        except KeyError:
-            logger.debug(f'Key error 2 in go_callback {key}')
+        # PREWAIT
+        if self.prewait > 0:
+            sleep(self.prewait.milliseconds / 1000)
 
-        try:
-            while self._player.is_alive():
-                sleep(0.05)
-        except AttributeError:
-            return
-        
+        # PLAY : specific audio cue stuff
+        if self.action_type == 'load':
+            self._action_target_object.arm(self._conf, ossia, self._armed_list)
+        elif self.action_type == 'unload':
+            self._action_target_object.disarm(ossia.conf_queue)
+        elif self.action_type == 'play':
+            self._action_target_object.go(ossia, mtc)
+        elif self.action_type == 'pause':
+            pass
+        elif self.action_type == 'stop':
+            pass
+        elif self.action_type == 'enable':
+            self._action_target_object.enabled = True
+        elif self.action_type == 'disable':
+            self._action_target_object.enabled = False
+
+        # POSTWAIT
+        if self.postwait > 0:
+            sleep(self.postwait.milliseconds / 1000)
+
+        # POST-GO GO
+        if self.post_go == 'go':
+            self._target_object.go(ossia, mtc)
+
+        # DISARM
         if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 
     def disarm(self, ossia_queue):
         if self.loaded is True:
-            try:
-                self._conf.players_port_index['used'].remove(self._player.port)
-                self._player.kill()
-                self._player.join()
-                self._player = None
-
-                ossia_queue.put(QueueOSCData(   'remove', 
-                                                self._osc_route, 
-                                                dictionary = self.OSC_ACTIONPLAYER_CONF))
-
-            except Exception as e:
-                logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
-            
             try:
                 if self in self._armed_list:
                     self._armed_list.remove(self)

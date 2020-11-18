@@ -3,7 +3,7 @@ import json
 
 
 class CTimecode(Timecode):
-    def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate=25):
+    def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate='ms'):
         if init_dict is not None:
             super().__init__(framerate, init_dict, start_seconds, frames)
         else:

@@ -29,6 +29,7 @@ from .AudioCue import AudioCue
 from .VideoCue import VideoCue
 from .VideoPlayer import VideoPlayer
 from .DmxCue import DmxCue
+from .ActionCue import ActionCue
 from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
@@ -226,7 +227,7 @@ class CuemsEngine():
                                         '/jadeo/offset' : [ossia.ValueType.String, None],
                                         '/jadeo/offset' : [ossia.ValueType.Int, None],
                                         '/jadeo/midi/connect' : [ossia.ValueType.String, None],
-                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Impulse, None]
+                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Bool, None]
                                         }
 
             self.cm.players_port_index['used'].append(port)
@@ -449,10 +450,12 @@ class CuemsEngine():
             if not self.ongoing_cue:
                 cue_to_go = self.script.cuelist.contents[0]
             else:
-                cue_to_go = self.next_cue_pointer
-                if not cue_to_go:
+                if self.next_cue_pointer:
+                    cue_to_go = self.next_cue_pointer
+                else:
                     logger.info(f'Reached end of playing at {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
                     self.ongoing_cue = None
+                    self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
                     return
 
             if cue_to_go not in self.armedcues:
@@ -555,6 +558,8 @@ class CuemsEngine():
 
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item, cuelist)
+                elif isinstance(item, ActionCue):
+                    item._action_target_object = self.script.find(item.action_target)
 
         except Exception as e:
             logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
