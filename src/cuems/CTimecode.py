@@ -124,7 +124,7 @@ class CTimecode(Timecode):
 
         return CTimecode(framerate=self._framerate, frames=multiplied_frames)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         """returns new CTimecode instance with divided value"""
         if isinstance(other, CTimecode):
             div_frames = self.frames / other.frames
