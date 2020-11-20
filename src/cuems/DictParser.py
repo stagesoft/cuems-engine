@@ -8,6 +8,7 @@ from .UI_properties import UI_properties
 from .Outputs import Outputs
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
+from .ActionCue import ActionCue
 from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from .ActionCue import ActionCue
 from .CTimecode import CTimecode
@@ -110,6 +111,8 @@ class CueListParser(CuemsScriptParser):
                 self.item_clp['contents'] = local_list
             elif isinstance(dict_value, dict):
                 parser_class, class_string = self.get_parser_class(dict_key)
+                if parser_class == GenericParser:
+                    parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
                 self.item_clp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
 
             else:
@@ -133,6 +136,8 @@ class GenericParser(CuemsScriptParser):
             for dict_key, dict_value in self.init_dict.items():
                 if isinstance (dict_value, dict):
                     parser_class, class_string = self.get_parser_class(dict_key)
+                    if parser_class == GenericParser:
+                        parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
                     self.item_gp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
                 elif isinstance(dict_value, list):
                     local_list = []
@@ -184,7 +189,10 @@ class GenericSubObjectParser(GenericParser):
 
 class CTimecodeParser(GenericSubObjectParser):  
 
-    pass
+    def parse(self):
+        self.item_gp = self.init_dict
+        return self.item_gp
+
 
 class OutputsParser(GenericSubObjectParser):
     def __init__(self, init_dict, class_string, parent_class=None):
