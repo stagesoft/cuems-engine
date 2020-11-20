@@ -111,6 +111,8 @@ class CueListParser(CuemsScriptParser):
                 self.item_clp['contents'] = local_list
             elif isinstance(dict_value, dict):
                 parser_class, class_string = self.get_parser_class(dict_key)
+                if parser_class == GenericParser:
+                    parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
                 self.item_clp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
 
             else:
@@ -128,13 +130,14 @@ class GenericParser(CuemsScriptParser):
         
     def parse(self):
         if self._class == GenericDict:
-            # self.item_gp[self.class_string] = self.init_dict
-            self.item_gp = self.init_dict
+            self.item_gp[self.class_string] = self.init_dict
 
         elif isinstance(self.init_dict, dict):
             for dict_key, dict_value in self.init_dict.items():
                 if isinstance (dict_value, dict):
                     parser_class, class_string = self.get_parser_class(dict_key)
+                    if parser_class == GenericParser:
+                        parser_class, class_string = self.get_parser_class(self.get_first_key(dict_value))
                     self.item_gp[dict_key] = parser_class(init_dict=dict_value, class_string=class_string).parse()
                 elif isinstance(dict_value, list):
                     local_list = []
@@ -185,8 +188,11 @@ class GenericSubObjectParser(GenericParser):
         return self.item_gp
 
 class CTimecodeParser(GenericSubObjectParser):  
-    logger.debug(f'CTimecodeParser')
-    pass
+
+    def parse(self):
+        self.item_gp = self.init_dict
+        return self.item_gp
+
 
 class OutputsParser(GenericSubObjectParser):
     def __init__(self, init_dict, class_string, parent_class=None):
