@@ -12,8 +12,8 @@
             <mtc_port>Midi Through Port-0</mtc_port>
             <osc_in_port_base>7710</osc_in_port_base>
             <video_outputs>
-                <output>:0</output>
-                <output>:0</output>
+                <output>0</output>
+                <output>1</output>
             </video_outputs>
             <audio_outputs>2</audio_outputs>
             <videoplayer>
