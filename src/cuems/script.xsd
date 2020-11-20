@@ -159,11 +159,8 @@
     <xs:complexContent>
       <xs:extension base="cms:CueType">
         <xs:sequence>
-          <!-- A media file path which can be none -->
           <xs:element name="Media" type="cms:MediaType" />
-          <!-- A master volume starting value -->
           <xs:element name="master_vol" type="cms:PercentType" />
-          <!-- An outputs section -->
           <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
@@ -173,20 +170,33 @@
   <xs:complexType name="MediaType">
     <xs:sequence minOccurs="0" maxOccurs="1">
       <xs:element name="file_name" type="xs:string" />
+      <xs:element name="regions" type="cms:RegionsType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RegionsType">
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="region" type="cms:RegionsType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RegionType">
+    <xs:sequence minOccurs="1">
+      <xs:element name="id" type="xs:nonNegativeInteger" />
+      <xs:element name="loop" type="xs:nonNegativeInteger" />
+      <xs:element name="in" type="cms:CTimecodeType" />
+      <xs:element name="out" type="cms:CTimecodeType" />
     </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="OutputsType">
-    <!-- Specify n virtual audio outputs -->
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="AudioCueOutput" type="cms:AudioCueOutputsType" />
       <xs:element name="VideoCueOutput" type="cms:VideoCueOutputsType" />
-
     </xs:choice>
   </xs:complexType>
 
   <xs:complexType name="AudioCueOutputsType">
-    <!-- Specify n virtual audio outputs -->
     <xs:sequence minOccurs="0" maxOccurs="unbounded">
       <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_vol" type="cms:PercentType" />
@@ -352,8 +362,8 @@
   </xs:simpleType>
 
   <xs:simpleType name="TimecodeType">
-    <xs:restriction base="xs:integer">
-      <xs:minInclusive value="0" />
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}" />
     </xs:restriction>
   </xs:simpleType>
 
