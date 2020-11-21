@@ -157,7 +157,8 @@ class GenericComplexSubObjectXmlBuilder(CuemsScriptXmlBuilder):
                     sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                     self.recurser(value, sub_dict_element)
                 elif isinstance(value, list):
-                    self.recurser(value, self.xml_tree)
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    self.recurser(value, sub_dict_element)
 
     def recurser(self, group, xml_tree):
         if isinstance(group, dict):
