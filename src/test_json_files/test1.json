@@ -1,0 +1,240 @@
+{
+    "CuemsScript": {
+        "unix_name": "bla",
+        "name": "CHANNELS",
+        "description": null,
+        "created": "2020-11-05T14:18:10.843198",
+        "modified": "2020-11-05T14:18:10.843198",
+        "CueList": {
+            "uuid": "9ae00750-1dc8-11eb-8830-af83ed36aff9",
+            "id": "0",
+            "name": "root",
+            "description": null,
+            "enabled": "True",
+            "loaded": "False",
+            "timecode": "False",
+            "offset": null,
+            "loop": 1,
+            "prewait": {
+                "CTimecode": "00:00:23.123"
+            },
+            "postwait": {
+                "CTimecode": "00:00:00.000"
+            },
+            "post_go": "pause",
+            "target": null,
+            "UI_properties": null,
+            "contents": [
+                {
+                    "AudioCue": {
+                        "uuid": "484db840-1df8-11eb-8314-3b9464061cfa",
+                        "id": null,
+                        "name": "New Audio Cue",
+                        "description": null,
+                        "enabled": "True",
+                        "loaded": "False",
+                        "timecode": "False",
+                        "offset": null,
+                        "loop": 1,
+                        "prewait": null,
+                        "postwait": null,
+                        "post_go": "pause",
+                        "target": null,
+                        "UI_properties": null,
+                        "Media": {"file_name":"0002.jpg", "regions":[{"region": {"id": 0, "loop": 1, "in": {"CTimecode": "00:00:00.000"},"out": {"CTimecode": "00:00:30.000"}}}]},
+                        "master_vol": 80,
+                        "Outputs": [
+                            {
+                                "AudioCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_vol": 80,
+                                    "channels": null
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "AudioCue": {
+                        "uuid": "e08eacf0-1df2-11eb-86ca-95b331c47647",
+                        "id": null,
+                        "name": "New Audio",
+                        "description": null,
+                        "enabled": "True",
+                        "loaded": "False",
+                        "timecode": "False",
+                        "offset": null,
+                        "loop": 1,
+                        "prewait": null,
+                        "postwait": null,
+                        "post_go": "pause",
+                        "target": null,
+                        "UI_properties": null,
+                        "Media": null,
+                        "master_vol": 80,
+                        "Outputs": [
+                            {
+                                "AudioCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_vol": 80,
+                                    "channels": null
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "AudioCue": {
+                        "uuid": "f0eeaa40-1df8-11eb-848c-25de49a3358f",
+                        "id": null,
+                        "name": "FFX",
+                        "description": null,
+                        "enabled": "True",
+                        "loaded": "False",
+                        "timecode": "False",
+                        "offset": null,
+                        "loop": 1,
+                        "prewait": null,
+                        "postwait": null,
+                        "post_go": "pause",
+                        "target": null,
+                        "UI_properties": null,
+                        "Media": null,
+                        "master_vol": 80,
+                        "Outputs": [
+                            {
+                                "AudioCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_vol": 80,
+                                    "channels": [
+                                        {
+                                            "channel": {
+                                                "channel_num": 0,
+                                                "channel_vol": 80
+                                            }
+                                        },
+                                        {
+                                            "channel": {
+                                                "channel_num": 0,
+                                                "channel_vol": 80
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "AudioCue": {
+                        "uuid": "268a0b70-1dfb-11eb-bc5f-2b59ad58b106",
+                        "id": null,
+                        "name": "New Audio Cue",
+                        "description": null,
+                        "enabled": "True",
+                        "loaded": "False",
+                        "timecode": "False",
+                        "offset": null,
+                        "loop": 1,
+                        "prewait": null,
+                        "postwait": null,
+                        "post_go": "pause",
+                        "target": null,
+                        "UI_properties": null,
+                        "Media": null,
+                        "master_vol": 80,
+                        "Outputs": [
+                            {
+                                "AudioCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_vol": 80,
+                                    "channels": null
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "VideoCue": {
+                        "uuid": "98ed3a60-1dfc-11eb-a857-83bbfa0935de",
+                        "id": null,
+                        "name": "New Video Cue",
+                        "description": null,
+                        "enabled": "True",
+                        "loaded": "False",
+                        "timecode": "False",
+                        "offset": null,
+                        "loop": 1,
+                        "prewait": null,
+                        "postwait": null,
+                        "post_go": "pause",
+                        "target": null,
+                        "UI_properties": {
+                            "timeline_position": {
+                                "x": 0,
+                                "y": 0
+                            }
+                        },
+                        "Media": null,
+                        "Outputs": [
+                            {
+                                "VideoCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_geometry": {
+                                        "x_scale": 0,
+                                        "y_scale": 0,
+                                        "corners": {
+                                            "top_left": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "top_right": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "bott_left": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "bott_right": {
+                                                "x": 0,
+                                                "y": 0
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "VideoCueOutput": {
+                                    "output_name": "salida_001",
+                                    "output_geometry": {
+                                        "x_scale": 0,
+                                        "y_scale": 0,
+                                        "corners": {
+                                            "top_left": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "top_right": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "bott_left": {
+                                                "x": 0,
+                                                "y": 0
+                                            },
+                                            "bott_right": {
+                                                "x": 0,
+                                                "y": 0
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}
