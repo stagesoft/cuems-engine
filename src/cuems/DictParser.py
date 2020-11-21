@@ -5,7 +5,7 @@ from .CueList import CueList
 from .Cue import Cue
 from .Media import Media
 from .UI_properties import UI_properties
-from .Outputs import Outputs
+from .CueOutput import CueOutput, AudioCueOutput, VideoCueOutput, DmxCueOutput
 from .AudioCue import AudioCue
 from .VideoCue import VideoCue
 from .ActionCue import ActionCue
@@ -202,26 +202,17 @@ class CTimecodeParser(GenericSubObjectParser):
         return self.item_gp
 
 
-class OutputsParser(GenericSubObjectParser):
+class OutputsParser(GenericParser):
     def __init__(self, init_dict, class_string, parent_class=None):
         self.init_dict = init_dict
-        self.class_string = class_string
-        self._class = self.get_class(class_string)
-        self.item_op = self._class().assign()
 
     def parse(self):
         for dict_key, dict_value in self.init_dict.items():
-            self.item_op[dict_key] = dict_value
+            self._class = self.get_class(dict_key)
+            self.item_op = self._class(dict_value)
 
         return self.item_op
 
-class AudioCueOutputParser(OutputsParser):
-    pass
-
-class VideoCueOutputParser(OutputsParser):
-    pass
-class DmxCueOutputParser(OutputsParser):
-    pass
 
 class NoneTypeParser():
     def __init__(self, init_dict, class_string):
