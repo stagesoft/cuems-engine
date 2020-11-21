@@ -4,7 +4,7 @@ OUTPUT_SUFFIX = 'Output'
 
 
 class Outputs():
-    def __init__(self, caller_class, init_dict = None):
+    def __init__(self, caller_class = 'Cue', init_dict = None):
         class_name = caller_class + OUTPUT_SUFFIX
         self._obj = None
         try:
@@ -35,13 +35,13 @@ class CueOutput(dict):
         return super().__str__()
 
 class AudioCueOutput(CueOutput):
-    def __init__(self, init_dict = None):
+    def __init__(self, init_dict = None, caller_class='AudioCue'):
         super().__init__(init_dict)
 
 class VideoCueOutput(CueOutput):
-    def __init__(self, init_dict = None):
+    def __init__(self, init_dict = None, caller_class='VideoCue'):
         super().__init__(init_dict)
 
 class DmxCueOutput(CueOutput):
-    def __init__(self, init_dict = None):
+    def __init__(self, init_dict = None, caller_class='DmxCue'):
         super().__init__(init_dict)
