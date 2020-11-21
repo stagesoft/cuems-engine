@@ -22,11 +22,11 @@ class AudioCue(Cue):
 
     @property
     def outputs(self):
-        return super().__getitem__('outputs')
+        return super().__getitem__('Outputs')
 
     @outputs.setter
     def outputs(self, outputs):
-        super().__setitem__('outputs', outputs)
+        super().__setitem__('Outputs', outputs)
 
 
     def review_offset(self, timecode):
