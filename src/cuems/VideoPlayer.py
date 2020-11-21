@@ -35,11 +35,11 @@ class VideoPlayer(Thread):
             if self.args:
                 for arg in self.args.split():
                     process_call_list.append(arg)
-            process_call_list.extend(['--osc', str(self._port), self.media])
+            process_call_list.extend(['--osc', str(self._port), '--start-screen', self.output, self.media])
             # self.p = Popen(process_call_list, shell=False, stdout=PIPE, stderr=PIPE)
             # self.stdout, self.stderr = self.p.communicate()
 
-            self.p = Popen(process_call_list, stdout=PIPE, stderr=STDOUT, env={'DISPLAY' : f'{self.output}'})
+            self.p = Popen(process_call_list, stdout=PIPE, stderr=STDOUT)
             stdout_lines_iterator = iter(self.p.stdout.readline, b'')
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:

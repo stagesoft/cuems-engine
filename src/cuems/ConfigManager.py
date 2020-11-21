@@ -85,9 +85,9 @@ class ConfigManager(Thread):
         logger.info(f'Project {project_uname} mappings loaded')
 
     def get_video_player_id(self, mapping_name):
-        for item in self.project_maps['Video']['outputs']['mapping']:
-            if mapping_name == item['virtual_name']:
-                return item['mapped_to']
+        for item in self.project_maps['Video']['outputs']:
+            if mapping_name == item['mapping']['virtual_name']:
+                return item['mapping']['mapped_to']
 
         raise Exception(f'Video output wrongly mapped')
 

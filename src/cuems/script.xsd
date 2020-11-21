@@ -23,7 +23,6 @@
               <!-- The uuid, TODO specify the uuid format in a type -->
               <xs:element name="uuid" type="cms:UuidType" />
               <!-- The name, mainly a string, we can check lengths here too if desired -->
-              <xs:element name="unix_name" type="cms:NameStringType" />
               <xs:element name="name" type="cms:NameStringType" /> <!-- 3 - 60 chars -->
               <!-- Long description of the script -->
               <xs:element name="description" type="cms:DescriptionStringType" /> <!-- 0 - 255 chars -->
@@ -176,7 +175,7 @@
 
   <xs:complexType name="RegionsType">
     <xs:sequence minOccurs="1" maxOccurs="unbounded">
-      <xs:element name="region" type="cms:RegionsType" />
+      <xs:element name="region" type="cms:RegionType" />
     </xs:sequence>
   </xs:complexType>
 
@@ -234,7 +233,7 @@
     <!-- Video outputs type -->
     <!-- Specify n virtual video outputs -->
     <xs:sequence minOccurs="1" maxOccurs="1">
-      <xs:element name="name" type="cms:NameStringType" />
+      <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
     </xs:sequence>
   </xs:complexType>

@@ -18,19 +18,19 @@
             <outputs>
                 <mapping>
                     <virtual_name>VideoOut1</virtual_name>
-                    <mapped_to>:0:0</mapped_to>
+                    <mapped_to>0</mapped_to>
                 </mapping>
                 <mapping>
                     <virtual_name>VideoOut2</virtual_name>
-                    <mapped_to>:0:1</mapped_to>
+                    <mapped_to>1</mapped_to>
                 </mapping>
                 <mapping>
                     <virtual_name>VideoOut3</virtual_name>
-                    <mapped_to>:0:0</mapped_to>
+                    <mapped_to>0</mapped_to>
                 </mapping>
                 <mapping>
                     <virtual_name>VideoOut4</virtual_name>
-                    <mapped_to>:0:1</mapped_to>
+                    <mapped_to>1</mapped_to>
                 </mapping>
             </outputs>
             <inputs></inputs>

@@ -168,8 +168,8 @@ class CuemsEngine():
                 if item['mapped_to'] not in self.cm.node_conf['video_inputs']['input']:
                     raise Exception(f'Video input mapping incorrect')
         if self.cm.project_maps['Video']['outputs']:
-            for item in self.cm.project_maps['Video']['outputs']['mapping']:
-                if item['mapped_to'] not in self._video_players.keys():
+            for item in self.cm.project_maps['Video']['outputs']:
+                if item['mapping']['mapped_to'] not in self._video_players.keys():
                     raise Exception(f'Video output mapping incorrect')
         
         if self.cm.project_maps['DMX']['inputs']:
@@ -191,18 +191,18 @@ class CuemsEngine():
         pass
 
     def check_video_devs(self):
-        for index, item in enumerate(self.cm.node_conf['video_outputs']['output']):
+        for index, item in enumerate(self.cm.node_conf['video_outputs']):
             # Assign a videoplayer object
             port = self.cm.players_port_index['start']
             while port in self.cm.players_port_index['used']:
                 port += 2
 
-            player_id = f'{item}:{index}'
+            player_id = item['output']
             self._video_players[player_id] = dict()
 
             try:
                 self._video_players[player_id]['player'] = VideoPlayer(  port, 
-                                                                    item,
+                                                                    item['output'],
                                                                     self.cm.node_conf['videoplayer']['path'],
                                                                     str(self.cm.node_conf['videoplayer']['args']),
                                                                     '')
@@ -532,7 +532,7 @@ class CuemsEngine():
                     if isinstance(item, VideoCue):
                         try:
                             for output in item.Outputs:
-                                video_player_id = self.cm.get_video_player_id(output['VideoCueOutput']['name'])
+                                video_player_id = self.cm.get_video_player_id(output['output_name'])
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
                         except Exception as e:

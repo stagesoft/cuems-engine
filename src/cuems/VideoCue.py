@@ -207,8 +207,8 @@ class VideoCue(Cue):
 
     def check_mappings(self, mappings):
         for output in self.Outputs:
-            for item in mappings['Video']['outputs']['mapping']:
-                if output['VideoCueOutput']['name'] == item['virtual_name']:
+            for item in mappings['Video']['outputs']:
+                if output['output_name'] == item['mapping']['virtual_name']:
                     return True
         return False
 

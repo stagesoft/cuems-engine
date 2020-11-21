@@ -1,5 +1,5 @@
 from .CTimecode import CTimecode
-from .Outputs import Outputs
+from .CueOutput import CueOutput
 from .Media import Media
 from .log import logger
 import uuid as uuid_module
