@@ -111,7 +111,7 @@
       <!-- Execution options -->
       <xs:element name="prewait" type="cms:CTimecodeType" /> <!-- After go before play -->
       <xs:element name="postwait" type="cms:CTimecodeType" /> <!-- After play before post go-->
-      <xs:element name="post_go" type="cms:PostActionType" /> <!-- Types: pause/go/go_at_end -->
+      <xs:element name="post_go" type="cms:PostGoType" /> <!-- Types: pause/go/go_at_end -->
       <xs:element name="target" type="cms:TargetType" /> <!-- target uuid -->
       <xs:element name="UI_properties" type="cms:UiPropertiesType" />
     </xs:sequence>
@@ -132,7 +132,7 @@
     </xs:choice>
   </xs:complexType>
 
-  <xs:simpleType name="PostActionType">
+  <xs:simpleType name="PostGoType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="pause" />
       <xs:enumeration value="go" />
@@ -158,11 +158,8 @@
     <xs:complexContent>
       <xs:extension base="cms:CueType">
         <xs:sequence>
-          <!-- A media file path which can be none -->
           <xs:element name="Media" type="cms:MediaType" />
-          <!-- A master volume starting value -->
           <xs:element name="master_vol" type="cms:PercentType" />
-          <!-- An outputs section -->
           <xs:element name="Outputs" type="cms:OutputsType" />
         </xs:sequence>
       </xs:extension>
@@ -172,24 +169,35 @@
   <xs:complexType name="MediaType">
     <xs:sequence minOccurs="0" maxOccurs="1">
       <xs:element name="file_name" type="xs:string" />
+      <xs:element name="regions" type="cms:RegionsType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RegionsType">
+    <xs:sequence minOccurs="1" maxOccurs="unbounded">
+      <xs:element name="region" type="cms:RegionType" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RegionType">
+    <xs:sequence minOccurs="1">
+      <xs:element name="id" type="xs:nonNegativeInteger" />
+      <xs:element name="loop" type="xs:nonNegativeInteger" />
+      <xs:element name="in" type="cms:CTimecodeType" />
+      <xs:element name="out" type="cms:CTimecodeType" />
     </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="OutputsType">
-    <!-- Specify n virtual audio outputs -->
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="AudioCueOutput" type="cms:AudioCueOutputsType" />
       <xs:element name="VideoCueOutput" type="cms:VideoCueOutputsType" />
-
     </xs:choice>
   </xs:complexType>
 
   <xs:complexType name="AudioCueOutputsType">
-    <!-- Specify n virtual audio outputs -->
     <xs:sequence minOccurs="0" maxOccurs="unbounded">
-      <!-- Output name -->
       <xs:element name="output_name" type="cms:NameStringType" />
-      <!-- Output volume -->
       <xs:element name="output_vol" type="cms:PercentType" />
       <xs:element name="channels" type="cms:AudioChannelsType" />
     </xs:sequence>
@@ -224,7 +232,7 @@
   <xs:complexType name="VideoCueOutputsType">
     <!-- Video outputs type -->
     <!-- Specify n virtual video outputs -->
-    <xs:sequence minOccurs="0" maxOccurs="10">
+    <xs:sequence minOccurs="1" maxOccurs="1">
       <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
     </xs:sequence>
@@ -296,9 +304,7 @@
   <!-- DMX allows a max of 512 different channels in a universe -->
   <xs:complexType name="DmxUniverseContentsType">
     <xs:sequence>
-      <xs:element name="dmx_channel" type="cms:DmxChannelType" minOccurs="0" maxOccurs="512">
-        <!-- They must be unique id's specs for the channels -->
-      </xs:element>
+      <xs:element name="dmx_channel" type="cms:DmxChannelType" minOccurs="0" maxOccurs="512" />
     </xs:sequence>
   </xs:complexType>
 
@@ -322,21 +328,31 @@
     <xs:complexContent>
       <xs:extension base="cms:CueType">
         <xs:sequence>
-          <xs:element name="action_type" type="xs:string" minOccurs="0" />
+          <xs:element name="action_type" type="cms:ActionType" minOccurs="0" />
           <xs:element name="action_target" type="cms:TargetType" />
         </xs:sequence>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
 
-  
+  <xs:simpleType name="ActionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="play" />
+      <xs:enumeration value="pause" />
+      <xs:enumeration value="stop" />
+      <xs:enumeration value="load" />
+      <xs:enumeration value="unload" />
+      <xs:enumeration value="enable" />
+      <xs:enumeration value="disable" />
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="BoolType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="True" />
       <xs:enumeration value="False" />
     </xs:restriction>
   </xs:simpleType>
-  
 
   <xs:simpleType name="DateType">
     <xs:restriction base="xs:dateTime">
@@ -346,7 +362,7 @@
 
   <xs:simpleType name="TimecodeType">
     <xs:restriction base="xs:string">
-      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2}" />
+      <xs:pattern value="[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}" />
     </xs:restriction>
   </xs:simpleType>
 

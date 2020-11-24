@@ -154,9 +154,11 @@ class GenericComplexSubObjectXmlBuilder(CuemsScriptXmlBuilder):
                 elif isinstance(value, (type(None))):
                     sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                 elif isinstance(value, dict):
-                    self.recurser(value, self.xml_tree)
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    self.recurser(value, sub_dict_element)
                 elif isinstance(value, list):
-                    self.recurser(value, self.xml_tree)
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    self.recurser(value, sub_dict_element)
 
     def recurser(self, group, xml_tree):
         if isinstance(group, dict):
@@ -191,19 +193,19 @@ class CueOutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
 
         if isinstance(self._object, dict):
             
-            for dict_key, dict_item in self._object.items():
-                for key, value in dict_item.items():
-                    if isinstance(value, (str, bool, int, float)):
-                        cue_subelement = ET.SubElement(cue_element, key)
-                        cue_subelement.text = str(value)
-                    elif isinstance(value, (type(None))):
-                        cue_subelement = ET.SubElement(cue_element, key)
-                    elif isinstance(value, dict):
-                        cue_subelement = ET.SubElement(cue_element, key)
-                        self.recurser(value, cue_subelement)
-                    elif isinstance(value, list):
-                        cue_subelement = ET.SubElement(cue_element, key)
-                        self.recurser(value, cue_subelement)
+
+            for key, value in self._object.items():
+                if isinstance(value, (str, bool, int, float)):
+                    cue_subelement = ET.SubElement(cue_element, key)
+                    cue_subelement.text = str(value)
+                elif isinstance(value, (type(None))):
+                    cue_subelement = ET.SubElement(cue_element, key)
+                elif isinstance(value, dict):
+                    cue_subelement = ET.SubElement(cue_element, key)
+                    self.recurser(value, cue_subelement)
+                elif isinstance(value, list):
+                    cue_subelement = ET.SubElement(cue_element, key)
+                    self.recurser(value, cue_subelement)
 
         else:   
             cue_element.text = str(self._object)
