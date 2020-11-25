@@ -90,6 +90,7 @@ class CuemsEngine():
             exit(-1)
 
         # WebSocket server
+        '''
         settings_dict = {}
         settings_dict['session_uuid'] = str(uuid1())
         settings_dict['library_path'] = self.cm.library_path
@@ -103,6 +104,7 @@ class CuemsEngine():
             self.stop_all_threads()
             logger.error('Config error, websocket_port key not found. Exiting.')
             exit(-1)
+        '''
 
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
@@ -260,11 +262,13 @@ class CuemsEngine():
 
         self.cm.join()
 
+        '''
         try:
             self.ws_server.stop()
         except AttributeError:
             pass
         logger.info(f'Ws-server thread finished')
+        '''
 
         try:
             self.ossia_server.stop()
@@ -318,8 +322,8 @@ class CuemsEngine():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
-        if self.ws_server.process.is_alive():
-            print('ws alive')
+        #if self.ws_server.process.is_alive():
+        #    print('ws alive')
         if self.mtclistener.is_alive():
             print('mtcl alive')
         exit()
@@ -334,8 +338,8 @@ class CuemsEngine():
             print('cm alive')
         if self.ossia_server.is_alive():
             print('ossia alive')
-        if self.ws_server.process.is_alive():
-            print('ws alive')
+        #if self.ws_server.process.is_alive():
+        #    print('ws alive')
         if self.mtclistener.is_alive():
             print('mtcl alive')
         exit()
