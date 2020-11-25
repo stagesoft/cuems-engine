@@ -15,11 +15,14 @@
                 <output>0</output>
                 <output>1</output>
             </video_outputs>
-            <audio_outputs>2</audio_outputs>
+            <audio_outputs>
+                <output>cuems1</output>
+                <output>cuems2</output>
+            </audio_outputs>
             <videoplayer>
                 <path>/usr/bin/xjadeo</path>
-                <args>--no-splash --quiet --no-initial-sync --no-letterbox --midi-driver alsa-seq --ignore-file-offset</args>
-                <!-- no-initial-sync ignore-file-offset midifps 1 -->
+                <args>--ontop --fullscreen --no-splash --quiet --no-initial-sync --midi-driver alsa-seq --ignore-file-offset</args>
+                <!-- no-initial-sync ignore-file-offset midifps 1 no-letterbox -->
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>

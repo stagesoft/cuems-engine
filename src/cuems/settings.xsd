@@ -29,7 +29,7 @@
             <xs:element name="mtc_port" type="xs:string" />
             <xs:element name="osc_in_port_base" type="xs:positiveInteger" />
             <xs:element name="video_outputs" type="cms:OutputsType" />
-            <xs:element name="audio_outputs" type="xs:nonNegativeInteger" />
+            <xs:element name="audio_outputs" type="cms:OutputsType" />
             <xs:element name="videoplayer" type="cms:VideoPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
