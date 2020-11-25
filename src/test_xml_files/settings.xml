@@ -6,11 +6,11 @@
         <database_name>project-manager.db</database_name>
         <node id="0" master="True">
             <osc_dest_host>localhost</osc_dest_host>
-            <oscquery_port>7700</oscquery_port>
-            <oscquery_out_port>7701</oscquery_out_port>
+            <oscquery_port>9090</oscquery_port>
+            <oscquery_out_port>9091</oscquery_out_port>
             <websocket_port>9092</websocket_port>
             <mtc_port>Midi Through Port-0</mtc_port>
-            <osc_in_port_base>7710</osc_in_port_base>
+            <osc_in_port_base>7000</osc_in_port_base>
             <video_outputs>
                 <output>0</output>
                 <output>1</output>
