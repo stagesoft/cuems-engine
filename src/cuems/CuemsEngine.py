@@ -37,7 +37,7 @@ from .ConfigManager import ConfigManager
 from pprint import pprint
 
 CUEMS_CONF_PATH = '/etc/cuems/'
-CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
+# CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
 
 # %%
