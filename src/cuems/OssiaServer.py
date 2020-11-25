@@ -44,6 +44,7 @@ class OssiaServer(threading.Thread):
     def stop(self):
         self.server_running = False
         self.thread.join()
+        self.conf_queue_loop.join()
         
     def threaded_loop(self):
         while self.server_running:
@@ -67,12 +68,13 @@ class OssiaServer(threading.Thread):
 
     def conf_queue_consumer(self):
         while self.server_running:
-            item = self.conf_queue.get()
-            if item.action == 'add':
-                self.add_nodes(item)
-            elif item.action == 'remove':
-                self.remove_nodes(item)
-            self.conf_queue.task_done()
+            if not self.conf_queue.empty():
+                item = self.conf_queue.get()
+                if item.action == 'add':
+                    self.add_nodes(item)
+                elif item.action == 'remove':
+                    self.remove_nodes(item)
+                self.conf_queue.task_done()
             time.sleep(0.004)
 
     def add_nodes(self, qdata):
