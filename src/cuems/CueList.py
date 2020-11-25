@@ -103,7 +103,7 @@ class CueList(Cue):
     def go_thread(self, ossia, mtc):
         # ARM NEXT TARGET
         if self._target_object:
-            self._target_object.arm(self.conf, ossia.conf_queue, self.armed_list)
+            self._target_object.arm(self.conf, ossia, self.armed_list)
 
         # PREWAIT
         if self.prewait > 0:
