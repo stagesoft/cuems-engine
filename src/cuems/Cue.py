@@ -7,24 +7,11 @@ from time import sleep
 from threading import Thread
 
 class Cue(dict):
-    def __init__(self, offset=None, init_dict = None, uuid=None ):
-        empty_keys = {"uuid":"", "id": "",  "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go": "", "target": "", "UI_properties": ""}
-        super().__init__(empty_keys)
-
-        if uuid is None:
-            super().__setitem__('uuid', str(uuid_module.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
-        
-        if offset is not None:
-            super().__setitem__('timecode', True)
-            self.__setitem__('offset', offset)
-        else:
-            super().__setitem__('timecode', False)
-
-        self._target_object = None
-        
-        if init_dict is not None:
+    def __init__(self, init_dict = None):
+        if init_dict:
             super().__init__(init_dict)
-
+            
+        self._target_object = None
         self._conf = None
         self._armed_list = None
         self._mtc_when_gone = CTimecode()
@@ -32,10 +19,6 @@ class Cue(dict):
         self._end_time = CTimecode('00:00:20:00')
         self._duration = self._end_time - self._start_time
         self._deadline_reached = False
-
-    @classmethod
-    def from_dict(cls, init_dict):
-        return cls(init_dict = init_dict)
 
     @property
     def uuid(self):

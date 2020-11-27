@@ -4,21 +4,10 @@ import uuid as uuid_module
 from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
-    def __init__(self, uuid=None, name=None, date=None, cuelist=None):
-        empty_keys = {"uuid":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
-        super().__init__(empty_keys)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)
 
-        if uuid is None:
-            super().__setitem__('uuid', str(uuid_module.uuid1()))
-        else:
-            super().__setitem__('uuid', uuid)
-        super().__setitem__('name', name)
-        if date is None:
-            date = date_now_iso_utc()
-
-        super().__setitem__('created', date)
-        super().__setitem__('modified', date)
-        super().__setitem__('cuelist', cuelist)
         
     @property
     def uuid(self):

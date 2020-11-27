@@ -24,8 +24,10 @@ class VideoCue(Cue):
                             }
     '''
 
-    def __init__(self, time=None, init_dict=None):
-        super().__init__(time, init_dict)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)
+            
         self._player = None
         self._osc_route = None
         self._offset_route = '/jadeo/offset'

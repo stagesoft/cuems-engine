@@ -7,15 +7,9 @@ from .log import logger
 
 
 class CueList(Cue):
-    
-    def __init__(self, contents=[], offset=None):
-        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "UI_properties": "", "contents": []}
-        super().__init__(init_dict=empty_keys)
-        super().__setitem__('uuid', str(uuid_module.uuid1()))
-        if isinstance(contents, list):
-            super().__setitem__('contents', contents)
-        else:
-            super().__setitem__('contents', [contents])
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)
 
     @property    
     def contents(self):

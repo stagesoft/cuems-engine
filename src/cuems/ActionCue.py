@@ -10,8 +10,10 @@ from .OssiaServer import QueueOSCData
 from .log import logger
 
 class ActionCue(Cue):
-    def __init__(self, time=None, init_dict=None):
-        super().__init__(time, init_dict)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)
+            
         self._action_target_object = None
 
     @property
