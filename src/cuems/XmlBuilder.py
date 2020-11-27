@@ -180,7 +180,30 @@ class CTimecodeXmlBuilder(GenericSimpleSubObjectXmlBuilder):
     pass
 
 class MediaXmlBuilder(GenericComplexSubObjectXmlBuilder):
-    pass
+    def build(self):
+        
+
+        if isinstance(self._object, dict):
+            
+
+            for key, value in self._object.items():
+                if isinstance(value, (str, bool, int, float)):
+                    cue_subelement = ET.SubElement(self.xml_tree, key)
+                    cue_subelement.text = str(value)
+                elif isinstance(value, (type(None))):
+                    cue_subelement = ET.SubElement(self.xml_tree, key)
+                elif isinstance(value, dict):
+                    cue_subelement = ET.SubElement(self.xml_tree, key)
+                    self.recurser(value, cue_subelement)
+                elif isinstance(value, list):
+                    cue_subelement = ET.SubElement(self.xml_tree, key)
+                    for list_item in value:
+                        builder_class = self.get_builder_class(list_item)
+                        sub_object_element = builder_class(list_item, xml_tree =cue_subelement).build()
+                    
+
+
+
 
 class UI_propertiesXmlBuilder(GenericComplexSubObjectXmlBuilder):
     pass
