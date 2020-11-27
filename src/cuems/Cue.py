@@ -3,14 +3,32 @@ from .CueOutput import AudioCueOutput, VideoCueOutput, DmxCueOutput
 from .Media import Media
 from .log import logger
 import uuid as uuid_module
+from time import sleep
+from threading import Thread
 
 class Cue(dict):
     def __init__(self, offset=None, init_dict = None, uuid=None ):
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
         
+        if offset is not None:
+            super().__setitem__('timecode', True)
+            self.__setitem__('offset', offset)
+        else:
+            super().__setitem__('timecode', False)
+
+        self._target_object = None
+        
         if init_dict is not None:
             super().__init__(init_dict)
+
+        self._conf = None
+        self._armed_list = None
+        self._mtc_when_gone = CTimecode()
+        self._start_time = CTimecode('00:00:00:00')
+        self._end_time = CTimecode('00:00:20:00')
+        self._duration = self._end_time - self._start_time
+        self._deadline_reached = False
 
     @classmethod
     def from_dict(cls, init_dict):
@@ -49,12 +67,12 @@ class Cue(dict):
         super().__setitem__('description', description)
 
     @property
-    def disabled(self):
-        return super().__getitem__('disabled')
+    def enabled(self):
+        return super().__getitem__('enabled')
 
-    @disabled.setter
-    def disabled(self, disabled):
-        super().__setitem__('disabled', disabled)
+    @enabled.setter
+    def enabled(self, enabled):
+        super().__setitem__('enabled', enabled)
 
     @property
     def loaded(self):
@@ -78,7 +96,7 @@ class Cue(dict):
 
     @offset.setter
     def offset(self, offset):
-        super().__setitem__('offset', offset)
+        self.__setitem__('offset', offset)
 
     @property
     def loop(self):
@@ -105,12 +123,12 @@ class Cue(dict):
         super().__setitem__('postwait', postwait)
 
     @property
-    def post_action(self):
-        return super().__getitem__('post_action')
+    def post_go(self):
+        return super().__getitem__('post_go')
 
-    @post_action.setter
-    def post_action(self, post_action):
-        super().__setitem__('post_action', post_action)
+    @post_go.setter
+    def post_go(self, post_go):
+        super().__setitem__('post_go', post_go)
 
     @property
     def target(self):
@@ -129,12 +147,14 @@ class Cue(dict):
         super().__setitem__('ui_properties', ui_properties)
 
     @property
-    def media(self):
+    def Media(self):
         return super().__getitem__('Media')
 
-    @media.setter
-    def media(self, media):
-        super().__setitem__('Media', media)
+    @Media.setter
+    def Media(self, Media):
+        super().__setitem__('Media', Media)
+    def target_object(self, target_object):
+        self._target_object = target_object
 
     def type(self):
         return type(self)
@@ -153,6 +173,8 @@ class Cue(dict):
                     dict_timecode = value.pop('CTimecode', None)
                     if dict_timecode is None:
                         ctime_value = CTimecode()
+                    elif isinstance(dict_timecode, int):
+                        ctime_value = CTimecode(start_seconds = dict_timecode)
                     else:
                         ctime_value = CTimecode(dict_timecode)
 
@@ -161,18 +183,76 @@ class Cue(dict):
         else:
             super().__setitem__(key, value)
 
-    def arm(self, conf, queue, init = False):
-        if self.disabled != True and self.loaded == init:
-            self.loaded = True
+    def arm(self, conf, ossia, armed_list, init = False):
+        self._conf = conf
+        self._armed_list = armed_list
 
-            return self.uuid
+        if not self.enabled:
+            if self.loaded and self in self._armed_list:
+                self.disarm(ossia.conf_queue)
+            return False
+        elif self.loaded and not init:
+            if not self in self._armed_list:
+                self._armed_list.append(self)
+            return True
+
+        if self.post_go == 'go':
+            self._target_object.arm(self._conf, ossia, self._armed_list, init)
+
+        return True
+
+    def go(self, ossia, mtc):
+        if not self.loaded:
+            logger.error(f'{self.__class__.__name__} {self.uuid} not loaded to go...')
+            raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
+
         else:
-            return None
+            # THREADED GO
+            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
+            thread.start()
 
-    def disarm(self, conf, queue):
+    def go_thread(self, ossia, mtc):
+        # ARM NEXT TARGET
+        if self._target_object:
+            self._target_object.arm(self._conf, ossia, self._armed_list)
+
+        # PREWAIT
+        if self.prewait > 0:
+            sleep(self.prewait.milliseconds / 1000)
+
+        # PLAY WHATEVER A SIMPLE CUE WOULD PLAY
+
+        # POSTWAIT
+        if self.postwait > 0:
+            sleep(self.postwait.milliseconds / 1000)
+
+        # POST-GO GO
+        if self.post_go == 'go':
+            self._target_object.go(ossia, mtc)
+
+        if self in self._armed_list:
+            self.disarm(ossia.conf_queue)
+
+
+    def disarm(self, ossia_queue):
         if self.loaded is True:
             self.loaded = False
 
-            return self.uuid
+            if self in self._armed_list:
+                self._armed_list.remove(self)
+
+            return True
+        else:
+            return False
+
+    def get_next_cue(self):
+        if self.target:
+            if self.post_go == 'pause':
+                return self._target_object
+            else:
+                return self._target_object.get_next_cue()
         else:
             return None
+
+    def check_mappings(self, mappings):
+        return True

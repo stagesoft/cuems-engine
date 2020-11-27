@@ -3,7 +3,7 @@ import json
 
 #TODO: !IMPORTANT! fix milisecond parseing with more than 3 digits and leading 0's; Fix division returnig to 23:59...
 class CTimecode(Timecode):
-    def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate=25):
+    def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate='ms'):
         if init_dict is not None:
             super().__init__(framerate, init_dict, start_seconds, frames)
         else:
@@ -22,8 +22,8 @@ class CTimecode(Timecode):
         """returns time as milliseconds
         """
         #TODO: float math for other framerates                               
-        millis_per_frame = int(1000/int(self._framerate))
-        return (millis_per_frame * self.frame_number)
+        millis_per_frame = 1000 / float(self._framerate)
+        return int(millis_per_frame * self.frame_number)
 
     def __hash__(self):
         return hash((self.milliseconds, self.milliseconds))

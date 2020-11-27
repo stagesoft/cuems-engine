@@ -3,7 +3,7 @@ import distutils.util
 from .CuemsScript import CuemsScript
 from .CueList import CueList
 from .Cue import Cue
-from .Media import Media
+from .Media import Media, region
 from .UI_properties import UI_properties
 from .CueOutput import CueOutput, AudioCueOutput, VideoCueOutput, DmxCueOutput
 from .AudioCue import AudioCue
@@ -213,6 +213,27 @@ class OutputsParser(GenericParser):
 
         return self.item_op
 
+class regionsParser(GenericParser):
+    def __init__(self, init_dict, class_string, parent_class=None):
+        self.init_dict = init_dict
+        self.class_string = class_string
+        self._class = self.get_class(class_string)
+        self.item_rp = self._class()
+        
+    def parse(self):
+        for dict_key, dict_value in self.init_dict.items():
+            key_parser_class, key_class_string = self.get_parser_class(dict_key)
+            self.item_rp = key_parser_class(init_dict=dict_value, class_string=key_class_string).parse()
+
+        return self.item_rp
+
+class AudioCueOutputParser(OutputsParser):
+    pass
+
+class VideoCueOutputParser(OutputsParser):
+    pass
+class DmxCueOutputParser(OutputsParser):
+    pass
 
 class NoneTypeParser():
     def __init__(self, init_dict, class_string):

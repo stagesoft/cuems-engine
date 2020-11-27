@@ -44,6 +44,7 @@ class OssiaServer(threading.Thread):
     def stop(self):
         self.server_running = False
         self.thread.join()
+        self.conf_queue_loop.join()
         
     def threaded_loop(self):
         while self.server_running:
@@ -67,12 +68,13 @@ class OssiaServer(threading.Thread):
 
     def conf_queue_consumer(self):
         while self.server_running:
-            item = self.conf_queue.get()
-            if item.action == 'add':
-                self.add_nodes(item)
-            elif item.action == 'remove':
-                self.remove_nodes(item)
-            self.conf_queue.task_done()
+            if not self.conf_queue.empty():
+                item = self.conf_queue.get()
+                if item.action == 'add':
+                    self.add_nodes(item)
+                elif item.action == 'remove':
+                    self.remove_nodes(item)
+                self.conf_queue.task_done()
             time.sleep(0.004)
 
     def add_nodes(self, qdata):
@@ -92,7 +94,7 @@ class OssiaServer(threading.Thread):
                 # conf[1] holds the method to call when received such a route
                 self.osc_registered_nodes[qdata.device_name + route] = [temp_node, conf[1]]
 
-            logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
+            # logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
         elif isinstance(qdata, QueueData):
             for route, conf in qdata.items():
                 temp_node = self.oscquery_device.add_node(route)
@@ -103,11 +105,14 @@ class OssiaServer(threading.Thread):
                 
                 self.oscquery_registered_nodes[route] = [temp_node, conf[1]]
 
-            logger.info(f'OSCQuery Nodes registered: {qdata}')
+            # logger.info(f'OSCQuery Nodes registered: {qdata}')
 
     def remove_nodes(self, qdata):
         if isinstance(qdata, QueueOSCData):
-            pass
+            self.osc_devices.pop(qdata.device_name)
+            for route, conf in qdata.items():
+                self.osc_registered_nodes.pop(qdata.device_name + route)
+
         elif isinstance(qdata, QueueData):
             for route, conf in qdata.items():
                 try:
@@ -121,7 +126,7 @@ class QueueData(dict):
         super().__init__(dictionary)
 
 class QueueOSCData(QueueData):
-    def __init__(self, action, device_name, host, in_port, out_port, dictionary):
+    def __init__(self, action, device_name, host = '', in_port = 0, out_port = 0, dictionary = {}):
         self.device_name = device_name
         self.host = host
         self.in_port = in_port

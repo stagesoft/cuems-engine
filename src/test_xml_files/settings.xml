@@ -6,19 +6,28 @@
         <database_name>project-manager.db</database_name>
         <node id="0" master="True">
             <osc_dest_host>localhost</osc_dest_host>
-            <oscquery_port>7700</oscquery_port>
-            <oscquery_out_port>7701</oscquery_out_port>
+            <oscquery_port>9090</oscquery_port>
+            <oscquery_out_port>9091</oscquery_out_port>
             <websocket_port>9092</websocket_port>
             <mtc_port>Midi Through Port-0</mtc_port>
-            <osc_in_port_base>7710</osc_in_port_base>
+            <osc_in_port_base>7000</osc_in_port_base>
+            <video_outputs>
+                <output>0</output>
+                <output>1</output>
+            </video_outputs>
+            <audio_outputs>
+                <output>cuems1</output>
+                <output>cuems2</output>
+            </audio_outputs>
             <videoplayer>
                 <path>/usr/bin/xjadeo</path>
-                <args>--no-splash --no-initial-sync --quiet --no-letterbox --midi-driver alsa-seq --midifps 0 --ignore-file-offset</args>
+                <args>--ontop --fullscreen --no-splash --quiet --no-initial-sync --midi-driver alsa-seq --ignore-file-offset</args>
+                <!-- no-initial-sync ignore-file-offset midifps 1 no-letterbox -->
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
                 <path>/usr/local/bin/audioplayer-cuems</path>
-                <args></args>
+                <args>-w 3</args>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>

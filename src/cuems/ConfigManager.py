@@ -52,10 +52,10 @@ class ConfigManager(Thread):
         self.node_conf = engine_settings['Settings']['node']
 
         logger.info(f'Cuems node_{self.node_conf["id"]:03} config loaded')
-        logger.info(f'Node conf: {self.node_conf}')
-        logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
-        logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
-        logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
+        #logger.info(f'Node conf: {self.node_conf}')
+        #logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
+        #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
+        #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
     def load_project_settings(self, project_uname):
         try:
@@ -84,6 +84,13 @@ class ConfigManager(Thread):
         self.project_maps = maps['ProjectMappings']
         logger.info(f'Project {project_uname} mappings loaded')
 
+    def get_video_player_id(self, mapping_name):
+        for item in self.project_maps['Video']['outputs']:
+            if mapping_name == item['mapping']['virtual_name']:
+                return item['mapping']['mapped_to']
+
+        raise Exception(f'Video output wrongly mapped')
+
     def check_dir_hierarchy(self):
         try:
             if not path.exists(self.library_path):
@@ -106,7 +113,7 @@ class ConfigManager(Thread):
                 mkdir(path.join(self.library_path, 'trash', 'media'))
 
             if not path.exists( self.tmp_upload_path ) :
-                mkdir( self.library_path )
+                mkdir( self.tmp_upload_path )
 
         except Exception as e:
             logger.error("error: {} {}".format(type(e), e))

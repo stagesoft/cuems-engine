@@ -15,6 +15,8 @@ from .log import logger
 class MtcListener(threading.Thread):
     def __init__(self, step_callback=None, reset_callback=None, port=None):
         self.main_tc = CTimecode('0:0:0:0')
+        self.main_tc.set_fractional(True)
+
         self.__quarter_frames = [0,0,0,0,0,0,0,0]
         self.port_name = None
         self.__open_port(port)
@@ -28,6 +30,9 @@ class MtcListener(threading.Thread):
 
     def timecode(self):
         return self.main_tc
+
+    def milliseconds(self):
+        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode

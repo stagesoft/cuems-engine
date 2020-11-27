@@ -10,462 +10,488 @@
         <created>2020-01-01T00:00:00.000</created>
         <modified>2020-01-01T00:00:00.000</modified>
         <CueList>
-            <uuid>12345678-aaaa-aaaa-aaaa-123456789001</uuid>
-            <id>1</id>
-            <name>Main cuelist id 1</name>
-            <description>Main cuelist desc id 1</description>
-            <disabled>false</disabled>
-            <loaded>false</loaded>
-            <timecode>true</timecode>
+            <uuid>12345678-aaaa-aaaa-aaaa-123456789000</uuid>
+            <id>ML</id>
+            <name>Main cuelist id ML</name>
+            <description>Main cuelist desc id ML</description>
+            <enabled>True</enabled>
+            <loaded>False</loaded>
+            <timecode>False</timecode>
             <offset>
-                <CTimecode>00:00:00:00</CTimecode>
+                <CTimecode>00:00:10.000</CTimecode>
             </offset>
-            <loop>0</loop>
+            <loop>1</loop>
             <prewait>
-                <CTimecode>00:00:00:00</CTimecode>
+                <CTimecode>00:00:01.000</CTimecode>
             </prewait>
             <postwait>
-                <CTimecode>00:00:00:00</CTimecode>
+                <CTimecode>00:00:03.000</CTimecode>
             </postwait>
-            <post_action>pause</post_action>
+            <post_go>pause</post_go>
             <target></target>
-            <ui_properties>
+            <UI_properties>
                 <timeline_position>
                     <x>0</x>
                     <y>0</y>
                 </timeline_position>
-            </ui_properties>
+            </UI_properties>
             <contents>
-                <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789002</uuid>
-                    <id>2</id>
-                    <name>Generic cue id 2</name>
-                    <description>Generic cue desc id 2</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                </Cue>
-                <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789003</uuid>
-                    <id>3</id>
-                    <name>Generic cue id 3</name>
-                    <description>Generic cue desc id 3</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                </Cue>
                 <AudioCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789004</uuid>
-                    <id>4</id>
-                    <name>Audio cue id 4</name>
-                    <description>Audio cue desc id 4</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789010</uuid>
+                    <id>10</id>
+                    <name>Audio cue id 10</name>
+                    <description>Audio cue desc id 10</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
                     <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
+                        <CTimecode>00:00:05.000</CTimecode>
                     </offset>
-                    <loop>0</loop>
+                    <loop>1</loop>
                     <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
+                        <CTimecode>00:00:05.000</CTimecode>
                     </prewait>
                     <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
+                        <CTimecode>00:00:05.000</CTimecode>
                     </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
+                    <post_go>go</post_go>
+                    <target></target>
+                    <UI_properties>
                         <timeline_position>
                             <x>0</x>
                             <y>0</y>
                         </timeline_position>
-                    </ui_properties>
-                    <media>
-                        <file_name>daft.wav</file_name>
-                    </media>
+                    </UI_properties>
+                    <Media>
+                        <file_name>sposa_non_mi_conosci.16.s.wav</file_name>
+                        <regions>
+                            <region>
+                                <id>0</id>
+                                <loop>1</loop>
+                                <in>
+                                    <CTimecode>00:00:00.000</CTimecode>
+                                </in>
+                                <out>
+                                    <CTimecode>00:00:30.000</CTimecode>
+                                </out>
+                            </region>
+                        </regions>
+                    </Media>
                     <master_vol>100</master_vol>
-                    <outputs>
-                        <output_name>Out1</output_name>
-                        <output_vol>100</output_vol>
-                        <channels>
-                            <channel id="1">100</channel>
-                            <channel id="2">100</channel>
-                        </channels>
-                    </outputs>
-                </AudioCue>
-                <DmxCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789005</uuid>
-                    <id>5</id>
-                    <name>Dmx cue id 5</name>
-                    <description>Dmx cue desc id 5</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                    <media>
-                        <file_name>test_dmx.xml</file_name>
-                    </media>
-                    <fadein_time>0</fadein_time>
-                    <fadeout_time>0</fadeout_time>
-                </DmxCue>
-                <Cue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789006</uuid>
-                    <id>6</id>
-                    <name>Generic cue id 6</name>
-                    <description>Generic cue desc id 6</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                </Cue>
-                <CueList>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789007</uuid>
-                    <id>7</id>
-                    <name>Cuelist id 7</name>
-                    <description>Cuelist desc id 7</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                    <contents>
-                        <AudioCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789008</uuid>
-                            <id>8</id>
-                            <name>Audio cue id 8</name>
-                            <description>Audio cue desc id 8</description>
-                            <disabled>false</disabled>
-                            <loaded>false</loaded>
-                            <timecode>true</timecode>
-                            <offset>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </offset>
-                            <loop>0</loop>
-                            <prewait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </prewait>
-                            <postwait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </postwait>
-                            <post_action>pause</post_action>
-                            <target>00000000-0000-0000-0000-000000000000</target>
-                            <ui_properties>
-                                <timeline_position>
-                                    <x>0</x>
-                                    <y>0</y>
-                                </timeline_position>
-                            </ui_properties>
-                            <media>
-                                <file_name>test</file_name>
-                            </media>
-                            <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
-                        </AudioCue>
-                    </contents>
-                </CueList>
-                <CueList>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789009</uuid>
-                    <id>9</id>
-                    <name>Cuelist id 9</name>
-                    <description>Cuelist desc id 9</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>true</timecode>
-                    <offset>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </offset>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                    <contents>
-                        <AudioCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789010</uuid>
-                            <id>10</id>
-                            <name>Audio cue id 10</name>
-                            <description>Audio cue desc id 10</description>
-                            <disabled>false</disabled>
-                            <loaded>false</loaded>
-                            <timecode>true</timecode>
-                            <offset>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </offset>
-                            <loop>0</loop>
-                            <prewait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </prewait>
-                            <postwait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </postwait>
-                            <post_action>pause</post_action>
-                            <target>00000000-0000-0000-0000-000000000000</target>
-                            <ui_properties>
-                                <timeline_position>
-                                    <x>0</x>
-                                    <y>0</y>
-                                </timeline_position>
-                            </ui_properties>
-                            <media>
-                                <file_name>sposa_non_mi_conosci.16.s.wav</file_name>
-                            </media>
-                            <master_vol>100</master_vol>
-                            <outputs>
-                                <output_name>Out1</output_name>
-                                <output_vol>100</output_vol>
-                                <channels>
-                                    <channel id="1">100</channel>
-                                    <channel id="2">100</channel>
-                                </channels>
-                            </outputs>
-                        </AudioCue>
-                        <VideoCue>
-                            <uuid>12345678-aaaa-aaaa-aaaa-123456789011</uuid>
-                            <id>11</id>
-                            <name>Video cue id 11</name>
-                            <description>Video cue desc id 11</description>
-                            <disabled>false</disabled>
-                            <loaded>false</loaded>
-                            <timecode>true</timecode>
-                            <offset>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </offset>
-                            <loop>0</loop>
-                            <prewait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </prewait>
-                            <postwait>
-                                <CTimecode>00:00:00:00</CTimecode>
-                            </postwait>
-                            <post_action>pause</post_action>
-                            <target>00000000-0000-0000-0000-000000000000</target>
-                            <ui_properties>
-                                <timeline_position>
-                                    <x>0</x>
-                                    <y>0</y>
-                                </timeline_position>
-                            </ui_properties>
-                            <media>
-                                <file_name>sposa_non_mi_conosci.mp4</file_name>
-                            </media>
-                            <outputs>
-                                <name>Video1</name>
-                                <output_geometry>
-                                    <x_scale>1</x_scale>
-                                    <y_scale>1</y_scale>
-                                    <corners>
-                                        <top_left>
-                                            <x>0</x>
-                                            <y>0</y>
-                                        </top_left>
-                                        <top_right>
-                                            <x>1</x>
-                                            <y>0</y>
-                                        </top_right>
-                                        <bott_left>
-                                            <x>0</x>
-                                            <y>1</y>
-                                        </bott_left>
-                                        <bott_right>
-                                            <x>1</x>
-                                            <y>1</y>
-                                        </bott_right>
-                                    </corners>
-                                </output_geometry>
-                            </outputs>
-                        </VideoCue>
-                    </contents>
-                </CueList>
-                <AudioCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789012</uuid>
-                    <id>12</id>
-                    <name>Audio cue id 12</name>
-                    <description>Audio cue desc id 12</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>false</timecode>
-                    <loop>0</loop>
-                    <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </prewait>
-                    <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
-                    </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
-                        <timeline_position>
-                            <x>0</x>
-                            <y>0</y>
-                        </timeline_position>
-                    </ui_properties>
-                    <media>
-                        <file_name>daft.wav</file_name>
-                    </media>
-                    <master_vol>100</master_vol>
-                    <outputs>
-                        <output_name>Out1</output_name>
-                        <output_vol>100</output_vol>
-                        <channels>
-                            <channel id="1">100</channel>
-                            <channel id="2">100</channel>
-                        </channels>
-                    </outputs>
+                    <Outputs>
+                        <AudioCueOutput>
+                            <output_name>Out1</output_name>
+                            <output_vol>100</output_vol>
+                            <channels>
+                                <channel>
+                                    <channel_num>100</channel_num>
+                                    <channel_vol>100</channel_vol>
+                                </channel>
+                                <channel>
+                                    <channel_num>100</channel_num>
+                                    <channel_vol>100</channel_vol>
+                                </channel>
+                            </channels>
+                        </AudioCueOutput>
+                        <AudioCueOutput>
+                            <output_name>Out2</output_name>
+                            <output_vol>100</output_vol>
+                            <channels>
+                                <channel>
+                                    <channel_num>100</channel_num>
+                                    <channel_vol>100</channel_vol>
+                                </channel>
+                                <channel>
+                                    <channel_num>100</channel_num>
+                                    <channel_vol>100</channel_vol>
+                                </channel>
+                            </channels>
+                        </AudioCueOutput>
+                    </Outputs>
                 </AudioCue>
                 <VideoCue>
-                    <uuid>12345678-aaaa-aaaa-aaaa-123456789013</uuid>
-                    <id>13</id>
-                    <name>Video cue id 13</name>
-                    <description>Video cue desc id 13</description>
-                    <disabled>false</disabled>
-                    <loaded>false</loaded>
-                    <timecode>false</timecode>
-                    <loop>0</loop>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789001</uuid>
+                    <id>V1</id>
+                    <name>Video cue id V1</name>
+                    <description>Video cue desc id V1</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:05.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
                     <prewait>
-                        <CTimecode>00:00:00:00</CTimecode>
+                        <CTimecode>00:00:05.000</CTimecode>
                     </prewait>
                     <postwait>
-                        <CTimecode>00:00:00:00</CTimecode>
+                        <CTimecode>00:00:05.000</CTimecode>
                     </postwait>
-                    <post_action>pause</post_action>
-                    <target>00000000-0000-0000-0000-000000000000</target>
-                    <ui_properties>
+                    <post_go>go</post_go>
+                    <target></target>
+                    <UI_properties>
                         <timeline_position>
                             <x>0</x>
                             <y>0</y>
                         </timeline_position>
-                    </ui_properties>
-                    <media>
-                        <file_name>daft.mp4</file_name>
-                    </media>
-                    <outputs>
-                        <name>Video1</name>
-                        <output_geometry>
-                            <x_scale>1</x_scale>
-                            <y_scale>1</y_scale>
-                            <corners>
-                                <top_left>
-                                    <x>0</x>
-                                    <y>0</y>
-                                </top_left>
-                                <top_right>
-                                    <x>1</x>
-                                    <y>0</y>
-                                </top_right>
-                                <bott_left>
-                                    <x>0</x>
-                                    <y>1</y>
-                                </bott_left>
-                                <bott_right>
-                                    <x>1</x>
-                                    <y>1</y>
-                                </bott_right>
-                            </corners>
-                        </output_geometry>
-                    </outputs>
+                    </UI_properties>
+                    <Media>
+                        <file_name>strokes.mp4</file_name>
+                        <regions>
+                            <region>
+                                <id>0</id>
+                                <loop>1</loop>
+                                <in>
+                                    <CTimecode>00:00:00.000</CTimecode>
+                                </in>
+                                <out>
+                                    <CTimecode>00:00:30.000</CTimecode>
+                                </out>
+                            </region>
+                        </regions>
+                    </Media>
+                    <Outputs>
+                        <VideoCueOutput>
+                            <output_name>VideoOut1</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                        <VideoCueOutput>
+                            <output_name>VideoOut2</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                    </Outputs>
+                </VideoCue>
+                <ActionCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-1234567890a1</uuid>
+                    <id>A1</id>
+                    <name>Action cue id A1</name>
+                    <description>Action cue desc id A1</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:01.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
+                    <prewait>
+                        <CTimecode>00:00:03.000</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>00:00:05.000</CTimecode>
+                    </postwait>
+                    <post_go>go</post_go>
+                    <target></target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <action_type>load</action_type>
+                    <action_target>12345678-aaaa-aaaa-aaaa-123456789002</action_target>
+                </ActionCue>
+                <ActionCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-1234567890a2</uuid>
+                    <id>A2</id>
+                    <name>Action cue id A2</name>
+                    <description>Action cue desc id A2</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
+                    <prewait>
+                        <CTimecode>00:00:03.000</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <post_go>pause</post_go>
+                    <target>12345678-aaaa-aaaa-aaaa-123456789003</target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <action_type>play</action_type>
+                    <action_target>12345678-aaaa-aaaa-aaaa-123456789002</action_target>
+                </ActionCue>
+                <VideoCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789002</uuid>
+                    <id>V2</id>
+                    <name>Video cue id V2</name>
+                    <description>Video cue desc id V2</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
+                    <prewait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <post_go>pause</post_go>
+                    <target></target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <Media>
+                        <file_name>sposa_non_mi_conosci.mp4</file_name>
+                        <regions>
+                            <region>
+                                <id>0</id>
+                                <loop>1</loop>
+                                <in>
+                                    <CTimecode>00:00:00.000</CTimecode>
+                                </in>
+                                <out>
+                                    <CTimecode>00:00:30.000</CTimecode>
+                                </out>
+                            </region>
+                        </regions>
+                    </Media>
+                    <Outputs>
+                        <VideoCueOutput>
+                            <output_name>VideoOut2</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                    </Outputs>
+                </VideoCue>
+                <VideoCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789003</uuid>
+                    <id>V3</id>
+                    <name>Video cue id V3</name>
+                    <description>Video cue desc id V3</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
+                    <prewait>
+                        <CTimecode>00:00:03.000</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <post_go>pause</post_go>
+                    <target></target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <Media>
+                        <file_name>sync.2.mp4</file_name>
+                        <regions>
+                            <region>
+                                <id>0</id>
+                                <loop>1</loop>
+                                <in>
+                                    <CTimecode>00:00:00.000</CTimecode>
+                                </in>
+                                <out>
+                                    <CTimecode>00:00:30.000</CTimecode>
+                                </out>
+                            </region>
+                        </regions>
+                    </Media>
+                    <Outputs>
+                        <VideoCueOutput>
+                            <output_name>VideoOut3</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                    </Outputs>
+                </VideoCue>
+                <VideoCue>
+                    <uuid>12345678-aaaa-aaaa-aaaa-123456789004</uuid>
+                    <id>V4</id>
+                    <name>Video cue id V4</name>
+                    <description>Video cue desc id V4</description>
+                    <enabled>True</enabled>
+                    <loaded>False</loaded>
+                    <timecode>False</timecode>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <loop>1</loop>
+                    <prewait>
+                        <CTimecode>00:00:04.000</CTimecode>
+                    </prewait>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <post_go>pause</post_go>
+                    <target></target>
+                    <UI_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </UI_properties>
+                    <Media>
+                        <file_name>daft25.m4v</file_name>
+                        <regions>
+                            <region>
+                                <id>0</id>
+                                <loop>1</loop>
+                                <in>
+                                    <CTimecode>00:00:00.000</CTimecode>
+                                </in>
+                                <out>
+                                    <CTimecode>00:00:30.000</CTimecode>
+                                </out>
+                            </region>
+                        </regions>
+                    </Media>
+                    <Outputs>
+                        <VideoCueOutput>
+                            <output_name>VideoOut4</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                        <VideoCueOutput>
+                            <output_name>VideoOut3</output_name>
+                            <output_geometry>
+                                <x_scale>1</x_scale>
+                                <y_scale>1</y_scale>
+                                <corners>
+                                    <top_left>
+                                        <x>0</x>
+                                        <y>0</y>
+                                    </top_left>
+                                    <top_right>
+                                        <x>1</x>
+                                        <y>0</y>
+                                    </top_right>
+                                    <bott_left>
+                                        <x>0</x>
+                                        <y>1</y>
+                                    </bott_left>
+                                    <bott_right>
+                                        <x>1</x>
+                                        <y>1</y>
+                                    </bott_right>
+                                </corners>
+                            </output_geometry>
+                        </VideoCueOutput>
+                    </Outputs>
                 </VideoCue>
             </contents>
         </CueList>
