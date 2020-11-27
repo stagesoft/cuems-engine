@@ -8,6 +8,9 @@ from threading import Thread
 
 class Cue(dict):
     def __init__(self, offset=None, init_dict = None, uuid=None ):
+        empty_keys = {"uuid":"", "id": "",  "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go": "", "target": "", "UI_properties": ""}
+        super().__init__(empty_keys)
+
         if uuid is None:
             super().__setitem__('uuid', str(uuid_module.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
         
@@ -147,12 +150,12 @@ class Cue(dict):
         super().__setitem__('ui_properties', ui_properties)
 
     @property
-    def Media(self):
+    def media(self):
         return super().__getitem__('Media')
 
-    @Media.setter
-    def Media(self, Media):
-        super().__setitem__('Media', Media)
+    @media.setter
+    def media(self, media):
+        super().__setitem__('Media', media)
     def target_object(self, target_object):
         self._target_object = target_object
 

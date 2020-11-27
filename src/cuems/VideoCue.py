@@ -39,20 +39,20 @@ class VideoCue(Cue):
         '''
 
     @property
-    def Media(self):
+    def media(self):
         return super().__getitem__('Media')
 
-    @Media.setter
-    def Media(self, Media):
-        super().__setitem__('Media', Media)
+    @media.setter
+    def media(self, media):
+        super().__setitem__('Media', media)
 
     @property
-    def Outputs(self):
+    def outputs(self):
         return super().__getitem__('Outputs')
 
-    @Outputs.setter
-    def Outputs(self, Outputs):
-        super().__setitem__('Outputs', Outputs)
+    @outputs.setter
+    def outputs(self, outputs):
+        super().__setitem__('Outputs', outputs)
 
     def player(self, player):
         self._player = player
@@ -88,7 +88,7 @@ class VideoCue(Cue):
 
         try:
             key = f'{self._osc_route}/jadeo/load'
-            ossia.osc_registered_nodes[key][0].parameter.value = str(path.join(self._conf.library_path, 'media', self.Media['file_name']))
+            ossia.osc_registered_nodes[key][0].parameter.value = str(path.join(self._conf.library_path, 'media', self.media['file_name']))
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 2 (load) in arm_callback {key}')
@@ -100,7 +100,7 @@ class VideoCue(Cue):
                                         self.Outputs,
                                         self._conf.node_conf['videoplayer']['path'],
                                         str(self._conf.node_conf['videoplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
+                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 
@@ -206,7 +206,7 @@ class VideoCue(Cue):
             return False
 
     def check_mappings(self, mappings):
-        for output in self.Outputs:
+        for output in self.outputs:
             for item in mappings['Video']['outputs']:
                 if output['output_name'] == item['mapping']['virtual_name']:
                     return True

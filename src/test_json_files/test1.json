@@ -41,7 +41,7 @@
                         "post_go": "pause",
                         "target": null,
                         "UI_properties": null,
-                        "Media": {"file_name":"0002.jpg", "regions":[{"region": {"id": 0, "loop": 1, "in": {"CTimecode": "00:00:00.000"},"out": {"CTimecode": "00:00:30.000"}}}]},
+                        "Media": {"file_name":"0002.jpg", "regions":[{"region": {"id": 0, "loop": 1, "in_time": {"CTimecode": "00:00:00.000"},"out_time": {"CTimecode": "00:00:30.000"}}}]},
                         "master_vol": 80,
                         "Outputs": [
                             {

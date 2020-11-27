@@ -41,12 +41,12 @@ class DmxCue(Cue):
         super().__setitem__('out_time', out_time)
 
     @property
-    def Media(self):
+    def media(self):
         return super().__getitem__('Media')
 
-    @Media.setter
-    def Media(self, Media):
-        super().__setitem__('Media', Media)
+    @media.setter
+    def media(self, media):
+        super().__setitem__('Media', media)
 
     @property
     def fadein_time(self):
@@ -94,7 +94,7 @@ class DmxCue(Cue):
             self._player = DmxPlayer(   self._conf.players_port_index, 
                                         self._conf.node_conf['dmxplayer']['path'],
                                         str(self._conf.node_conf['dmxplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
+                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 

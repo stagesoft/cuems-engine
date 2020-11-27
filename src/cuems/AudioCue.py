@@ -40,7 +40,7 @@ class AudioCue(Cue):
         super().__setitem__('master_vol', master_vol)
 
     @property
-    def Outputs(self):
+    def outputs(self):
         return super().__getitem__('Outputs')
 
     @outputs.setter
@@ -71,7 +71,7 @@ class AudioCue(Cue):
             self._player = AudioPlayer( self._conf.players_port_index, 
                                         self._conf.node_conf['audioplayer']['path'],
                                         str(self._conf.node_conf['audioplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
+                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 
