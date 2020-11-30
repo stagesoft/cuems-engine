@@ -12,7 +12,8 @@ from .log import logger
 class ActionCue(Cue):
     def __init__(self, init_dict = None):
         if init_dict:
-            super().__init__(init_dict)       
+            super().__init__(init_dict)
+            
         self._action_target_object = None
 
     @property

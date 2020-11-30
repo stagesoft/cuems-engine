@@ -24,12 +24,22 @@ class DmxCue(Cue):
 
     def __init__(self, init_dict = None):
         if init_dict:
-            super().__init__(init_dict)       
+            super().__init__(init_dict)
+            
         self._player = None
         self._osc_route = None
         self._offset_route = '/offset'
 
         self.OSC_DMXPLAYER_CONF[self._offset_route] = [ossia.ValueType.Float, None]
+        
+
+    @property
+    def media(self):
+        return super().__getitem__('Media')
+
+    @media.setter
+    def media(self, media):
+        super().__setitem__('Media', media)
 
     @property
     def fadein_time(self):
@@ -77,7 +87,7 @@ class DmxCue(Cue):
             self._player = DmxPlayer(   self._conf.players_port_index, 
                                         self._conf.node_conf['dmxplayer']['path'],
                                         str(self._conf.node_conf['dmxplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
+                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 

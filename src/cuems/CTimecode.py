@@ -1,7 +1,7 @@
 from timecode import Timecode
 import json
 
-
+#TODO: !IMPORTANT! fix milisecond parseing with more than 3 digits and leading 0's; Fix division returnig to 23:59...
 class CTimecode(Timecode):
     def __init__(self, init_dict = None, start_timecode=None, start_seconds=None, frames=None, framerate='ms'):
         if init_dict is not None:
@@ -129,7 +129,7 @@ class CTimecode(Timecode):
 
         return CTimecode(framerate=self._framerate, frames=multiplied_frames)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         """returns new CTimecode instance with divided value"""
         if isinstance(other, CTimecode):
             div_frames = self.frames / other.frames

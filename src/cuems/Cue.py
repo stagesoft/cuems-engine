@@ -1,6 +1,6 @@
 from .CTimecode import CTimecode
-from .CueOutput import CueOutput
-from .Media import Media, region
+from .CueOutput import AudioCueOutput, VideoCueOutput, DmxCueOutput
+from .Media import Media
 from .log import logger
 import uuid as uuid_module
 from time import sleep
@@ -9,17 +9,14 @@ from threading import Thread
 class Cue(dict):
     def __init__(self, init_dict = None):
         if init_dict:
-            super().__init__(init_dict)       
+            super().__init__(init_dict)
+            
         self._target_object = None
         self._conf = None
         self._armed_list = None
         self._start_mtc = CTimecode()
         self._end_mtc = CTimecode()
         self._end_reached = False
-
-    @classmethod
-    def from_dict(cls, init_dict):
-        return cls(init_dict = init_dict)
 
     @property
     def uuid(self):

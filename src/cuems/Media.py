@@ -1,13 +1,9 @@
 from .CTimecode import CTimecode
 
 class Media(dict):
-   
-    def __init__(self, init_dict=None):
-        empty_keys= {"file_name": ""}
-        if (init_dict):
+    def __init__(self, init_dict = None):
+        if init_dict:
             super().__init__(init_dict)
-        else:
-            super().__init__(empty_keys)
     
     @property
     def file_name(self):
