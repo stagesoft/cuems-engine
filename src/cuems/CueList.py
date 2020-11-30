@@ -7,15 +7,9 @@ from .log import logger
 
 
 class CueList(Cue):
-    
-    def __init__(self, contents=[], offset=None):
-        empty_keys = {"uuid":"", "id":"", "name": "", "description": "", "enabled": "", "loaded": "", "timecode": "", "offset": "", "loop": "", "prewait": "", "postwait": "", "post_go" : "", "target" : "", "UI_properties": "", "contents": []}
-        super().__init__(init_dict=empty_keys)
-        super().__setitem__('uuid', str(uuid_module.uuid1()))
-        if isinstance(contents, list):
-            super().__setitem__('contents', contents)
-        else:
-            super().__setitem__('contents', [contents])
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)       
 
     @property    
     def contents(self):
@@ -65,8 +59,8 @@ class CueList(Cue):
                 media_dict.update( item.get_media() )
             else:
                 try:
-                    if item['Media']:
-                        media_dict[item.uuid] = [item['Media']['file_name'], item.__class__.__name__]
+                    if item.media:
+                        media_dict[item.uuid] = [item.media.file_name, item.__class__.__name__]
                 except KeyError:
                         media_dict[item.uuid] = {'media' : None, 'type' : item.__class__.__name__}
         
@@ -123,23 +117,15 @@ class CueList(Cue):
         if self.post_go == 'go':
             self._target_object.go(ossia, mtc)
 
-        try:
-            while self._player.is_alive():
-                sleep(0.05)
-        except AttributeError:
-            return
-        
+        '''
+        if self.post_go == 'go_at_end':
+            self._target_object.go(ossia, mtc)
+        '''
+
         if self in self.armed_list:
             self.disarm(ossia.conf_queue)
 
     def disarm(self, ossia_queue):
-        for item in self.contents:
-            if item.loaded and item in self.armed_list:
-                item.disarm(ossia_queue)
-
-        if self.post_go == 'go':
-            self._target_object.disarm(ossia_queue)
-
         try:
             if self in self.armed_list:
                 self.armed_list.remove(self)

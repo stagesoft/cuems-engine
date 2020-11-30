@@ -45,7 +45,7 @@ class VideoPlayer(Thread):
                 for line in stdout_lines_iterator:
                     logger.info(line)
 
-            if self.p.returncode != 0:
+            if self.p.returncode not in [0, -9]:
                 raise CalledProcessError(self.p.returncode, self.p.args)
 
         except OSError as e:

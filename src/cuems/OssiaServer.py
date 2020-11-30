@@ -43,6 +43,8 @@ class OssiaServer(threading.Thread):
 
     def stop(self):
         self.server_running = False
+        while not self.conf_queue.empty():
+            self.conf_queue.get()
         self.thread.join()
         self.conf_queue_loop.join()
         

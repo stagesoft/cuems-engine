@@ -1,4 +1,4 @@
-import subprocess
+from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 from threading import Thread
 import os
 import pyossia as ossia
@@ -37,12 +37,22 @@ class AudioPlayer(Thread):
         try:
             # Calling audioplayer-cuems in a subprocess
             process_call_list = [self.path]
-            if self.args is not None:
+            if self.args:
                 for arg in self.args.split():
                     process_call_list.append(arg)
             process_call_list.extend(['--port', str(self.port), self.media])
-            self.p=subprocess.Popen(process_call_list, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.stdout, self.stderr = self.p.communicate()
+            # self.p=subprocess.Popen(process_call_list, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # self.stdout, self.stderr = self.p.communicate()
+
+            self.p = Popen(process_call_list, stdout=PIPE, stderr=STDOUT)
+            stdout_lines_iterator = iter(self.p.stdout.readline, b'')
+            while self.p.poll() is None:
+                for line in stdout_lines_iterator:
+                    logger.info(line)
+
+            if self.p.returncode not in [0, -9]:
+                raise CalledProcessError(self.p.returncode, self.p.args)
+
         except OSError as e:
             # logger.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
             logger.warning(f'Failed to start AudioPlayer for {self.media}')

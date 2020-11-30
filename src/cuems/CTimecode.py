@@ -15,15 +15,20 @@ class CTimecode(Timecode):
     @classmethod
     def from_dict(cls, init_dict):
         return cls(init_dict =  init_dict)
-    @property
 
-    
+    @property
     def milliseconds(self):
         """returns time as milliseconds
         """
         #TODO: float math for other framerates                               
         millis_per_frame = 1000 / float(self._framerate)
         return int(millis_per_frame * self.frame_number)
+
+    def return_in_other_framerate(self, framerate):
+        """returns a copy of the object with a different framerate.
+        """
+        new = CTimecode(framerate=framerate, start_seconds=float(self.milliseconds / 1000))
+        return new
 
     def __hash__(self):
         return hash((self.milliseconds, self.milliseconds))

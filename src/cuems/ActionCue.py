@@ -10,8 +10,9 @@ from .OssiaServer import QueueOSCData
 from .log import logger
 
 class ActionCue(Cue):
-    def __init__(self, time=None, init_dict=None):
-        super().__init__(time, init_dict)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)       
         self._action_target_object = None
 
     @property
@@ -81,6 +82,18 @@ class ActionCue(Cue):
         elif self.action_type == 'enable':
             self._action_target_object.enabled = True
         elif self.action_type == 'disable':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'fade_in':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'fade_out':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'wait':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'go_to':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'pause_project':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'resume_project':
             self._action_target_object.enabled = False
 
         # POSTWAIT

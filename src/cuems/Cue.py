@@ -1,34 +1,21 @@
 from .CTimecode import CTimecode
 from .CueOutput import CueOutput
-from .Media import Media
+from .Media import Media, region
 from .log import logger
 import uuid as uuid_module
 from time import sleep
 from threading import Thread
 
 class Cue(dict):
-    def __init__(self, offset=None, init_dict = None, uuid=None ):
-        if uuid is None:
-            super().__setitem__('uuid', str(uuid_module.uuid4())) # TODO: Check safe and choose uuid version (4? 5?)
-        
-        if offset is not None:
-            super().__setitem__('timecode', True)
-            self.__setitem__('offset', offset)
-        else:
-            super().__setitem__('timecode', False)
-
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)       
         self._target_object = None
-        
-        if init_dict is not None:
-            super().__init__(init_dict)
-
         self._conf = None
         self._armed_list = None
-        self._mtc_when_gone = CTimecode()
-        self._start_time = CTimecode('00:00:00:00')
-        self._end_time = CTimecode('00:00:20:00')
-        self._duration = self._end_time - self._start_time
-        self._deadline_reached = False
+        self._start_mtc = CTimecode()
+        self._end_mtc = CTimecode()
+        self._end_reached = False
 
     @classmethod
     def from_dict(cls, init_dict):
@@ -147,12 +134,13 @@ class Cue(dict):
         super().__setitem__('ui_properties', ui_properties)
 
     @property
-    def Media(self):
+    def media(self):
         return super().__getitem__('Media')
 
-    @Media.setter
-    def Media(self, Media):
-        super().__setitem__('Media', Media)
+    @media.setter
+    def media(self, media):
+        super().__setitem__('Media', media)
+
     def target_object(self, target_object):
         self._target_object = target_object
 

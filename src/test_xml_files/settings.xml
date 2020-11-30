@@ -27,7 +27,7 @@
             </videoplayer>
             <audioplayer>
                 <path>/usr/local/bin/audioplayer-cuems</path>
-                <args>-w 3</args>
+                <args></args>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>

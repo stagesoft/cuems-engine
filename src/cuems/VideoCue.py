@@ -4,6 +4,7 @@ from threading import Thread
 from time import sleep
 
 from .Cue import Cue
+from .CTimecode import CTimecode
 from .VideoPlayer import VideoPlayer
 from .OssiaServer import QueueOSCData
 from .log import logger
@@ -24,47 +25,34 @@ class VideoCue(Cue):
                             }
     '''
 
-    def __init__(self, time=None, init_dict=None):
-        super().__init__(time, init_dict)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)
         self._player = None
         self._osc_route = None
-        self._offset_route = '/jadeo/offset'
 
-        self._conf = None
-        self._armed_list = None
+        # TODO: Adjust framerates for universal use, by now 25 fps for video
+        self._start_mtc = CTimecode(framerate=25)
+        self._end_mtc = CTimecode(framerate=25)
 
         '''
-        self.OSC_VIDEOPLAYER_CONF[self._offset_route] = [ossia.ValueType.String, None]
-        self.OSC_VIDEOPLAYER_CONF[self._offset_route] = [ossia.ValueType.Int, None]
+        self.OSC_VIDEOPLAYER_CONF['/jadeo/offset'] = [ossia.ValueType.String, None]
+        self.OSC_VIDEOPLAYER_CONF['/jadeo/offset'] = [ossia.ValueType.Int, None]
         '''
 
     @property
-    def Media(self):
-        return super().__getitem__('Media')
-
-    @Media.setter
-    def Media(self, Media):
-        super().__setitem__('Media', Media)
-
-    @property
-    def Outputs(self):
+    def outputs(self):
         return super().__getitem__('Outputs')
 
-    @Outputs.setter
-    def Outputs(self, Outputs):
-        super().__setitem__('Outputs', Outputs)
+    @outputs.setter
+    def outputs(self, outputs):
+        super().__setitem__('Outputs', outputs)
 
     def player(self, player):
         self._player = player
 
     def osc_route(self, osc_route):
         self._osc_route = osc_route
-
-    def offset_route(self, offset_route):
-        _offset_route = offset_route
-
-    def review_offset(self, timecode):
-        return -(int(timecode.frame_number))
 
     def arm(self, conf, ossia, armed_list, init = False):
         self._conf = conf
@@ -80,15 +68,15 @@ class VideoCue(Cue):
             return True
 
         try:
-            key = f'{self._osc_route}/jadeo/midi/disconnect'
-            ossia.osc_registered_nodes[key][0].parameter.value = True
+            key = f'{self._osc_route}/jadeo/cmd'
+            ossia.osc_registered_nodes[key][0].parameter.value = 'midi disconnect'
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/load'
-            ossia.osc_registered_nodes[key][0].parameter.value = str(path.join(self._conf.library_path, 'media', self.Media['file_name']))
+            ossia.osc_registered_nodes[key][0].parameter.value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 2 (load) in arm_callback {key}')
@@ -97,10 +85,10 @@ class VideoCue(Cue):
         # Assign its own videoplayer object
         try:
             self._player = VideoPlayer( self._conf.players_port_index, 
-                                        self.Outputs,
+                                        self.outputs,
                                         self._conf.node_conf['videoplayer']['path'],
                                         str(self._conf.node_conf['videoplayer']['args']),
-                                        str(path.join(self._conf.library_path, 'media', self.Media['file_name'])))
+                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
         except Exception as e:
             raise e
 
@@ -146,17 +134,20 @@ class VideoCue(Cue):
 
         # PLAY : specific video cue stuff
         try:
-            key = f'{self._osc_route}{self._offset_route}'
-            self._mtc_when_gone = mtc.main_tc
-            self._duration = self._end_time - self._start_time
-            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(self._mtc_when_gone)
+            key = f'{self._osc_route}/jadeo/offset'
+            self._start_mtc = mtc.main_tc
+            duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+            duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+            self._end_mtc = self._start_mtc + duration
+            offset_to_go = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate) - self._start_mtc
+            ossia.osc_registered_nodes[key][0].parameter.value = offset_to_go.frame_number
             logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
         try:
-            key = f'{self._osc_route}/jadeo/midi/connect'
-            ossia.osc_registered_nodes[key][0].parameter.value = "Midi Through"
+            key = f'{self._osc_route}/jadeo/cmd'
+            ossia.osc_registered_nodes[key][0].parameter.value = "midi connect Midi Through"
         except KeyError:
             logger.debug(f'Key error 2 (connect) in go_callback {key}')
 
@@ -167,12 +158,35 @@ class VideoCue(Cue):
         if self.post_go == 'go' and self._target_object:
             self._target_object.go(ossia, mtc)
 
-        while not self._deadline_reached:
-            if mtc.main_tc < (self._mtc_when_gone + self._duration):
-                sleep(0.05)
-            else:
-                self._deadline_reached = True
-    
+        try:
+            loop_counter = 0
+            while not self.media.regions[0].loop or loop_counter < self.media.regions[0].loop:
+                while (mtc.main_tc.milliseconds < self._end_mtc.milliseconds):
+                    sleep(0.05)
+
+                try:
+                    key = f'{self._osc_route}/jadeo/offset'
+                    self._start_mtc = mtc.main_tc
+                    duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+                    duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+                    self._end_mtc = self._start_mtc + duration
+                    offset_to_go = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate) - self._start_mtc
+                    ossia.osc_registered_nodes[key][0].parameter.value = offset_to_go.frame_number
+                    logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
+                except KeyError:
+                    logger.debug(f'Key error 1 (offset) in go_callback {key}')
+
+                loop_counter += 1
+
+            try:
+                key = f'{self._osc_route}/jadeo/cmd'
+                ossia.osc_registered_nodes[key][0].parameter.value = 'midi disconnect'
+                logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
+            except KeyError:
+                logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
+
+        except AttributeError:
+            pass
         if self in self._armed_list:
             self.disarm(ossia.conf_queue)
 
@@ -206,7 +220,7 @@ class VideoCue(Cue):
             return False
 
     def check_mappings(self, mappings):
-        for output in self.Outputs:
+        for output in self.outputs:
             for item in mappings['Video']['outputs']:
                 if output['output_name'] == item['mapping']['virtual_name']:
                     return True

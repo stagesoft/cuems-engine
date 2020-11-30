@@ -4,22 +4,10 @@ import uuid as uuid_module
 from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
-    def __init__(self, uuid=None, name=None, date=None, cuelist=None):
-        empty_keys = {"uuid":"", "name": "", "description": "", "created": "", "modified": "", "cuelist": ""}
-        super().__init__(empty_keys)
+    def __init__(self, init_dict = None):
+        if init_dict:
+            super().__init__(init_dict)       
 
-        if uuid is None:
-            super().__setitem__('uuid', str(uuid_module.uuid1()))
-        else:
-            super().__setitem__('uuid', uuid)
-        super().__setitem__('name', name)
-        if date is None:
-            date = date_now_iso_utc()
-
-        super().__setitem__('created', date)
-        super().__setitem__('modified', date)
-        super().__setitem__('cuelist', cuelist)
-        
     @property
     def uuid(self):
         return super().__getitem__('uuid')
@@ -87,11 +75,11 @@ class CuemsScript(dict):
             
             for cue in self.cuelist.contents:
                 try:
-                    if cue.Media is not None:
+                    if cue.media is not None:
                         if type(cue)==CueList:
                             media_dict.update(self.get_cuelist_media(cue))
                         else:
-                            media_dict[cue.Media.file_name] = type(cue)
+                            media_dict[cue.media.file_name] = type(cue)
                 except KeyError:
                     logger.debug("cue with no media")
         return media_dict
@@ -101,11 +89,11 @@ class CuemsScript(dict):
         if (cuelist is not None) and (cuelist.contents is not None):
             for cue in cuelist.contents:
                 try:
-                    if cue.Media is not None:
+                    if cue.media is not None:
                         if type(cue)==CueList:
                             media_dict.update(self.get_cuelist_media(cue))
                         else:
-                            media_dict[cue.Media.file_name] = type(cue)
+                            media_dict[cue.media.file_name] = type(cue)
                 except KeyError:
                     logger.debug("cue with no media")
         return media_dict

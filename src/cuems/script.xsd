@@ -344,6 +344,12 @@
       <xs:enumeration value="unload" />
       <xs:enumeration value="enable" />
       <xs:enumeration value="disable" />
+      <xs:enumeration value="fade_in" />
+      <xs:enumeration value="fade_out" />
+      <xs:enumeration value="wait" />
+      <xs:enumeration value="go_to" />
+      <xs:enumeration value="pause_project" />
+      <xs:enumeration value="resume_project" />
     </xs:restriction>
   </xs:simpleType>
 
