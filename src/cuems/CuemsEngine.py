@@ -4,6 +4,7 @@
 import threading
 import queue
 import multiprocessing
+from subprocess import CalledProcessError
 import signal
 import time
 import os
@@ -206,7 +207,7 @@ class CuemsEngine():
                 self._video_players[player_id]['player'] = VideoPlayer(  port, 
                                                                     item['output'],
                                                                     self.cm.node_conf['videoplayer']['path'],
-                                                                    str(self.cm.node_conf['videoplayer']['args']),
+                                                                    self.cm.node_conf['videoplayer']['args'],
                                                                     '')
             except Exception as e:
                 raise e
@@ -225,6 +226,7 @@ class CuemsEngine():
                                         '/jadeo/corner4' : [ossia.ValueType.List, None],
                                         '/jadeo/start' : [ossia.ValueType.Bool, None],
                                         '/jadeo/load' : [ossia.ValueType.String, None],
+                                        '/jadeo/cmd' : [ossia.ValueType.String, None],
                                         '/jadeo/quit' : [ossia.ValueType.Bool, None],
                                         '/jadeo/offset' : [ossia.ValueType.String, None],
                                         '/jadeo/offset' : [ossia.ValueType.Int, None],
@@ -241,12 +243,30 @@ class CuemsEngine():
                                                     port + 1, 
                                                     OSC_VIDEOPLAYER_CONF))
 
+    def stop_video_devs(self):
+        for dev in self._video_players.values():
+            key = f'{dev["route"]}/jadeo/quit'
+            try:
+                self.ossia_server.osc_registered_nodes[key][0].parameter.value = True
+            except CalledProcessError:
+                pass
+
+    def disconnect_video_devs(self):
+        for dev in self._video_players.values():
+            try:
+                key = f'{dev["route"]}/jadeo/cmd'
+                self.ossia_server.osc_registered_nodes[key][0].parameter.value = 'midi disconnect'
+            except KeyError:
+                logger.debug(f'Key error (cmd midi disconnect) in disconnect all method {key}')
+
     def check_dmx_devs(self):
         pass
 
     #########################################################
     # Ordered stopping
     def stop_all_threads(self):
+        self.stop_video_devs()
+
         self.stop_requested = True
 
         self.disarm_all()
@@ -366,7 +386,10 @@ class CuemsEngine():
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
 
         if self.script != None:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
+            self.armedcues.clear()
+            self.ongoing_cue = None
 
         try:
             self.cm.load_project_settings(kwargs["value"])
@@ -492,10 +515,12 @@ class CuemsEngine():
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
+            self.disconnect_video_devs()
             self.armedcues.clear()
             self.ongoing_cue = None
 
-            self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+            if self.script:
+                self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
@@ -535,7 +560,7 @@ class CuemsEngine():
                 if item.check_mappings(self.cm.project_maps):
                     if isinstance(item, VideoCue):
                         try:
-                            for output in item.Outputs:
+                            for output in item.outputs:
                                 video_player_id = self.cm.get_video_player_id(output['output_name'])
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
