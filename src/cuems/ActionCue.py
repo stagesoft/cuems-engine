@@ -84,6 +84,18 @@ class ActionCue(Cue):
             self._action_target_object.enabled = True
         elif self.action_type == 'disable':
             self._action_target_object.enabled = False
+        elif self.action_type == 'fade_in':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'fade_out':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'wait':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'go_to':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'pause_project':
+            self._action_target_object.enabled = False
+        elif self.action_type == 'resume_project':
+            self._action_target_object.enabled = False
 
         # POSTWAIT
         if self.postwait > 0:

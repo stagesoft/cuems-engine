@@ -30,10 +30,6 @@ class DmxCue(Cue):
         self._osc_route = None
         self._offset_route = '/offset'
 
-        self._conf = None
-        self.ossia_queue = None
-        self._armed_list = None
-
         self.OSC_DMXPLAYER_CONF[self._offset_route] = [ossia.ValueType.Float, None]
         
 

@@ -6,9 +6,8 @@ from .cuems_editor.CuemsUtils import date_now_iso_utc
 class CuemsScript(dict):
     def __init__(self, init_dict = None):
         if init_dict:
-            super().__init__(init_dict)
+            super().__init__(init_dict)       
 
-        
     @property
     def uuid(self):
         return super().__getitem__('uuid')

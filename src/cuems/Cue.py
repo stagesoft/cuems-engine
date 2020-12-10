@@ -14,11 +14,9 @@ class Cue(dict):
         self._target_object = None
         self._conf = None
         self._armed_list = None
-        self._mtc_when_gone = CTimecode()
-        self._start_time = CTimecode('00:00:00:00')
-        self._end_time = CTimecode('00:00:20:00')
-        self._duration = self._end_time - self._start_time
-        self._deadline_reached = False
+        self._start_mtc = CTimecode()
+        self._end_mtc = CTimecode()
+        self._end_reached = False
 
     @property
     def uuid(self):
@@ -139,6 +137,7 @@ class Cue(dict):
     @media.setter
     def media(self, media):
         super().__setitem__('Media', media)
+
     def target_object(self, target_object):
         self._target_object = target_object
 
