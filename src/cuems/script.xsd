@@ -143,6 +143,7 @@
   <xs:complexType name="UiPropertiesType">
     <xs:all minOccurs="0">
       <xs:element name="timeline_position" type="cms:Coordinates" />
+      <xs:element name="warning" type="xs:integer" />
     </xs:all>
   </xs:complexType>
 
