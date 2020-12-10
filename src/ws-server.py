@@ -7,11 +7,12 @@ import time
 import uuid
 import os
 
-q = Queue()
+engine_queue = Queue()
+editor_queue = Queue()
 
 settings_dict = {}
 settings_dict['session_uuid'] = str(uuid.uuid1())
-settings_dict['library_path'] = '/home/ion/cuems_library'
+settings_dict['library_path'] = '/opt/cuems_library'
 settings_dict['tmp_upload_path'] = '/tmp/cuemsuploads'
 settings_dict['database_name'] = 'project-manager.db'
 
@@ -24,9 +25,10 @@ except Exception as e:
     print("error: {} {}".format(type(e), e))
 
 def f(text):
-    q.put(text)
+    editor_queue.put(text)
 
-server = CuemsWsServer(q, settings_dict)
+
+server = CuemsWsServer(engine_queue, editor_queue, settings_dict)
 logger.info('start server')
 server.start(9092)
 
