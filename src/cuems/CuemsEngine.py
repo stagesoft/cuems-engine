@@ -3,7 +3,7 @@
 # %%
 import threading
 import queue
-import multiprocessing
+from multiprocessing import Queue as MPQueue
 from subprocess import CalledProcessError
 import signal
 import time
@@ -31,7 +31,7 @@ from .VideoCue import VideoCue
 from .VideoPlayer import VideoPlayer
 from .DmxCue import DmxCue
 from .ActionCue import ActionCue
-from .CueProcessor import CuePriorityQueue, CueQueueProcessor
+# from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
@@ -97,8 +97,8 @@ class CuemsEngine():
         settings_dict['library_path'] = self.cm.library_path
         settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
         settings_dict['database_name'] = self.cm.database_name
-        self.engine_queue = queue.Queue()
-        self.editor_queue = queue.Queue()
+        self.engine_queue = MPQueue()
+        self.editor_queue = MPQueue()
         self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict)
         try:
             self.ws_server.start(self.cm.node_conf['websocket_port'])
@@ -154,11 +154,10 @@ class CuemsEngine():
 
     def engine_queue_consumer(self):
         while not self.stop_requested:
-            if not self.editor_queue.empty():
-                item = self.editor_queue.get()
+            if not self.engine_queue.empty():
+                item = self.engine_queue.get()
                 logger.debug(f'Received queue message from WS server: {item}')
                 self.editor_command_callback(item)
-                self.editor_queue.task_done()
             time.sleep(0.004)
 
     def editor_command_callback(self, item):
@@ -168,7 +167,7 @@ class CuemsEngine():
             else:
                 if item['action'] == 'load_project':
                     logger.info(f'Load project command received via WS')
-                    self.load_project_callback(kwargs={'value' : item['value']})
+                    self.load_project_callback(value = item['value'])
         except KeyError:
             try:
                 if not item['type'] in ['error', 'initial_settings']:
