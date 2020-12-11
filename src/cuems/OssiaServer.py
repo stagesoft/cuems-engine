@@ -81,18 +81,11 @@ class OssiaServer(threading.Thread):
 
     def add_nodes(self, qdata):
         if isinstance(qdata, QueueOSCData):
-            '''
             self.osc_devices[qdata.device_name] = ossia.ossia.OSCDevice(
                                                         f'remoteAudioPlayer{qdata.device_name}', 
                                                         qdata.host, 
                                                         qdata.in_port, 
                                                         qdata.out_port)
-            '''
-            self.osc_devices[qdata.device_name] = ossia.add_device(
-                                                        f'remoteAudioPlayer{qdata.device_name}', 
-                                                        mode = 'mirror', 
-                                                        target = qdata.host, 
-                                                        udp_port = qdata.in_port)
 
             for route, conf in qdata.items():
                 temp_node = self.osc_devices[qdata.device_name].add_node(route)
