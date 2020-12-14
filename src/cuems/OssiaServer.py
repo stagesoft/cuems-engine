@@ -55,14 +55,14 @@ class OssiaServer(threading.Thread):
                 parameter, value = oscq_message
                 if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
                     self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
-                '''
-                try:                
-                    self.engine_osc_nodes[str(parameter.node)][0].parameter.value = value
+
+                try:
+                    if str(parameter.node) in self.osc_registered_nodes:
+                        self.osc_registered_nodes[str(parameter.node)][0].parameter.value = value
                 except KeyError:
                     logger.info(f'OSC device has no {str(parameter.node)} node')
                 except SystemError:
                     pass
-                '''
 
                 oscq_message = self.oscquery_messageq.pop()
             
@@ -86,6 +86,7 @@ class OssiaServer(threading.Thread):
                                                         qdata.host, 
                                                         qdata.in_port, 
                                                         qdata.out_port)
+
             for route, conf in qdata.items():
                 temp_node = self.osc_devices[qdata.device_name].add_node(route)
                 # conf[0] holds the OSC type of data
@@ -93,8 +94,19 @@ class OssiaServer(threading.Thread):
                 temp_node.parameter.access_mode = ossia.AccessMode.Bi
                 temp_node.parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
 
+
                 # conf[1] holds the method to call when received such a route
                 self.osc_registered_nodes[qdata.device_name + route] = [temp_node, conf[1]]
+
+            ############ Register also the node on the oscquery device tree
+            for route, conf in qdata.items():
+                temp_node = self.oscquery_device.add_node(qdata.device_name + route)
+                temp_node.create_parameter(conf[0])
+                temp_node.parameter.access_mode = ossia.AccessMode.Bi
+                temp_node.parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
+                self.oscquery_messageq.register(temp_node.parameter)
+                
+                self.oscquery_registered_nodes[qdata.device_name + route] = [temp_node, conf[1]]
 
             # logger.info(f'OSC Nodes listening on {qdata.in_port}: {self.osc_registered_nodes[qdata.device_name + route]}')
         elif isinstance(qdata, QueueData):
@@ -112,11 +124,13 @@ class OssiaServer(threading.Thread):
     def remove_nodes(self, qdata):
         if isinstance(qdata, QueueOSCData):
             self.osc_devices.pop(qdata.device_name)
-            for route, conf in qdata.items():
+            for route, _ in qdata.items():
                 self.osc_registered_nodes.pop(qdata.device_name + route)
+            for route, _ in qdata.items():
+                self.oscquery_registered_nodes.pop(qdata.device_name + route)
 
         elif isinstance(qdata, QueueData):
-            for route, conf in qdata.items():
+            for route, _ in qdata.items():
                 try:
                     self.oscquery_registered_nodes.pop(route)
                 except:
