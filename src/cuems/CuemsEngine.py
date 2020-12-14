@@ -3,7 +3,7 @@
 # %%
 import threading
 import queue
-import multiprocessing
+from multiprocessing import Queue as MPQueue
 from subprocess import CalledProcessError
 import signal
 import time
@@ -31,7 +31,7 @@ from .VideoCue import VideoCue
 from .VideoPlayer import VideoPlayer
 from .DmxCue import DmxCue
 from .ActionCue import ActionCue
-from .CueProcessor import CuePriorityQueue, CueQueueProcessor
+# from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
@@ -80,6 +80,7 @@ class CuemsEngine():
 
         # MTC master object creation through bound library and open port
         self.mtcmaster = libmtcmaster.MTCSender_create()
+        self.go_offset = 0
 
         # MTC listener (could be usefull)
         try:
@@ -91,21 +92,24 @@ class CuemsEngine():
             exit(-1)
 
         # WebSocket server
-        '''
         settings_dict = {}
         settings_dict['session_uuid'] = str(uuid1())
         settings_dict['library_path'] = self.cm.library_path
         settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
         settings_dict['database_name'] = self.cm.database_name
-        self.ws_queue = queue.Queue()
-        self.ws_server = CuemsWsServer(self.ws_queue, settings_dict)
+        self.engine_queue = MPQueue()
+        self.editor_queue = MPQueue()
+        self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict)
         try:
             self.ws_server.start(self.cm.node_conf['websocket_port'])
         except KeyError:
             self.stop_all_threads()
             logger.error('Config error, websocket_port key not found. Exiting.')
             exit(-1)
-        '''
+        else:
+            # Threaded own queue consumer loop
+            self.engine_queue_loop = threading.Thread(target=self.engine_queue_consumer, name='engineq_consumer')
+            self.engine_queue_loop.start()
 
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
@@ -147,6 +151,29 @@ class CuemsEngine():
             time.sleep(0.005)
 
         self.stop_all_threads()
+
+    def engine_queue_consumer(self):
+        while not self.stop_requested:
+            if not self.engine_queue.empty():
+                item = self.engine_queue.get()
+                logger.debug(f'Received queue message from WS server: {item}')
+                self.editor_command_callback(item)
+            time.sleep(0.004)
+
+    def editor_command_callback(self, item):
+        try:
+            if not item['action'] in ['load_project']:
+                self.editor_queue.put({"type":"error", "action":None, "value":"Command not recognized"})
+            else:
+                if item['action'] == 'load_project':
+                    logger.info(f'Load project command received via WS')
+                    self.load_project_callback(value = item['value'])
+        except KeyError:
+            try:
+                if not item['type'] in ['error', 'initial_settings']:
+                    self.editor_queue.put({"type":"error", "action":None, "value":"Response not recognized"})
+            except KeyError:
+                logger.exception(f'Not recognized communications with WSServer. Item received: {item}')
 
     #########################################################
     # Check functions
@@ -291,6 +318,13 @@ class CuemsEngine():
         '''
 
         try:
+            while not self.engine_queue.empty():
+                self.engine_queue.get()
+            self.engine_queue_loop.join()
+        except:
+            pass
+
+        try:
             self.ossia_server.stop()
         except AttributeError:
             pass
@@ -328,7 +362,8 @@ class CuemsEngine():
     # Usefull callbacks
     def mtc_step_callback(self, mtc):
         # self.timecode(value = str(mtc))
-        self.ossia_server.oscquery_registered_nodes['/engine/status/timecode'][0].parameter.value = mtc.milliseconds
+        if self.go_offset:
+            self.ossia_server.oscquery_registered_nodes['/engine/status/timecode'][0].parameter.value = mtc.milliseconds - self.go_offset
 
     ########################################################
     # System signals handlers
@@ -390,6 +425,8 @@ class CuemsEngine():
             self.disarm_all()
             self.armedcues.clear()
             self.ongoing_cue = None
+            self.next_cue_pointer = None
+            self.go_offset = 0
 
         try:
             self.cm.load_project_settings(kwargs["value"])
@@ -433,9 +470,15 @@ class CuemsEngine():
 
             # Then we force-arm the first item in the main list
             self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+            # And get it ready to wait a GO command
+            self.next_cue_pointer = self.script.cuelist.contents[0]
+            self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
             # Start MTC!
             libmtcmaster.MTCSender_play(self.mtcmaster)
+
+        # Everything went OK we notify it to the WS server through the queue
+        self.editor_queue.put({'type':'load_project', 'value':'OK'})
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -480,8 +523,9 @@ class CuemsEngine():
                 if self.next_cue_pointer:
                     cue_to_go = self.next_cue_pointer
                 else:
-                    logger.info(f'Reached end of playing at {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
+                    logger.info(f'Reached end of scrip. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
                     self.ongoing_cue = None
+                    self.go_offset = 0
                     self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
                     return
 
@@ -491,6 +535,16 @@ class CuemsEngine():
                 self.ongoing_cue = cue_to_go
                 self.ongoing_cue.go(self.ossia_server, self.mtclistener)
                 self.next_cue_pointer = self.ongoing_cue.get_next_cue()
+                self.go_offset = self.mtclistener.main_tc.milliseconds
+
+                # OSC Query cues status notification
+                self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value = self.ongoing_cue.uuid
+                if self.next_cue_pointer:
+                    self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
+                else:
+                    self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = ""
+
+                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = True
         else:
             logger.warning('No script loaded, cannot process GO command.')
 
@@ -498,7 +552,7 @@ class CuemsEngine():
         logger.info('OSC PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
-            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -506,7 +560,8 @@ class CuemsEngine():
         logger.info('OSC STOP!')
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
-            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.go_offset = 0
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -518,12 +573,16 @@ class CuemsEngine():
             self.disconnect_video_devs()
             self.armedcues.clear()
             self.ongoing_cue = None
+            self.go_offset = 0
+
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
 
             if self.script:
                 self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
-            libmtcmaster.MTCSender_play(self.mtcmaster)
 
-            # self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+                self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value = ""
+                self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.script.cuelist.contents[0].uuid
+            libmtcmaster.MTCSender_play(self.mtcmaster)
 
         except:
             pass
