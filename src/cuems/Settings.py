@@ -81,6 +81,7 @@ class Settings(dict):
             xml_file = open(self.xmlfile)
         except FileNotFoundError:
             logger.error(f'{self.xmlfile} XML file not found')
+            raise
 
         xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True, attr_prefix='')
 

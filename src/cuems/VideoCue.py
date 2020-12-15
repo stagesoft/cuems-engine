@@ -204,10 +204,21 @@ class VideoCue(Cue):
         else:
             return False
 
-    def check_mappings(self, mappings):
-        for output in self.outputs:
-            for item in mappings['Video']['outputs']:
-                if output['output_name'] == item['mapping']['virtual_name']:
-                    return True
-        return False
+    def check_mappings(self, settings):
+        if settings.project_maps:
+            for output in self.outputs:
+                if output['output_name'] == 'default':
+                    break
+                found = False
+                for item in settings.project_maps['Video']['outputs']:
+                    if output['output_name'] == item['mapping']['virtual_name']:
+                        found = True
+                if not found:
+                    return False 
+        else:
+            for output in self.outputs:
+                if output['output_name'] != 'default':
+                    output['output_name'] = 'default'
+
+        return True
 

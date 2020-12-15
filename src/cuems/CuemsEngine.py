@@ -35,8 +35,6 @@ from .ActionCue import ActionCue
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
-from pprint import pprint
-
 CUEMS_CONF_PATH = '/etc/cuems/'
 CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
@@ -197,6 +195,7 @@ class CuemsEngine():
             for item in self.cm.project_maps['Video']['inputs']['mapping']:
                 if item['mapped_to'] not in self.cm.node_conf['video_inputs']['input']:
                     raise Exception(f'Video input mapping incorrect')
+
         if self.cm.project_maps['Video']['outputs']:
             for item in self.cm.project_maps['Video']['outputs']:
                 if item['mapping']['mapped_to'] not in self._video_players.keys():
@@ -429,54 +428,62 @@ class CuemsEngine():
         try:
             self.cm.load_project_settings(kwargs["value"])
             # logger.info(self.cm.project_conf)
-        except FileNotFoundError as e:
-            logger.exception(f'Project settings file not found : {e}')
+        except FileNotFoundError:
+            logger.info(f'Project settings file not found. Adopting defaults.')
+        except:
+            logger.info(f'Project settings error while loading. Adopting defaults.')
 
         try:
             self.cm.load_project_mappings(kwargs["value"])
             logger.info(self.cm.project_maps)
         except FileNotFoundError:
-            logger.exception(f'Project mappings file not found . {e}')
+            logger.info(f'Project mappings file not found. Adopting default outputs.')
+        except:
+            logger.info(f'Project mappings error while loading. Adopting default outputs.')
 
         try:
-            self.check_project_mappings()
+            if self.cm.project_maps:
+                self.check_project_mappings()
         except Exception as e:
             logger.exception(e)
-            raise Exception('Script could not be loaded.')
 
         try:
             schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')
             xml_file = os.path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
-
         except FileNotFoundError:
             logger.error('Project script file not found')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Project script file not found'})
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script XML parsing error'})
+        except Exception as e:
+            logger.error(f'Project script could not be loaded {e}')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script could not be loaded'})
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
-            raise Exception('Script could not be loaded.')
-        
-        try:
-            self.script_media_check()
-        except FileNotFoundError:
-            logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+
         else:
-            self.initial_cuelist_process(self.script.cuelist)
+            try:
+                self.script_media_check()
+            except FileNotFoundError:
+                logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+            else:
+                self.initial_cuelist_process(self.script.cuelist)
 
-            # Then we force-arm the first item in the main list
-            self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
-            # And get it ready to wait a GO command
-            self.next_cue_pointer = self.script.cuelist.contents[0]
-            self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
+                # Then we force-arm the first item in the main list
+                self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+                # And get it ready to wait a GO command
+                self.next_cue_pointer = self.script.cuelist.contents[0]
+                self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
-            # Start MTC!
-            libmtcmaster.MTCSender_play(self.mtcmaster)
+                # Start MTC!
+                libmtcmaster.MTCSender_play(self.mtcmaster)
 
-        # Everything went OK we notify it to the WS server through the queue
-        self.editor_queue.put({'type':'load_project', 'value':'OK'})
+            # Everything went OK we notify it to the WS server through the queue
+            self.editor_queue.put({'type':'load_project', 'value':'OK'})
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -605,6 +612,8 @@ class CuemsEngine():
             for key, value in media_list.items():
                 string += f'\n{value[1]} : {key} : {value[0]}'
             logger.error(string)
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'subtype':'media', 'data':media_list})
+
             raise FileNotFoundError
         
     def initial_cuelist_process(self, cuelist, caller = None):
@@ -614,16 +623,19 @@ class CuemsEngine():
         '''
         try:
             for index, item in enumerate(cuelist.contents):
-                if item.check_mappings(self.cm.project_maps):
+                if item.check_mappings(self.cm):
                     if isinstance(item, VideoCue):
                         try:
                             for output in item.outputs:
+                                # TO DO : add support for multiple outputs
                                 video_player_id = self.cm.get_video_player_id(output['output_name'])
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
                         except Exception as e:
                             logger.exception(e)
                             raise e
+                else:
+                    raise Exception(f"Cue outputs badly assigned in cue : {item.uuid}")
 
                 if item.loaded and not item in self.armedcues:
                     item.arm(self.cm, self.ossia_server, self.armedcues, init = True)

@@ -58,6 +58,7 @@ class ConfigManager(Thread):
         #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
     def load_project_settings(self, project_uname):
+        conf = {}
         try:
             settings_schema = path.join(self.cuems_conf_path, 'project_settings.xsd')
             settings_path = path.join(self.library_path, 'projects', project_uname, 'settings.xml')
@@ -67,11 +68,15 @@ class ConfigManager(Thread):
         except Exception as e:
             logger.error(e)
 
-        self.project_conf = conf['ProjectSettings']
-
-        logger.info(f'Project {project_uname} settings loaded')
+        try:
+            self.project_conf = conf['ProjectSettings']
+        except:
+            pass
+        else:
+            logger.info(f'Project {project_uname} settings loaded')
 
     def load_project_mappings(self, project_uname):
+        maps = {}
         try:
             mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
             mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
@@ -81,15 +86,32 @@ class ConfigManager(Thread):
         except Exception as e:
             logger.error(e)
 
-        self.project_maps = maps['ProjectMappings']
-        logger.info(f'Project {project_uname} mappings loaded')
+        try:
+            self.project_maps = maps['ProjectMappings']
+        except:
+            pass
+        else:
+            logger.info(f'Project {project_uname} mappings loaded')
 
     def get_video_player_id(self, mapping_name):
-        for item in self.project_maps['Video']['outputs']:
-            if mapping_name == item['mapping']['virtual_name']:
-                return item['mapping']['mapped_to']
+        if mapping_name == 'default':
+            return self.node_conf['video_default_output']
+        else:
+            for item in self.project_maps['Video']['outputs']:
+                if mapping_name == item['mapping']['virtual_name']:
+                    return item['mapping']['mapped_to']
 
         raise Exception(f'Video output wrongly mapped')
+
+    def get_audio_output_id(self, mapping_name):
+        if mapping_name == 'default':
+            return self.node_conf['audio_default_output']
+        else:
+            for item in self.project_maps['Audio']['outputs']:
+                if mapping_name == item['mapping']['virtual_name']:
+                    return item['mapping']['mapped_to']
+
+        raise Exception(f'Audio output wrongly mapped')
 
     def check_dir_hierarchy(self):
         try:
