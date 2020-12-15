@@ -53,8 +53,11 @@ class OssiaServer(threading.Thread):
             oscq_message = self.oscquery_messageq.pop()
             while (oscq_message != None):
                 parameter, value = oscq_message
-                if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
-                    self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
+                try:
+                    if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
+                        self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
+                except KeyError:
+                    logger.info(f'OSC has no {str(parameter.node)} node')
 
                 try:
                     if str(parameter.node) in self.osc_registered_nodes:
