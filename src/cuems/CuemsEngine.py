@@ -177,19 +177,14 @@ class CuemsEngine():
     # Check functions
     def check_project_mappings(self):
         if self.cm.project_maps['Audio']['inputs']:
-            '''
             for item in self.cm.project_maps['Audio']['inputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['audio_inputs']['input']:
+                if item['mapped_to'] in self.cm.node_conf['audio_inputs']['input']:
                     raise Exception(f'Audio input mapping incorrect')
-            '''
-            pass
+
         if self.cm.project_maps['Audio']['outputs']:
-            '''
             for item in self.cm.project_maps['Audio']['outputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['audio_outputs']['output']:
+                if item['mapped_to'] in self.cm.node_conf['audio_outputs']['output']:
                     raise Exception(f'Audio output mapping incorrect')
-            '''
-            pass
 
         if self.cm.project_maps['Video']['inputs']:
             for item in self.cm.project_maps['Video']['inputs']['mapping']:
@@ -204,14 +199,14 @@ class CuemsEngine():
         if self.cm.project_maps['DMX']['inputs']:
             '''
             for item in self.cm.project_maps['DMX']['inputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['dmx_inputs']['input']:
+                if item['mapped_to'] in self.cm.node_conf['dmx_inputs']['input']:
                     raise Exception(f'DMX input mapping incorrect')
             '''
             pass
         if self.cm.project_maps['DMX']['outputs']:
             '''
             for item in self.cm.project_maps['DMX']['outputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['dmx_outputs']['output']:
+                if item['mapped_to'] in self.cm.node_conf['dmx_outputs']['output']:
                     raise Exception(f'DMX output mapping incorrect')
             '''
             pass
