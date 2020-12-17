@@ -25,7 +25,7 @@ class XmlBuilder():
         try:
             builder_class = globals()[builder_class_name]
         except KeyError as err:
-            logger.debug("Could not find class {0}, reverting to generic builder class".format(err))
+            # logger.debug("Could not find class {0}, reverting to generic builder class".format(err))
             builder_class = globals()[GENERIC_BUILDER]
         return builder_class
     
