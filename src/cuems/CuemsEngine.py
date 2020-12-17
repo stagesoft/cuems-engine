@@ -165,7 +165,7 @@ class CuemsEngine():
             else:
                 if item['action'] == 'load_project':
                     logger.info(f'Load project command received via WS')
-                    self.load_project_callback(value = item['value'])
+                    self.load_project_callback(value = item['value'], action_uuid = item['action_uuid'])
         except KeyError:
             try:
                 if not item['type'] in ['error', 'initial_settings']:
@@ -483,7 +483,7 @@ class CuemsEngine():
                 libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # Everything went OK we notify it to the WS server through the queue
-            self.editor_queue.put({'type':'load_project', 'value':'OK'})
+            self.editor_queue.put({'type':'load_project', 'action_uuid': kwargs['action_uuid'], 'value':'OK'})
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
