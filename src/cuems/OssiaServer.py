@@ -9,7 +9,7 @@ from .log import logger
 
 class OssiaServer(threading.Thread):
     def __init__(self, node_id, in_port, out_port, queue):
-        super().__init__(name='ossia')
+        super().__init__(target=self.threaded_loop, name='OSCQueryLoop')
         self.server_running = True
 
         self.conf_queue = queue
@@ -34,18 +34,12 @@ class OssiaServer(threading.Thread):
         # OSC messages queue
         self.oscquery_messageq = ossia.MessageQueue(self.oscquery_device)
 
-    def start(self):
-        self.server_running = True
-
-        # Message loop
-        self.thread = threading.Thread(target=self.threaded_loop, name='OSCQuery')
-        self.thread.start()
+        self.start()
 
     def stop(self):
         self.server_running = False
         while not self.conf_queue.empty():
             self.conf_queue.get()
-        self.thread.join()
         self.conf_queue_loop.join()
         
     def threaded_loop(self):
