@@ -31,6 +31,7 @@ class VideoCue(Cue):
             
         self._player = None
         self._osc_route = None
+        self._go_thread = None
 
         # TODO: Adjust framerates for universal use, by now 25 fps for video
         self._start_mtc = CTimecode(framerate=25)
@@ -105,10 +106,10 @@ class VideoCue(Cue):
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
         else:
             # THREADED GO
-            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
-            thread.start()
+            self._go_thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread_func, args = [ossia, mtc])
+            self._go_thread.start()
 
-    def go_thread(self, ossia, mtc):
+    def go_thread_func(self, ossia, mtc):
         # ARM NEXT TARGET
         if self._target_object:
             self._target_object.arm(self._conf, ossia, self._armed_list)
@@ -145,17 +146,19 @@ class VideoCue(Cue):
 
         try:
             loop_counter = 0
+            duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+            duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+            in_time_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
+
             while not self.media.regions[0].loop or loop_counter < self.media.regions[0].loop:
-                while (mtc.main_tc.milliseconds < self._end_mtc.milliseconds):
-                    sleep(0.05)
+                while mtc.main_tc.milliseconds < self._end_mtc.milliseconds:
+                    sleep(0.005)
 
                 try:
                     key = f'{self._osc_route}/jadeo/offset'
                     self._start_mtc = mtc.main_tc
-                    duration = self.media.regions[0].out_time - self.media.regions[0].in_time
-                    duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
                     self._end_mtc = self._start_mtc + duration
-                    offset_to_go = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate) - self._start_mtc
+                    offset_to_go = in_time_adjusted - self._start_mtc
                     ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go.frame_number
                     logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].parameter.value))
                 except KeyError:
@@ -178,6 +181,7 @@ class VideoCue(Cue):
     def disarm(self, ossia_queue):
         if self.loaded is True:
             '''
+            # Needed when each cue launched its own player
             try:
                 self._player.kill()
                 self._conf.players_port_index['used'].remove(self._player.port)
@@ -203,6 +207,9 @@ class VideoCue(Cue):
             return True
         else:
             return False
+
+    def stop(self):
+        self._stop_requested = True
 
     def check_mappings(self, settings):
         if settings.project_maps:

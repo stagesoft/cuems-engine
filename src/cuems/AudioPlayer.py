@@ -7,9 +7,9 @@ from .log import logger
 
 import time
 
-
 class AudioPlayer(Thread):
     def __init__(self, port_index, path, args, media):
+        super().__init__()
         self.port = port_index['start']
         while self.port in port_index['used']:
             self.port += 2
@@ -23,11 +23,12 @@ class AudioPlayer(Thread):
         self.path = path
         self.args = args
         self.media = media
-        
-        
-    def __init_trhead(self):
+
+    '''        
+    def __init_thread(self):
         super().__init__()
         self.daemon = True
+    '''
 
     def run(self):
         if __debug__:
@@ -50,33 +51,35 @@ class AudioPlayer(Thread):
                 for line in stdout_lines_iterator:
                     logger.info(line)
 
-            if self.p.returncode not in [0, -9]:
-                raise CalledProcessError(self.p.returncode, self.p.args)
-
         except OSError as e:
             # logger.warning("Failed to start AudioPlayer on card:{}".format(self.card_id))
             logger.warning(f'Failed to start AudioPlayer for {self.media}')
-            if __debug__:
-                logger.debug(e)
+            logger.exception(e)
+        except CalledProcessError as e:
+            if self.p.returncode < 0:
+                raise CalledProcessError(self.p.returncode, self.p.args)
 
-        if __debug__:
-            logger.debug(self.stdout)
-            logger.debug(self.stderr)
-    
     def kill(self):
         self.p.kill()
         self.started = False
+
     def start(self):
         if self.firstrun:
+            '''
             self.__init_trhead()
             Thread.start(self)
+            '''
+            super().start()
             self.firstrun = False
         else:
-            if not self.is_alive():
+            if self.is_alive():
+                logger.debug("AudioPlayer allready running")
+            else:
+                '''
                 self.__init_trhead()
                 Thread.start(self)
-            else:
-                logger.debug("AudioPlayer allready running")
+                '''
+                super().start()
 
 '''
 class AudioPlayerRemote():

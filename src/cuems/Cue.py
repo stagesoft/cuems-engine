@@ -17,6 +17,8 @@ class Cue(dict):
         self._start_mtc = CTimecode()
         self._end_mtc = CTimecode()
         self._end_reached = False
+        self._go_thread = None
+        self._stop_requested = False
 
     @property
     def uuid(self):
@@ -241,3 +243,6 @@ class Cue(dict):
 
     def check_mappings(self, mappings):
         return True
+
+    def stop(self):
+        pass
