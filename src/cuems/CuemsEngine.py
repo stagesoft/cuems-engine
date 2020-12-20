@@ -49,6 +49,8 @@ class CuemsEngine():
         # Running flag
         self.stop_requested = False
 
+        self._editor_request_uuid = None
+
         #########################################################
         # System signals handlers
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -164,18 +166,27 @@ class CuemsEngine():
 
     def editor_command_callback(self, item):
         try:
-            if not item['action'] in ['load_project']:
-                self.editor_queue.put({"type":"error", "action":None, "value":"Command not recognized"})
-            else:
-                if item['action'] == 'load_project':
-                    logger.info(f'Load project command received via WS')
-                    self.load_project_callback(value = item['value'])
+            self._editor_request_uuid = item['action_uuid']
+        except KeyError:
+            self.editor_queue.put({"type":"error", "action":None, 'action_uuid':None, "value":"No action uuid submitted"})
+            return
+
+        try:
+            if not item['type'] in ['error', 'initial_settings']:
+                self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Response not recognized"})
+                self._editor_request_uuid = None
         except KeyError:
             try:
-                if not item['type'] in ['error', 'initial_settings']:
-                    self.editor_queue.put({"type":"error", "action":None, "value":"Response not recognized"})
+                if not item['action'] in ['load_project']:
+                    self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
+                    self._editor_request_uuid = None
+                else:
+                    if item['action'] == 'load_project':
+                        self._editor_request_uuid = item['action_uuid']
+                        logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        self.load_project_callback(value = item['value'])
             except KeyError:
-                logger.exception(f'Not recognized communications with WSServer. Item received: {item}')
+                logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
 
     #########################################################
     # Check functions
@@ -454,13 +465,16 @@ class CuemsEngine():
             self.script = reader.read_to_objects()
         except FileNotFoundError:
             logger.error('Project script file not found')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Project script file not found'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Project script file not found'})
+            self._editor_request_uuid = None
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script XML parsing error'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script XML parsing error'})
+            self._editor_request_uuid = None
         except Exception as e:
             logger.error(f'Project script could not be loaded {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script could not be loaded'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            self._editor_request_uuid = None
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
@@ -483,7 +497,8 @@ class CuemsEngine():
                 libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # Everything went OK we notify it to the WS server through the queue
-            self.editor_queue.put({'type':'load_project', 'value':'OK'})
+            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+            self._editor_request_uuid = None
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -614,7 +629,8 @@ class CuemsEngine():
             for key, value in media_list.items():
                 string += f'\n{value[1]} : {key} : {value[0]}'
             logger.error(string)
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'subtype':'media', 'data':media_list})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':media_list})
+            self._editor_request_uuid = None
 
             raise FileNotFoundError
         
