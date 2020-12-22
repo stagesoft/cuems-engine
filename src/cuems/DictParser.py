@@ -29,7 +29,7 @@ class CuemsParser():
         try:
             parser_class = (globals()[parser_name], class_string)
         except KeyError as err:
-            logger.debug("Could not find class {0}, reverting to generic parser class".format(err))
+            # logger.debug("Could not find class {0}, reverting to generic parser class".format(err))
             parser_class = (globals()[GENERIC_PARSER], class_string)
         return parser_class
 
@@ -38,7 +38,7 @@ class CuemsParser():
         try:
             _class = globals()[class_string]
         except KeyError as err:
-            logger.debug("Could not find class {0}".format(err))
+            # logger.debug("Could not find class {0}".format(err))
             _class = GenericDict
         return _class
 
