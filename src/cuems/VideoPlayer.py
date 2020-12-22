@@ -11,6 +11,7 @@ import time
 
 class VideoPlayer(Thread):
     def __init__(self, port, output, path, args, media):
+        super().__init__()
         self._port = port
         self.output = output
         self.path = path
@@ -21,9 +22,11 @@ class VideoPlayer(Thread):
         self.stdout = None
         self.stderr = None
         
+    '''
     def __init_trhead(self):
         super().__init__()
         self.daemon = True
+    '''
 
     def run(self):
         if __debug__:
@@ -44,29 +47,35 @@ class VideoPlayer(Thread):
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:
                     logger.info(line)
-
-            if self.p.returncode not in [0, -9]:
+        except OSError as e:
+            logger.info(f'Failed to start VideoPlayer on display : {self.output}.')
+            logger.exception(e)
+        except CalledProcessError as e:
+            if self.p.returncode < 0:
                 raise CalledProcessError(self.p.returncode, self.p.args)
 
-        except OSError as e:
-            logger.info(f'Failed to start VideoPlayer on display : {self.output[0]["VideoCueOutput"]["name"]}.')
-            if __debug__:
-                logger.exception(e)
 
     def kill(self):
         self.p.kill()
         self.started = False
+
     def start(self):
         if self.firstrun:
+            '''
             self.__init_trhead()
             Thread.start(self)
+            '''
+            super().start()
             self.firstrun = False
         else:
-            if not self.is_alive():
+            if self.is_alive():
+                logger.debug("VideoPlayer allready running")
+            else:
+                '''
                 self.__init_trhead()
                 Thread.start(self)
-            else:
-                logger.debug("VideoPlayer allready running")
+                '''
+                super().start()
 
     def port(self):
         return self._port

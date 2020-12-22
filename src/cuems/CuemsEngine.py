@@ -48,6 +48,8 @@ class CuemsEngine():
         # Running flag
         self.stop_requested = False
 
+        self._editor_request_uuid = None
+
         #########################################################
         # System signals handlers
         signal.signal(signal.SIGINT, self.sigIntHandler)
@@ -101,7 +103,12 @@ class CuemsEngine():
             self.ws_server.start(self.cm.node_conf['websocket_port'])
         except KeyError:
             self.stop_all_threads()
-            logger.error('Config error, websocket_port key not found. Exiting.')
+            logger.exception('Config error, websocket_port key not found in settings. Exiting.')
+            exit(-1)
+        except Exception as e:
+            self.stop_all_threads()
+            logger.error('Exception when starting websocket server. Exiting.')
+            logger.exception(e)
             exit(-1)
         else:
             # Threaded own queue consumer loop
@@ -114,7 +121,6 @@ class CuemsEngine():
                                         self.cm.node_conf['oscquery_port'], 
                                         self.cm.node_conf['oscquery_out_port'], 
                                         self.ossia_queue)
-        self.ossia_server.start()
 
         # Initial OSC nodes to tell ossia to configure
         OSC_ENGINE_CONF = { '/engine' : [ossia.ValueType.Impulse, None],
@@ -159,41 +165,55 @@ class CuemsEngine():
 
     def editor_command_callback(self, item):
         try:
-            if not item['action'] in ['load_project']:
-                self.editor_queue.put({"type":"error", "action":None, "value":"Command not recognized"})
-            else:
-                if item['action'] == 'load_project':
-                    logger.info(f'Load project command received via WS')
-                    self.load_project_callback(value = item['value'], action_uuid = item['action_uuid'])
+            self._editor_request_uuid = item['action_uuid']
+        except KeyError:
+            self.editor_queue.put({"type":"error", "action":None, 'action_uuid':None, "value":"No action uuid submitted"})
+            return
+
+        try:
+            if not item['type'] in ['error', 'initial_settings']:
+                self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Response not recognized"})
+                self._editor_request_uuid = None
         except KeyError:
             try:
-                if not item['type'] in ['error', 'initial_settings']:
-                    self.editor_queue.put({"type":"error", "action":None, "value":"Response not recognized"})
+                if not item['action'] in ['load_project']:
+                    self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
+                    self._editor_request_uuid = None
+                else:
+                    if item['action'] == 'load_project':
+                        self._editor_request_uuid = item['action_uuid']
+                        logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        self.load_project_callback(value = item['value'])
             except KeyError:
-                logger.exception(f'Not recognized communications with WSServer. Item received: {item}')
+                logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
 
     #########################################################
     # Check functions
     def check_project_mappings(self):
         if self.cm.project_maps['Audio']['inputs']:
-            '''
-            for item in self.cm.project_maps['Audio']['inputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['audio_inputs']['input']:
+            for item in self.cm.project_maps['Audio']['inputs']:
+                found = False
+                for real_input in self.cm.node_conf['audio_inputs']:
+                    if item['mapping']['mapped_to'] == real_input['input']:
+                        found = True
+                        break
+                if not found:
                     raise Exception(f'Audio input mapping incorrect')
-            '''
-            pass
+
         if self.cm.project_maps['Audio']['outputs']:
-            '''
-            for item in self.cm.project_maps['Audio']['outputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['audio_outputs']['output']:
+            # TO DO : per channel assignment
+            for item in self.cm.project_maps['Audio']['outputs']:
+                found = False
+                for real_output in self.cm.node_conf['audio_outputs']:
+                    if item['mapping']['mapped_to'] == real_output['output']:
+                        found = True
+                        break
+                if not found:
                     raise Exception(f'Audio output mapping incorrect')
-            '''
-            pass
 
         if self.cm.project_maps['Video']['inputs']:
-            for item in self.cm.project_maps['Video']['inputs']['mapping']:
-                if item['mapped_to'] not in self.cm.node_conf['video_inputs']['input']:
-                    raise Exception(f'Video input mapping incorrect')
+            # TO DO
+            pass
 
         if self.cm.project_maps['Video']['outputs']:
             for item in self.cm.project_maps['Video']['outputs']:
@@ -201,18 +221,10 @@ class CuemsEngine():
                     raise Exception(f'Video output mapping incorrect')
         
         if self.cm.project_maps['DMX']['inputs']:
-            '''
-            for item in self.cm.project_maps['DMX']['inputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['dmx_inputs']['input']:
-                    raise Exception(f'DMX input mapping incorrect')
-            '''
+            # TO DO
             pass
         if self.cm.project_maps['DMX']['outputs']:
-            '''
-            for item in self.cm.project_maps['DMX']['outputs']['mapping']:
-                if item['mapped_to'] is in self.cm.node_conf['dmx_outputs']['output']:
-                    raise Exception(f'DMX output mapping incorrect')
-            '''
+            # TO DO
             pass
 
     def check_audio_devs(self):
@@ -254,7 +266,7 @@ class CuemsEngine():
                                         '/jadeo/cmd' : [ossia.ValueType.String, None],
                                         '/jadeo/quit' : [ossia.ValueType.Bool, None],
                                         '/jadeo/offset' : [ossia.ValueType.String, None],
-                                        '/jadeo/offset' : [ossia.ValueType.Int, None],
+                                        '/jadeo/offset.1' : [ossia.ValueType.Int, None],
                                         '/jadeo/midi/connect' : [ossia.ValueType.String, None],
                                         '/jadeo/midi/disconnect' : [ossia.ValueType.Bool, None]
                                         }
@@ -268,11 +280,11 @@ class CuemsEngine():
                                                     port + 1, 
                                                     OSC_VIDEOPLAYER_CONF))
 
-    def stop_video_devs(self):
+    def quit_video_devs(self):
         for dev in self._video_players.values():
-            key = f'{dev["route"]}/jadeo/quit'
+            key = f'{dev["route"]}/jadeo/cmd'
             try:
-                self.ossia_server.osc_registered_nodes[key][0].parameter.value = True
+                self.ossia_server.osc_registered_nodes[key][0].parameter.value = 'quit'
             except CalledProcessError:
                 pass
 
@@ -290,43 +302,49 @@ class CuemsEngine():
     #########################################################
     # Ordered stopping
     def stop_all_threads(self):
-        self.stop_video_devs()
-
-        self.stop_requested = True
-
-        self.disarm_all()
+        self.mtclistener.stop()
+        self.mtclistener.join()
 
         try:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
             libmtcmaster.MTCSender_release(self.mtcmaster)
             logger.info('MTC Master released')
         except:
-            logger.info('MTC Master could not be released')
+            logger.exception('MTC Master could not be released')
 
-        self.mtclistener.stop()
-        self.mtclistener.join()
+        self.quit_video_devs()
+
+        self.disarm_all()
+
+        self.stop_requested = True
 
         self.cm.join()
 
         try:
             self.ws_server.stop()
+            logger.info(f'Ws-server thread finished')
         except AttributeError:
-            pass
-        logger.info(f'Ws-server thread finished')
+            logger.exception('Could not stop Ws-server')
 
         try:
             while not self.engine_queue.empty():
                 self.engine_queue.get()
             self.engine_queue_loop.join()
+            self.engine_queue.close()
+
+            while not self.editor_queue.empty():
+                self.editor_queue.get()
+            self.editor_queue.close()
+            logger.debug('IPC queues clean and closed')
         except:
-            pass
+            logger.exception('Could not clean and close IPC queues')
 
         try:
             self.ossia_server.stop()
-        except AttributeError:
-            pass
-        logger.info(f'Ossia server thread finished')
-
-        # self.sm.join()
+            self.ossia_server.join()
+            logger.info(f'Ossia server thread finished')
+        except:
+            logger.exception('Could not stop Ossia server')
 
     #########################################################
     # Status check functions
@@ -364,35 +382,27 @@ class CuemsEngine():
     ########################################################
     # System signals handlers
     def sigTermHandler(self, sigNum, frame):
-        self.stop_all_threads()
+        try:
+            self.stop_all_threads()
+        except:
+            logger.exception('Exception when closing all threads')
+
         time.sleep(0.1)
         string = f'SIGTERM received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.cm.is_alive():
-            print('cm alive')
-        if self.ossia_server.is_alive():
-            print('ossia alive')
-        if self.ws_server.process.is_alive():
-            print('ws alive')
-        if self.mtclistener.is_alive():
-            print('mtcl alive')
         exit()
 
     def sigIntHandler(self, sigNum, frame):
-        self.stop_all_threads()
+        try:
+            self.stop_all_threads()
+        except:
+            logger.exception('Exception when closing all threads')
+
         time.sleep(0.1)
         string = f'SIGINT received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
         logger.info(string)
-        if self.cm.is_alive():
-            print('cm alive')
-        if self.ossia_server.is_alive():
-            print('ossia alive')
-        if self.ws_server.process.is_alive():
-            print('ws alive')
-        if self.mtclistener.is_alive():
-            print('mtcl alive')
         exit()
 
     def sigChldHandler(self, sigNum, frame):
@@ -416,13 +426,14 @@ class CuemsEngine():
     def load_project_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
 
-        if self.script != None:
+        if self.script:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
             self.armedcues.clear()
             self.ongoing_cue = None
             self.next_cue_pointer = None
             self.go_offset = 0
+            self.script = None
 
         try:
             self.cm.load_project_settings(kwargs["value"])
@@ -453,13 +464,16 @@ class CuemsEngine():
             self.script = reader.read_to_objects()
         except FileNotFoundError:
             logger.error('Project script file not found')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Project script file not found'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Project script file not found'})
+            self._editor_request_uuid = None
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script XML parsing error'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script XML parsing error'})
+            self._editor_request_uuid = None
         except Exception as e:
             logger.error(f'Project script could not be loaded {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'value':'Script could not be loaded'})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            self._editor_request_uuid = None
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
@@ -482,7 +496,8 @@ class CuemsEngine():
                 libmtcmaster.MTCSender_play(self.mtcmaster)
 
             # Everything went OK we notify it to the WS server through the queue
-            self.editor_queue.put({'type':'load_project', 'action_uuid': kwargs['action_uuid'], 'value':'OK'})
+            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+            self._editor_request_uuid = None
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -574,8 +589,8 @@ class CuemsEngine():
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
-            self.disconnect_video_devs()
             self.armedcues.clear()
+            self.disconnect_video_devs()
             self.ongoing_cue = None
             self.go_offset = 0
 
@@ -583,13 +598,15 @@ class CuemsEngine():
 
             if self.script:
                 self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+                self.next_cue_pointer = self.script.cuelist.contents[0]
+                self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
                 self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value = ""
                 self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.script.cuelist.contents[0].uuid
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
-        except:
-            pass
+        except Exception as e:
+            logger.exception(e)
 
     ########################################################
 
@@ -611,7 +628,8 @@ class CuemsEngine():
             for key, value in media_list.items():
                 string += f'\n{value[1]} : {key} : {value[0]}'
             logger.error(string)
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'subtype':'media', 'data':media_list})
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':media_list})
+            self._editor_request_uuid = None
 
             raise FileNotFoundError
         
@@ -663,8 +681,8 @@ class CuemsEngine():
             
     def disarm_all(self):
         for item in self.armedcues:
-            if item in self.armedcues:
-                item.disarm(self.ossia_queue)
+            item.stop()
+            item.disarm(self.ossia_queue)
 
 
     ########################################################

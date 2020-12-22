@@ -105,10 +105,10 @@ class AudioCue(Cue):
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
         else:
             # THREADED GO
-            thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread, args = [ossia, mtc])
-            thread.start()
+            self._go_thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread_func, args = [ossia, mtc])
+            self._go_thread.start()
 
-    def go_thread(self, ossia, mtc):
+    def go_thread_func(self, ossia, mtc):
         # ARM NEXT TARGET
         if self.post_go != 'go' and self._target_object:
             self._target_object.arm(self._conf, ossia, self._armed_list)
@@ -146,15 +146,19 @@ class AudioCue(Cue):
 
         try:
             loop_counter = 0
+            duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+
             while not self.media.regions[0].loop or loop_counter < self.media.regions[0].loop:
                 while self._player.is_alive() and (mtc.main_tc.milliseconds < self._end_mtc.milliseconds):
-                    sleep(0.05)
+                    sleep(0.005)
+
                 # Recalculate offset and apply
                 self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
-                self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
+                self._end_mtc = self._start_mtc + (duration)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
                 key = f'{self._osc_route}/offset'
                 ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go
+
                 loop_counter += 1
                 
             try:
@@ -178,7 +182,6 @@ class AudioCue(Cue):
             try:
                 self._conf.players_port_index['used'].remove(self._player.port)
                 self._player.kill()
-                self._player.join()
                 self._player = None
 
                 ossia_queue.put(QueueOSCData(   'remove', 
@@ -199,6 +202,11 @@ class AudioCue(Cue):
             return True
         else:
             return False
+
+    def stop(self):
+        self._stop_requested = True
+        if self._player and self._player.is_alive():
+            self._player.kill()
 
     def check_mappings(self, settings):
         if settings.project_maps:

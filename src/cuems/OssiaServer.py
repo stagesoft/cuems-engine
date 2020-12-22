@@ -9,7 +9,7 @@ from .log import logger
 
 class OssiaServer(threading.Thread):
     def __init__(self, node_id, in_port, out_port, queue):
-        super().__init__(name='ossia')
+        super().__init__(target=self.threaded_loop, name='OSCQueryLoop')
         self.server_running = True
 
         self.conf_queue = queue
@@ -34,18 +34,12 @@ class OssiaServer(threading.Thread):
         # OSC messages queue
         self.oscquery_messageq = ossia.MessageQueue(self.oscquery_device)
 
-    def start(self):
-        self.server_running = True
-
-        # Message loop
-        self.thread = threading.Thread(target=self.threaded_loop, name='OSCQuery')
-        self.thread.start()
+        self.start()
 
     def stop(self):
         self.server_running = False
         while not self.conf_queue.empty():
             self.conf_queue.get()
-        self.thread.join()
         self.conf_queue_loop.join()
         
     def threaded_loop(self):
@@ -53,8 +47,11 @@ class OssiaServer(threading.Thread):
             oscq_message = self.oscquery_messageq.pop()
             while (oscq_message != None):
                 parameter, value = oscq_message
-                if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
-                    self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
+                try:
+                    if self.oscquery_registered_nodes[str(parameter.node)][1] is not None:
+                        self.oscquery_registered_nodes[str(parameter.node)][1](value=value)
+                except KeyError:
+                    logger.info(f'OSC has no {str(parameter.node)} node')
 
                 try:
                     if str(parameter.node) in self.osc_registered_nodes:

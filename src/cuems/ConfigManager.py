@@ -95,7 +95,7 @@ class ConfigManager(Thread):
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
-            return self.node_conf['video_default_output']
+            return self.node_conf['default_video_output']
         else:
             for item in self.project_maps['Video']['outputs']:
                 if mapping_name == item['mapping']['virtual_name']:
@@ -105,7 +105,7 @@ class ConfigManager(Thread):
 
     def get_audio_output_id(self, mapping_name):
         if mapping_name == 'default':
-            return self.node_conf['audio_default_output']
+            return self.node_conf['default_audio_output']
         else:
             for item in self.project_maps['Audio']['outputs']:
                 if mapping_name == item['mapping']['virtual_name']:
