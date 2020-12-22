@@ -36,7 +36,6 @@ from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
 CUEMS_CONF_PATH = '/etc/cuems/'
-CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
 
 # %%
