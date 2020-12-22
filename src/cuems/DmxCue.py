@@ -23,8 +23,7 @@ class DmxCue(Cue):
                             }
 
     def __init__(self, init_dict = None):
-        if init_dict:
-            super().__init__(init_dict)
+        super().__init__(init_dict)
             
         self._player = None
         self._osc_route = None
