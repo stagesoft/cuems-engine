@@ -97,6 +97,8 @@ class CuemsEngine():
         settings_dict['library_path'] = self.cm.library_path
         settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
         settings_dict['database_name'] = self.cm.database_name
+        settings_dict['load_timeout'] = self.cm.node_conf['load_timeout']
+        settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
         self.engine_queue = MPQueue()
         self.editor_queue = MPQueue()
         self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict)
@@ -110,7 +112,7 @@ class CuemsEngine():
             self.stop_all_threads()
             logger.error('Exception when starting websocket server. Exiting.')
             logger.exception(e)
-            exit(-1)
+            exit(-1)    
         else:
             # Threaded own queue consumer loop
             self.engine_queue_loop = threading.Thread(target=self.engine_queue_consumer, name='engineq_consumer')
