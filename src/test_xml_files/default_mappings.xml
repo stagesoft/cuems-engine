@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cms:CuemsProjectMappings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/project_mappings.xsd">
+    <ProjectMappings>
+        <Audio>
+            <outputs>
+                <mapping>
+                    <virtual_name>system:playback_1</virtual_name>
+                    <mapped_to>system:playback_1</mapped_to>
+                </mapping>
+                <mapping>
+                    <virtual_name>system:playback_2</virtual_name>
+                    <mapped_to>system:playback_2</mapped_to>
+                </mapping>
+            </outputs>
+            <inputs></inputs>
+        </Audio>
+        <Video>
+            <outputs>
+                <mapping>
+                    <virtual_name>0</virtual_name>
+                    <mapped_to>0</mapped_to>
+                </mapping>
+                <mapping>
+                    <virtual_name>1</virtual_name>
+                    <mapped_to>1</mapped_to>
+                </mapping>
+            </outputs>
+            <inputs></inputs>
+        </Video>
+        <DMX>
+            <outputs>
+                <mapping>
+                    <virtual_name>1</virtual_name>
+                    <mapped_to>1</mapped_to>
+                </mapping>
+            </outputs>
+            <inputs></inputs>
+        </DMX>
+    </ProjectMappings>
+</cms:CuemsProjectMappings>

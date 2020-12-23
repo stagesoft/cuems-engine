@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
+    <xs:element name="CuemsOutputs">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="video_outputs" type="cms:OutputsType" />
+                <xs:element name="default_video_output" type="xs:string" />
+                <xs:element name="audio_outputs" type="cms:OutputsType" />
+                <xs:element name="default_audio_output" type="xs:string" />
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- TYPES DEFINITIONS -->
+    <xs:complexType name="OutputsType">
+        <xs:sequence>
+            <xs:element name="output" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

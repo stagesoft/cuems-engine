@@ -11,6 +11,7 @@ class ConfigManager(Thread):
         self.tmp_upload_path = None
         self.database_name = None
         self.node_conf = {}
+        self.node_outputs = {}
         self.project_conf = {}
         self.project_maps = {}
         self.load_node_conf()
@@ -24,7 +25,6 @@ class ConfigManager(Thread):
         settings_file = path.join(self.cuems_conf_path, 'settings.xml')
         try:
             engine_settings = Settings(schema=settings_schema, xmlfile=settings_file)
-            # engine_settings.read()
         except FileNotFoundError as e:
             raise e
 
@@ -57,6 +57,21 @@ class ConfigManager(Thread):
         #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
         #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
+        self.load_output_settings()
+
+    def load_output_settings(self):
+        settings_schema = path.join(self.cuems_conf_path, 'outputs.xsd')
+        settings_file = path.join(self.cuems_conf_path, 'outputs.xml')
+        try:
+            self.node_outputs = Settings(schema=settings_schema, xmlfile=settings_file)
+            self.node_outputs.pop('xmlns:cms')
+            self.node_outputs.pop('xmlns:xsi')
+            self.node_outputs.pop('xsi:schemaLocation')
+        except FileNotFoundError as e:
+            raise e
+        except KeyError:
+            pass
+
     def load_project_settings(self, project_uname):
         conf = {}
         try:
@@ -81,17 +96,19 @@ class ConfigManager(Thread):
             mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
             mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
             maps = Settings(mappings_schema, mappings_path)
-        except FileNotFoundError as e:
-            raise e
         except Exception as e:
-            logger.error(e)
+            logger.info(f'Project mappings not found. Adopting default mappings.')
 
-        try:
-            self.project_maps = maps['ProjectMappings']
-        except:
-            pass
-        else:
-            logger.info(f'Project {project_uname} mappings loaded')
+            try:
+                mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
+                mappings_path = path.join(self.cuems_conf_path, 'default_mappings.xml')
+                maps = Settings(mappings_schema, mappings_path)
+            except Exception as e:
+                logger.error(f"Default mappings file not found. Project can't be loaded")
+                raise e
+
+        self.project_maps = maps['ProjectMappings']
+        logger.info(f'Project {project_uname} mappings loaded')
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':

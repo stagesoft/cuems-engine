@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cms:CuemsOutputs xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/outputs.xsd">
+    <video_outputs>
+        <output>0</output>
+        <output>1</output>
+    </video_outputs>
+    <default_video_output>0</default_video_output>
+    <audio_outputs>
+        <output>system:playback_1</output>
+        <output>system:playback_2</output>
+    </audio_outputs>
+    <default_audio_output>system:playback_1</default_audio_output>
+</cms:CuemsOutputs>

@@ -194,7 +194,7 @@ class CuemsEngine():
         if self.cm.project_maps['Audio']['inputs']:
             for item in self.cm.project_maps['Audio']['inputs']:
                 found = False
-                for real_input in self.cm.node_conf['audio_inputs']:
+                for real_input in self.cm.node_outputs['audio_inputs']:
                     if item['mapping']['mapped_to'] == real_input['input']:
                         found = True
                         break
@@ -205,7 +205,7 @@ class CuemsEngine():
             # TO DO : per channel assignment
             for item in self.cm.project_maps['Audio']['outputs']:
                 found = False
-                for real_output in self.cm.node_conf['audio_outputs']:
+                for real_output in self.cm.node_outputs['audio_outputs']:
                     if item['mapping']['mapped_to'] == real_output['output']:
                         found = True
                         break
@@ -232,7 +232,7 @@ class CuemsEngine():
         pass
 
     def check_video_devs(self):
-        for index, item in enumerate(self.cm.node_conf['video_outputs']):
+        for index, item in enumerate(self.cm.node_outputs['video_outputs']):
             # Assign a videoplayer object
             port = self.cm.players_port_index['start']
             while port in self.cm.players_port_index['used']:
@@ -446,17 +446,17 @@ class CuemsEngine():
 
         try:
             self.cm.load_project_mappings(kwargs["value"])
-            logger.info(self.cm.project_maps)
-        except FileNotFoundError:
-            logger.info(f'Project mappings file not found. Adopting default outputs.')
+            # logger.info(self.cm.project_maps)
         except:
-            logger.info(f'Project mappings error while loading. Adopting default outputs.')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
+            return
 
         try:
-            if self.cm.project_maps:
-                self.check_project_mappings()
+            self.check_project_mappings()
         except Exception as e:
-            logger.exception(e)
+            logger.error('Wrong configuration on input/output mappings')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'})
+            return
 
         try:
             schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')
@@ -478,27 +478,37 @@ class CuemsEngine():
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            return
 
-        else:
-            try:
-                self.script_media_check()
-            except FileNotFoundError:
-                logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
-            else:
-                self.initial_cuelist_process(self.script.cuelist)
+        try:
+            self.script_media_check()
+        except FileNotFoundError:
+            logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Media not found'})
+            self.script = None
+            return
 
-                # Then we force-arm the first item in the main list
-                self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
-                # And get it ready to wait a GO command
-                self.next_cue_pointer = self.script.cuelist.contents[0]
-                self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
+        try:
+            self.initial_cuelist_process(self.script.cuelist)
+        except:
+            logger.error(f"Error processing script data. Can't be loaded.")
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
+            self.script = None
+            return
 
-                # Start MTC!
-                libmtcmaster.MTCSender_play(self.mtcmaster)
+        # Then we force-arm the first item in the main list
+        self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+        # And get it ready to wait a GO command
+        self.next_cue_pointer = self.script.cuelist.contents[0]
+        self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
-            # Everything went OK we notify it to the WS server through the queue
-            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-            self._editor_request_uuid = None
+        # Start MTC!
+        libmtcmaster.MTCSender_play(self.mtcmaster)
+
+        # Everything went OK we notify it to the WS server through the queue
+        self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+        self._editor_request_uuid = None
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -679,6 +689,7 @@ class CuemsEngine():
 
         except Exception as e:
             logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
+            raise
             
     def disarm_all(self):
         for item in self.armedcues:
