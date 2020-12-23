@@ -97,6 +97,7 @@ class CuemsEngine():
         settings_dict['library_path'] = self.cm.library_path
         settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
         settings_dict['database_name'] = self.cm.database_name
+        settings_dict['load_timeout'] = self.cm.node_conf['load_timeout']
         settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
         self.engine_queue = MPQueue()
         self.editor_queue = MPQueue()
