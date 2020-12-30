@@ -34,6 +34,7 @@ from .ActionCue import ActionCue
 # from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
+from .HWDiscovery import hw_discovery
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
@@ -45,6 +46,13 @@ class CuemsEngine():
         logger.info('CUEMS ENGINE INITIALIZATION')
         # Main thread ids
         logger.info(f'Main thread PID: {os.getpid()}')
+
+        try:
+            logger.info(f'Hardware discovery launched...')
+            hw_discovery()
+        except Exception as e:
+            logger.exception(f'Exception: {e}')
+            exit(-1)
 
         # Running flag
         self.stop_requested = False
@@ -150,7 +158,10 @@ class CuemsEngine():
         try:
             self.check_video_devs()
         except Exception as e:
+            logger.error(f'Error checkecing & starting video devices...')
             logger.exception(e)
+            logger.error(f'Exiting...')
+            exit(-1)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -179,7 +190,7 @@ class CuemsEngine():
                 self._editor_request_uuid = None
         except KeyError:
             try:
-                if not item['action'] in ['load_project']:
+                if not item['action'] in ['load_project', 'hw_discovery']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
                     self._editor_request_uuid = None
                 else:
@@ -187,48 +198,67 @@ class CuemsEngine():
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         self.load_project_callback(value = item['value'])
+                    elif item['action'] == 'hw_discovery':
+                        self._editor_request_uuid = item['action_uuid']
+                        logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        try:
+                            hw_discovery()
+                        except:
+                            self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
+                            logger.error(f'HW discovery failed after ws request, request id: {self._editor_request_uuid}')
+                            self._editor_request_uuid = None
+                        else:
+                            self.editor_queue.put({'type':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+                            self._editor_request_uuid = None
+
             except KeyError:
                 logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
 
     #########################################################
     # Check functions
     def check_project_mappings(self):
-        if self.cm.project_maps['Audio']['inputs']:
-            for item in self.cm.project_maps['Audio']['inputs']:
-                found = False
-                for real_input in self.cm.node_outputs['audio_inputs']:
-                    if item['mapping']['mapped_to'] == real_input['input']:
-                        found = True
-                        break
-                if not found:
-                    raise Exception(f'Audio input mapping incorrect')
+        if self.cm.default_mappings:
+            return True
 
-        if self.cm.project_maps['Audio']['outputs']:
-            # TO DO : per channel assignment
-            for item in self.cm.project_maps['Audio']['outputs']:
-                found = False
-                for real_output in self.cm.node_outputs['audio_outputs']:
-                    if item['mapping']['mapped_to'] == real_output['output']:
-                        found = True
-                        break
-                if not found:
-                    raise Exception(f'Audio output mapping incorrect')
+        if self.cm.project_maps['audio']:
+            if self.cm.project_maps['audio']['outputs']:
+                # TO DO : per channel assignment
+                for item in self.cm.project_maps['audio']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['audio_outputs']:
+                            raise Exception(f'Audio output mapping incorrect')
 
-        if self.cm.project_maps['Video']['inputs']:
-            # TO DO
-            pass
+            elif self.cm.project_maps['audio']['inputs']:
+                for item in self.cm.project_maps['audio']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['audio_inputs']:
+                            raise Exception(f'Audio input mapping incorrect')
 
-        if self.cm.project_maps['Video']['outputs']:
-            for item in self.cm.project_maps['Video']['outputs']:
-                if item['mapping']['mapped_to'] not in self._video_players.keys():
-                    raise Exception(f'Video output mapping incorrect')
-        
-        if self.cm.project_maps['DMX']['inputs']:
-            # TO DO
-            pass
-        if self.cm.project_maps['DMX']['outputs']:
-            # TO DO
-            pass
+        if self.cm.project_maps['video']:
+            if self.cm.project_maps['video']['outputs']:
+                for item in self.cm.project_maps['video']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['video_outputs']:
+                            raise Exception(f'Video output mapping incorrect')
+
+            elif self.cm.project_maps['video']['inputs']:
+                for item in self.cm.project_maps['video']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['video_inputs']:
+                            raise Exception(f'Video input mapping incorrect')
+
+        if self.cm.project_maps['dmx']:
+            if self.cm.project_maps['dmx']['outputs']:
+                for item in self.cm.project_maps['dmx']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['dmx_outputs']:
+                            raise Exception(f'dmx output mapping incorrect')
+
+            elif self.cm.project_maps['dmx']['inputs']:
+                for item in self.cm.project_maps['dmx']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['dmx_inputs']:
+                            raise Exception(f'dmx input mapping incorrect')
 
     def check_audio_devs(self):
         pass
@@ -240,12 +270,12 @@ class CuemsEngine():
             while port in self.cm.players_port_index['used']:
                 port += 2
 
-            player_id = item['output']
+            player_id = item
             self._video_players[player_id] = dict()
 
             try:
                 self._video_players[player_id]['player'] = VideoPlayer(  port, 
-                                                                    item['output'],
+                                                                    item,
                                                                     self.cm.node_conf['videoplayer']['path'],
                                                                     self.cm.node_conf['videoplayer']['args'],
                                                                     '')

@@ -14,10 +14,15 @@ class ConfigManager(Thread):
         self.node_outputs = {}
         self.project_conf = {}
         self.project_maps = {}
+        self.default_mappings = False
         self.load_node_conf()
+
         self.players_port_index = { "start":int(self.node_conf['osc_in_port_base']), 
                                     "used":[]
                                     }
+
+        self.load_node_outputs()
+
         self.start()
 
     def load_node_conf(self):
@@ -57,20 +62,72 @@ class ConfigManager(Thread):
         #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
         #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
-        self.load_output_settings()
-
-    def load_output_settings(self):
-        settings_schema = path.join(self.cuems_conf_path, 'outputs.xsd')
-        settings_file = path.join(self.cuems_conf_path, 'outputs.xml')
+    def load_node_outputs(self):
+        settings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
+        settings_file = path.join(self.cuems_conf_path, 'default_mappings.xml')
         try:
-            self.node_outputs = Settings(schema=settings_schema, xmlfile=settings_file)
-            self.node_outputs.pop('xmlns:cms')
-            self.node_outputs.pop('xmlns:xsi')
-            self.node_outputs.pop('xsi:schemaLocation')
+            node_outputs = Settings(schema=settings_schema, xmlfile=settings_file).copy()
+            node_outputs.pop('xmlns:cms')
+            node_outputs.pop('xmlns:xsi')
+            node_outputs.pop('xsi:schemaLocation')
         except FileNotFoundError as e:
             raise e
         except KeyError:
             pass
+
+        for key, value in node_outputs.items():
+            if key == 'audio':
+                if not value:
+                    break
+                
+                for item in value:
+                    if 'outputs' in item.keys():
+                        self.node_outputs['audio_outputs'] = []
+                        for subitem in item['outputs']:
+                            self.node_outputs['audio_outputs'].append(subitem['output']['name'])
+                    elif 'default_output' in item.keys():
+                        self.node_outputs['default_audio_output'] = item['default_output']
+                    elif 'inputs' in item.keys():
+                        self.node_outputs['audio_inputs'] = []
+                        for subitem in item['inputs']:
+                            self.node_outputs['audio_inputs'].append(subitem['input']['name'])
+                    elif 'default_input' in item.keys():
+                        self.node_outputs['default_audio_input'] = item['default_input']
+            elif key == 'video':
+                if not value:
+                    break
+
+                for item in value:
+                    if 'outputs' in item.keys():
+                        self.node_outputs['video_outputs'] = []
+                        for subitem in item['outputs']:
+                            self.node_outputs['video_outputs'].append(subitem['output']['name'])
+                    elif 'default_output' in item.keys():
+                        self.node_outputs['default_video_output'] = item['default_output']
+                    elif 'inputs' in item.keys():
+                        self.node_outputs['video_inputs'] = []
+                        for subitem in item['inputs']:
+                            self.node_outputs['video_inputs'].append(subitem['input']['name'])
+                    elif 'default_input' in item.keys():
+                        self.node_outputs['default_video_input'] = item['default_input']
+            elif key == 'dmx':
+                self.node_outputs['dmx_outputs'] = []
+                if not value:
+                    break
+
+                for item in value:
+                    if 'outputs' in item.keys():
+                        self.node_outputs['dmx_outputs'] = []
+                        for subitem in item['outputs']:
+                            self.node_outputs['dmx_outputs'].append(subitem['output']['name'])
+                    elif 'default_output' in item.keys():
+                        self.node_outputs['default_dmx_output'] = item['default_output']
+                    elif 'inputs' in item.keys():
+                        self.node_outputs['dmx_inputs'] = []
+                        for subitem in item['inputs']:
+                            self.node_outputs['dmx_inputs'].append(subitem['input']['name'])
+                    elif 'default_input' in item.keys():
+                        self.node_outputs['default_dmx_input'] = item['default_input']
 
     def load_project_settings(self, project_uname):
         conf = {}
@@ -81,14 +138,20 @@ class ConfigManager(Thread):
         except FileNotFoundError as e:
             raise e
         except Exception as e:
-            logger.error(e)
+            logger.exception(e)
 
-        try:
-            self.project_conf = conf['ProjectSettings']
-        except:
-            pass
-        else:
-            logger.info(f'Project {project_uname} settings loaded')
+        conf.pop('xmlns:cms')
+        conf.pop('xmlns:xsi')
+        conf.pop('xsi:schemaLocation')
+        self.project_conf = conf.copy()
+        for key, value in self.project_conf.items():
+            corrected_dict = {}
+            if value:
+                for item in value:
+                    corrected_dict.update(item)
+                self.project_conf[key] = corrected_dict
+
+        logger.info(f'Project {project_uname} settings loaded')
 
     def load_project_mappings(self, project_uname):
         maps = {}
@@ -96,6 +159,7 @@ class ConfigManager(Thread):
             mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
             mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
             maps = Settings(mappings_schema, mappings_path)
+            self.default_mappings = False
         except Exception as e:
             logger.info(f'Project mappings not found. Adopting default mappings.')
 
@@ -103,20 +167,50 @@ class ConfigManager(Thread):
                 mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
                 mappings_path = path.join(self.cuems_conf_path, 'default_mappings.xml')
                 maps = Settings(mappings_schema, mappings_path)
+                self.default_mappings = True
             except Exception as e:
                 logger.error(f"Default mappings file not found. Project can't be loaded")
                 raise e
 
-        self.project_maps = maps['ProjectMappings']
-        logger.info(f'Project {project_uname} mappings loaded')
+        maps.pop('xmlns:cms')
+        maps.pop('xmlns:xsi')
+        maps.pop('xsi:schemaLocation')
+        self.project_maps = maps.copy()
+        # By now we need to correct the data structure from the xml
+        # the converter is not getting what we really intended but we'll
+        # correct it here by the moment
+        try:
+            for key, value in self.project_maps.items():
+                if value:
+                    corrected_dict = {}
+                    for item in value:
+                        corrected_dict.update(item)
+                    self.project_maps[key] = corrected_dict
+            
+            for key, value in self.project_maps.items():
+                if value:
+                    for subkey, subvalue in value.items():
+                        new_list = []
+                        if isinstance(subvalue, list):
+                            for elem in subvalue:
+                                if isinstance(elem, dict):
+                                    new_list.append(list(elem.values()))
+                                else:
+                                    new_list.append(elem)
+                            value[subkey] = new_list
+        except Exception as e:
+            logger.error(f"Error loading project mappings. {e}")
+        else:
+            logger.info(f'Project {project_uname} mappings loaded')
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
             return self.node_conf['default_video_output']
         else:
-            for item in self.project_maps['Video']['outputs']:
-                if mapping_name == item['mapping']['virtual_name']:
-                    return item['mapping']['mapped_to']
+            for each_out in self.project_maps['video']['outputs']:
+                for each_map in each_out[0]['mappings']:
+                    if mapping_name == each_map['mapped_to']:
+                        return each_out[0]['name']
 
         raise Exception(f'Video output wrongly mapped')
 
@@ -124,9 +218,10 @@ class ConfigManager(Thread):
         if mapping_name == 'default':
             return self.node_conf['default_audio_output']
         else:
-            for item in self.project_maps['Audio']['outputs']:
-                if mapping_name == item['mapping']['virtual_name']:
-                    return item['mapping']['mapped_to']
+            for each_out in self.project_maps['audio']['outputs']:
+                for each_map in each_out[0]['mappings']:
+                    if mapping_name == each_map['mapped_to']:
+                        return each_out[0]['name']
 
         raise Exception(f'Audio output wrongly mapped')
 
