@@ -216,11 +216,19 @@ class VideoCue(Cue):
                 if output['output_name'] == 'default':
                     break
                 found = False
-                for item in settings.project_maps['Video']['outputs']:
-                    if output['output_name'] == item['mapping']['virtual_name']:
-                        found = True
-                if not found:
-                    return False 
+                try:
+                    out_list = settings.project_maps['video']['outputs']
+                except:
+                    found = False
+                else:
+                    for each_out in out_list:
+                        for each_map in each_out[0]['mappings']:
+                            if output['output_name'] == each_map['mapped_to']:
+                                found = True
+                                break
+
+            if not found:
+                return False 
         else:
             for output in self.outputs:
                 if output['output_name'] != 'default':

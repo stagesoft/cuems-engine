@@ -11,9 +11,10 @@ SCHEMA_INSTANCE_URI = 'http://www.w3.org/2001/XMLSchema-instance'
 
 
 class XmlBuilder():
-    def __init__(self, _object, namespace, xsd_path, xml_tree = None,):
+    def __init__(self, _object, namespace, xsd_path, xml_tree = None, xml_root_tag='CuemsProject'):
         self._object = _object
         self.xml_tree = xml_tree
+        self.xml_root_tag = xml_root_tag
         self.class_name = type(_object).__name__
         self.xsd_path = xsd_path
         self.namespace =  namespace
@@ -31,7 +32,8 @@ class XmlBuilder():
     
     def build(self):
 
-        xml_root = ET.Element(f'{{{next(iter(self.namespace.values()))}}}CuemsProject')
+        #xml_root = ET.Element(f'{{{next(iter(self.namespace.values()))}}}CuemsProject')
+        xml_root = ET.Element(f'{{{next(iter(self.namespace.values()))}}}{self.xml_root_tag}')
         xml_root.attrib= {f'{{{SCHEMA_INSTANCE_URI}}}schemaLocation': next(iter(self.namespace.values())) + " " + self.xsd_path}   
         builder_class = self.get_builder_class(self._object)
         self.xml_tree = builder_class(self._object, xml_tree = xml_root).build()
@@ -208,6 +210,48 @@ class MediaXmlBuilder(GenericComplexSubObjectXmlBuilder):
 class UI_propertiesXmlBuilder(GenericComplexSubObjectXmlBuilder):
     pass
 
+class OutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
+    def build(self):
+        if isinstance(self._object, dict):
+            for key, value in self._object.items():
+                if isinstance(value, (str, bool, int, float)):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    sub_dict_element.text = str(value)
+                elif isinstance(value, (type(None))):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                elif isinstance(value, dict):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                    self.recurser(value, sub_dict_element)
+                elif isinstance(value, list):
+                    for item in value:
+                        sub_dict_element = ET.SubElement(self.xml_tree, str(key))
+                        self.recurser(item, sub_dict_element)
+        
+        return self.xml_tree
+
+    def recurser(self, group, xml_tree):
+        if isinstance(group, dict):
+            for key, value in group.items():
+                if isinstance(value, (str, bool, int, float)):
+                    output_subelement = ET.SubElement(xml_tree, key)
+                    output_subelement.text = str(value)
+                elif isinstance(value, (type(None))):
+                    output_subelement = ET.SubElement(xml_tree, key)
+                elif isinstance(value, dict):
+                    output_subelement = ET.SubElement(xml_tree, key)
+                    self.recurser(value, output_subelement)
+                elif isinstance(value, list):
+                    for item in value:
+                        output_subelement = ET.SubElement(xml_tree, key)
+                        self.recurser(item, output_subelement)
+        elif isinstance(group, list):
+            for item in group:
+                if isinstance(value, (str, bool, int, float)):
+                    xml_tree.text = str(item)
+                if isinstance(item, dict):
+                    self.recurser(item, xml_tree)
+        elif isinstance(group, (str, bool, int, float)):
+            xml_tree.text = str(group)
 
 class CueOutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
 

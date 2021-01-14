@@ -30,22 +30,12 @@
             <xs:element name="discovery_timeout" type="xs:positiveInteger" />
             <xs:element name="mtc_port" type="xs:string" />
             <xs:element name="osc_in_port_base" type="xs:positiveInteger" />
-            <xs:element name="video_outputs" type="cms:OutputsType" />
-            <xs:element name="default_video_output" type="xs:string" />
-            <xs:element name="audio_outputs" type="cms:OutputsType" />
-            <xs:element name="default_audio_output" type="xs:string" />
             <xs:element name="videoplayer" type="cms:VideoPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
         </xs:sequence>
         <xs:attribute name="id" type="xs:int"></xs:attribute>
         <xs:attribute name="master" type="cms:BoolType" />
-    </xs:complexType>
-
-    <xs:complexType name="OutputsType">
-        <xs:sequence>
-            <xs:element name="output" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
-        </xs:sequence>
     </xs:complexType>
 
     <xs:complexType name="PlayerType">

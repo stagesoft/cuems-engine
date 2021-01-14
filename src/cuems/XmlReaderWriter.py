@@ -7,19 +7,14 @@ import datetime  as DT
 import os
 import json
 
-from .log import *
+from .log import logger
 from .CTimecode import CTimecode
 from .CMLCuemsConverter import CMLCuemsConverter
 from .DictParser import CuemsParser
 from .XmlBuilder import XmlBuilder
 
-xmlschema_logger = logging.getLogger('xmlschema')
-
-xmlschema_logger.setLevel(logging.INFO)
-
-
 class CuemsXml():
-    def __init__(self, schema, xmlfile=None, namespace={'cms':'http://stagelab.net/cuems'}):
+    def __init__(self, schema, xmlfile=None, namespace={'cms':'http://stagelab.net/cuems'}, xml_root_tag='CuemsProject'):
         self.converter = CMLCuemsConverter
         self.schema_object = None
         self._xmlfile = None
@@ -28,6 +23,7 @@ class CuemsXml():
         self.xmlfile = xmlfile
         self.xmldata = None
         self.namespace = namespace
+        self.xml_root_tag = xml_root_tag
         
     
     @property
@@ -64,11 +60,11 @@ class XmlWriter(CuemsXml):
 
     def write_from_dict(self, project_dict):
         project_object = CuemsParser(project_dict).parse()
-        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema).build()
+        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema, xml_root_tag=self.xml_root_tag).build()
         self.write(xml_data)
 
     def write_from_object(self, project_object):
-        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema).build()
+        xml_data = XmlBuilder(project_object, namespace=self.namespace, xsd_path=self.schema, xml_root_tag=self.xml_root_tag).build()
         self.write(xml_data)
 
 

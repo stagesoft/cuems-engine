@@ -34,6 +34,7 @@ from .ActionCue import ActionCue
 # from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
+from .HWDiscovery import hw_discovery
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 
@@ -44,6 +45,13 @@ class CuemsEngine():
         logger.info('CUEMS ENGINE INITIALIZATION')
         # Main thread ids
         logger.info(f'Main thread PID: {os.getpid()}')
+
+        try:
+            logger.info(f'Hardware discovery launched...')
+            hw_discovery()
+        except Exception as e:
+            logger.exception(f'Exception: {e}')
+            exit(-1)
 
         # Running flag
         self.stop_requested = False
@@ -149,7 +157,10 @@ class CuemsEngine():
         try:
             self.check_video_devs()
         except Exception as e:
+            logger.error(f'Error checkecing & starting video devices...')
             logger.exception(e)
+            logger.error(f'Exiting...')
+            exit(-1)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -178,7 +189,7 @@ class CuemsEngine():
                 self._editor_request_uuid = None
         except KeyError:
             try:
-                if not item['action'] in ['load_project']:
+                if not item['action'] in ['load_project', 'hw_discovery']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
                     self._editor_request_uuid = None
                 else:
@@ -186,65 +197,84 @@ class CuemsEngine():
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         self.load_project_callback(value = item['value'])
+                    elif item['action'] == 'hw_discovery':
+                        self._editor_request_uuid = item['action_uuid']
+                        logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        try:
+                            hw_discovery()
+                        except:
+                            self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
+                            logger.error(f'HW discovery failed after ws request, request id: {self._editor_request_uuid}')
+                            self._editor_request_uuid = None
+                        else:
+                            self.editor_queue.put({'type':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+                            self._editor_request_uuid = None
+
             except KeyError:
                 logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
 
     #########################################################
     # Check functions
     def check_project_mappings(self):
-        if self.cm.project_maps['Audio']['inputs']:
-            for item in self.cm.project_maps['Audio']['inputs']:
-                found = False
-                for real_input in self.cm.node_conf['audio_inputs']:
-                    if item['mapping']['mapped_to'] == real_input['input']:
-                        found = True
-                        break
-                if not found:
-                    raise Exception(f'Audio input mapping incorrect')
+        if self.cm.default_mappings:
+            return True
 
-        if self.cm.project_maps['Audio']['outputs']:
-            # TO DO : per channel assignment
-            for item in self.cm.project_maps['Audio']['outputs']:
-                found = False
-                for real_output in self.cm.node_conf['audio_outputs']:
-                    if item['mapping']['mapped_to'] == real_output['output']:
-                        found = True
-                        break
-                if not found:
-                    raise Exception(f'Audio output mapping incorrect')
+        if self.cm.project_maps['audio']:
+            if self.cm.project_maps['audio']['outputs']:
+                # TO DO : per channel assignment
+                for item in self.cm.project_maps['audio']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['audio_outputs']:
+                            raise Exception(f'Audio output mapping incorrect')
 
-        if self.cm.project_maps['Video']['inputs']:
-            # TO DO
-            pass
+            elif self.cm.project_maps['audio']['inputs']:
+                for item in self.cm.project_maps['audio']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['audio_inputs']:
+                            raise Exception(f'Audio input mapping incorrect')
 
-        if self.cm.project_maps['Video']['outputs']:
-            for item in self.cm.project_maps['Video']['outputs']:
-                if item['mapping']['mapped_to'] not in self._video_players.keys():
-                    raise Exception(f'Video output mapping incorrect')
-        
-        if self.cm.project_maps['DMX']['inputs']:
-            # TO DO
-            pass
-        if self.cm.project_maps['DMX']['outputs']:
-            # TO DO
-            pass
+        if self.cm.project_maps['video']:
+            if self.cm.project_maps['video']['outputs']:
+                for item in self.cm.project_maps['video']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['video_outputs']:
+                            raise Exception(f'Video output mapping incorrect')
+
+            elif self.cm.project_maps['video']['inputs']:
+                for item in self.cm.project_maps['video']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['video_inputs']:
+                            raise Exception(f'Video input mapping incorrect')
+
+        if self.cm.project_maps['dmx']:
+            if self.cm.project_maps['dmx']['outputs']:
+                for item in self.cm.project_maps['dmx']['outputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['dmx_outputs']:
+                            raise Exception(f'dmx output mapping incorrect')
+
+            elif self.cm.project_maps['dmx']['inputs']:
+                for item in self.cm.project_maps['dmx']['inputs']:
+                    for subitem in item:
+                        if subitem['name'] not in self.cm.node_outputs['dmx_inputs']:
+                            raise Exception(f'dmx input mapping incorrect')
 
     def check_audio_devs(self):
         pass
 
     def check_video_devs(self):
-        for index, item in enumerate(self.cm.node_conf['video_outputs']):
+        for index, item in enumerate(self.cm.node_outputs['video_outputs']):
             # Assign a videoplayer object
             port = self.cm.players_port_index['start']
             while port in self.cm.players_port_index['used']:
                 port += 2
 
-            player_id = item['output']
+            player_id = item
             self._video_players[player_id] = dict()
 
             try:
                 self._video_players[player_id]['player'] = VideoPlayer(  port, 
-                                                                    item['output'],
+                                                                    item,
                                                                     self.cm.node_conf['videoplayer']['path'],
                                                                     self.cm.node_conf['videoplayer']['args'],
                                                                     '')
@@ -447,17 +477,17 @@ class CuemsEngine():
 
         try:
             self.cm.load_project_mappings(kwargs["value"])
-            logger.info(self.cm.project_maps)
-        except FileNotFoundError:
-            logger.info(f'Project mappings file not found. Adopting default outputs.')
+            # logger.info(self.cm.project_maps)
         except:
-            logger.info(f'Project mappings error while loading. Adopting default outputs.')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
+            return
 
         try:
-            if self.cm.project_maps:
-                self.check_project_mappings()
+            self.check_project_mappings()
         except Exception as e:
-            logger.exception(e)
+            logger.error('Wrong configuration on input/output mappings')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'})
+            return
 
         try:
             schema = os.path.join(self.cm.cuems_conf_path, 'script.xsd')
@@ -479,27 +509,37 @@ class CuemsEngine():
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            return
 
-        else:
-            try:
-                self.script_media_check()
-            except FileNotFoundError:
-                logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
-            else:
-                self.initial_cuelist_process(self.script.cuelist)
+        try:
+            self.script_media_check()
+        except FileNotFoundError:
+            logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Media not found'})
+            self.script = None
+            return
 
-                # Then we force-arm the first item in the main list
-                self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
-                # And get it ready to wait a GO command
-                self.next_cue_pointer = self.script.cuelist.contents[0]
-                self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
+        try:
+            self.initial_cuelist_process(self.script.cuelist)
+        except:
+            logger.error(f"Error processing script data. Can't be loaded.")
+            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
+            self.script = None
+            return
 
-                # Start MTC!
-                libmtcmaster.MTCSender_play(self.mtcmaster)
+        # Then we force-arm the first item in the main list
+        self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
+        # And get it ready to wait a GO command
+        self.next_cue_pointer = self.script.cuelist.contents[0]
+        self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
-            # Everything went OK we notify it to the WS server through the queue
-            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-            self._editor_request_uuid = None
+        # Start MTC!
+        libmtcmaster.MTCSender_play(self.mtcmaster)
+
+        # Everything went OK we notify it to the WS server through the queue
+        self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+        self._editor_request_uuid = None
 
     def load_cue_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
@@ -680,6 +720,7 @@ class CuemsEngine():
 
         except Exception as e:
             logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
+            raise
             
     def disarm_all(self):
         for item in self.armedcues:
