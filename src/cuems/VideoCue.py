@@ -28,6 +28,8 @@ class VideoCue(Cue):
     def __init__(self, init_dict = None):
         super().__init__(init_dict)
             
+        self._players_mx = {}
+        self._mx_index = None
         self._player = None
         self._osc_route = None
         self._go_thread = None
@@ -75,6 +77,17 @@ class VideoCue(Cue):
             if not self in self._armed_list:
                 self._armed_list.append(self)
             return True
+
+        if self._players_mx['1']['busy']:
+            self._player = self._players_mx['2']['player']
+            self._osc_route = self._players_mx['2']['route']
+            self._players_mx['2']['busy'] = True
+            self._mx_index = '2'
+        else:
+            self._player = self._players_mx['1']['player']
+            self._osc_route = self._players_mx['1']['route']
+            self._players_mx['1']['busy'] = True
+            self._mx_index = '1'
 
         try:
             key = f'{self._osc_route}/jadeo/cmd'
@@ -170,12 +183,14 @@ class VideoCue(Cue):
                 ossia.oscquery_registered_nodes[key][0].parameter.value = 'midi disconnect'
                 logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].parameter.value))
             except KeyError:
-                logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
+                logger.debug(f'Key error 1 (disconnect) in go_callback {key}')
 
         except AttributeError:
             pass
         if self in self._armed_list:
             self.disarm(ossia.conf_queue)
+
+        self._players_mx[self._mx_index]['busy'] = False
 
     def disarm(self, ossia_queue):
         if self.loaded is True:
@@ -200,7 +215,9 @@ class VideoCue(Cue):
                     self._armed_list.remove(self)
             except:
                 pass
-            
+
+            self._players_mx[self._mx_index]['busy'] = False
+        
             self.loaded = False
 
             return True
