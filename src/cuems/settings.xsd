@@ -26,6 +26,8 @@
             <xs:element name="oscquery_port" type="xs:positiveInteger" />
             <xs:element name="oscquery_out_port" type="xs:positiveInteger" />
             <xs:element name="websocket_port" type="xs:positiveInteger" />
+            <xs:element name="load_timeout" type="xs:positiveInteger" />
+            <xs:element name="discovery_timeout" type="xs:positiveInteger" />
             <xs:element name="mtc_port" type="xs:string" />
             <xs:element name="osc_in_port_base" type="xs:positiveInteger" />
             <xs:element name="video_outputs" type="cms:OutputsType" />
