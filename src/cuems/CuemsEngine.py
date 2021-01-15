@@ -144,7 +144,7 @@ class CuemsEngine():
                             '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
-                            '/engine/status/timecode' : [ossia.ValueType.String, None], 
+                            '/engine/status/timecode' : [ossia.ValueType.Int, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
                             '/engine/status/running' : [ossia.ValueType.Bool, None]
