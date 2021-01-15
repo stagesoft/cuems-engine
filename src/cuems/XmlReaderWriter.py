@@ -1,4 +1,4 @@
-""" For the moment it works with pip3 install xmlschema==1.1.2
+""" For the moment it works with pip3 install xmlschema==1.2.2
  """
 
 import xml.etree.ElementTree as ET
