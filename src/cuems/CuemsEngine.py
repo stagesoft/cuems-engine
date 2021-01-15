@@ -147,7 +147,7 @@ class CuemsEngine():
                             '/engine/status/timecode' : [ossia.ValueType.Int, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
-                            '/engine/status/running' : [ossia.ValueType.Bool, None]
+                            '/engine/status/running' : [ossia.ValueType.Int, None]
                             }
 
         self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
@@ -293,14 +293,14 @@ class CuemsEngine():
                                         '/jadeo/corner2' : [ossia.ValueType.List, None],
                                         '/jadeo/corner3' : [ossia.ValueType.List, None],
                                         '/jadeo/corner4' : [ossia.ValueType.List, None],
-                                        '/jadeo/start' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/start' : [ossia.ValueType.Int, None],
                                         '/jadeo/load' : [ossia.ValueType.String, None],
                                         '/jadeo/cmd' : [ossia.ValueType.String, None],
-                                        '/jadeo/quit' : [ossia.ValueType.Bool, None],
+                                        '/jadeo/quit' : [ossia.ValueType.Int, None],
                                         '/jadeo/offset' : [ossia.ValueType.String, None],
                                         '/jadeo/offset.1' : [ossia.ValueType.Int, None],
                                         '/jadeo/midi/connect' : [ossia.ValueType.String, None],
-                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Bool, None]
+                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
                                         }
 
             self.cm.players_port_index['used'].append(port)
@@ -605,7 +605,7 @@ class CuemsEngine():
                 else:
                     self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = ""
 
-                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = True
+                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 1
         else:
             logger.warning('No script loaded, cannot process GO command.')
 
@@ -613,7 +613,7 @@ class CuemsEngine():
         logger.info('OSC PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = int(not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value)
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -622,7 +622,7 @@ class CuemsEngine():
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.go_offset = 0
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 0
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -636,7 +636,7 @@ class CuemsEngine():
             self.ongoing_cue = None
             self.go_offset = 0
 
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 0
 
             if self.script:
                 self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
