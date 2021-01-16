@@ -9,7 +9,7 @@ class CTimecode(Timecode):
         else:
             if start_seconds == 0:
                 start_seconds = None
-                frames = 0
+                frames = None
             super().__init__(framerate, start_timecode, start_seconds, frames)
     
     @classmethod
