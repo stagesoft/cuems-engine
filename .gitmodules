@@ -1,3 +1,6 @@
 [submodule "cuems_editor"]
 	path = src/cuems/cuems_editor
 	url = https://github.com/stagesoft/cuems_editor
+[submodule "src/cuems/cuems_nodeconf"]
+	path = src/cuems/cuems_nodeconf
+	url = git@github.com:stagesoft/cuems_nodeconf.git
