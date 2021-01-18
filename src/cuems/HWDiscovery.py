@@ -50,11 +50,14 @@ def hw_discovery():
                 output_name = decoded[1:decoded.find(':')]
                 outputs_object['video']['outputs']['output'].append({'name':output_name, 'mappings' : {'mapped_to':output_name}})
     except:
-        outputs_object.video_outputs = []
+        outputs_object.['video']['outputs'] = {'output':[]}
     else:
         del outputs_object['video']['outputs']['output'][0]
 
-    outputs_object['video']['default_output'] = outputs_object['video']['outputs']['output'][0]['name']
+    if outputs_object.['video']['outputs']['output']:
+        outputs_object['video']['default_output'] = outputs_object['video']['outputs']['output'][0]['name']
+    else:
+        outputs_object['video']['default_output'] = ''
 
     # XML Writer
     writer = XmlWriter(schema = '/etc/cuems/project_mappings.xsd', xmlfile = '/etc/cuems/default_mappings.xml', xml_root_tag='CuemsProjectMappings')
