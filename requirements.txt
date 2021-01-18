@@ -1,4 +1,0 @@
-elementpath==1.4.3
-pyossia @ file:///home/ion/src/cuems/libossia/libossia-build/src/ossia-python/dist/pyossia-1.0.4+102.g607d11c8.dirty-cp37-cp37m-linux_x86_64.whl
-timecode==1.2.0
-xmlschema==1.1.2
