@@ -37,7 +37,6 @@ from .ConfigManager import ConfigManager
 from .HWDiscovery import hw_discovery
 
 CUEMS_CONF_PATH = '/etc/cuems/'
-CUEMS_USER_CONF_PATH = os.environ['HOME'] + '/.cuems/'
 
 
 # %%
@@ -145,10 +144,10 @@ class CuemsEngine():
                             '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
-                            '/engine/status/timecode' : [ossia.ValueType.String, None], 
+                            '/engine/status/timecode' : [ossia.ValueType.Int, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
-                            '/engine/status/running' : [ossia.ValueType.Bool, None]
+                            '/engine/status/running' : [ossia.ValueType.Int, None]
                             }
 
         self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
@@ -610,7 +609,7 @@ class CuemsEngine():
                 else:
                     self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = ""
 
-                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = True
+                self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 1
         else:
             logger.warning('No script loaded, cannot process GO command.')
 
@@ -618,7 +617,7 @@ class CuemsEngine():
         logger.info('OSC PAUSE!')
         try:
             libmtcmaster.MTCSender_pause(self.mtcmaster)
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = int(not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value)
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -627,7 +626,7 @@ class CuemsEngine():
         try:
             libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.go_offset = 0
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 0
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
 
@@ -641,7 +640,7 @@ class CuemsEngine():
             self.ongoing_cue = None
             self.go_offset = 0
 
-            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = False
+            self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 0
 
             if self.script:
                 self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)

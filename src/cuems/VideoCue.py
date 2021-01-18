@@ -137,8 +137,9 @@ class VideoCue(Cue):
             duration = self.media.regions[0].out_time - self.media.regions[0].in_time
             duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
             self._end_mtc = self._start_mtc + duration
-            offset_to_go = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate) - self._start_mtc
-            ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go.frame_number
+            cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
+            offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
+            ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go
             logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].parameter.value))
         except KeyError:
             logger.debug(f'Key error 1 (offset) in go_callback {key}')
@@ -170,8 +171,8 @@ class VideoCue(Cue):
                     key = f'{self._osc_route}/jadeo/offset'
                     self._start_mtc = mtc.main_tc
                     self._end_mtc = self._start_mtc + duration
-                    offset_to_go = in_time_adjusted - self._start_mtc
-                    ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go.frame_number
+                    offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
+                    ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go
                     logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].parameter.value))
                 except KeyError:
                     logger.debug(f'Key error 1 (offset) in go_callback {key}')
