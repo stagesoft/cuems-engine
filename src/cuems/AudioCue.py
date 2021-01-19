@@ -212,6 +212,7 @@ class AudioCue(Cue):
             found = False
             for output in self.outputs:
                 if output['output_name'] == 'default':
+                    found = True
                     break
                 try:
                     out_list = settings.project_maps['audio']['outputs']
