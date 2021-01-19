@@ -213,10 +213,10 @@ class VideoCue(Cue):
 
     def check_mappings(self, settings):
         if settings.project_maps:
+            found = False
             for output in self.outputs:
                 if output['output_name'] == 'default':
                     break
-                found = False
                 try:
                     out_list = settings.project_maps['video']['outputs']
                 except:
