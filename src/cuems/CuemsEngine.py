@@ -157,7 +157,7 @@ class CuemsEngine():
         try:
             self.check_video_devs()
         except Exception as e:
-            logger.error(f'Error checkecing & starting video devices...')
+            logger.error(f'Error checking & starting video devices...')
             logger.exception(e)
             logger.error(f'Exiting...')
             exit(-1)
@@ -263,54 +263,60 @@ class CuemsEngine():
         pass
 
     def check_video_devs(self):
-        for index, item in enumerate(self.cm.node_outputs['video_outputs']):
-            # Assign a videoplayer object
-            port = self.cm.players_port_index['start']
-            while port in self.cm.players_port_index['used']:
-                port += 2
+        try:
+            if self.cm.node_outputs['video_outputs']:
+                for index, item in enumerate(self.cm.node_outputs['video_outputs']):
+                    # Assign a videoplayer object
+                    port = self.cm.players_port_index['start']
+                    while port in self.cm.players_port_index['used']:
+                        port += 2
 
-            player_id = item
-            self._video_players[player_id] = dict()
+                    player_id = item
+                    self._video_players[player_id] = dict()
 
-            try:
-                self._video_players[player_id]['player'] = VideoPlayer(  port, 
-                                                                    item,
-                                                                    self.cm.node_conf['videoplayer']['path'],
-                                                                    self.cm.node_conf['videoplayer']['args'],
-                                                                    '')
-            except Exception as e:
-                raise e
+                    try:
+                        self._video_players[player_id]['player'] = VideoPlayer(  port, 
+                                                                            item,
+                                                                            self.cm.node_conf['videoplayer']['path'],
+                                                                            self.cm.node_conf['videoplayer']['args'],
+                                                                            '')
+                    except Exception as e:
+                        raise e
 
-            self._video_players[player_id]['player'].start()
+                    self._video_players[player_id]['player'].start()
 
-            # And dinamically attach it to the ossia for remote control it
-            self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["id"]:03}/videoplayer-{index}'
+                    # And dinamically attach it to the ossia for remote control it
+                    self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["id"]:03}/videoplayer-{index}'
 
-            OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
-                                        '/jadeo/yscale' : [ossia.ValueType.Float, None], 
-                                        '/jadeo/corners' : [ossia.ValueType.List, None],
-                                        '/jadeo/corner1' : [ossia.ValueType.List, None],
-                                        '/jadeo/corner2' : [ossia.ValueType.List, None],
-                                        '/jadeo/corner3' : [ossia.ValueType.List, None],
-                                        '/jadeo/corner4' : [ossia.ValueType.List, None],
-                                        '/jadeo/start' : [ossia.ValueType.Int, None],
-                                        '/jadeo/load' : [ossia.ValueType.String, None],
-                                        '/jadeo/cmd' : [ossia.ValueType.String, None],
-                                        '/jadeo/quit' : [ossia.ValueType.Int, None],
-                                        '/jadeo/offset' : [ossia.ValueType.String, None],
-                                        '/jadeo/offset.1' : [ossia.ValueType.Int, None],
-                                        '/jadeo/midi/connect' : [ossia.ValueType.String, None],
-                                        '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
-                                        }
+                    OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
+                                                '/jadeo/yscale' : [ossia.ValueType.Float, None], 
+                                                '/jadeo/corners' : [ossia.ValueType.List, None],
+                                                '/jadeo/corner1' : [ossia.ValueType.List, None],
+                                                '/jadeo/corner2' : [ossia.ValueType.List, None],
+                                                '/jadeo/corner3' : [ossia.ValueType.List, None],
+                                                '/jadeo/corner4' : [ossia.ValueType.List, None],
+                                                '/jadeo/start' : [ossia.ValueType.Int, None],
+                                                '/jadeo/load' : [ossia.ValueType.String, None],
+                                                '/jadeo/cmd' : [ossia.ValueType.String, None],
+                                                '/jadeo/quit' : [ossia.ValueType.Int, None],
+                                                '/jadeo/offset' : [ossia.ValueType.String, None],
+                                                '/jadeo/offset.1' : [ossia.ValueType.Int, None],
+                                                '/jadeo/midi/connect' : [ossia.ValueType.String, None],
+                                                '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
+                                                }
 
-            self.cm.players_port_index['used'].append(port)
+                    self.cm.players_port_index['used'].append(port)
 
-            self.ossia_queue.put(   QueueOSCData(   'add', 
-                                                    self._video_players[player_id]['route'], 
-                                                    self.cm.node_conf['osc_dest_host'], 
-                                                    port,
-                                                    port + 1, 
-                                                    OSC_VIDEOPLAYER_CONF))
+                    self.ossia_queue.put(   QueueOSCData(   'add', 
+                                                            self._video_players[player_id]['route'], 
+                                                            self.cm.node_conf['osc_dest_host'], 
+                                                            port,
+                                                            port + 1, 
+                                                            OSC_VIDEOPLAYER_CONF))
+            else:
+                logger.info('No video outputs detected.')
+        except Exception as e:
+            logger.info('No video outputs detected.')
 
     def quit_video_devs(self):
         for dev in self._video_players.values():

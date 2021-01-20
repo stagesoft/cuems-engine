@@ -81,13 +81,13 @@ class ConfigManager(Thread):
                     break
                 
                 for item in value:
-                    if 'outputs' in item.keys():
+                    if 'outputs' in item.keys() and item['outputs']:
                         self.node_outputs['audio_outputs'] = []
                         for subitem in item['outputs']:
                             self.node_outputs['audio_outputs'].append(subitem['output']['name'])
                     elif 'default_output' in item.keys():
                         self.node_outputs['default_audio_output'] = item['default_output']
-                    elif 'inputs' in item.keys():
+                    elif 'inputs' in item.keys() and item['inputs']:
                         self.node_outputs['audio_inputs'] = []
                         for subitem in item['inputs']:
                             self.node_outputs['audio_inputs'].append(subitem['input']['name'])
@@ -98,13 +98,13 @@ class ConfigManager(Thread):
                     break
 
                 for item in value:
-                    if 'outputs' in item.keys():
+                    if 'outputs' in item.keys() and item['outputs']:
                         self.node_outputs['video_outputs'] = []
                         for subitem in item['outputs']:
                             self.node_outputs['video_outputs'].append(subitem['output']['name'])
                     elif 'default_output' in item.keys():
                         self.node_outputs['default_video_output'] = item['default_output']
-                    elif 'inputs' in item.keys():
+                    elif 'inputs' in item.keys() and item['inputs']:
                         self.node_outputs['video_inputs'] = []
                         for subitem in item['inputs']:
                             self.node_outputs['video_inputs'].append(subitem['input']['name'])
@@ -116,7 +116,7 @@ class ConfigManager(Thread):
                     break
 
                 for item in value:
-                    if 'outputs' in item.keys():
+                    if 'outputs' in item.keys() and item['outputs']:
                         self.node_outputs['dmx_outputs'] = []
                         for subitem in item['outputs']:
                             self.node_outputs['dmx_outputs'].append(subitem['output']['name'])
@@ -124,7 +124,7 @@ class ConfigManager(Thread):
                         self.node_outputs['default_dmx_output'] = item['default_output']
                     elif 'inputs' in item.keys():
                         self.node_outputs['dmx_inputs'] = []
-                        for subitem in item['inputs']:
+                        for subitem in item['inputs'] and item['inputs']:
                             self.node_outputs['dmx_inputs'].append(subitem['input']['name'])
                     elif 'default_input' in item.keys():
                         self.node_outputs['default_dmx_input'] = item['default_input']

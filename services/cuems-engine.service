@@ -7,7 +7,7 @@ Type=simple
 Restart=always
 ExecStartPre=/bin/mkdir -p /var/run/cuems-engine
 PIDFile=/var/run/cuems-engine/service.pid
-ExecStart=/home/stagelab/.pyenv/versions/3.7.3/bin/python3.7 /home/stagelab/src/cuems/cuems-engine/src/engine_server_run.py
+ExecStart=/home/stagelab/.pyenv/versions/cuems/bin/python3.7 /home/stagelab/src/cuems/cuems-engine/src/engine.py
 
 [Install]
 WantedBy=multi-user.target

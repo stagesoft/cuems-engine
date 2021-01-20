@@ -18,8 +18,8 @@ class AudioCue(Cue):
                             '/volmaster' : [ossia.ValueType.Float, None],
                             '/play' : [ossia.ValueType.Impulse, None],
                             '/stop' : [ossia.ValueType.Impulse, None],
-                            '/stoponlost' : [ossia.ValueType.Bool, None],
-                            '/mtcfollow' : [ossia.ValueType.Bool, None],
+                            '/stoponlost' : [ossia.ValueType.Int, None],
+                            '/mtcfollow' : [ossia.ValueType.Int, None],
                             '/offset' : [ossia.ValueType.Float, None],
                             '/check' : [ossia.ValueType.Impulse, None]
                             }
@@ -131,7 +131,7 @@ class AudioCue(Cue):
             # Connect to mtc signal
         try:
             key = f'{self._osc_route}/mtcfollow'
-            ossia.oscquery_registered_nodes[key][0].parameter.value = True
+            ossia.oscquery_registered_nodes[key][0].parameter.value = 1
         except KeyError:
             logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -162,7 +162,7 @@ class AudioCue(Cue):
                 
             try:
                 key = f'{self._osc_route}/mtcfollow'
-                ossia.oscquery_registered_nodes[key][0].parameter.value = False
+                ossia.oscquery_registered_nodes[key][0].parameter.value = 0
             except KeyError:
                 logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -209,10 +209,11 @@ class AudioCue(Cue):
 
     def check_mappings(self, settings):
         if settings.project_maps:
+            found = False
             for output in self.outputs:
                 if output['output_name'] == 'default':
+                    found = True
                     break
-                found = False
                 try:
                     out_list = settings.project_maps['audio']['outputs']
                 except:

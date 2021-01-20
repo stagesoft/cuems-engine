@@ -4,6 +4,8 @@ from pprint import pprint
 from .CuemsScript import CuemsScript
 from .XmlReaderWriter import XmlWriter
 from .log import logger
+from Xlib import display
+from Xlib.ext import xinerama
 
 def hw_discovery():
     # Calling audioplayer-cuems in a subprocess
@@ -42,19 +44,24 @@ def hw_discovery():
 
     # Video
     try:
-        p = Popen(['xrandr','--listactivemonitors'], stdout=PIPE, stderr=STDOUT)
-        stdout_lines_iterator = iter(p.stdout.readline, b'')
-        while p.poll() is None:
-            for line in stdout_lines_iterator:
-                decoded = line.decode('utf-8')
-                output_name = decoded[1:decoded.find(':')]
-                outputs_object['video']['outputs']['output'].append({'name':output_name, 'mappings' : {'mapped_to':output_name}})
-    except:
-        outputs_object.video_outputs = []
-    else:
-        del outputs_object['video']['outputs']['output'][0]
+        # Xlib video outputs retreival through xinerama extension
+        disp = display.Display()
+        screen = disp.screen()
+        window = screen.root.create_window(0, 0, 1, 1, 1, screen.root_depth)
 
-    outputs_object['video']['default_output'] = outputs_object['video']['outputs']['output'][0]['name']
+        qs = xinerama.query_screens(window)
+        if qs._data['number'] > 0:
+            for index, screen in enumerate(qs._data['screens']):
+                outputs_object['video']['outputs']['output'].append({'name':f'{index}', 'mappings':{'mapped_to':[f'{index}', ]}})
+
+    except Exception as e:
+        logger.exception(e)
+        outputs_object['video']['outputs'] = {'output':[]}
+
+    if outputs_object['video']['outputs']['output']:
+        outputs_object['video']['default_output'] = outputs_object['video']['outputs']['output'][0]['name']
+    else:
+        outputs_object['video']['default_output'] = ''
 
     # XML Writer
     writer = XmlWriter(schema = '/etc/cuems/project_mappings.xsd', xmlfile = '/etc/cuems/default_mappings.xml', xml_root_tag='CuemsProjectMappings')
