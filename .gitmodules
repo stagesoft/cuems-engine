@@ -3,4 +3,4 @@
 	url = https://github.com/stagesoft/cuems_editor
 [submodule "src/cuems/cuems_nodeconf"]
 	path = src/cuems/cuems_nodeconf
-	url = git@github.com:stagesoft/cuems_nodeconf.git
+	url = https://github.com/stagesoft/cuems_nodeconf.git
