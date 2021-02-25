@@ -288,5 +288,8 @@ class DmxCueOutputXmlBuilder(CueOutputsXmlBuilder):
     pass
 
     
+class CuemsNodeDictXmlBuilder(CuemsScriptXmlBuilder):
+    pass
+    
 class NoneTypeXmlBuilder(GenericSimpleSubObjectXmlBuilder): # TODO: clean, not need anymore? 
     pass
