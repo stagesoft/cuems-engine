@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from enum import Enum
 
 from .log import logger
 from .DictParser import GenericDict
@@ -8,7 +9,7 @@ PARSER_SUFFIX = 'XmlBuilder'
 GENERIC_BUILDER = 'GenericCueXmlBuilder'
 
 SCHEMA_INSTANCE_URI = 'http://www.w3.org/2001/XMLSchema-instance'
-
+VALUE_TYPES = (str, bool, int, float, Enum)
 
 class XmlBuilder():
     def __init__(self, _object, namespace, xsd_path, xml_tree = None, xml_root_tag='CuemsProject'):
@@ -26,7 +27,7 @@ class XmlBuilder():
         try:
             builder_class = globals()[builder_class_name]
         except KeyError as err:
-            # logger.debug("Could not find class {0}, reverting to generic builder class".format(err))
+            logger.debug("Could not find class {0}, reverting to generic builder class".format(err))
             builder_class = globals()[GENERIC_BUILDER]
         return builder_class
     
@@ -53,7 +54,7 @@ class CuemsScriptXmlBuilder(XmlBuilder):
 
         for key, value in self._object.items():
             
-            if isinstance(value, (str, bool, int, float)):
+            if isinstance(value, VALUE_TYPES):
                 cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
             elif isinstance(value, (type(None))):
@@ -71,7 +72,7 @@ class CueListXmlBuilder(CuemsScriptXmlBuilder):
         cuelist_element = ET.SubElement(self.xml_tree, self.class_name)
         for key, value in self._object.items():
             cue_subelement = ET.SubElement(cuelist_element, str(key))          
-            if isinstance(value, (str, bool, int, float)):
+            if isinstance(value, VALUE_TYPES):
                 cue_subelement.text = str(value)
             elif isinstance(value, (type(None))):
                 pass
@@ -92,7 +93,7 @@ class GenericCueXmlBuilder(CuemsScriptXmlBuilder):
     def build(self):
         cue_element = ET.SubElement(self.xml_tree, self.class_name)
         for key, value in self._object.items():
-            if isinstance(value, (str, bool, int, float)):
+            if isinstance(value, VALUE_TYPES):
                 cue_subelement = ET.SubElement(cue_element, str(key))
                 cue_subelement.text = str(value)
             elif isinstance(value, (type(None))):
@@ -150,7 +151,7 @@ class GenericComplexSubObjectXmlBuilder(CuemsScriptXmlBuilder):
     def build(self):
         if isinstance(self._object, dict):
             for key, value in self._object.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                     sub_dict_element.text = str(value)
                 elif isinstance(value, (type(None))):
@@ -165,7 +166,7 @@ class GenericComplexSubObjectXmlBuilder(CuemsScriptXmlBuilder):
     def recurser(self, group, xml_tree):
         if isinstance(group, dict):
             for key, value in group.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     cue_subelement = ET.SubElement(xml_tree, key)
                     cue_subelement.text = str(value)
                 elif isinstance(value, (type(None))):
@@ -189,7 +190,7 @@ class MediaXmlBuilder(GenericComplexSubObjectXmlBuilder):
             
 
             for key, value in self._object.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     cue_subelement = ET.SubElement(self.xml_tree, key)
                     cue_subelement.text = str(value)
                 elif isinstance(value, (type(None))):
@@ -214,7 +215,7 @@ class OutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
     def build(self):
         if isinstance(self._object, dict):
             for key, value in self._object.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                     sub_dict_element.text = str(value)
                 elif isinstance(value, (type(None))):
@@ -232,7 +233,7 @@ class OutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
     def recurser(self, group, xml_tree):
         if isinstance(group, dict):
             for key, value in group.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     output_subelement = ET.SubElement(xml_tree, key)
                     output_subelement.text = str(value)
                 elif isinstance(value, (type(None))):
@@ -246,11 +247,11 @@ class OutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
                         self.recurser(item, output_subelement)
         elif isinstance(group, list):
             for item in group:
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     xml_tree.text = str(item)
                 if isinstance(item, dict):
                     self.recurser(item, xml_tree)
-        elif isinstance(group, (str, bool, int, float)):
+        elif isinstance(group, VALUE_TYPES):
             xml_tree.text = str(group)
 
 class CueOutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
@@ -262,7 +263,7 @@ class CueOutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
             
 
             for key, value in self._object.items():
-                if isinstance(value, (str, bool, int, float)):
+                if isinstance(value, VALUE_TYPES):
                     cue_subelement = ET.SubElement(cue_element, key)
                     cue_subelement.text = str(value)
                 elif isinstance(value, (type(None))):
