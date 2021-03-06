@@ -13,6 +13,7 @@ from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from .ActionCue import ActionCue
 from .CTimecode import CTimecode
 from .log import logger
+from .cuems_nodeconf.CuemsNode import CuemsNodeDict, CuemsNode
 
 PARSER_SUFFIX = 'Parser'
 GENERIC_PARSER = 'GenericParser'
@@ -233,6 +234,19 @@ class AudioCueOutputParser(OutputsParser):
 class VideoCueOutputParser(OutputsParser):
     pass
 class DmxCueOutputParser(OutputsParser):
+    pass
+
+class CuemsNodeDictParser(OutputsParser):
+    def parse(self):
+        self.item_rp = list()
+        for item in self.init_dict:
+            for dict_key, dict_value in item.items():
+                key_parser_class, key_class_string = self.get_parser_class(dict_key)
+                self.item_rp.append(key_parser_class(init_dict=dict_value, class_string=key_class_string).parse()) 
+
+        return self.item_rp
+
+class CuemsNodeParser(GenericParser):
     pass
 
 class NoneTypeParser():
