@@ -16,6 +16,7 @@ from .CTimecode import CTimecode
 import xmlschema.exceptions
 
 from .cuems_editor.CuemsWsServer import CuemsWsServer
+from .cuems_hwdiscovery.CuemsHwDiscovery import HWDiscovery
 
 from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
@@ -34,24 +35,23 @@ from .ActionCue import ActionCue
 # from .CueProcessor import CuePriorityQueue, CueQueueProcessor
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
-from .HWDiscovery import hw_discovery
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 
 
 # %%
 class CuemsEngine():
+    '''
+    Our main engine class. An object of this class runs all the inner
+    logical part of communications with the WebSocket system as well as
+    with the Ossia System to deal with the projects and execute them
+    launching players, controlling their logics and so on...
+    '''
+
     def __init__(self):
         logger.info('CUEMS ENGINE INITIALIZATION')
         # Main thread ids
         logger.info(f'Main thread PID: {os.getpid()}')
-
-        try:
-            logger.info(f'Hardware discovery launched...')
-            hw_discovery()
-        except Exception as e:
-            logger.exception(f'Exception: {e}')
-            exit(-1)
 
         # Running flag
         self.stop_requested = False
@@ -201,7 +201,7 @@ class CuemsEngine():
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         try:
-                            hw_discovery()
+                            HWDiscovery()
                         except:
                             self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
                             logger.error(f'HW discovery failed after ws request, request id: {self._editor_request_uuid}')

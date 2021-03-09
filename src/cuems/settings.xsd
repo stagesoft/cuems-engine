@@ -9,6 +9,8 @@
                             <xs:element name="library_path" type="xs:string" minOccurs="1" maxOccurs="1" />
                             <xs:element name="tmp_upload_path" type="xs:string" minOccurs="1" maxOccurs="1" />
                             <xs:element name="database_name" type="xs:string" minOccurs="1" maxOccurs="1" />
+                            <xs:element name="autoconf_lock_file" type="xs:string" minOccurs="1" maxOccurs="1" />
+                            <xs:element name="show_lock_file" type="xs:string" minOccurs="1" maxOccurs="1" />
                             <!-- Node settings -->
                             <xs:element name="node" type="cms:NodeConfType" minOccurs="1" maxOccurs="1"></xs:element>
                         </xs:sequence>
