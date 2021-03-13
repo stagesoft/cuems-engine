@@ -51,8 +51,6 @@ class ConfigManager(Thread):
         else:
             self.database_name = engine_settings['Settings']['database_name']
 
-        self.autoconf_lock_file = engine_settings['Settings']['autoconf_lock_file']
-
         self.show_lock_file = engine_settings['Settings']['show_lock_file']
 
         # Now we know where the library is, let's check it out

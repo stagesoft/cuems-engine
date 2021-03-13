@@ -4,7 +4,6 @@
         <library_path>/opt/cuems_library</library_path>
         <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
         <database_name>project-manager.db</database_name>
-        <autoconf_lock_file>first_time.lock</autoconf_lock_file>
         <show_lock_file>show.lock</show_lock_file>
         <node id="0" master="True">
             <osc_dest_host>localhost</osc_dest_host>
