@@ -3,19 +3,33 @@
     <xs:element name="CuemsProjectMappings">
         <xs:complexType>
             <xs:sequence>
-                <xs:element name="audio" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
-                <xs:element name="video" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
-                <xs:element name="dmx" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
+                <xs:element name="number_of_nodes" minOccurs="1" maxOccurs="1" type="xs:nonNegativeInteger" />
+                <xs:element name="nodes" minOccurs="1" maxOccurs="1" type="cms:NodesType" />
             </xs:sequence>
         </xs:complexType>
     </xs:element>
 
+    <xs:complexType name="NodesType">
+        <xs:sequence>
+            <xs:element name="node" minOccurs="1" maxOccurs="unbounded" type="cms:NodeType" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="NodeType">
+        <xs:sequence>
+            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString" />
+            <xs:element name="audio" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
+            <xs:element name="video" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
+            <xs:element name="dmx" minOccurs="0" maxOccurs="1" type="cms:DeviceType" />
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:complexType name="DeviceType">
         <xs:sequence>
             <xs:element name="outputs" minOccurs="0" maxOccurs="unbounded" type="cms:PutGroupType" />
-            <xs:element name="default_output" minOccurs="0" maxOccurs="1" type="xs:string" />
+            <xs:element name="default_output" minOccurs="0" maxOccurs="unbounded" type="xs:string" />
             <xs:element name="inputs" minOccurs="0" maxOccurs="unbounded" type="cms:PutGroupType" />
-            <xs:element name="default_input" minOccurs="0" maxOccurs="1" type="xs:string" />
+            <xs:element name="default_input" minOccurs="0" maxOccurs="unbounded" type="xs:string" />
         </xs:sequence>
     </xs:complexType>
 
