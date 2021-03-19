@@ -225,8 +225,8 @@ class OutputsXmlBuilder(GenericComplexSubObjectXmlBuilder):
                     sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                     self.recurser(value, sub_dict_element)
                 elif isinstance(value, list):
+                    sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                     for item in value:
-                        sub_dict_element = ET.SubElement(self.xml_tree, str(key))
                         self.recurser(item, sub_dict_element)
         
         return self.xml_tree
