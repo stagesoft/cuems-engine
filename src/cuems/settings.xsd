@@ -23,11 +23,13 @@
     <!-- TYPES DEFINITIONS -->
     <xs:complexType name="NodeConfType">
         <xs:sequence>
+            <xs:element name="uuid" type="cms:NonEmptyString" />
             <xs:element name="osc_dest_host" type="cms:NonEmptyString" />
             <xs:element name="oscquery_port" type="xs:positiveInteger" />
             <xs:element name="oscquery_out_port" type="xs:positiveInteger" />
             <xs:element name="websocket_port" type="xs:positiveInteger" />
             <xs:element name="load_timeout" type="xs:positiveInteger" />
+            <xs:element name="nodeconf_timeout" type="xs:positiveInteger" />
             <xs:element name="discovery_timeout" type="xs:positiveInteger" />
             <xs:element name="mtc_port" type="xs:string" />
             <xs:element name="osc_in_port_base" type="xs:positiveInteger" />

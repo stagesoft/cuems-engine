@@ -6,11 +6,13 @@
         <database_name>project-manager.db</database_name>
         <show_lock_file>show.lock</show_lock_file>
         <node id="0" master="True">
+            <uuid>2cf05d21cca3</uuid>
             <osc_dest_host>localhost</osc_dest_host>
             <oscquery_port>9090</oscquery_port>
             <oscquery_out_port>9091</oscquery_out_port>
             <websocket_port>9092</websocket_port>
             <load_timeout>15000</load_timeout>
+            <nodeconf_timeout>5000</nodeconf_timeout>
             <discovery_timeout>15000</discovery_timeout>
             <mtc_port>Midi Through Port-0</mtc_port>
             <osc_in_port_base>7000</osc_in_port_base>
