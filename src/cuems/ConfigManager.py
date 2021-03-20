@@ -4,13 +4,14 @@ from .Settings import Settings
 from .log import logger
 
 class ConfigManager(Thread):
-    def __init__(self, path, *args, **kwargs):
+    def __init__(self, path, nodeconf=False, *args, **kwargs):
         super().__init__(name='CfgMan', args=args, kwargs=kwargs)
         self.cuems_conf_path = path
         self.library_path = None
         self.tmp_upload_path = None
         self.database_name = None
         self.node_conf = {}
+        self.network_outputs = {}
         self.node_outputs = {}
         self.project_conf = {}
         self.project_maps = {}
@@ -21,7 +22,8 @@ class ConfigManager(Thread):
                                     "used":[]
                                     }
 
-        self.load_node_outputs()
+        if not nodeconf:
+            self.load_node_outputs()
 
         self.start()
 
@@ -68,14 +70,24 @@ class ConfigManager(Thread):
         settings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
         settings_file = path.join(self.cuems_conf_path, 'default_mappings.xml')
         try:
-            node_outputs = Settings(schema=settings_schema, xmlfile=settings_file).copy()
-            node_outputs.pop('xmlns:cms')
-            node_outputs.pop('xmlns:xsi')
-            node_outputs.pop('xsi:schemaLocation')
+            self.network_outputs = Settings(schema=settings_schema, xmlfile=settings_file).copy()
+            self.network_outputs.pop('xmlns:cms')
+            self.network_outputs.pop('xmlns:xsi')
+            self.network_outputs.pop('xsi:schemaLocation')
         except FileNotFoundError as e:
             raise e
         except KeyError:
             pass
+        except Exception as e:
+            logger.exception(e)
+
+        if self.network_outputs['number_of_nodes'] > 1:
+            for node in self.network_outputs['nodes']:
+                if node['node']['uuid'] == self.node_conf['uuid']:
+                    node_outputs = node['node']
+                    break
+        else:
+            node_outputs = self.network_outputs['nodes'][0]['node']
 
         for key, value in node_outputs.items():
             if key == 'audio':
