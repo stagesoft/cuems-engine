@@ -16,7 +16,8 @@ from .CTimecode import CTimecode
 import xmlschema.exceptions
 
 from .cuems_editor.CuemsWsServer import CuemsWsServer
-from .cuems_hwdiscovery.CuemsHwDiscovery import HWDiscovery
+from .cuems_nodeconf.CuemsNodeConf import CuemsNodeConf
+from .cuems_hwdiscovery.CuemsHwDiscovery import CuemsHWDiscovery
 
 from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
@@ -144,6 +145,7 @@ class CuemsEngine():
                             '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
+                            '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
                             '/engine/status/timecode' : [ossia.ValueType.Int, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
@@ -201,7 +203,8 @@ class CuemsEngine():
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         try:
-                            HWDiscovery()
+                            CuemsNodeConf()
+                            CuemsHWDiscovery()
                         except:
                             self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
                             logger.error(f'HW discovery failed after ws request, request id: {self._editor_request_uuid}')
@@ -653,6 +656,13 @@ class CuemsEngine():
                 self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.script.cuelist.contents[0].uuid
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
+        except Exception as e:
+            logger.exception(e)
+
+    def hwdiscovery_callback(self):
+        try:
+            CuemsNodeConf()
+            CuemsHWDiscovery()
         except Exception as e:
             logger.exception(e)
 
