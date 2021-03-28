@@ -7,3 +7,6 @@
 [submodule "src/cuems/cuems_nodeconf"]
 	path = src/cuems/cuems_nodeconf
 	url = https://github.com/stagesoft/cuems_nodeconf.git
+[submodule "src/cuems/cuems_deploy"]
+	path = src/cuems/cuems_deploy
+	url = https://github.com/stagesoft/cuems_deploy.git
