@@ -5,8 +5,9 @@
         <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
         <database_name>project-manager.db</database_name>
         <show_lock_file>show.lock</show_lock_file>
-        <node id="0" master="True">
-            <uuid>2cf05d21cca3</uuid>
+        <node>
+            <uuid>0367f391-ebf4-48b2-9f26-e4f021cf67b7</uuid>
+            <mac>2cf05d21cca3</mac>
             <osc_dest_host>localhost</osc_dest_host>
             <oscquery_port>9090</oscquery_port>
             <oscquery_out_port>9091</oscquery_out_port>

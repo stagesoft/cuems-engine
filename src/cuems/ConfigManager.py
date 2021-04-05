@@ -13,6 +13,7 @@ class ConfigManager(Thread):
         self.node_conf = {}
         self.network_outputs = {}
         self.node_outputs = {}
+        self.amimaster = False
         self.project_conf = {}
         self.project_maps = {}
         self.default_mappings = False
@@ -60,7 +61,7 @@ class ConfigManager(Thread):
 
         self.node_conf = engine_settings['Settings']['node']
 
-        logger.info(f'Cuems node_{self.node_conf["id"]:03} config loaded')
+        logger.info(f'Cuems node_{self.node_conf["uuid"]} config loaded')
         #logger.info(f'Node conf: {self.node_conf}')
         #logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
         #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
@@ -82,11 +83,15 @@ class ConfigManager(Thread):
             logger.exception(e)
 
         if self.network_outputs['number_of_nodes'] > 1:
+            self.amimaster = True
+
             for node in self.network_outputs['nodes']:
-                if node['node']['uuid'] == self.node_conf['uuid']:
+                if node['node']['mac'] == self.node_conf['mac']:
                     node_outputs = node['node']
                     break
         else:
+            self.amimaster = False
+            
             node_outputs = self.network_outputs['nodes'][0]['node']
 
         for key, value in node_outputs.items():

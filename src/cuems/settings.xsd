@@ -24,6 +24,7 @@
     <xs:complexType name="NodeConfType">
         <xs:sequence>
             <xs:element name="uuid" type="cms:NonEmptyString" />
+            <xs:element name="mac" type="cms:NonEmptyString" />
             <xs:element name="osc_dest_host" type="cms:NonEmptyString" />
             <xs:element name="oscquery_port" type="xs:positiveInteger" />
             <xs:element name="oscquery_out_port" type="xs:positiveInteger" />
@@ -37,8 +38,6 @@
             <xs:element name="audioplayer" type="cms:AudioPlayerType" minOccurs="0" maxOccurs="1" />
             <xs:element name="dmxplayer" type="cms:DmxPlayerType" minOccurs="0" maxOccurs="1" />
         </xs:sequence>
-        <xs:attribute name="id" type="xs:int"></xs:attribute>
-        <xs:attribute name="master" type="cms:BoolType" />
     </xs:complexType>
 
     <xs:complexType name="PlayerType">
