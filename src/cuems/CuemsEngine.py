@@ -100,35 +100,40 @@ class CuemsEngine():
             exit(-1)
 
         # WebSocket server
-        settings_dict = {}
-        settings_dict['session_uuid'] = str(uuid1())
-        settings_dict['library_path'] = self.cm.library_path
-        settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
-        settings_dict['database_name'] = self.cm.database_name
-        settings_dict['load_timeout'] = self.cm.node_conf['load_timeout']
-        settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
-        self.engine_queue = MPQueue()
-        self.editor_queue = MPQueue()
-        self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict)
-        try:
-            self.ws_server.start(self.cm.node_conf['websocket_port'])
-        except KeyError:
-            self.stop_all_threads()
-            logger.exception('Config error, websocket_port key not found in settings. Exiting.')
-            exit(-1)
-        except Exception as e:
-            self.stop_all_threads()
-            logger.error('Exception when starting websocket server. Exiting.')
-            logger.exception(e)
-            exit(-1)    
+        if (self.cm.amimaster):
+            logger.info('Master node starting Websocket Server')
+            settings_dict = {}
+            settings_dict['session_uuid'] = str(uuid1())
+            settings_dict['library_path'] = self.cm.library_path
+            settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
+            settings_dict['database_name'] = self.cm.database_name
+            settings_dict['load_timeout'] = self.cm.node_conf['load_timeout']
+            settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
+            self.engine_queue = MPQueue()
+            self.editor_queue = MPQueue()
+            self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict)
+            try:
+                self.ws_server.start(self.cm.node_conf['websocket_port'])
+            except KeyError:
+                self.stop_all_threads()
+                logger.exception('Config error, websocket_port key not found in settings. Exiting.')
+                exit(-1)
+            except Exception as e:
+                self.stop_all_threads()
+                logger.error('Exception when starting websocket server. Exiting.')
+                logger.exception(e)
+                exit(-1)    
+            else:
+                # Threaded own queue consumer loop
+                self.engine_queue_loop = threading.Thread(target=self.engine_queue_consumer, name='engineq_consumer')
+                self.engine_queue_loop.start()
         else:
-            # Threaded own queue consumer loop
-            self.engine_queue_loop = threading.Thread(target=self.engine_queue_consumer, name='engineq_consumer')
-            self.engine_queue_loop.start()
+            logger.info('Slave node, no WS server needed')
+
 
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
-        self.ossia_server = OssiaServer(self.cm.node_conf['id'], 
+        self.ossia_server = OssiaServer(self.cm.node_conf['uuid'], 
                                         self.cm.node_conf['oscquery_port'], 
                                         self.cm.node_conf['oscquery_out_port'], 
                                         self.ossia_queue)
@@ -289,7 +294,7 @@ class CuemsEngine():
                     self._video_players[player_id]['player'].start()
 
                     # And dinamically attach it to the ossia for remote control it
-                    self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["id"]:03}/videoplayer-{index}'
+                    self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["uuid"]}/videoplayer-{index}'
 
                     OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
                                                 '/jadeo/yscale' : [ossia.ValueType.Float, None], 

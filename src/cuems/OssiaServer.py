@@ -25,7 +25,7 @@ class OssiaServer(threading.Thread):
         self.osc_registered_nodes = dict()
 
         # Ossia Device and OSCQuery server creation
-        self.oscquery_device = ossia.LocalDevice(f'node_{node_id:03}_oscquery')
+        self.oscquery_device = ossia.LocalDevice(f'node_{node_id}_oscquery')
         self.oscquery_device.create_oscquery_server(    in_port, 
                                                         out_port, 
                                                         False)
