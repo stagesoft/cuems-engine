@@ -93,7 +93,7 @@ class DmxCue(Cue):
         self._player.start()
 
         # And dinamically attach it to the ossia for remote control it
-        self._osc_route = f'/node{self._conf.node_conf["id"]:03}/dmxplayer-{self.uuid}'
+        self._osc_route = f'/players/dmxplayer-{self.uuid}'
 
         ossia.conf_queue.put(   QueueOSCData(  'add', 
                                     self._osc_route, 
