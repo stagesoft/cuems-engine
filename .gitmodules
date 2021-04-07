@@ -9,4 +9,4 @@
 	url = https://github.com/stagesoft/cuems_nodeconf.git
 [submodule "src/cuems/cuems_deploy"]
 	path = src/cuems/cuems_deploy
-	url = https://github.com/stagesoft/cuems_deploy.git
+	url = git@github.com:stagesoft/cuems_deploy.git
