@@ -1,10 +1,9 @@
 from cuems.cuems_deploy.CuemsDeploy import CuemsDeploy
 
 
-d = CuemsDeploy(library_path='/opt/test')
-result = d.sync('/opt/cuems_library/files.tmp')
+deployer = CuemsDeploy(library_path='/opt/test')
 
-if result == True:
+if deployer.sync('/opt/cuems_library/files.tmp'):
     print("sync ok!")
 else:
-    print(result)
+    print(deployer.errors)
