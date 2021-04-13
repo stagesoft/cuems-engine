@@ -6,7 +6,7 @@ from os import path
 from pyossia import ossia
 from .Cue import Cue
 from .DmxPlayer import DmxPlayer
-from .OssiaServer import QueueOSCData
+from .OssiaServer import QueuePlayerOSCData
 from .log import logger
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
@@ -95,12 +95,12 @@ class DmxCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/players/dmxplayer-{self.uuid}'
 
-        ossia.conf_queue.put(   QueueOSCData(  'add', 
-                                    self._osc_route, 
-                                    self._conf.node_conf['osc_dest_host'], 
-                                    self._player.port,
-                                    self._player.port + 1, 
-                                    self.OSC_DMXPLAYER_CONF))
+        ossia.conf_queue.put(   QueuePlayerOSCData( 'add', 
+                                                    self._osc_route, 
+                                                    self._conf.node_conf['osc_dest_host'], 
+                                                    self._player.port,
+                                                    self._player.port + 1, 
+                                                    self.OSC_DMXPLAYER_CONF))
 
         self.loaded = True
         if not self in self._armed_list:

@@ -6,7 +6,7 @@ from threading import Thread
 
 from .Cue import Cue
 # from .AudioPlayer import AudioPlayer
-from .OssiaServer import QueueOSCData
+# from .OssiaServer import QueuePlayerOSCData
 from .log import logger
 
 class ActionCue(Cue):

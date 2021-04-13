@@ -23,7 +23,7 @@ from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
 
 from .log import logger
-from .OssiaServer import OssiaServer, QueueData, QueueOSCData
+from .OssiaServer import OssiaServer, QueueMasterOSCQueryData, QueueSlaveOSCQueryData, QueuePlayerOSCData
 from .Settings import Settings
 from .CuemsScript import CuemsScript
 from .CueList import CueList
@@ -87,7 +87,8 @@ class CuemsEngine():
         self.armedcues = list()
 
         # MTC master object creation through bound library and open port
-        self.mtcmaster = libmtcmaster.MTCSender_create()
+        if self.cm.amimaster:
+            self.mtcmaster = libmtcmaster.MTCSender_create()
         self.go_offset = 0
 
         # MTC listener (could be usefull)
@@ -134,14 +135,13 @@ class CuemsEngine():
         # OSSIA OSCQuery server
         self.ossia_queue = queue.Queue()
         self.ossia_server = OssiaServer(self.cm.node_conf['uuid'], 
-                                        self.cm.node_conf['oscquery_port'], 
-                                        self.cm.node_conf['oscquery_out_port'], 
-                                        self.ossia_queue)
+                                        self.cm.node_conf['oscquery_ws_port'], 
+                                        self.cm.node_conf['oscquery_osc_port'], 
+                                        self.ossia_queue,
+                                        master = self.cm.amimaster)
 
         # Initial OSC nodes to tell ossia to configure
-        OSC_ENGINE_CONF = { '/engine' : [ossia.ValueType.Impulse, None],
-                            '/engine/command' : [ossia.ValueType.Impulse, None],
-                            '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
+        OSC_ENGINE_CONF = { '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
                             '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/go' : [ossia.ValueType.Impulse, self.go_callback],
                             '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
@@ -151,13 +151,27 @@ class CuemsEngine():
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
                             '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
+                            '/engine/command/deploy' : [ossia.ValueType.Impulse, self.deploy_callback],
+                            '/engine/status/load' : [ossia.ValueType.String, None],
+                            '/engine/status/loadcue' : [ossia.ValueType.String, None],
+                            '/engine/status/go' : [ossia.ValueType.String, None],
+                            '/engine/status/gocue' : [ossia.ValueType.String, None],
+                            '/engine/status/pause' : [ossia.ValueType.String, None],
+                            '/engine/status/stop' : [ossia.ValueType.String, None],
+                            '/engine/status/resetall' : [ossia.ValueType.String, None],
+                            '/engine/status/preload' : [ossia.ValueType.String, None],
+                            '/engine/status/unload' : [ossia.ValueType.String, None],
+                            '/engine/status/hwdiscovery' : [ossia.ValueType.String, None],
+                            '/engine/status/deploy' : [ossia.ValueType.String, None],
                             '/engine/status/timecode' : [ossia.ValueType.Int, None], 
                             '/engine/status/currentcue' : [ossia.ValueType.String, None],
                             '/engine/status/nextcue' : [ossia.ValueType.String, None],
                             '/engine/status/running' : [ossia.ValueType.Int, None]
                             }
 
-        self.ossia_queue.put(QueueData('add', OSC_ENGINE_CONF))
+        self.ossia_queue.put(QueueMasterOSCQueryData('add', OSC_ENGINE_CONF))
+
+        self.add_slave_nodes_oscquery_devices()
 
         # Check, start and OSC register video devices/players
         self._video_players = {}
@@ -191,19 +205,21 @@ class CuemsEngine():
             return
 
         try:
-            if not item['type'] in ['error', 'initial_settings']:
+            if item['type'] not in ['error', 'initial_settings']:
                 self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Response not recognized"})
                 self._editor_request_uuid = None
         except KeyError:
             try:
-                if not item['action'] in ['load_project', 'hw_discovery']:
+                if item['action'] not in ['load_project', 'hw_discovery', 'deploy']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
                     self._editor_request_uuid = None
                 else:
                     if item['action'] == 'load_project':
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+
                         self.load_project_callback(value = item['value'])
+            
                     elif item['action'] == 'hw_discovery':
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
@@ -217,6 +233,23 @@ class CuemsEngine():
                         else:
                             self.editor_queue.put({'type':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
                             self._editor_request_uuid = None
+                    elif item['action'] == 'deploy':
+                        logger.info(f'Deploy command received via WS. Request uuid: {self._editor_request_uuid}')
+                        try:
+                            # Check local needs for script media
+                            pass
+                        except:
+                            self.editor_queue.put({'type':'error', 'action':'deploy', 'action_uuid':self._editor_request_uuid, 'value':'Local media check failed, check logs.'})
+                            logger.error(f'Local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
+                            self._editor_request_uuid = None
+                        else:
+                            try:
+                                # Perform deploy
+                                pass
+                            except:
+                                self.editor_queue.put({'type':'error', 'action':'deploy', 'action_uuid':self._editor_request_uuid, 'value':'Deploy failed, check logs.'})
+                                logger.error(f'Deploy failed after ws request, request id: {self._editor_request_uuid}')
+                                self._editor_request_uuid = None
 
             except KeyError:
                 logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
@@ -272,55 +305,61 @@ class CuemsEngine():
 
     def check_video_devs(self):
         try:
-            if self.cm.node_outputs['video_outputs']:
-                for index, item in enumerate(self.cm.node_outputs['video_outputs']):
-                    # Assign a videoplayer object
-                    port = self.cm.players_port_index['start']
-                    while port in self.cm.players_port_index['used']:
-                        port += 2
-
-                    player_id = item
-                    self._video_players[player_id] = dict()
-
+            if self.cm.node_outputs['video']:
+                for section in self.cm.node_outputs['video']:
                     try:
-                        self._video_players[player_id]['player'] = VideoPlayer(  port, 
-                                                                            item,
-                                                                            self.cm.node_conf['videoplayer']['path'],
-                                                                            self.cm.node_conf['videoplayer']['args'],
-                                                                            '')
-                    except Exception as e:
-                        raise e
+                        if section['outputs']:
+                            for index, item in enumerate(section['outputs']):
+                                # Select the OSC port number for our new videoplayer
+                                port = self.cm.osc_port_index['start']
+                                while port in self.cm.osc_port_index['used']:
+                                    port += 2
 
-                    self._video_players[player_id]['player'].start()
+                                self.cm.osc_port_index['used'].append(port)
 
-                    # And dinamically attach it to the ossia for remote control it
-                    self._video_players[player_id]['route'] = f'/node{self.cm.node_conf["uuid"]}/videoplayer-{index}'
+                                player_id = item['output']['name']
+                                self._video_players[player_id] = dict()
 
-                    OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
-                                                '/jadeo/yscale' : [ossia.ValueType.Float, None], 
-                                                '/jadeo/corners' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner1' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner2' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner3' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner4' : [ossia.ValueType.List, None],
-                                                '/jadeo/start' : [ossia.ValueType.Int, None],
-                                                '/jadeo/load' : [ossia.ValueType.String, None],
-                                                '/jadeo/cmd' : [ossia.ValueType.String, None],
-                                                '/jadeo/quit' : [ossia.ValueType.Int, None],
-                                                '/jadeo/offset' : [ossia.ValueType.String, None],
-                                                '/jadeo/offset.1' : [ossia.ValueType.Int, None],
-                                                '/jadeo/midi/connect' : [ossia.ValueType.String, None],
-                                                '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
-                                                }
+                                try:
+                                    # Assign a videoplayer object
+                                    self._video_players[player_id]['player'] = VideoPlayer(  port, 
+                                                                                        item['output']['name'],
+                                                                                        self.cm.node_conf['videoplayer']['path'],
+                                                                                        self.cm.node_conf['videoplayer']['args'],
+                                                                                        '')
+                                except Exception as e:
+                                    raise e
 
-                    self.cm.players_port_index['used'].append(port)
+                                self._video_players[player_id]['player'].start()
 
-                    self.ossia_queue.put(   QueueOSCData(   'add', 
-                                                            self._video_players[player_id]['route'], 
-                                                            self.cm.node_conf['osc_dest_host'], 
-                                                            port,
-                                                            port + 1, 
-                                                            OSC_VIDEOPLAYER_CONF))
+                                # And dinamically attach it to the ossia for remote control it
+                                self._video_players[player_id]['route'] = f'/players/videoplayer-{index}'
+
+                                OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
+                                                            '/jadeo/yscale' : [ossia.ValueType.Float, None], 
+                                                            '/jadeo/corners' : [ossia.ValueType.List, None],
+                                                            '/jadeo/corner1' : [ossia.ValueType.List, None],
+                                                            '/jadeo/corner2' : [ossia.ValueType.List, None],
+                                                            '/jadeo/corner3' : [ossia.ValueType.List, None],
+                                                            '/jadeo/corner4' : [ossia.ValueType.List, None],
+                                                            '/jadeo/start' : [ossia.ValueType.Int, None],
+                                                            '/jadeo/load' : [ossia.ValueType.String, None],
+                                                            '/jadeo/cmd' : [ossia.ValueType.String, None],
+                                                            '/jadeo/quit' : [ossia.ValueType.Int, None],
+                                                            '/jadeo/offset' : [ossia.ValueType.String, None],
+                                                            '/jadeo/offset.1' : [ossia.ValueType.Int, None],
+                                                            '/jadeo/midi/connect' : [ossia.ValueType.String, None],
+                                                            '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
+                                                            }
+
+                                self.ossia_queue.put(   QueuePlayerOSCData( 'add', 
+                                                                            self._video_players[player_id]['route'], 
+                                                                            self.cm.node_conf['osc_dest_host'], 
+                                                                            port,
+                                                                            port + 1, 
+                                                                            OSC_VIDEOPLAYER_CONF))
+                    except KeyError:
+                        pass
             else:
                 logger.info('No video outputs detected.')
         except Exception as e:
@@ -330,7 +369,7 @@ class CuemsEngine():
         for dev in self._video_players.values():
             key = f'{dev["route"]}/jadeo/cmd'
             try:
-                self.ossia_server.osc_registered_nodes[key][0].parameter.value = 'quit'
+                self.ossia_server.osc_player_registered_nodes[key][0].parameter.value = 'quit'
             except CalledProcessError:
                 pass
 
@@ -338,7 +377,7 @@ class CuemsEngine():
         for dev in self._video_players.values():
             try:
                 key = f'{dev["route"]}/jadeo/cmd'
-                self.ossia_server.osc_registered_nodes[key][0].parameter.value = 'midi disconnect'
+                self.ossia_server.osc_player_registered_nodes[key][0].parameter.value = 'midi disconnect'
             except KeyError:
                 logger.debug(f'Key error (cmd midi disconnect) in disconnect all method {key}')
 
@@ -352,9 +391,10 @@ class CuemsEngine():
         self.mtclistener.join()
 
         try:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
-            libmtcmaster.MTCSender_release(self.mtcmaster)
-            logger.info('MTC Master released')
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_stop(self.mtcmaster)
+                libmtcmaster.MTCSender_release(self.mtcmaster)
+                logger.info('MTC Master released')
         except:
             logger.exception('MTC Master could not be released')
 
@@ -364,26 +404,26 @@ class CuemsEngine():
 
         self.stop_requested = True
 
-        self.cm.join()
-
         try:
-            self.ws_server.stop()
-            logger.info(f'Ws-server thread finished')
-        except AttributeError:
-            logger.exception('Could not stop Ws-server')
+            if self.cm.amimaster:
+                while not self.engine_queue.empty():
+                    self.engine_queue.get()
+                self.engine_queue_loop.join()
+                self.engine_queue.close()
 
-        try:
-            while not self.engine_queue.empty():
-                self.engine_queue.get()
-            self.engine_queue_loop.join()
-            self.engine_queue.close()
-
-            while not self.editor_queue.empty():
-                self.editor_queue.get()
-            self.editor_queue.close()
-            logger.debug('IPC queues clean and closed')
+                while not self.editor_queue.empty():
+                    self.editor_queue.get()
+                self.editor_queue.close()
+                logger.debug('IPC queues clean and closed')
         except:
             logger.exception('Could not clean and close IPC queues')
+
+        try:
+            if self.cm.amimaster:
+                self.ws_server.stop()
+                logger.info(f'Ws-server thread finished')
+        except AttributeError:
+            logger.exception('Could not stop Ws-server')
 
         try:
             self.ossia_server.stop()
@@ -391,6 +431,8 @@ class CuemsEngine():
             logger.info(f'Ossia server thread finished')
         except:
             logger.exception('Could not stop Ossia server')
+
+        self.cm.join()
 
     #########################################################
     # Status check functions
@@ -468,12 +510,107 @@ class CuemsEngine():
     ########################################################
 
     ########################################################
+    # OSC devices usefull methods
+    def add_slave_nodes_oscquery_devices(self):
+        # Define OSC route for each slave node inside our local master OSC tree
+        OSC_SLAVE_ENGINE_CONF = {   '/engine/command/load' : [ossia.ValueType.String, None],
+                                    '/engine/command/go' : [ossia.ValueType.Impulse, None],
+                                    '/engine/command/pause' : [ossia.ValueType.Impulse, None],
+                                    '/engine/command/stop' : [ossia.ValueType.Impulse, None],
+                                    '/engine/command/resetall' : [ossia.ValueType.Impulse, None],
+                                    '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, None],
+                                    '/engine/command/deploy' : [ossia.ValueType.Impulse, None],
+                                    '/engine/status/load' : [ossia.ValueType.String, None],
+                                    '/engine/status/loadcue' : [ossia.ValueType.String, None],
+                                    '/engine/status/go' : [ossia.ValueType.String, None],
+                                    '/engine/status/gocue' : [ossia.ValueType.String, None],
+                                    '/engine/status/pause' : [ossia.ValueType.String, None],
+                                    '/engine/status/stop' : [ossia.ValueType.String, None],
+                                    '/engine/status/resetall' : [ossia.ValueType.String, None],
+                                    '/engine/status/preload' : [ossia.ValueType.String, None],
+                                    '/engine/status/unload' : [ossia.ValueType.String, None],
+                                    '/engine/status/hwdiscovery' : [ossia.ValueType.String, None],
+                                    '/engine/status/deploy' : [ossia.ValueType.String, None],
+                                    '/engine/status/timecode' : [ossia.ValueType.Int, None], 
+                                    '/engine/status/currentcue' : [ossia.ValueType.String, None],
+                                    '/engine/status/nextcue' : [ossia.ValueType.String, None],
+                                    '/engine/status/running' : [ossia.ValueType.Int, None]
+                                }
+
+        if self.cm.amimaster:
+            logger.info(f'----- Master node trying to add slave nodes to OSCQuery tree -----')
+
+            # Create OSC remote device routes for each slave node
+            for name, node in self.cm.avahi_monitor.listener.osc_services.items():
+                decoded_uuid = node.properties[b'uuid'].decode('utf8')
+                if decoded_uuid != self.cm.node_conf['uuid']:
+                    '''
+                    # Select the OSC out port number for our new slave node OSC
+                    port = self.cm.osc_port_index['start']
+                    while port in self.cm.osc_port_index['used']:
+                        port += 2
+
+                    self.cm.osc_port_index['used'].append(port)
+                    '''
+
+                    self.ossia_queue.put(   QueueSlaveOSCQueryData(   action = 'add', 
+                                                            device_name = decoded_uuid, 
+                                                            host = node.parsed_addresses()[0], 
+                                                            ws_port = int(node.port), 
+                                                            osc_port = int(node.port) + 1, 
+                                                            dictionary = OSC_SLAVE_ENGINE_CONF) )
+                
+                    logger.info(f'Loaded OSCQuery tree for slave node {decoded_uuid}')
+
+            logger.info(f'----- All slave nodes added to the OSC tree in some way -----')
+        else:
+            logger.info(f'----- Slave node trying to add master node to OSCQuery tree -----')
+
+            # Create OSC remote device routes for each slave node
+            for name, node in self.cm.avahi_monitor.listener.osc_services.items():
+                if node.properties[b'node_type'] == b'master':
+                    '''
+                    # Select the OSC out port number for our new slave node OSC
+                    port = self.cm.osc_port_index['start']
+                    while port in self.cm.osc_port_index['used']:
+                        port += 2
+
+                    self.cm.osc_port_index['used'].append(port)
+                    '''
+
+                    decoded_uuid = node.properties[b'uuid'].decode('utf8')
+                    self.ossia_queue.put(   QueueSlaveOSCQueryData(   action = 'add', 
+                                                            device_name = decoded_uuid, 
+                                                            host = node.parsed_addresses()[0], 
+                                                            ws_port = int(node.port), 
+                                                            osc_port = int(node.port) + 1, 
+                                                            dictionary = OSC_SLAVE_ENGINE_CONF) )
+                
+                    logger.info(f'Loaded OSCQuery tree for master node {decoded_uuid}')
+
+            logger.info(f'----- MASTER node added to the OSC tree in some way -----')
+
+    ########################################################
+
+    ########################################################
     # OSC messages handlers
     def load_project_callback(self, **kwargs):
         logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
 
+        # Call OSC load on all slaves:
+        if self.cm.amimaster:
+            for uuid in self.ossia_server.oscquery_slave_devices.keys():
+                key = f'/{uuid}/engine/command/load'
+                try:
+                    logger.info(f'Calling load project {kwargs["value"]} via OSC on slave node {uuid}')
+                    self.ossia_server.oscquery_slave_registered_nodes[key][0].parameter.value = kwargs['value']
+                except Exception as e:
+                    logger.exception(e)
+
+        # If there was already an script we discard it and restart the run engine
         if self.script:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
             self.armedcues.clear()
             self.ongoing_cue = None
@@ -481,26 +618,40 @@ class CuemsEngine():
             self.go_offset = 0
             self.script = None
 
+        # LOAD PROJECT SETTINGS
         try:
             self.cm.load_project_settings(kwargs["value"])
             # logger.info(self.cm.project_conf)
         except FileNotFoundError:
-            logger.info(f'Project settings file not found. Adopting defaults.')
+            if self.cm.amimaster:
+                logger.info(f'Project settings file not found. Adopting defaults.')
+            else:
+                logger.info(f'Project settings file not found. Noted to get it from master.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'DEPLOY'
         except:
             logger.info(f'Project settings error while loading. Adopting defaults.')
 
+        # LOAD PROJECT MAPPINGS
         try:
             self.cm.load_project_mappings(kwargs["value"])
             # logger.info(self.cm.project_maps)
         except:
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
+            else:
+                logger.info(f'Project mappings file problem. Noted to get it from master.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'DEPLOY'
             return
 
+        # CHECK PROJECT MAPPINGS
         try:
             self.check_project_mappings()
         except Exception as e:
             logger.error('Wrong configuration on input/output mappings')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'})
+            else:
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'ERROR'
             return
 
         try:
@@ -510,27 +661,47 @@ class CuemsEngine():
             self.script = reader.read_to_objects()
         except FileNotFoundError:
             logger.error('Project script file not found')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Project script file not found'})
-            self._editor_request_uuid = None
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Project script file not found'})
+                self._editor_request_uuid = None
+            else:
+                logger.info(f'Project script not found. Noted to get it from master.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'DEPLOY'
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script XML parsing error'})
-            self._editor_request_uuid = None
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script XML parsing error'})
+                self._editor_request_uuid = None
+            else:
+                logger.info(f'Project script XML exception.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'ERROR'
         except Exception as e:
             logger.error(f'Project script could not be loaded {e}')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
-            self._editor_request_uuid = None
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+                self._editor_request_uuid = None
+            else:
+                logger.info(f'Project script could not be loaded. Check logs.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'ERROR'
 
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
+            else:
+                logger.info(f'Project script could not be loaded. Check logs.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'ERROR'
             return
 
         try:
             self.script_media_check()
         except FileNotFoundError:
             logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Media not found'})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'Media not found'})
+            else:
+                logger.info(f'Project media not found. Noted to get it from master.')
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'DEPLOY'
             self.script = None
             return
 
@@ -538,7 +709,11 @@ class CuemsEngine():
             self.initial_cuelist_process(self.script.cuelist)
         except:
             logger.error(f"Error processing script data. Can't be loaded.")
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
+            else:
+                logger.info(f"Error processing script data. Can't be loaded.")
+                self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'ERROR'
             self.script = None
             return
 
@@ -549,10 +724,15 @@ class CuemsEngine():
         self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.next_cue_pointer.uuid
 
         # Start MTC!
-        libmtcmaster.MTCSender_play(self.mtcmaster)
+        if self.cm.amimaster:
+            libmtcmaster.MTCSender_play(self.mtcmaster)
 
         # Everything went OK we notify it to the WS server through the queue
-        self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+        if self.cm.amimaster:
+            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+        else:
+            logger.info(f'Project loaded OK.')
+            self.ossia_server.oscquery_registered_nodes['/engine/status/load'][0].parameter.value = 'OK'
         self._editor_request_uuid = None
 
     def load_cue_callback(self, **kwargs):
@@ -626,7 +806,8 @@ class CuemsEngine():
     def pause_callback(self, **kwargs):
         logger.info('OSC PAUSE!')
         try:
-            libmtcmaster.MTCSender_pause(self.mtcmaster)
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_pause(self.mtcmaster)
             self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = int(not self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value)
         except:
             logger.info('NO MTCMASTER ASSIGNED!')
@@ -634,7 +815,8 @@ class CuemsEngine():
     def stop_callback(self, **kwargs):
         logger.info('OSC STOP!')
         try:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.go_offset = 0
             self.ossia_server.oscquery_registered_nodes['/engine/status/running'][0].parameter.value = 0
         except:
@@ -643,7 +825,8 @@ class CuemsEngine():
     def reset_all_callback(self, **kwargs):
         logger.info('OSC RESETALL!')
         try:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
             self.armedcues.clear()
             self.disconnect_video_devs()
@@ -659,7 +842,8 @@ class CuemsEngine():
 
                 self.ossia_server.oscquery_registered_nodes['/engine/status/currentcue'][0].parameter.value = ""
                 self.ossia_server.oscquery_registered_nodes['/engine/status/nextcue'][0].parameter.value = self.script.cuelist.contents[0].uuid
-            libmtcmaster.MTCSender_play(self.mtcmaster)
+            if self.cm.amimaster:
+                libmtcmaster.MTCSender_play(self.mtcmaster)
 
         except Exception as e:
             logger.exception(e)
@@ -670,6 +854,9 @@ class CuemsEngine():
             CuemsHWDiscovery()
         except Exception as e:
             logger.exception(e)
+
+    def deploy_callback(self):
+        pass
 
     ########################################################
 
@@ -691,7 +878,8 @@ class CuemsEngine():
             for key, value in media_list.items():
                 string += f'\n{value[1]} : {key} : {value[0]}'
             logger.error(string)
-            self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':media_list})
+            if self.cm.amimaster:
+                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':media_list})
             self._editor_request_uuid = None
 
             raise FileNotFoundError

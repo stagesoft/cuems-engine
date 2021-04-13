@@ -6,7 +6,7 @@ from threading import Thread
 from .Cue import Cue
 from .CTimecode import CTimecode
 from .AudioPlayer import AudioPlayer
-from .OssiaServer import QueueOSCData
+from .OssiaServer import QueuePlayerOSCData
 from .log import logger
 
 class AudioCue(Cue):
@@ -81,7 +81,7 @@ class AudioCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/players/audioplayer-{self.uuid}'
 
-        ossia.conf_queue.put(   QueueOSCData(  'add', 
+        ossia.conf_queue.put(   QueuePlayerOSCData(  'add', 
                                             self._osc_route, 
                                             self._conf.node_conf['osc_dest_host'], 
                                             self._player.port,

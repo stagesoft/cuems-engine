@@ -6,7 +6,7 @@ from time import sleep
 from .Cue import Cue
 from .CTimecode import CTimecode
 from .VideoPlayer import VideoPlayer
-from .OssiaServer import QueueOSCData
+# from .OssiaServer import QueuePlayerOSCData
 from .log import logger
 class VideoCue(Cue):
     '''
@@ -188,7 +188,7 @@ class VideoCue(Cue):
                 self._player.join()
                 self._player = None
 
-                ossia_queue.put(QueueOSCData(   'remove', 
+                ossia_queue.put(QueuePlayerOSCData(   'remove', 
                                                 self._osc_route, 
                                                 dictionary = self.OSC_VIDEOPLAYER_CONF))
 

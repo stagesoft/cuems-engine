@@ -69,35 +69,55 @@ class CuemsScript(dict):
 
     # returns a dict of UNIQUE media (no duplicates)
 
-    def get_media(self):
-        media_dict = dict()
-        if (self.cuelist is not None) and (self.cuelist.contents is not None):
-            
-            for cue in self.cuelist.contents:
-                try:
-                    if cue.media is not None:
-                        if type(cue)==CueList:
-                            media_dict.update(self.get_cuelist_media(cue))
-                        else:
-                            media_dict[cue.media.file_name] = type(cue)
-                except KeyError:
-                    logger.debug("cue with no media")
-        return media_dict
+    def get_media(self, cuelist = None):
+        '''Gets all the media files list present on a cuelist.'''
 
-    def get_cuelist_media(self, cuelist):
         media_dict = dict()
-        if (cuelist is not None) and (cuelist.contents is not None):
+
+        # If no cuelist is specified we are looking inside our own
+        # script object, so our cuelist is our self cuelist
+        if not cuelist:
+            cuelist = self.cuelist
+
+        if cuelist.contents:
             for cue in cuelist.contents:
-                try:
-                    if cue.media is not None:
-                        if type(cue)==CueList:
-                            media_dict.update(self.get_cuelist_media(cue))
-                        else:
+                if type(cue)==CueList:
+                    # If the cue is a cuelist, let's recurse
+                    media_dict.update(self.get_media(cue))
+                else:
+                    try:
+                        if cue.media:
                             media_dict[cue.media.file_name] = type(cue)
-                except KeyError:
-                    logger.debug("cue with no media")
+                    except KeyError:
+                        pass
+                        # logger.debug("cue with no media")
         return media_dict
 
+    def get_own_media(self, uuid, cuelist = None):
+        '''Gets the media files list present on the script which are 
+        related to the specified node uuid, usually our local UUID,
+        as we are looking for our own needed media files'''
+
+        media_dict = dict()
+
+        # If no cuelist is specified we are looking inside our own
+        # script object, so our cuelist is our self cuelist
+        if not cuelist:
+            cuelist = self.cuelist
+
+        if cuelist.contents:
+            for cue in cuelist.contents:
+                if type(cue)==CueList:
+                    # If the cue is a cuelist, let's recurse
+                    media_dict.update(self.get_own_media(uuid, cue))
+                else:
+                    try:
+                        if cue.media:
+                            media_dict[cue.media.file_name] = type(cue)
+                    except KeyError:
+                        pass
+                        # logger.debug("cue with no media")
+        return media_dict
 
     def find(self, uuid):
         return self.cuelist.find(uuid)
