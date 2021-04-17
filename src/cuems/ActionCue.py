@@ -6,7 +6,7 @@ from threading import Thread
 
 from .Cue import Cue
 # from .AudioPlayer import AudioPlayer
-from .OssiaServer import QueueOSCData
+# from .OssiaServer import PlayerOSCConfData
 from .log import logger
 
 class ActionCue(Cue):
@@ -38,7 +38,7 @@ class ActionCue(Cue):
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                self.disarm(ossia.conf_queue)
+                self.disarm(ossia)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -73,7 +73,7 @@ class ActionCue(Cue):
         if self.action_type == 'load':
             self._action_target_object.arm(self._conf, ossia, self._armed_list)
         elif self.action_type == 'unload':
-            self._action_target_object.disarm(ossia.conf_queue)
+            self._action_target_object.disarm(ossia)
         elif self.action_type == 'play':
             self._action_target_object.go(ossia, mtc)
         elif self.action_type == 'pause':
@@ -107,9 +107,9 @@ class ActionCue(Cue):
 
         # DISARM
         if self in self._armed_list:
-            self.disarm(ossia.conf_queue)
+            self.disarm(ossia)
 
-    def disarm(self, ossia_queue):
+    def disarm(self, ossia_server = None):
         if self.loaded is True:
             try:
                 if self in self._armed_list:

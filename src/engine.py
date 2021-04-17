@@ -10,7 +10,6 @@ try:
     CuemsHWDiscovery()
 except Exception as e:
     logger.exception(f'Exception during HW discovery process:\n{e}')
-    exit(-1)
 
 try:
     my_engine = CuemsEngine()

@@ -26,8 +26,8 @@
             <xs:element name="uuid" type="cms:NonEmptyString" />
             <xs:element name="mac" type="cms:NonEmptyString" />
             <xs:element name="osc_dest_host" type="cms:NonEmptyString" />
-            <xs:element name="oscquery_port" type="xs:positiveInteger" />
-            <xs:element name="oscquery_out_port" type="xs:positiveInteger" />
+            <xs:element name="oscquery_ws_port" type="xs:positiveInteger" />
+            <xs:element name="oscquery_osc_port" type="xs:positiveInteger" />
             <xs:element name="websocket_port" type="xs:positiveInteger" />
             <xs:element name="load_timeout" type="xs:positiveInteger" />
             <xs:element name="nodeconf_timeout" type="xs:positiveInteger" />

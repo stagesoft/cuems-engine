@@ -6,7 +6,7 @@ from threading import Thread
 from .Cue import Cue
 from .CTimecode import CTimecode
 from .AudioPlayer import AudioPlayer
-from .OssiaServer import QueueOSCData
+from .OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
 from .log import logger
 
 class AudioCue(Cue):
@@ -60,7 +60,7 @@ class AudioCue(Cue):
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                self.disarm(ossia.conf_queue)
+                self.disarm(ossia)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -81,12 +81,11 @@ class AudioCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/players/audioplayer-{self.uuid}'
 
-        ossia.conf_queue.put(   QueueOSCData(  'add', 
-                                            self._osc_route, 
-                                            self._conf.node_conf['osc_dest_host'], 
-                                            self._player.port,
-                                            self._player.port + 1, 
-                                            self.OSC_AUDIOPLAYER_CONF))
+        ossia.add_player_nodes( PlayerOSCConfData(  device_name=self._osc_route, 
+                                                    host=self._conf.node_conf['osc_dest_host'], 
+                                                    in_port=self._player.port,
+                                                    out_port=self._player.port + 1, 
+                                                    dictionary=self.OSC_AUDIOPLAYER_CONF) )
 
         self.loaded = True
         if not self in self._armed_list:
@@ -123,15 +122,15 @@ class AudioCue(Cue):
             self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
             self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
             offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
-            ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go
-            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].parameter.value))
+            ossia.oscquery_registered_nodes[key][0].value = offset_to_go
+            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 in go_callback {key}')
 
             # Connect to mtc signal
         try:
             key = f'{self._osc_route}/mtcfollow'
-            ossia.oscquery_registered_nodes[key][0].parameter.value = 1
+            ossia.oscquery_registered_nodes[key][0].value = 1
         except KeyError:
             logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -156,13 +155,13 @@ class AudioCue(Cue):
                 self._end_mtc = self._start_mtc + (duration)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
                 key = f'{self._osc_route}/offset'
-                ossia.oscquery_registered_nodes[key][0].parameter.value = offset_to_go
+                ossia.oscquery_registered_nodes[key][0].value = offset_to_go
 
                 loop_counter += 1
                 
             try:
                 key = f'{self._osc_route}/mtcfollow'
-                ossia.oscquery_registered_nodes[key][0].parameter.value = 0
+                ossia.oscquery_registered_nodes[key][0].value = 0
             except KeyError:
                 logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -174,18 +173,16 @@ class AudioCue(Cue):
                 self._target_object.go(ossia, mtc)
 
         if self in self._armed_list:
-            self.disarm(ossia.conf_queue)
+            self.disarm(ossia)
 
-    def disarm(self, ossia_queue):
+    def disarm(self, ossia):
         if self.loaded is True:
             try:
                 self._conf.players_port_index['used'].remove(self._player.port)
                 self._player.kill()
                 self._player = None
 
-                ossia_queue.put(QueueOSCData(   'remove', 
-                                                self._osc_route, 
-                                                dictionary = self.OSC_AUDIOPLAYER_CONF))
+                ossia.remove_nodes( OSCConfData(device_name=self._osc_route, dictionary=self.OSC_AUDIOPLAYER_CONF) )
 
             except Exception as e:
                 logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')

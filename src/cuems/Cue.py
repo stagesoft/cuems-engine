@@ -176,7 +176,7 @@ class Cue(dict):
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                self.disarm(ossia.conf_queue)
+                self.disarm(ossia)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -218,10 +218,10 @@ class Cue(dict):
             self._target_object.go(ossia, mtc)
 
         if self in self._armed_list:
-            self.disarm(ossia.conf_queue)
+            self.disarm(ossia)
 
 
-    def disarm(self, ossia_queue):
+    def disarm(self, ossia = None):
         if self.loaded is True:
             self.loaded = False
 

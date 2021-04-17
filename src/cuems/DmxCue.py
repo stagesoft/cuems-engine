@@ -6,7 +6,7 @@ from os import path
 from pyossia import ossia
 from .Cue import Cue
 from .DmxPlayer import DmxPlayer
-from .OssiaServer import QueueOSCData
+from .OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
 from .log import logger
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
@@ -74,7 +74,7 @@ class DmxCue(Cue):
 
         if not self.enabled:
             if self.loaded and self in self._armed_list:
-                    self.disarm(ossia.conf_queue)
+                    self.disarm(ossia)
             return False
         elif self.loaded and not init:
             if not self in self._armed_list:
@@ -95,12 +95,11 @@ class DmxCue(Cue):
         # And dinamically attach it to the ossia for remote control it
         self._osc_route = f'/players/dmxplayer-{self.uuid}'
 
-        ossia.conf_queue.put(   QueueOSCData(  'add', 
-                                    self._osc_route, 
-                                    self._conf.node_conf['osc_dest_host'], 
-                                    self._player.port,
-                                    self._player.port + 1, 
-                                    self.OSC_DMXPLAYER_CONF))
+        ossia.add_player_nodes( PlayerOSCConfData(  device_name=self._osc_route, 
+                                                    host=self._conf.node_conf['osc_dest_host'], 
+                                                    in_port=self._player.port,
+                                                    out_port=self._player.port + 1, 
+                                                    dictionary=self.OSC_DMXPLAYER_CONF))
 
         self.loaded = True
         if not self in self._armed_list:
@@ -132,14 +131,14 @@ class DmxCue(Cue):
         # PLAY : specific DMX cue stuff
         try:
             key = f'{self._osc_route}{self._offset_route}'
-            ossia.osc_registered_nodes[key][0].parameter.value = self.review_offset(mtc)
-            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].parameter.value))
+            ossia.osc_registered_nodes[key][0].value = self.review_offset(mtc)
+            logger.info(key + " " + str(ossia.osc_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'OSC key error 1 in go_callback {key}')
 
         try:
             key = f'{self._osc_route}/mtcfollow'
-            ossia.osc_registered_nodes[key][0].parameter.value = True
+            ossia.osc_registered_nodes[key][0].value = True
         except KeyError:
             logger.debug(f'OSC key error 2 in go_callback {key}')
 
@@ -158,9 +157,9 @@ class DmxCue(Cue):
             return
         
         if self in self._armed_list:
-            self.disarm(ossia.conf_queue)
+            self.disarm(ossia)
 
-    def disarm(self, ossia_queue):
+    def disarm(self, ossia):
         if self.loaded is True:
             try:
                 self._player.kill()
@@ -168,9 +167,7 @@ class DmxCue(Cue):
                 self._player.join()
                 self._player = None
 
-                ossia_queue.put(QueueOSCData(   'remove', 
-                                                self._osc_route, 
-                                                dictionary = self.OSC_DMXPLAYER_CONF))
+                ossia.remove_nodes( OSCConfData(device_name=self._osc_route, dictionary = self.OSC_DMXPLAYER_CONF) )
 
             except Exception as e:
                 logger.warning(f'Could not properly unload {self.__class__.__name__} {self.uuid} : {e}')
