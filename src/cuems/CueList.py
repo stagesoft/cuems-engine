@@ -65,20 +65,20 @@ class CueList(Cue):
         
         return media_dict
 
-    def arm(self, conf, ossia_queue, armed_list, init = False):
+    def arm(self, conf, ossia_server, armed_list, init = False):
         self.conf = conf
         self.armed_list = armed_list
 
         if self.enabled and self.loaded == init:
             if not self in armed_list:
-                self.contents[0].arm(self.conf, ossia_queue, self.armed_list, init)
+                self.contents[0].arm(self.conf, ossia_server, self.armed_list, init)
 
                 self.loaded = True
 
                 armed_list.append(self)
 
             if self.post_go == 'go':
-                self._target_object.arm(self.conf, ossia_queue, self.armed_list, init)
+                self._target_object.arm(self.conf, ossia_server, self.armed_list, init)
 
             return True
         else:
@@ -122,9 +122,9 @@ class CueList(Cue):
         '''
 
         if self in self.armed_list:
-            self.disarm(ossia.conf_queue)
+            self.disarm(ossia)
 
-    def disarm(self, ossia_queue):
+    def disarm(self, ossia_server = None):
         try:
             if self in self.armed_list:
                 self.armed_list.remove(self)

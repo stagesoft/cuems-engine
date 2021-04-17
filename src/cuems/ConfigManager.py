@@ -93,11 +93,15 @@ class ConfigManager(Thread):
         self.node_conf = {}
         self.network_map = {}
         self.network_outputs = {}
-        self.node_outputs = {}
+        self.node_outputs = {'audio_inputs':[], 'audio_outputs':[], 'video_inputs':[], 'video_outputs':[], 'dmx_inputs':[], 'dmx_outputs':[]}
         self.amimaster = False
         self.project_conf = {}
         self.project_maps = {}
+        self.project_default_outputs = {}
+
         self.default_mappings = False
+
+        self.number_of_nodes = 1
 
         self.load_node_conf()
 
@@ -186,64 +190,43 @@ class ConfigManager(Thread):
 
         for node in self.network_outputs['nodes']:
             if node['node']['mac'] == self.node_conf['mac']:
-                self.node_outputs = node['node']
+                temp_node_outputs = node['node']
                 break
 
-        '''
-        for key, value in node_outputs.items():
-            if key == 'audio':
-                if not value:
-                    break
-                
-                for item in value:
-                    if 'outputs' in item.keys() and item['outputs']:
-                        self.node_outputs['audio_outputs'] = []
-                        for subitem in item['outputs']:
-                            self.node_outputs['audio_outputs'].append(subitem['output']['name'])
-                    elif 'default_output' in item.keys():
-                        self.node_outputs['default_audio_output'] = item['default_output']
-                    elif 'inputs' in item.keys() and item['inputs']:
-                        self.node_outputs['audio_inputs'] = []
-                        for subitem in item['inputs']:
-                            self.node_outputs['audio_inputs'].append(subitem['input']['name'])
-                    elif 'default_input' in item.keys():
-                        self.node_outputs['default_audio_input'] = item['default_input']
-            elif key == 'video':
-                if not value:
-                    break
+        temp_node_outputs.pop('uuid')
+        temp_node_outputs.pop('mac')
+        
+        for section, value in temp_node_outputs.items():
+            if section == 'audio' and value:
+                for subsection in value:
+                    for key, value in subsection.items():
+                        if key == 'outputs':
+                            for subitem in value:
+                                self.node_outputs['audio_outputs'].append(subitem['output']['name'])
 
-                for item in value:
-                    if 'outputs' in item.keys() and item['outputs']:
-                        self.node_outputs['video_outputs'] = []
-                        for subitem in item['outputs']:
-                            self.node_outputs['video_outputs'].append(subitem['output']['name'])
-                    elif 'default_output' in item.keys():
-                        self.node_outputs['default_video_output'] = item['default_output']
-                    elif 'inputs' in item.keys() and item['inputs']:
-                        self.node_outputs['video_inputs'] = []
-                        for subitem in item['inputs']:
-                            self.node_outputs['video_inputs'].append(subitem['input']['name'])
-                    elif 'default_input' in item.keys():
-                        self.node_outputs['default_video_input'] = item['default_input']
-            elif key == 'dmx':
-                self.node_outputs['dmx_outputs'] = []
-                if not value:
-                    break
+                        elif key == 'inputs':
+                            for subitem in value:
+                                self.node_outputs['audio_inputs'].append(subitem['input']['name'])
 
-                for item in value:
-                    if 'outputs' in item.keys() and item['outputs']:
-                        self.node_outputs['dmx_outputs'] = []
-                        for subitem in item['outputs']:
-                            self.node_outputs['dmx_outputs'].append(subitem['output']['name'])
-                    elif 'default_output' in item.keys():
-                        self.node_outputs['default_dmx_output'] = item['default_output']
-                    elif 'inputs' in item.keys():
-                        self.node_outputs['dmx_inputs'] = []
-                        for subitem in item['inputs'] and item['inputs']:
-                            self.node_outputs['dmx_inputs'].append(subitem['input']['name'])
-                    elif 'default_input' in item.keys():
-                        self.node_outputs['default_dmx_input'] = item['default_input']
-        '''
+            elif section == 'video' and value:
+                for subsection in value:
+                    for key, value in subsection.items():
+                        if key == 'outputs':
+                            for subitem in value:
+                                self.node_outputs['video_outputs'].append(subitem['output']['name'])
+                        if key == 'inputs':
+                            for subitem in value:
+                                self.node_outputs['video_inputs'].append(subitem['input']['name'])
+
+            elif section == 'dmx' and value:
+                for subsection in value:
+                    for key, value in subsection.items():
+                        if key == 'outputs':
+                            for subitem in value:
+                                self.node_outputs['dmx_outputs'].append(subitem['output']['name'])
+                        if key == 'inputs':
+                            for subitem in value:
+                                self.node_outputs['dmx_inputs'].append(subitem['input']['name'])
 
     def load_project_settings(self, project_uname):
         conf = {}
@@ -291,29 +274,21 @@ class ConfigManager(Thread):
         maps.pop('xmlns:cms')
         maps.pop('xmlns:xsi')
         maps.pop('xsi:schemaLocation')
-        self.project_maps = maps.copy()
+        nodes = maps.pop('nodes')
+        self.number_of_nodes = maps.pop('number_of_nodes')
+        self.project_default_outputs = maps.copy()
         # By now we need to correct the data structure from the xml
         # the converter is not getting what we really intended but we'll
         # correct it here by the moment
         try:
-            for key, value in self.project_maps.items():
-                if value:
-                    corrected_dict = {}
-                    for item in value:
-                        corrected_dict.update(item)
-                    self.project_maps[key] = corrected_dict
+            for node in nodes:
+                if node['node']['uuid'] == self.node_conf['uuid']:
+                    self.project_maps = node.pop('node')
+                    break
             
-            for key, value in self.project_maps.items():
-                if value:
-                    for subkey, subvalue in value.items():
-                        new_list = []
-                        if isinstance(subvalue, list):
-                            for elem in subvalue:
-                                if isinstance(elem, dict):
-                                    new_list.append(list(elem.values()))
-                                else:
-                                    new_list.append(elem)
-                            value[subkey] = new_list
+            self.project_maps.pop('uuid')
+            self.project_maps.pop('mac')
+
         except Exception as e:
             logger.error(f"Error loading project mappings. {e}")
         else:
