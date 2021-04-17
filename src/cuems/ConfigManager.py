@@ -188,10 +188,15 @@ class ConfigManager(Thread):
         except Exception as e:
             logger.exception(e)
 
+        temp_node_outputs = None
+
         for node in self.network_outputs['nodes']:
             if node['node']['mac'] == self.node_conf['mac']:
                 temp_node_outputs = node['node']
                 break
+
+        if not temp_node_outputs:
+            raise Exception('Node mac could not be recognised in the network map')
 
         temp_node_outputs.pop('uuid')
         temp_node_outputs.pop('mac')
