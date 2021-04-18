@@ -1,41 +1,93 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<cms:CuemsProjectMappings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/project_mappings.xsd">
-    <audio>
-        <outputs>
-            <output>
-                <name>system:playback_1</name>
-                <mappings>
-                    <mapped_to>Out1</mapped_to>
-                </mappings>
-            </output>
-            <output>
-                <name>system:playback_2</name>
-                <mappings>
-                    <mapped_to>Out2</mapped_to>
-                </mappings>
-            </output>
-        </outputs>
-        <default_output>system:playback_1</default_output>
-    </audio>
-    <video>
-        <outputs>
-            <output>
-                <name>0</name>
-                <mappings>
-                    <mapped_to>VideoOut1</mapped_to>
-                    <mapped_to>VideoOut3</mapped_to>
-                </mappings>
-            </output>
-            <output>
-                <name>1</name>
-                <mappings>
-                    <mapped_to>VideoOut2</mapped_to>
-                    <mapped_to>VideoOut4</mapped_to>
-                </mappings>
-            </output>
-        </outputs>
-        <default_output>0</default_output>
-    </video>
-    <dmx>
-    </dmx>
+<?xml version='1.0' encoding='utf-8'?>
+<cms:CuemsProjectMappings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems /etc/cuems/project_mappings.xsd">
+    <number_of_nodes>2</number_of_nodes>
+    <default_audio_input>2cf05d21cca3 system:capture_1</default_audio_input>
+    <default_audio_output>2cf05d21cca3 system:playback_1</default_audio_output>
+    <default_video_input />
+    <default_video_output>2cf05d21cca3 0</default_video_output>
+    <default_dmx_input />
+    <default_dmx_output />
+    <nodes>
+        <node>
+            <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
+            <mac>2cf05d21cca3</mac>
+            <audio>
+                <outputs>
+                    <output>
+                        <name>system:playback_1</name>
+                        <mappings>
+                            <mapped_to>system:playback_1</mapped_to>
+                            <mapped_to>Out1</mapped_to>
+                        </mappings>
+                    </output>
+                    <output>
+                        <name>system:playback_2</name>
+                        <mappings>
+                            <mapped_to>system:playback_2</mapped_to>
+                        </mappings>
+                    </output>
+                </outputs>
+                <inputs>
+                    <input>
+                        <name>system:capture_1</name>
+                        <mappings>
+                            <mapped_to>system:capture_1</mapped_to>
+                        </mappings>
+                    </input>
+                    <input>
+                        <name>system:capture_2</name>
+                        <mappings>
+                            <mapped_to>system:capture_2</mapped_to>
+                        </mappings>
+                    </input>
+                </inputs>
+            </audio>
+            <video>
+                <outputs>
+                    <output>
+                        <name>0</name>
+                        <mappings>
+                            <mapped_to>0</mapped_to>
+                            <mapped_to>VideoOut1</mapped_to>
+                            <mapped_to>VideoOut2</mapped_to>
+                            <mapped_to>VideoOut3</mapped_to>
+                            <mapped_to>VideoOut4</mapped_to>
+                        </mappings>
+                    </output>
+                </outputs>
+            </video>
+            <dmx />
+        </node>
+        <node>
+            <uuid>0367f391-ebf4-48b2-9f26-000000000003</uuid>
+            <mac>0800276db133</mac>
+            <audio>
+                <outputs>
+                    <output>
+                        <name>system:playback_1</name>
+                        <mappings>
+                            <mapped_to>system:playback_1</mapped_to>
+                        </mappings>
+                    </output>
+                    <output>
+                        <name>system:playback_2</name>
+                        <mappings>
+                            <mapped_to>system:playback_2</mapped_to>
+                        </mappings>
+                    </output>
+                </outputs>
+            </audio>
+            <video>
+                <outputs>
+                    <output>
+                        <name>0</name>
+                        <mappings>
+                            <mapped_to>0</mapped_to>
+                        </mappings>
+                    </output>
+                </outputs>
+            </video>
+            <dmx />
+        </node>
+    </nodes>
 </cms:CuemsProjectMappings>
