@@ -303,10 +303,12 @@ class ConfigManager(Thread):
         if mapping_name == 'default':
             return self.node_conf['default_video_output']
         else:
-            for each_out in self.project_maps['video']['outputs']:
-                for each_map in each_out[0]['mappings']:
-                    if mapping_name == each_map['mapped_to']:
-                        return each_out[0]['name']
+            for section in self.project_maps['video']:
+                if 'outputs' in section.keys():
+                    for each_out in section['outputs']:
+                        for each_map in each_out['output']['mappings']:
+                            if mapping_name == each_map['mapped_to']:
+                                return each_out['output']['name']
 
         raise Exception(f'Video output wrongly mapped')
 
