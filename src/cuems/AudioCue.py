@@ -69,7 +69,7 @@ class AudioCue(Cue):
 
         # Assign its own audioplayer object
         try:
-            self._player = AudioPlayer( self._conf.players_port_index, 
+            self._player = AudioPlayer( self._conf.osc_port_index, 
                                         self._conf.node_conf['audioplayer']['path'],
                                         self._conf.node_conf['audioplayer']['args'],
                                         str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
@@ -178,7 +178,7 @@ class AudioCue(Cue):
     def disarm(self, ossia):
         if self.loaded is True:
             try:
-                self._conf.players_port_index['used'].remove(self._player.port)
+                self._conf.osc_port_index['used'].remove(self._player.port)
                 self._player.kill()
                 self._player = None
 
@@ -207,26 +207,29 @@ class AudioCue(Cue):
     def check_mappings(self, settings):
         if settings.project_maps:
             found = False
-            for output in self.outputs:
-                if output['output_name'] == 'default':
-                    found = True
+            
+            for section in settings.project_maps['audio']:
+                if 'outputs' in section.keys():
+                    out_list = section['outputs']
                     break
-                try:
-                    out_list = settings.project_maps['audio']['outputs']
-                except:
-                    found = False
                 else:
-                    for each_out in out_list:
-                        for each_map in each_out[0]['mappings']:
-                            if output['output_name'] == each_map['mapped_to']:
-                                found = True
-                                break
+                    out_list = []
 
-            if not found:
-                return False 
-        else:
-            for output in self.outputs:
-                if output['output_name'] != 'default':
-                    output['output_name'] = 'default'
+            if out_list:
+                for output in self.outputs:
+                    if output['output_name'] == 'default':
+                        found = True
+                        break
+                    else:
+                        for each_out in out_list:
+                            for each_map in each_out['output']['mappings']:
+                                if output['output_name'] == each_map['mapped_to']:
+                                    found = True
+                                    break
 
-        return True
+                return found
+
+            else:
+                return False
+
+        return False

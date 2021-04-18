@@ -184,7 +184,7 @@ class VideoCue(Cue):
             # Needed when each cue launched its own player
             try:
                 self._player.kill()
-                self._conf.players_port_index['used'].remove(self._player.port)
+                self._conf.osc_port_index['used'].remove(self._player.port)
                 self._player.join()
                 self._player = None
 
@@ -212,27 +212,29 @@ class VideoCue(Cue):
     def check_mappings(self, settings):
         if settings.project_maps:
             found = False
-            for output in self.outputs:
-                if output['output_name'] == 'default':
-                    found = True
+            
+            for section in settings.project_maps['video']:
+                if 'outputs' in section.keys():
+                    out_list = section['outputs']
                     break
-                try:
-                    out_list = settings.project_maps['video']['outputs']
-                except:
-                    found = False
                 else:
-                    for each_out in out_list:
-                        for each_map in each_out[0]['mappings']:
-                            if output['output_name'] == each_map['mapped_to']:
-                                found = True
-                                break
+                    out_list = []
 
-            if not found:
-                return False 
-        else:
-            for output in self.outputs:
-                if output['output_name'] != 'default':
-                    output['output_name'] = 'default'
+            if out_list:
+                for output in self.outputs:
+                    if output['output_name'] == 'default':
+                        found = True
+                        break
+                    else:
+                        for each_out in out_list:
+                            for each_map in each_out['output']['mappings']:
+                                if output['output_name'] == each_map['mapped_to']:
+                                    found = True
+                                    break
 
-        return True
+                return found
 
+            else:
+                return False
+
+        return False
