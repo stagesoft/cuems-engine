@@ -48,7 +48,8 @@ class OssiaServer(threading.Thread):
 
         # Ossia Local OSCQuery device and server creation
         self.node_id = node_id
-        if master:
+        self.master = master
+        if self.master:
             local_device_name = f'{self.node_id}_master_root'
         else:
             local_device_name = f'{self.node_id}_slave_root'
@@ -101,7 +102,7 @@ class OssiaServer(threading.Thread):
             while (oscq_message != None):
                 parameter, value = oscq_message
 
-                # print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
+                print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
 
                 # Try to copy the message on the appropriate nodes
                 try:
@@ -113,6 +114,14 @@ class OssiaServer(threading.Thread):
                     logger.info(f'OSC device has no {str(parameter.node)} node')
                 except Exception as e:
                     logger.exception(e)
+
+                if str(parameter.node)[:13] == '/engine/comms/':
+                    # If we are master we filter the comms OSC messages and
+                    # try to copy them to all the slaves directly
+                    print(f'Copying comms to slaves / master...')
+                    for device in self.oscquery_slave_devices.keys():
+                        self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+                        self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
 
                 # Try to call a callback for that node if there is any
                 try:
@@ -136,7 +145,13 @@ class OssiaServer(threading.Thread):
                 while (oscq_message != None):
                     parameter, value = oscq_message
 
-                    # print(f'REMOTE QUEUE : param : {str(parameter.node)} value : {value}')
+                    print(f'REMOTE QUEUE : device {device} param : {str(parameter.node)} value : {value}')
+
+                    self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+                    self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+
+                    if not self.master:
+                        self._oscquery_registered_nodes[str(parameter.node)][0].value = value
 
                     '''
                     try:
@@ -208,14 +223,20 @@ class OssiaServer(threading.Thread):
 
             # logger.info(f'OSC Nodes listening on {data.in_port}: {self.osc_player_registered_nodes[data.device_name + route]}')
 
-    def add_master_nodes(self, data):
-        ''' Just an alias to add_slave_nodes to make code more readable
+    def add_master_node(self, data):
+        ''' Just an alias to add_other_nodes to make code more readable
             But it also adds a small delay for the master node to do it a bit later
         '''
         time.sleep(1)
-        self.add_slave_nodes(data)
+        self.add_other_nodes(data)
 
     def add_slave_nodes(self, data):
+        ''' Just an alias to add_other_nodes to make code more readable
+            But it also adds a small delay for the master node to do it a bit later
+        '''
+        self.add_other_nodes(data)
+
+    def add_other_nodes(self, data):
         if isinstance(data, SlaveOSCQueryConfData):
             self.oscquery_slave_devices[data.device_name] = ossia.OSCQueryDevice(  data.device_name, 
                                                                                     f'ws://{data.host}:{data.ws_port}', 
