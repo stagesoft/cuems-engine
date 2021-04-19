@@ -71,7 +71,6 @@ class CuemsScript(dict):
 
     def get_media(self, cuelist = None):
         '''Gets all the media files list present on a cuelist.'''
-
         media_dict = dict()
 
         # If no cuelist is specified we are looking inside our own
@@ -83,7 +82,7 @@ class CuemsScript(dict):
             for cue in cuelist.contents:
                 if type(cue)==CueList:
                     # If the cue is a cuelist, let's recurse
-                    media_dict.update(self.get_media(cue))
+                    media_dict.update(self.get_media(cuelist=cue))
                 else:
                     try:
                         if cue.media:
@@ -93,7 +92,7 @@ class CuemsScript(dict):
                         # logger.debug("cue with no media")
         return media_dict
 
-    def get_own_media(self, uuid, cuelist = None):
+    def get_own_media(self, cuelist = None, config = None):
         '''Gets the media files list present on the script which are 
         related to the specified node uuid, usually our local UUID,
         as we are looking for our own needed media files'''
@@ -109,11 +108,13 @@ class CuemsScript(dict):
             for cue in cuelist.contents:
                 if type(cue)==CueList:
                     # If the cue is a cuelist, let's recurse
-                    media_dict.update(self.get_own_media(uuid, cue))
+                    media_dict.update(self.get_own_media(cuelist=cue, config=config))
                 else:
                     try:
                         if cue.media:
-                            media_dict[cue.media.file_name] = type(cue)
+                            cue.check_mappings(config)
+                            if cue._local:
+                                media_dict[cue.media.file_name] = type(cue)
                     except KeyError:
                         pass
                         # logger.debug("cue with no media")
