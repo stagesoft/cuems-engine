@@ -19,6 +19,7 @@ class Cue(dict):
         self._end_reached = False
         self._go_thread = None
         self._stop_requested = False
+        self._local = False
 
     @property
     def uuid(self):
@@ -241,7 +242,7 @@ class Cue(dict):
         else:
             return None
 
-    def check_mappings(self, mappings):
+    def check_mappings(self, settings):
         return True
 
     def stop(self):
