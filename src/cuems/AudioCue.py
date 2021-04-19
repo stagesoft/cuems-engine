@@ -122,15 +122,15 @@ class AudioCue(Cue):
             self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
             self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
             offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
-            ossia.oscquery_registered_nodes[key][0].value = offset_to_go
-            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+            ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 in go_callback {key}')
 
             # Connect to mtc signal
         try:
             key = f'{self._osc_route}/mtcfollow'
-            ossia.oscquery_registered_nodes[key][0].value = 1
+            ossia._oscquery_registered_nodes[key][0].value = 1
         except KeyError:
             logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -155,13 +155,13 @@ class AudioCue(Cue):
                 self._end_mtc = self._start_mtc + (duration)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
                 key = f'{self._osc_route}/offset'
-                ossia.oscquery_registered_nodes[key][0].value = offset_to_go
+                ossia._oscquery_registered_nodes[key][0].value = offset_to_go
 
                 loop_counter += 1
                 
             try:
                 key = f'{self._osc_route}/mtcfollow'
-                ossia.oscquery_registered_nodes[key][0].value = 0
+                ossia._oscquery_registered_nodes[key][0].value = 0
             except KeyError:
                 logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -205,31 +205,27 @@ class AudioCue(Cue):
             self._player.kill()
 
     def check_mappings(self, settings):
-        if settings.project_maps:
-            found = False
-            
-            for section in settings.project_maps['audio']:
-                if 'outputs' in section.keys():
-                    out_list = section['outputs']
+        found = False
+        
+        for section in settings.project_maps['audio']:
+            if 'outputs' in section.keys():
+                out_list = section['outputs']
+                map_list = ['default']
+                for out in out_list:
+                    for map in out['output']['mappings']:
+                        map_list.append(map['mapped_to'])
+                break
+            else:
+                map_list = []
+
+        for output in self.outputs:
+            if output['node_uuid'] == settings.node_conf['uuid']:
+                self._local = True
+                if output['output_name'] in map_list:
+                    found = True
                     break
                 else:
-                    out_list = []
+                    found = False
+                    break
 
-            if out_list:
-                for output in self.outputs:
-                    if output['output_name'] == 'default':
-                        found = True
-                        break
-                    else:
-                        for each_out in out_list:
-                            for each_map in each_out['output']['mappings']:
-                                if output['output_name'] == each_map['mapped_to']:
-                                    found = True
-                                    break
-
-                return found
-
-            else:
-                return False
-
-        return False
+        return found

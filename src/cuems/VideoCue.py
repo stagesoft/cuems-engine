@@ -78,15 +78,15 @@ class VideoCue(Cue):
 
         try:
             key = f'{self._osc_route}/jadeo/cmd'
-            ossia.oscquery_registered_nodes[key][0].value = 'midi disconnect'
-            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+            ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/load'
-            ossia.oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
-            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+            ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 2 (load) in arm_callback {key}')
 
@@ -126,14 +126,14 @@ class VideoCue(Cue):
             self._end_mtc = self._start_mtc + duration
             cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
             offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
-            ossia.oscquery_registered_nodes[key][0].value = offset_to_go
-            logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+            ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/cmd'
-            ossia.oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
+            ossia._oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
         except KeyError:
             logger.debug(f'Key error 2 (connect) in go_callback {key}')
 
@@ -159,8 +159,8 @@ class VideoCue(Cue):
                     self._start_mtc = mtc.main_tc
                     self._end_mtc = self._start_mtc + duration
                     offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
-                    ossia.oscquery_registered_nodes[key][0].value = offset_to_go
-                    logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+                    ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                    logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
                 except KeyError:
                     logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
@@ -168,8 +168,8 @@ class VideoCue(Cue):
 
             try:
                 key = f'{self._osc_route}/jadeo/cmd'
-                ossia.oscquery_registered_nodes[key][0].value = 'midi disconnect'
-                logger.info(key + " " + str(ossia.oscquery_registered_nodes[key][0].value))
+                ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
                 logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
@@ -210,31 +210,27 @@ class VideoCue(Cue):
         self._stop_requested = True
 
     def check_mappings(self, settings):
-        if settings.project_maps:
-            found = False
-            
-            for section in settings.project_maps['video']:
-                if 'outputs' in section.keys():
-                    out_list = section['outputs']
+        found = False
+        
+        for section in settings.project_maps['video']:
+            if 'outputs' in section.keys():
+                out_list = section['outputs']
+                map_list = ['default']
+                for out in out_list:
+                    for map in out['output']['mappings']:
+                        map_list.append(map['mapped_to'])
+                break
+            else:
+                map_list = []
+
+        for output in self.outputs:
+            if output['node_uuid'] == settings.node_conf['uuid']:
+                self._local = True
+                if output['output_name'] in map_list:
+                    found = True
                     break
                 else:
-                    out_list = []
+                    found = False
+                    break
 
-            if out_list:
-                for output in self.outputs:
-                    if output['output_name'] == 'default':
-                        found = True
-                        break
-                    else:
-                        for each_out in out_list:
-                            for each_map in each_out['output']['mappings']:
-                                if output['output_name'] == each_map['mapped_to']:
-                                    found = True
-                                    break
-
-                return found
-
-            else:
-                return False
-
-        return False
+        return found
