@@ -44,7 +44,6 @@ class OssiaServer(threading.Thread):
 
         self.local_queue_loop = threading.Thread(target=self.threaded_local_loop, name='OSCLocalQueueLoop')
         self.remote_queue_loop = threading.Thread(target=self.threaded_remote_loop, name='OSCRemoteQueueLoop')
-        # self.global_queue_loop = threading.Thread(target=self.threaded_global_loop, name='OSCGlobalQueueLoop')
 
         # Ossia Local OSCQuery device and server creation
         self.node_id = node_id
@@ -102,7 +101,7 @@ class OssiaServer(threading.Thread):
             while (oscq_message != None):
                 parameter, value = oscq_message
 
-                print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
+                # print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
 
                 # Try to copy the message on the appropriate nodes
                 try:
@@ -115,10 +114,21 @@ class OssiaServer(threading.Thread):
                 except Exception as e:
                     logger.exception(e)
 
+                # Try to copy the message on the appropriate nodes
+                try:
+                    # if the message has a route to any of the local players...
+                    if str(parameter.node) in self.oscquery_slave_registered_nodes.keys():
+                        self.oscquery_slave_registered_nodes[str(parameter.node)][0].value = value
+                        # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
+                except KeyError:
+                    logger.info(f'OSC device has no {str(parameter.node)} node')
+                except Exception as e:
+                    logger.exception(e)
+
                 if str(parameter.node)[:13] == '/engine/comms/':
                     # If we are master we filter the comms OSC messages and
                     # try to copy them to all the slaves directly
-                    print(f'Copying comms to slaves / master...')
+                    # print(f'Copying comms to slaves / master...')
                     for device in self.oscquery_slave_devices.keys():
                         self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
                         self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
@@ -145,13 +155,16 @@ class OssiaServer(threading.Thread):
                 while (oscq_message != None):
                     parameter, value = oscq_message
 
-                    print(f'REMOTE QUEUE : device {device} param : {str(parameter.node)} value : {value}')
+                    # print(f'REMOTE QUEUE : device {device} param : {str(parameter.node)} value : {value}')
 
                     self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
                     self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
 
                     if not self.master:
-                        self._oscquery_registered_nodes[str(parameter.node)][0].value = value
+                        try:
+                            self._oscquery_registered_nodes[str(parameter.node)][0].value = value
+                        except KeyError:
+                            pass
 
                     '''
                     try:
@@ -176,20 +189,6 @@ class OssiaServer(threading.Thread):
                     oscq_message = queue.pop()
 
             time.sleep(0.005)
-
-    def threaded_global_loop(self):
-        while self.server_running:
-            for queue in self.gmessageqs:
-                # Loop for the remote queues
-                oscq_message = queue.pop()
-                while (oscq_message != None):
-                    parameter, value = oscq_message
-
-                    print(f'GLOBAL QUEUE : param : {str(parameter.node)} value : {value}')
-
-                    oscq_message = queue.pop()
-
-            time.sleep(0.001)
 
     def add_player_nodes(self, data):
         if isinstance(data, PlayerOSCConfData):

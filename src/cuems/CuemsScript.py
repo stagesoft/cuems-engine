@@ -86,7 +86,7 @@ class CuemsScript(dict):
                 else:
                     try:
                         if cue.media:
-                            media_dict[cue.media.file_name] = type(cue)
+                            media_dict[cue.media.file_name] = cue
                     except KeyError:
                         pass
                         # logger.debug("cue with no media")
@@ -114,7 +114,7 @@ class CuemsScript(dict):
                         if cue.media:
                             cue.check_mappings(config)
                             if cue._local:
-                                media_dict[cue.media.file_name] = type(cue)
+                                media_dict[cue.media.file_name] = cue
                     except KeyError:
                         pass
                         # logger.debug("cue with no media")

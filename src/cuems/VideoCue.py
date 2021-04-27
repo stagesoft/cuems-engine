@@ -210,27 +210,24 @@ class VideoCue(Cue):
         self._stop_requested = True
 
     def check_mappings(self, settings):
-        found = False
+        found = True
         
-        for section in settings.project_maps['video']:
-            if 'outputs' in section.keys():
-                out_list = section['outputs']
-                map_list = ['default']
-                for out in out_list:
-                    for map in out['output']['mappings']:
-                        map_list.append(map['mapped_to'])
-                break
-            else:
-                map_list = []
+        map_list = ['default']
+
+        if settings.project_node_mappings['video']['outputs']:
+            for elem in settings.project_node_mappings['video']['outputs']:
+                for map in elem['mappings']:
+                    map_list.append(map['mapped_to'])
 
         for output in self.outputs:
-            if output['node_uuid'] == settings.node_conf['uuid']:
+            # if output['node_uuid'] == settings.node_conf['uuid']:
+            if output['output_name'][:36] == settings.node_conf['uuid']:
                 self._local = True
-                if output['output_name'] in map_list:
-                    found = True
-                    break
-                else:
+                if output['output_name'][37:] not in map_list:
                     found = False
                     break
+            else:
+                self._local = False
+                found = True
 
         return found

@@ -92,31 +92,47 @@ class ConfigManager(Thread):
         self.database_name = None
         self.node_conf = {}
         self.network_map = {}
-        self.network_outputs = {}
-        self.node_outputs = {'audio_inputs':[], 'audio_outputs':[], 'video_inputs':[], 'video_outputs':[], 'dmx_inputs':[], 'dmx_outputs':[]}
+        self.network_mappings = {}
+        self.node_mappings = {}
+        self.node_hw_outputs = {'audio_inputs':[], 'audio_outputs':[], 'video_inputs':[], 'video_outputs':[], 'dmx_inputs':[], 'dmx_outputs':[]}
+
         self.amimaster = False
+
         self.project_conf = {}
-        self.project_maps = {}
+        self.project_mappings = {}
+        self.project_node_mappings = {}
         self.project_default_outputs = {}
 
-        self.default_mappings = False
+        self.using_default_mappings = False
 
         self.number_of_nodes = 1
 
-        self.load_node_conf()
+        try:
+            self.load_node_conf()
+        except Exception as e:
+            logger.exception(f'Exception catched while load_node_conf: {e}')
+            raise e
 
         self.check_amimaster()
+
+        if self.amimaster:
+            try:
+                self.load_network_map()
+            except Exception as e:
+                logger.exception(f'Exception catched while load_network_map: {e}')
+                raise e
+
+        if not nodeconf:
+            try:
+                self.load_net_and_node_mappings()
+            except Exception as e:
+                logger.exception(f'Exception catched while load_net_and_node_mappings: {e}')
+                raise e
+
 
         self.osc_port_index = { "start":int(self.node_conf['osc_in_port_base']), 
                                     "used":[]
                                     }
-
-        if not nodeconf:
-            self.load_node_outputs()
-
-        if self.amimaster:
-            self.load_network_map()
-
         self.start()
 
     def load_network_map(self):
@@ -173,65 +189,37 @@ class ConfigManager(Thread):
         #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
         #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
-    def load_node_outputs(self):
+    def load_net_and_node_mappings(self):
         settings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
         settings_file = path.join(self.cuems_conf_path, 'default_mappings.xml')
         try:
-            self.network_outputs = Settings(schema=settings_schema, xmlfile=settings_file).copy()
-            self.network_outputs.pop('xmlns:cms')
-            self.network_outputs.pop('xmlns:xsi')
-            self.network_outputs.pop('xsi:schemaLocation')
+            self.network_mappings = Settings(schema=settings_schema, xmlfile=settings_file).copy()
+            self.network_mappings.pop('xmlns:cms')
+            self.network_mappings.pop('xmlns:xsi')
+            self.network_mappings.pop('xsi:schemaLocation')
         except FileNotFoundError as e:
             raise e
         except KeyError:
             pass
         except Exception as e:
-            logger.exception(e)
+            logger.exception(f'Exception in load_net_and_node_mappings: {e}')
 
-        temp_node_outputs = None
+        self.network_mappings = self.process_network_mappings(self.network_mappings.copy())
 
-        for node in self.network_outputs['nodes']:
-            if node['node']['mac'] == self.node_conf['mac']:
-                temp_node_outputs = node['node']
+        for node in self.network_mappings['nodes']:
+            if node['uuid'] == self.node_conf['uuid']:
+                self.node_mappings = node
                 break
 
-        if not temp_node_outputs:
-            raise Exception('Node mac could not be recognised in the network map')
+        if not self.node_mappings:
+            raise Exception('Node uuid could not be recognised in the network outputs map')
 
-        temp_node_outputs.pop('uuid')
-        temp_node_outputs.pop('mac')
-        
-        for section, value in temp_node_outputs.items():
-            if section == 'audio' and value:
-                for subsection in value:
-                    for key, value in subsection.items():
-                        if key == 'outputs':
-                            for subitem in value:
-                                self.node_outputs['audio_outputs'].append(subitem['output']['name'])
-
-                        elif key == 'inputs':
-                            for subitem in value:
-                                self.node_outputs['audio_inputs'].append(subitem['input']['name'])
-
-            elif section == 'video' and value:
-                for subsection in value:
-                    for key, value in subsection.items():
-                        if key == 'outputs':
-                            for subitem in value:
-                                self.node_outputs['video_outputs'].append(subitem['output']['name'])
-                        if key == 'inputs':
-                            for subitem in value:
-                                self.node_outputs['video_inputs'].append(subitem['input']['name'])
-
-            elif section == 'dmx' and value:
-                for subsection in value:
-                    for key, value in subsection.items():
-                        if key == 'outputs':
-                            for subitem in value:
-                                self.node_outputs['dmx_outputs'].append(subitem['output']['name'])
-                        if key == 'inputs':
-                            for subitem in value:
-                                self.node_outputs['dmx_inputs'].append(subitem['input']['name'])
+        # Select just output names for node_hw_outputs var
+        for section, value in self.node_mappings.items():
+            if isinstance(value, dict):
+                for subsection, subvalue in value.items():
+                    for subitem in subvalue:
+                        self.node_hw_outputs[section+'_'+subsection].append(subitem['name'])
 
     def load_project_settings(self, project_uname):
         conf = {}
@@ -258,57 +246,50 @@ class ConfigManager(Thread):
         logger.info(f'Project {project_uname} settings loaded')
 
     def load_project_mappings(self, project_uname):
-        maps = {}
+        mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
+        mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
         try:
-            mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
-            mappings_path = path.join(self.library_path, 'projects', project_uname, 'mappings.xml')
-            maps = Settings(mappings_schema, mappings_path)
-            self.default_mappings = False
+            self.project_mappings = Settings(mappings_schema, mappings_path)
+            self.project_mappings.pop('xmlns:cms')
+            self.project_mappings.pop('xmlns:xsi')
+            self.project_mappings.pop('xsi:schemaLocation')
+
+            self.using_default_mappings = False
         except FileNotFoundError as e:
             logger.info(f'Project mappings not found. Adopting default mappings.')
 
-            try:
-                mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
-                mappings_path = path.join(self.cuems_conf_path, 'default_mappings.xml')
-                maps = Settings(mappings_schema, mappings_path)
-                self.default_mappings = True
-            except Exception as e:
-                logger.error(f"Default mappings file not found. Project can't be loaded")
-                raise e
+            self.using_default_mappings = True
+            self.project_mappings = self.node_mappings
+            return
+        except KeyError:
+            pass
+        except Exception as e:
+            logger.exception(f'Exception in load_project_mappings: {e}')
 
-        maps.pop('xmlns:cms')
-        maps.pop('xmlns:xsi')
-        maps.pop('xsi:schemaLocation')
-        nodes = maps.pop('nodes')
-        self.number_of_nodes = maps.pop('number_of_nodes')
-        self.project_default_outputs = maps.copy()
+        self.number_of_nodes = int(self.project_mappings['number_of_nodes'])
         # By now we need to correct the data structure from the xml
         # the converter is not getting what we really intended but we'll
         # correct it here by the moment
-        try:
-            for node in nodes:
-                if node['node']['uuid'] == self.node_conf['uuid']:
-                    self.project_maps = node.pop('node')
-                    break
-            
-            self.project_maps.pop('uuid')
-            self.project_maps.pop('mac')
 
-        except Exception as e:
-            logger.error(f"Error loading project mappings. {e}")
-        else:
-            logger.info(f'Project {project_uname} mappings loaded')
+        self.project_mappings = self.process_network_mappings(self.project_mappings.copy())
+
+        for node in self.project_mappings['nodes']:
+            if node['uuid'] == self.node_conf['uuid']:
+                self.project_node_mappings = node
+                break
+            
+        if not self.project_node_mappings:
+            raise Exception('Node uuid could not be recognised in the project outputs map')
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
             return self.node_conf['default_video_output']
         else:
-            for section in self.project_maps['video']:
-                if 'outputs' in section.keys():
-                    for each_out in section['outputs']:
-                        for each_map in each_out['output']['mappings']:
-                            if mapping_name == each_map['mapped_to']:
-                                return each_out['output']['name']
+            if 'outputs' in self.project_node_mappings['video'].keys():
+                for each_out in self.project_node_mappings['video']['outputs']:
+                    for each_map in each_out['mappings']:
+                        if mapping_name == each_map['mapped_to']:
+                            return each_out['name']
 
         raise Exception(f'Video output wrongly mapped')
 
@@ -316,7 +297,7 @@ class ConfigManager(Thread):
         if mapping_name == 'default':
             return self.node_conf['default_audio_output']
         else:
-            for each_out in self.project_maps['audio']['outputs']:
+            for each_out in self.project_mappings['audio']['outputs']:
                 for each_map in each_out[0]['mappings']:
                     if mapping_name == each_map['mapped_to']:
                         return each_out[0]['name']
@@ -357,4 +338,25 @@ class ConfigManager(Thread):
                 break
 
 
+    def process_network_mappings(self, mappings):
+        '''Temporary process instead of reviewing xml read and convert to objects'''
+        temp_nodes = []
+        
+        for node in mappings['nodes']:
+            temp_node = {}
+            for section, contents in node['node'].items():
+                if not isinstance(contents, list):
+                    temp_node[section] = contents
+                else:
+                    temp_node[section] = {}
+                    for item in contents:
+                        for key, values in item.items():
+                            temp_node[section][key] = []
+                            for elem in values:
+                                for subkey, subvalue in elem.items():
+                                    temp_node[section][key].append(subvalue)
+            temp_nodes.append(temp_node)
+        
+        mappings['nodes'] = temp_nodes
 
+        return mappings

@@ -198,7 +198,7 @@
 
   <xs:complexType name="AudioCueOutputsType">
     <xs:sequence minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="node_uuid" type="cms:UuidType" />
+      <!-- <xs:element name="node_uuid" type="cms:UuidType" /> -->
       <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_vol" type="cms:PercentType" />
       <xs:element name="channels" type="cms:AudioChannelsType" />
@@ -235,7 +235,7 @@
     <!-- Video outputs type -->
     <!-- Specify n virtual video outputs -->
     <xs:sequence minOccurs="1" maxOccurs="1">
-      <xs:element name="node_uuid" type="cms:UuidType" />
+      <!-- <xs:element name="node_uuid" type="cms:UuidType" /> -->
       <xs:element name="output_name" type="cms:NameStringType" />
       <xs:element name="output_geometry" type="cms:VideoOutputGeometryType" />
     </xs:sequence>
