@@ -653,6 +653,11 @@ class CuemsEngine():
         if self.cm.amimaster:
             for device in self.ossia_server.oscquery_slave_devices.keys():
                 try:
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'load_project'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = kwargs['value']
+
                     logger.info(f'Calling load project {kwargs["value"]} via OSC on slave node {device}')
                     self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/load'][0].value = kwargs['value']
                 except Exception as e:
@@ -799,9 +804,16 @@ class CuemsEngine():
             if self.cm.amimaster:
                 # If we are master, prior to process the script cuelist in local, we check the load process on the slaves...
                 node_error_dict = {}
-                for device in self.ossia_server.oscquery_slave_devices:
-                    if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value != 'OK':
-                        node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
+                any_error = False
+                ok_count = 0
+                while ok_count < len(self.ossia_server.oscquery_slave_devices) and not any_error:
+                    ok_count = 0
+                    for device in self.ossia_server.oscquery_slave_devices:
+                        if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'ERROR':
+                            node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
+                        elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'OK':
+                            ok_count += 1
+
                 if node_error_dict:
                     # Some slave could not load the project
                     self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':f'Errors loading project on nodes: {node_error_dict}'})
@@ -892,6 +904,21 @@ class CuemsEngine():
                 logger.info(f'Current Cue: {self.ongoing_cue}')
 
     def go_callback(self, **kwargs):
+        # Call OSC go on all slaves:
+        # by the moment we are using the direct /engine/command/go callback on the slaves
+        if self.cm.amimaster:
+            for device in self.ossia_server.oscquery_slave_devices.keys():
+                try:
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'go'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+
+                    logger.info(f'Calling GO CUE via OSC on slave node {device}')
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/go'][0].value = 1
+                except Exception as e:
+                    logger.exception(e)
+
         if self.script:
             if not self.ongoing_cue:
                 cue_to_go = self.script.cuelist.contents[0]
@@ -909,7 +936,8 @@ class CuemsEngine():
                 logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
             else:
                 self.ongoing_cue = cue_to_go
-                self.ongoing_cue.go(self.ossia_server, self.mtclistener)
+                if cue_to_go._local:
+                    self.ongoing_cue.go(self.ossia_server, self.mtclistener)
                 self.next_cue_pointer = self.ongoing_cue.get_next_cue()
                 self.go_offset = self.mtclistener.main_tc.milliseconds
 
@@ -1074,7 +1102,7 @@ class CuemsEngine():
         try:
             for index, item in enumerate(cuelist.contents):
                 if item.check_mappings(self.cm):
-                    if isinstance(item, VideoCue):
+                    if isinstance(item, VideoCue) and item._local:
                         try:
                             for output in item.outputs:
                                 # TO DO : add support for multiple outputs
@@ -1088,7 +1116,7 @@ class CuemsEngine():
                 else:
                     raise Exception(f"Cue outputs badly assigned in cue : {item.uuid}")
 
-                if item.loaded and not item in self.armedcues:
+                if item.loaded and not item in self.armedcues and item._local:
                     item.arm(self.cm, self.ossia_server, self.armedcues, init = True)
 
                 if item.target is None or item.target == "":
