@@ -67,6 +67,9 @@ class VideoCue(Cue):
         self._conf = conf
         self._armed_list = armed_list
 
+        if not self._local:
+            return True
+
         if not self.enabled:
             if self.loaded and self in self._armed_list:
                     self.disarm(ossia)
@@ -78,14 +81,16 @@ class VideoCue(Cue):
 
         try:
             key = f'{self._osc_route}/jadeo/cmd'
-            ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+            # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+            ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
             logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/load'
-            ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+            # ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+            ossia.osc_player_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
             logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 2 (load) in arm_callback {key}')
@@ -126,14 +131,16 @@ class VideoCue(Cue):
             self._end_mtc = self._start_mtc + duration
             cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
             offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
-            ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+            # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+            ossia.osc_player_registered_nodes[key][0].value = offset_to_go
             logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
         except KeyError:
             logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
         try:
             key = f'{self._osc_route}/jadeo/cmd'
-            ossia._oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
+            # ossia._oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
+            ossia.osc_player_registered_nodes[key][0].value = "midi connect Midi Through"
         except KeyError:
             logger.debug(f'Key error 2 (connect) in go_callback {key}')
 
@@ -159,7 +166,8 @@ class VideoCue(Cue):
                     self._start_mtc = mtc.main_tc
                     self._end_mtc = self._start_mtc + duration
                     offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
-                    ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                    # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                    ossia.osc_player_registered_nodes[key][0].value = offset_to_go
                     logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
                 except KeyError:
                     logger.debug(f'Key error 1 (offset) in go_callback {key}')
@@ -168,7 +176,8 @@ class VideoCue(Cue):
 
             try:
                 key = f'{self._osc_route}/jadeo/cmd'
-                ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+                # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+                ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
                 logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
                 logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')

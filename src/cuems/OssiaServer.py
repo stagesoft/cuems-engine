@@ -199,25 +199,26 @@ class OssiaServer(threading.Thread):
                                                         data.in_port, 
                                                         data.out_port)
             for route, conf in data.items():
-                temp_node = self.osc_player_devices[data.device_name].add_node(data.device_name + route)
+                temp_node = self.osc_player_devices[data.device_name].add_node(route)
                 temp_node.critical = True
-
                 # conf[0] holds the OSC type of data
+
                 parameter = temp_node.create_parameter(conf[0])
                 parameter.access_mode = ossia.AccessMode.Bi
                 parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
-
                 # conf[1] holds the method to call when received such a route
                 self.osc_player_registered_nodes[data.device_name + route] = [parameter, conf[1]]
 
                 ############ Register also the node on the local oscquery device tree
                 temp_node = self._oscquery_local_device.add_node(data.device_name + route)
                 temp_node.critical = True
+                # conf[0] holds the OSC type of data
+
                 parameter = temp_node.create_parameter(conf[0])
                 parameter.access_mode = ossia.AccessMode.Bi
                 parameter.repetition_filter = ossia.ossia_python.RepetitionFilter.On
                 # self._oscquery_local_messageq.register(parameter)
-                
+                # conf[1] holds the method to call when received such a route
                 self._oscquery_registered_nodes[data.device_name + route] = [parameter, conf[1]]
 
             # logger.info(f'OSC Nodes listening on {data.in_port}: {self.osc_player_registered_nodes[data.device_name + route]}')

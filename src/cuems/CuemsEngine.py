@@ -550,6 +550,23 @@ class CuemsEngine():
             with open(path.join(self.cm.library_path, 'cuems_rsync_request.log'), 'a') as f:
                 f.writelines(file_names)
 
+    def set_show_lock_file(self):
+        path = '/etc/cuems/show.lock'
+        if  not os.path.isfile(path):
+            try:
+                with open(path, 'w') as results_file:
+                    results_file.write(' ')
+            except:
+                self.logger.warning("Could not write show lock file")
+
+    def remove_show_lock_file(self):
+        path = '/etc/cuems/show.lock'
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                self.logger.warning("Could not delete master lock file")
+
     ########################################################
     # System signals handlers
     def sigTermHandler(self, sigNum, frame):
@@ -801,6 +818,7 @@ class CuemsEngine():
             return
 
         try:
+            #### CHECK LOAD PROCESS ON SLAVES... :
             if self.cm.amimaster:
                 # If we are master, prior to process the script cuelist in local, we check the load process on the slaves...
                 node_error_dict = {}
@@ -904,35 +922,35 @@ class CuemsEngine():
                 logger.info(f'Current Cue: {self.ongoing_cue}')
 
     def go_callback(self, **kwargs):
-        # Call OSC go on all slaves:
-        # by the moment we are using the direct /engine/command/go callback on the slaves
-        if self.cm.amimaster:
-            for device in self.ossia_server.oscquery_slave_devices.keys():
-                try:
-                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
-                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'go'
-                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
-
-                    logger.info(f'Calling GO CUE via OSC on slave node {device}')
-                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/go'][0].value = 1
-                except Exception as e:
-                    logger.exception(e)
-
         if self.script:
+            # Call OSC go on all slaves:
+            # by the moment we are using the direct /engine/command/go callback on the slaves
+            if self.cm.amimaster:
+                for device in self.ossia_server.oscquery_slave_devices.keys():
+                    try:
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'go'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+
+                        logger.info(f'Calling GO CUE via OSC on slave node {device}')
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/go'][0].value += 1
+                    except Exception as e:
+                        logger.exception(e)
+
             if not self.ongoing_cue:
                 cue_to_go = self.script.cuelist.contents[0]
             else:
                 if self.next_cue_pointer:
                     cue_to_go = self.next_cue_pointer
                 else:
-                    logger.info(f'Reached end of scrip. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
+                    logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
                     self.ongoing_cue = None
                     self.go_offset = 0
                     self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
                     return
 
-            if cue_to_go not in self.armedcues:
+            if cue_to_go not in self.armedcues and cue_to_go._local:
                 logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
             else:
                 self.ongoing_cue = cue_to_go
@@ -1019,6 +1037,9 @@ class CuemsEngine():
                         + f'action : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value} // '
                         + f'action_uuid : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action_uuid"][0].value} // '
                         + f'value : {self.ossia_server._oscquery_registered_nodes["/engine/comms/value"][0].value}')
+
+            if self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value == 'command' and self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'go':
+                self.go_callback()
 
     def action_uuid_callback(self, **kwargs):
         self._editor_request_uuid = kwargs['value']
