@@ -29,10 +29,10 @@ class MyAvahiListener():
         try:
             if type_ == '_cuems_nodeconf._tcp.local.':
                 self.nodeconf_services.pop(name)
-                logger.info(f'Avahi nodeconf service removed: {name}')
+                #logger.info(f'Avahi nodeconf service removed: {name}')
             elif type_ == '_cuems_osc._tcp.local.':
                 self.osc_services.pop(name)
-                logger.info(f'Avahi OSC service removed: {name}')
+                #logger.info(f'Avahi OSC service removed: {name}')
         except KeyError:
             pass
 
@@ -43,10 +43,10 @@ class MyAvahiListener():
         info = zeroconf.get_service_info(type_, name)
         if type_ == '_cuems_nodeconf._tcp.local.':
             self.nodeconf_services[name] = info
-            logger.info(f'New avahi nodeconf service added: {info}')
+            #logger.info(f'New avahi nodeconf service added: {info}')
         elif type_ == '_cuems_osc._tcp.local.':
             self.osc_services[name] = info
-            logger.info(f'New avahi OSC service added: {info}')
+            #logger.info(f'New avahi OSC service added: {info}')
 
         if self.callback:
             self.callback(node)
@@ -55,10 +55,10 @@ class MyAvahiListener():
         info = zeroconf.get_service_info(type_, name)
         if type_ == '_cuems_nodeconf._tcp.local.':
             self.nodeconf_services[name] = info
-            logger.info(f'Avahi nodeconf service updated: {info}')
+            #logger.info(f'Avahi nodeconf service updated: {info}')
         elif type_ == '_cuems_osc._tcp.local.':
             self.osc_services[name] = info
-            logger.info(f'Avahi OSC service updated: {info}')
+            #logger.info(f'Avahi OSC service updated: {info}')
 
         if self.callback:
             self.callback(node, action=MyAvahiListener.Action.UPDATE)
