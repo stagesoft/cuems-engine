@@ -251,11 +251,11 @@ class CuemsEngine():
                 except KeyError as e:
                     logger.exception(f"/{device}/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
 
-                if item['action'] not in ['load_project', 'hw_discovery', 'deploy']:
+                if item['action'] not in ['project_ready', 'hw_discovery', 'deploy']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
                     self._editor_request_uuid = ''
                 else:
-                    if item['action'] == 'load_project':
+                    if item['action'] == 'project_ready':
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
 
@@ -834,7 +834,7 @@ class CuemsEngine():
 
                 if node_error_dict:
                     # Some slave could not load the project
-                    self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':f'Errors loading project on nodes: {node_error_dict}'})
+                    self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':f'Errors loading project on nodes: {node_error_dict}'})
 
                     self.script = None
                     return
@@ -850,7 +850,7 @@ class CuemsEngine():
             logger.error(f"Error processing script data. Can't be loaded.")
             logger.exception(e)
             if self.cm.amimaster:
-                self.editor_queue.put({'type':'error', 'action':'load_project', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
+                self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':"Error processing script data. Can't be loaded."})
             else:
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
@@ -874,7 +874,7 @@ class CuemsEngine():
 
         # Everything went OK while loading the project locally...
         if self.cm.amimaster:
-            self.editor_queue.put({'type':'load_project', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+            self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
         else:
             logger.info(f'Project loaded OK.')
             self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'OK'
