@@ -260,6 +260,7 @@ class ConfigManager(Thread):
 
             self.using_default_mappings = True
             self.project_mappings = self.node_mappings
+            self.project_node_mappings = self.node_mappings
             return
         except KeyError:
             pass
