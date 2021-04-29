@@ -58,6 +58,9 @@ class AudioCue(Cue):
         self._conf = conf
         self._armed_list = armed_list
 
+        if not self._local:
+            return True
+
         if not self.enabled:
             if self.loaded and self in self._armed_list:
                 self.disarm(ossia)

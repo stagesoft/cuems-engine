@@ -152,3 +152,9 @@ class CueList(Cue):
         else:
             return None
 
+    def check_mappings(self, settings):
+        # By now let's presume all CueList objects are _local
+        self._local = True
+
+        return True
+
