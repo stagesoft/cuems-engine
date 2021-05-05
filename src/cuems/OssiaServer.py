@@ -157,8 +157,8 @@ class OssiaServer(threading.Thread):
 
                     # print(f'REMOTE QUEUE : device {device} param : {str(parameter.node)} value : {value}')
 
-                    self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
-                    self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+                    self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value if value else ''
+                    self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value if value else ''
 
                     if not self.master:
                         try:
