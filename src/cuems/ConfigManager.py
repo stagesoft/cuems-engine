@@ -37,7 +37,7 @@ class MyAvahiListener():
             pass
 
         if self.callback:
-            self.callback(action=MyAvahiListener.Action.DELETE)
+            self.callback(None, action=MyAvahiListener.Action.DELETE)
 
     def add_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
@@ -49,7 +49,7 @@ class MyAvahiListener():
             #logger.info(f'New avahi OSC service added: {info}')
 
         if self.callback:
-            self.callback(node)
+            self.callback(info, action=MyAvahiListener.Action.ADD)
 
     def update_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
@@ -61,7 +61,7 @@ class MyAvahiListener():
             #logger.info(f'Avahi OSC service updated: {info}')
 
         if self.callback:
-            self.callback(node, action=MyAvahiListener.Action.UPDATE)
+            self.callback(info, action=MyAvahiListener.Action.UPDATE)
 
 class CuemsAvahiMonitor():
     def __init__(self):
@@ -88,7 +88,7 @@ class ConfigManager(Thread):
 
         self.cuems_conf_path = path
         self.library_path = None
-        self.tmp_upload_path = None
+        self.tmp_path = None
         self.database_name = None
         self.node_conf = {}
         self.network_map = {}
@@ -164,11 +164,11 @@ class ConfigManager(Thread):
         else:
             self.library_path = engine_settings['Settings']['library_path']
 
-        if engine_settings['Settings']['tmp_upload_path'] == None:
+        if engine_settings['Settings']['tmp_path'] == None:
             logger.warning('No temp upload path specified in settings. Assuming default /tmp/cuemsupload.')
-            self.tmp_upload_path = path.join('/', 'tmp', 'cuemsupload')
+            self.tmp_path = path.join('/', 'tmp', 'cuems')
         else:
-            self.tmp_upload_path = engine_settings['Settings']['tmp_upload_path']
+            self.tmp_path = engine_settings['Settings']['tmp_path']
 
         if engine_settings['Settings']['database_name'] == None:
             logger.warning('No database name specified in settings. Assuming default project-manager.db.')
@@ -281,6 +281,8 @@ class ConfigManager(Thread):
         if not self.project_node_mappings:
             raise Exception('Node uuid could not be recognised in the project outputs map')
 
+        logger.info(f'Project {project_uname} mappings loaded')
+
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
             return self.node_conf['default_video_output']
@@ -325,8 +327,8 @@ class ConfigManager(Thread):
             if not path.exists( path.join(self.library_path, 'trash', 'media') ) :
                 mkdir(path.join(self.library_path, 'trash', 'media'))
 
-            if not path.exists( self.tmp_upload_path ) :
-                mkdir( self.tmp_upload_path )
+            if not path.exists( self.tmp_path ) :
+                mkdir( self.tmp_path )
 
         except Exception as e:
             logger.error("error: {} {}".format(type(e), e))
