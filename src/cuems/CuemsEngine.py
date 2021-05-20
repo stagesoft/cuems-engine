@@ -279,8 +279,11 @@ class CuemsEngine():
                         logger.info(f'Deploy command received via WS. Editor request uuid: {self._editor_request_uuid}')
                         try:
                             # Check local needs for script media
-                            self.script_media_check()
-                        except:
+                            media_fail_list = self.script_media_check()
+                        except Exception as e:
+                            logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
+                        
+                        if media_fail_list:
                             if self.cm.amimaster:
                                 # If local media check failed and I'm master... ERROR to UI!
                                 self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
@@ -797,24 +800,31 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script could not be loaded'
 
+            self._editor_request_uuid = ''
             return
 
         try:
-            self.script_media_check()
-        except FileNotFoundError:
+            media_fail_list = self.script_media_check()
+        except Exception as e:
+            logger.exception(f'Exception raised while performing media check: {e}')
+
+        if media_fail_list:
             logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+
             if self.cm.amimaster:
-                self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Media not found'})
+                self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_fail_list.keys())})
             else:
-                logger.info(f'Project media not found. Noted to get it from master.')
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'media'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Media not found'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/data'][0].value = list(media_fail_list.keys())
 
             self.script = None
+            self._editor_request_uuid = ''
             return
 
         try:
@@ -836,6 +846,7 @@ class CuemsEngine():
                     # Some slave could not load the project
                     self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':f'Errors loading project on nodes: {node_error_dict}'})
 
+                    self._editor_request_uuid = ''
                     self.script = None
                     return
 
@@ -859,6 +870,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = "Error processing script data. Can't be loaded."
 
+            self._editor_request_uuid = ''
             self.script = None
             return
 
@@ -1093,27 +1105,14 @@ class CuemsEngine():
                 string += f'\n{type(cue)} : {filename} : cue_uuid : {cue.uuid}'
             logger.error(string)
 
-            if self.cm.amimaster:
-                self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_list.keys())})
-            else:
-                self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
-
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'media'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Media not found'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/data'][0].value = list(media_list.keys())
-
+            if not self.cm.amimaster:
                 deploy_request_list = []
                 for item in list(media_list.keys()):
                     deploy_request_list.append('/media/' + item)
 
                 self.log_deploy_request(deploy_request_list)
-                
-            self._editor_request_uuid = ''
-
-            raise FileNotFoundError
+            
+        return media_list
         
     def initial_cuelist_process(self, cuelist, caller = None):
         ''' 

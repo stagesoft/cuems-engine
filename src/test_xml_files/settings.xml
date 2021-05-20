@@ -2,7 +2,7 @@
 <cms:CuemsSettings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/settings.xsd">
     <Settings>
         <library_path>/opt/cuems_library</library_path>
-        <tmp_upload_path>/tmp/cuemsupload</tmp_upload_path>
+        <tmp_path>/tmp/cuems</tmp_path>
         <database_name>project-manager.db</database_name>
         <show_lock_file>show.lock</show_lock_file>
         <node>
