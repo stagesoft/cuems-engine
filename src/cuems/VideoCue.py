@@ -67,9 +67,6 @@ class VideoCue(Cue):
         self._conf = conf
         self._armed_list = armed_list
 
-        if not self._local:
-            return True
-
         if not self.enabled:
             if self.loaded and self in self._armed_list:
                     self.disarm(ossia)
@@ -79,21 +76,22 @@ class VideoCue(Cue):
                 self._armed_list.append(self)
             return True
 
-        try:
-            key = f'{self._osc_route}/jadeo/cmd'
-            # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
-            ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
-            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-        except KeyError:
-            logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
+        if self._local:
+            try:
+                key = f'{self._osc_route}/jadeo/cmd'
+                # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+                ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
+                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+            except KeyError:
+                logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
-        try:
-            key = f'{self._osc_route}/jadeo/load'
-            # ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
-            ossia.osc_player_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
-            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-        except KeyError:
-            logger.debug(f'Key error 2 (load) in arm_callback {key}')
+            try:
+                key = f'{self._osc_route}/jadeo/load'
+                # ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+                ossia.osc_player_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+            except KeyError:
+                logger.debug(f'Key error 2 (load) in arm_callback {key}')
 
         self.loaded = True
         if not self in self._armed_list:
@@ -122,27 +120,28 @@ class VideoCue(Cue):
         if self.prewait > 0:
             sleep(self.prewait.milliseconds / 1000)
 
-        # PLAY : specific video cue stuff
-        try:
-            key = f'{self._osc_route}/jadeo/offset'
-            self._start_mtc = mtc.main_tc
-            duration = self.media.regions[0].out_time - self.media.regions[0].in_time
-            duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
-            self._end_mtc = self._start_mtc + duration
-            cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
-            offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
-            # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
-            ossia.osc_player_registered_nodes[key][0].value = offset_to_go
-            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-        except KeyError:
-            logger.debug(f'Key error 1 (offset) in go_callback {key}')
+        if self._local:
+            # PLAY : specific video cue stuff
+            try:
+                key = f'{self._osc_route}/jadeo/offset'
+                self._start_mtc = mtc.main_tc
+                duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+                duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+                self._end_mtc = self._start_mtc + duration
+                cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
+                offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
+                # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                ossia.osc_player_registered_nodes[key][0].value = offset_to_go
+                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+            except KeyError:
+                logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
-        try:
-            key = f'{self._osc_route}/jadeo/cmd'
-            # ossia._oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
-            ossia.osc_player_registered_nodes[key][0].value = "midi connect Midi Through"
-        except KeyError:
-            logger.debug(f'Key error 2 (connect) in go_callback {key}')
+            try:
+                key = f'{self._osc_route}/jadeo/cmd'
+                # ossia._oscquery_registered_nodes[key][0].value = "midi connect Midi Through"
+                ossia.osc_player_registered_nodes[key][0].value = "midi connect Midi Through"
+            except KeyError:
+                logger.debug(f'Key error 2 (connect) in go_callback {key}')
 
         # POSTWAIT
         if self.postwait > 0:
@@ -161,29 +160,32 @@ class VideoCue(Cue):
                 while mtc.main_tc.milliseconds < self._end_mtc.milliseconds:
                     sleep(0.005)
 
-                try:
-                    key = f'{self._osc_route}/jadeo/offset'
-                    self._start_mtc = mtc.main_tc
-                    self._end_mtc = self._start_mtc + duration
-                    offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
-                    # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
-                    ossia.osc_player_registered_nodes[key][0].value = offset_to_go
-                    logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-                except KeyError:
-                    logger.debug(f'Key error 1 (offset) in go_callback {key}')
+                if self._local:
+                    try:
+                        key = f'{self._osc_route}/jadeo/offset'
+                        self._start_mtc = mtc.main_tc
+                        self._end_mtc = self._start_mtc + duration
+                        offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
+                        # ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                        ossia.osc_player_registered_nodes[key][0].value = offset_to_go
+                        logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+                    except KeyError:
+                        logger.debug(f'Key error 1 (offset) in go_callback {key}')
 
                 loop_counter += 1
 
-            try:
-                key = f'{self._osc_route}/jadeo/cmd'
-                # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
-                ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
-                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-            except KeyError:
-                logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
+            if self._local:
+                try:
+                    key = f'{self._osc_route}/jadeo/cmd'
+                    # ossia._oscquery_registered_nodes[key][0].value = 'midi disconnect'
+                    ossia.osc_player_registered_nodes[key][0].value = 'midi disconnect'
+                    logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+                except KeyError:
+                    logger.debug(f'Key error 1 (disconnect) in arm_callback {key}')
 
         except AttributeError:
             pass
+        
         if self in self._armed_list:
             self.disarm(ossia)
 
@@ -219,6 +221,9 @@ class VideoCue(Cue):
         self._stop_requested = True
 
     def check_mappings(self, settings):
+        if not settings.project_node_mappings:
+            return True
+
         found = True
         
         map_list = ['default']

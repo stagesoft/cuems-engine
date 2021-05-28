@@ -58,9 +58,6 @@ class AudioCue(Cue):
         self._conf = conf
         self._armed_list = armed_list
 
-        if not self._local:
-            return True
-
         if not self.enabled:
             if self.loaded and self in self._armed_list:
                 self.disarm(ossia)
@@ -71,24 +68,25 @@ class AudioCue(Cue):
             return True
 
         # Assign its own audioplayer object
-        try:
-            self._player = AudioPlayer( self._conf.osc_port_index, 
-                                        self._conf.node_conf['audioplayer']['path'],
-                                        self._conf.node_conf['audioplayer']['args'],
-                                        str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
-        except Exception as e:
-            raise e
+        if self._local:
+            try:
+                self._player = AudioPlayer( self._conf.osc_port_index, 
+                                            self._conf.node_conf['audioplayer']['path'],
+                                            self._conf.node_conf['audioplayer']['args'],
+                                            str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
+            except Exception as e:
+                raise e
 
-        self._player.start()
+            self._player.start()
 
-        # And dinamically attach it to the ossia for remote control it
-        self._osc_route = f'/players/audioplayer-{self.uuid}'
+            # And dinamically attach it to the ossia for remote control it
+            self._osc_route = f'/players/audioplayer-{self.uuid}'
 
-        ossia.add_player_nodes( PlayerOSCConfData(  device_name=self._osc_route, 
-                                                    host=self._conf.node_conf['osc_dest_host'], 
-                                                    in_port=self._player.port,
-                                                    out_port=self._player.port + 1, 
-                                                    dictionary=self.OSC_AUDIOPLAYER_CONF) )
+            ossia.add_player_nodes( PlayerOSCConfData(  device_name=self._osc_route, 
+                                                        host=self._conf.node_conf['osc_dest_host'], 
+                                                        in_port=self._player.port,
+                                                        out_port=self._player.port + 1, 
+                                                        dictionary=self.OSC_AUDIOPLAYER_CONF) )
 
         self.loaded = True
         if not self in self._armed_list:
@@ -119,23 +117,24 @@ class AudioCue(Cue):
             sleep(self.prewait.milliseconds / 1000)
 
         # PLAY : specific audio cue stuff
-            # Set offset
-        try:
-            key = f'{self._osc_route}/offset'
-            self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
-            self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
-            offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
-            ossia._oscquery_registered_nodes[key][0].value = offset_to_go
-            logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
-        except KeyError:
-            logger.debug(f'Key error 1 in go_callback {key}')
+        # Set offset
+        if self._local:
+            try:
+                key = f'{self._osc_route}/offset'
+                self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+                self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
+                offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
+                ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
+            except KeyError:
+                logger.debug(f'Key error 1 in go_callback {key}')
 
-            # Connect to mtc signal
-        try:
-            key = f'{self._osc_route}/mtcfollow'
-            ossia._oscquery_registered_nodes[key][0].value = 1
-        except KeyError:
-            logger.debug(f'Key error 2 in go_callback {key}')
+                # Connect to mtc signal
+            try:
+                key = f'{self._osc_route}/mtcfollow'
+                ossia._oscquery_registered_nodes[key][0].value = 1
+            except KeyError:
+                logger.debug(f'Key error 2 in go_callback {key}')
 
         # POSTWAIT
         if self.postwait > 0:
@@ -153,20 +152,25 @@ class AudioCue(Cue):
                 while self._player.is_alive() and (mtc.main_tc.milliseconds < self._end_mtc.milliseconds):
                     sleep(0.005)
 
-                # Recalculate offset and apply
-                self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
-                self._end_mtc = self._start_mtc + (duration)
-                offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
-                key = f'{self._osc_route}/offset'
-                ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                if self._local:
+                    # Recalculate offset and apply
+                    self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+                    self._end_mtc = self._start_mtc + (duration)
+                    offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
+                    try:
+                        key = f'{self._osc_route}/offset'
+                        ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                    except KeyError:
+                        logger.debug(f'Key error 3 in go_callback {key}')
 
                 loop_counter += 1
-                
-            try:
-                key = f'{self._osc_route}/mtcfollow'
-                ossia._oscquery_registered_nodes[key][0].value = 0
-            except KeyError:
-                logger.debug(f'Key error 2 in go_callback {key}')
+
+            if self._local:                
+                try:
+                    key = f'{self._osc_route}/mtcfollow'
+                    ossia._oscquery_registered_nodes[key][0].value = 0
+                except KeyError:
+                    logger.debug(f'Key error 4 in go_callback {key}')
 
         except AttributeError:
             pass
@@ -208,6 +212,9 @@ class AudioCue(Cue):
             self._player.kill()
 
     def check_mappings(self, settings):
+        if not settings.project_node_mappings:
+            return True
+
         found = True
         
         map_list = ['default']
