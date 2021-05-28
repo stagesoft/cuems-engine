@@ -153,7 +153,7 @@ class CuemsEngine():
                             '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
                             '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
                             '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
-                            '/engine/command/resetall' : [ossia.ValueType.Impulse, self.reset_all_callback],
+                            '/engine/command/resetall' : [ossia.ValueType.String, self.reset_all_callback],
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
                             '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
@@ -541,21 +541,24 @@ class CuemsEngine():
 
 
     def set_show_lock_file(self):
-        path = '/etc/cuems/show.lock'
-        if  not path.isfile(path):
+        show_lock_path = '/etc/cuems/show.lock'
+        if  not path.isfile(show_lock_path):
             try:
-                with open(path, 'w') as results_file:
-                    results_file.write(' ')
+                with open(show_lock_path, 'w') as file:
+                    file.write(' ')
+
+                logger.warning("/etc/cuems/show.lock file written...")
             except:
-                self.logger.warning("Could not write show lock file")
+                logger.warning("Could not write show lock file")
 
     def remove_show_lock_file(self):
-        path = '/etc/cuems/show.lock'
-        if path.isfile(path):
+        show_lock_path = '/etc/cuems/show.lock'
+        if path.isfile(show_lock_path):
             try:
-                remove(path)
+                remove(show_lock_path)
+                logger.warning("/etc/cuems/show.lock file removed...")
             except OSError:
-                self.logger.warning("Could not delete master lock file")
+                logger.warning("Could not delete master lock file")
 
     ########################################################
     # System signals handlers
@@ -831,7 +834,10 @@ class CuemsEngine():
             logger.error(f'Media not found for project: {kwargs["value"]} !!!')
 
             if self.cm.amimaster:
-                self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_fail_list.keys())})
+                pass
+                ''' By the moment we allow the show mode to get ready even if there are media files missing...
+                # self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_fail_list.keys())})
+                '''
             else:
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
@@ -927,25 +933,31 @@ class CuemsEngine():
         if self.cm.amimaster:
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
-        # Everything went OK while loading the project locally...
-        if local_media_error: # For slaves...
+        if local_media_error:
             logger.info(f'Project loaded with local media errors...')
-        else:
-            if self.cm.amimaster:
-                if slave_media_error:
-                    logger.warning(f'Project loaded OK but some slaves could not load all their media...')
-                    self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_deploy_needed'})
-                else:
-                    logger.info(f'Project loaded OK.')
+
+        if self.cm.amimaster:
+            if not local_media_error:
+                if not slave_media_error:
                     self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-
+                    logger.info(f'Project loaded OK.')
+                else:
+                    logger.warning(f'Some slaves could not load all their media...')
+                    self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_deploy_needed'})
             else:
-                self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'OK'
+                self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_missing_media'})
+        else:
+            self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'OK'
 
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'OK'
+            self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
+            self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
+            self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+            self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'OK'
+
+        # Everything went OK while loading the project locally...
+        logger.info(f'Project load COMPLETED!')
+
+        self.set_show_lock_file()
 
         self._editor_request_uuid = ''
 
@@ -1066,7 +1078,33 @@ class CuemsEngine():
             logger.info('NO MTCMASTER ASSIGNED!')
 
     def reset_all_callback(self, **kwargs):
+        try:
+            if kwargs['value'][-1] == '*':
+                return
+        except IndexError:
+            pass
+
+        # Mark back our load command on slaves
+        if self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value[-1] != '*':
+            self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value = kwargs['value'] + '*'
+
         logger.info(f'RESET ALL CALLBACK! -> ARGS : {kwargs["value"]}')
+
+        # Call OSC go on all slaves:
+        # by the moment we are using the direct /engine/command/go callback on the slaves
+        if self.cm.amimaster:
+            for device in self.ossia_server.oscquery_slave_devices.keys():
+                try:
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'resetall'
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+
+                    logger.info(f'Calling RESETALL CALLBACK via OSC on slave node {device}')
+                    self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/resetall'][0].value = 'resetall'
+                except Exception as e:
+                    logger.exception(e)
+
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_stop(self.mtcmaster)
