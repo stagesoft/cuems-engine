@@ -7,7 +7,7 @@ from multiprocessing import Queue as MPQueue
 from subprocess import CalledProcessError
 import signal
 import time
-from os import path, getpid
+from os import path, getpid, remove
 import pyossia as ossia
 from uuid import uuid1
 from functools import partial
@@ -19,7 +19,7 @@ import xmlschema.exceptions
 from .cuems_editor.CuemsWsServer import CuemsWsServer
 from .cuems_nodeconf.CuemsNodeConf import CuemsNodeConf
 from .cuems_hwdiscovery.CuemsHwDiscovery import CuemsHWDiscovery
-from .cuems_deploy import CuemsDeploy
+from .cuems_deploy.CuemsDeploy import CuemsDeploy
 
 from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
@@ -114,7 +114,7 @@ class CuemsEngine():
             settings_dict = {}
             settings_dict['session_uuid'] = str(uuid1())
             settings_dict['library_path'] = self.cm.library_path
-            settings_dict['tmp_upload_path'] = self.cm.tmp_upload_path
+            settings_dict['tmp_path'] = self.cm.tmp_path
             settings_dict['database_name'] = self.cm.database_name
             settings_dict['load_timeout'] = self.cm.node_conf['load_timeout']
             settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
@@ -149,7 +149,7 @@ class CuemsEngine():
         # Initial OSC nodes to tell ossia to configure
         OSC_ENGINE_CONF = { '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
                             '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],
-                            '/engine/command/go' : [ossia.ValueType.Impulse, self.go_callback],
+                            '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
                             '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
                             '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
                             '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
@@ -157,7 +157,7 @@ class CuemsEngine():
                             '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
                             '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
                             '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
-                            '/engine/command/deploy' : [ossia.ValueType.Impulse, self.deploy_callback],
+                            '/engine/command/deploy' : [ossia.ValueType.String, self.deploy_callback],
                             '/engine/command/test' : [ossia.ValueType.String, self.test_callback],
                             '/engine/comms/type' : [ossia.ValueType.String, self.comms_callback],
                             '/engine/comms/subtype' : [ossia.ValueType.String, None],
@@ -204,9 +204,6 @@ class CuemsEngine():
         except Exception as e:
             logger.exception(e)
 
-        if not self.cm.amimaster:
-            self.deploy_requests_reset()
-
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
             time.sleep(0.1)
@@ -239,7 +236,7 @@ class CuemsEngine():
                     self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = item['action']
                     self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = item['action_uuid']
                     self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = item['value']
-                except KeyError:
+                except KeyError as e:
                     logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in _oscquery_registered_nodes")
 
                 try:
@@ -249,7 +246,7 @@ class CuemsEngine():
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = item['action_uuid']
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = item['value']
                 except KeyError as e:
-                    logger.exception(f"/{device}/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
+                    logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
 
                 if item['action'] not in ['project_ready', 'hw_discovery', 'project_deploy']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
@@ -276,81 +273,9 @@ class CuemsEngine():
                             self._editor_request_uuid = ''
 
                     elif item['action'] == 'project_deploy':
+                        self._editor_request_uuid = item['action_uuid']
                         logger.info(f'Deploy command received via WS. Editor request uuid: {self._editor_request_uuid}')
-                        try:
-                            # Check local needs for script media
-                            media_fail_list = self.script_media_check()
-                        except Exception as e:
-                            logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
-                        
-                        if media_fail_list:
-                            if self.cm.amimaster:
-                                # If local media check failed and I'm master... ERROR to UI!
-                                self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
-                                logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
-                                self._editor_request_uuid = ''
-                            else:
-                                # If local media check failed and I'm slave... Try to deploy from master...
-                                try:
-                                    deploy_manager = CuemsDeploy(library_path=self.cm.library_path, master_hostname=None, log_file=path.join(self.cm.library_path, 'cuems_rsync_request.log'))
-
-                                    if deploy_manager.sync():
-                                        # If deploy is successful...
-                                        logger.info(f'Deploy sync successful from master')
-
-                                        self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
-
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy succesful!'
-                                    else:
-                                        # If deploy is NOT succesful...
-                                        logger.error(f'Deploy sync returned errors.')
-
-                                        self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'ERROR'
-
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                                        self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = deploy_manager.errors
-                                except Exception as e:
-                                    # If deploy raised any exception...
-                                    logger.error(f'Deploy raised an exception {e} after master request id : {self._editor_request_uuid}')
-
-                                    self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'ERROR'
-
-                                    self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
-                                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
-                                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                                    self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Local deploy fail!'
-                        else:
-                            if self.cm.amimaster:
-                                self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Deploy failed, check logs.'})
-                                logger.error(f'Deploy failed after editor request id: {self._editor_request_uuid}')
-                                self._editor_request_uuid = ''
-
-                                # Check slaves deploy return
-                                all_slaves_ok = True
-                                ''' CHECK SLAVES '''
-                                if all_slaves_ok:
-                                    self.editor_queue.put({'type':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-                                    self._editor_request_uuid = ''
-                                else:
-                                    self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Deploy failed in some slave node'})
-                                    logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid}')
-                                    self._editor_request_uuid = ''
-                            else:
-                                # Deploy is not needed on this slave...
-                                logger.info(f'Deploy requested but it is not needed on this slave')
-
-                                self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
-
-                                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
-                                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
-                                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy not needed on this slave!'
-
+                        self.deploy_callback(value = item['value'])
 
             except KeyError:
                 logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
@@ -373,7 +298,9 @@ class CuemsEngine():
                     for section, elements in contents.items():
                         for element in elements:
                             if element['name'] not in self.cm.node_hw_outputs[f'{area}_{section}']:
-                                        raise Exception(f'Project {area} {section} mapping incorrect: {element["name"]} not present in node: {self.cm.node_conf["uuid"]}')
+                                raise Exception(f'Project {area} {section} mapping incorrect: {element["name"]} not present in node: {self.cm.node_conf["uuid"]}')
+
+        return True
                 
     def check_audio_devs(self):
         pass
@@ -449,6 +376,15 @@ class CuemsEngine():
                 self.ossia_server.osc_player_registered_nodes[key][0].value = 'midi disconnect'
             except KeyError:
                 logger.exception(f'Key error (cmd midi disconnect) in disconnect all method {key}')
+
+    def unload_video_devs(self):
+        for dev in self._video_players.values():
+            try:
+                key = f'{dev["route"]}/jadeo/load'
+                # ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+                self.ossia_server.osc_player_registered_nodes[key][0].value = ''
+            except Exception as e:
+                logger.debug(f'Exception while unloading video players: {e}')
 
     def check_dmx_devs(self):
         pass
@@ -544,18 +480,69 @@ class CuemsEngine():
         if self.go_offset:
             self.ossia_server._oscquery_registered_nodes['/engine/status/timecode'][0].value = mtc.milliseconds - self.go_offset
 
-    def deploy_requests_reset(self):
-        with open(path.join(self.cm.library_path, 'cuems_rsync_request.log'), 'w') as f:
-            logger.info(f'Rsync requests log file emptied!!')
+    def deploy_requests_reset(self, project_name='', tag_name=''):
+        path_to_reset = path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')
+        with open(path_to_reset, 'w') as f:
+            logger.info(f'Rsync requests log file {path_to_reset} emptied!!')
 
-    def log_deploy_request(self, file_names=[]):
-        if file_names:
-            with open(path.join(self.cm.library_path, 'cuems_rsync_request.log'), 'a') as f:
-                f.writelines(file_names)
+    def log_deploy_request(self, project_name='', tag_name='project', file_names=[]):
+        if project_name:
+            if tag_name == 'project':
+                file_names = [  '/projects/' + project_name + '/script.xml\n',
+                                '/projects/' + project_name + '/mappings.xml\n', 
+                                '/projects/' + project_name + '/settings.xml\n']
+
+            try:
+                with open(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log'), 'w') as f:
+                    f.writelines(file_names)
+            except Exception as e:
+                logger.exception(f'Exception raised when writing rsync request log file: {e}')
+                return False
+            else:
+                return True
+
+    def try_deploy(self, project_name='', tag_name='project'):
+        if project_name:
+            try:
+                deploy_manager = CuemsDeploy(library_path=self.cm.library_path, master_hostname=None, log_file='/tmp/cuems_rsync.log')
+
+                if deploy_manager.sync(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')):
+                    # If deploy is successful...
+                    logger.info(f'Deploy sync successful from master')
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy succesful!'
+                else:
+                    # If deploy is NOT succesful...
+                    logger.error(f'Deploy sync returned errors. {deploy_manager.errors}')
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'ERROR'
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = deploy_manager.errors
+            except Exception as e:
+                # If deploy raised any exception...
+                logger.error(f'Deploy raised an exception {e} after master request id : {self._editor_request_uuid}')
+
+                self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'ERROR'
+
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Local deploy fail!'
+
+            self.deploy_requests_reset(project_name = project_name, tag_name = tag_name)
+
 
     def set_show_lock_file(self):
         path = '/etc/cuems/show.lock'
-        if  not os.path.isfile(path):
+        if  not path.isfile(path):
             try:
                 with open(path, 'w') as results_file:
                     results_file.write(' ')
@@ -564,9 +551,9 @@ class CuemsEngine():
 
     def remove_show_lock_file(self):
         path = '/etc/cuems/show.lock'
-        if os.path.isfile(path):
+        if path.isfile(path):
             try:
-                os.remove(path)
+                remove(path)
             except OSError:
                 self.logger.warning("Could not delete master lock file")
 
@@ -666,7 +653,25 @@ class CuemsEngine():
     ########################################################
     # OSC messages handlers
     def load_project_callback(self, **kwargs):
-        logger.info(f'OSC LOAD! -> PROJECT : {kwargs["value"]}')
+        try:
+            if kwargs['value'][-1] == '*':
+                # if argument is marked is already treated...
+                return
+            else:
+                # Mark back our load command on slaves
+                self.ossia_server._oscquery_registered_nodes[f'/engine/command/load'][0].value = kwargs['value'] + '*'
+        except IndexError:
+            return
+
+        logger.info(f'PROJECT READY/LOAD CALLBACK! -> PROJECT : {kwargs["value"]}')
+
+        # As we only allow one project in show mode we dismantle whatever other was loaded previously to this one...
+        logger.info(f'Unloading previous content on video players...')
+        self.unload_video_devs()
+
+        # Init working stuff...
+        local_media_error = False
+        slave_media_error = False
 
         # Call OSC load on all slaves:
         # by the moment we are using the direct /engine/command/load callback on the slaves
@@ -682,6 +687,10 @@ class CuemsEngine():
                     self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/load'][0].value = kwargs['value']
                 except Exception as e:
                     logger.exception(e)
+        else:
+            # Let's request a deploy of the project files
+            self.log_deploy_request(project_name = kwargs['value'], tag_name = 'project')
+            self.try_deploy(project_name=kwargs['value'], tag_name='project')
 
         # If there was already an script we discard it and restart the run engine
         if self.script:
@@ -707,8 +716,10 @@ class CuemsEngine():
         # LOAD PROJECT MAPPINGS
         try:
             self.cm.load_project_mappings(kwargs["value"])
+            logger.info('Project mappings load OK!')
             # logger.info(self.cm.project_mappings)
-        except:
+        except Exception as e:
+            logger.info(f'Exception raised while loading project mappings: {type(e)} {e}')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
             else:
@@ -717,24 +728,25 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'mappings'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Mapping files error while loading.'
-
-                self.log_deploy_request(file_names=['/projects/' + kwargs["value"] + '/mappings.xml'])
             return
 
         # CHECK PROJECT MAPPINGS
         try:
-            self.check_project_mappings()
+            if self.check_project_mappings():
+                logger.info('Project mappings check OK!')
         except Exception as e:
-            logger.error('Wrong configuration on input/output mappings')
+            logger.exception(f'Wrong configuration on input/output mappings: {e}')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'})
             else:
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'mappings'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Wrong configuration on input/output mappings'
@@ -755,6 +767,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'script_file_not_found'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Project script file not found'
@@ -769,6 +782,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'xml'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script XML parsing error'
@@ -783,6 +797,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'error'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script could not be loaded'
@@ -796,12 +811,16 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/subtype'][0].value = 'error'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script could not be loaded'
 
             self._editor_request_uuid = ''
             return
+        else:
+            logger.info('Project script loaded OK!')
+            self.script.unix_name = kwargs['value']
 
         try:
             media_fail_list = self.script_media_check()
@@ -809,7 +828,7 @@ class CuemsEngine():
             logger.exception(f'Exception raised while performing media check: {e}')
 
         if media_fail_list:
-            logger.error(f'Script {kwargs["value"]} cannot be run, media not found!')
+            logger.error(f'Media not found for project: {kwargs["value"]} !!!')
 
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_fail_list.keys())})
@@ -823,36 +842,60 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Media not found'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/data'][0].value = list(media_fail_list.keys())
 
+            ''' By the moment we allow the show mode to get ready even if there are media files missing...
             self.script = None
             self._editor_request_uuid = ''
             return
+            '''
+            local_media_error = True
+        else:
+            logger.info('Media check OK!')
 
         try:
             #### CHECK LOAD PROCESS ON SLAVES... :
             if self.cm.amimaster:
                 # If we are master, prior to process the script cuelist in local, we check the load process on the slaves...
+                node_ok_list = []
                 node_error_dict = {}
-                any_error = False
-                ok_count = 0
-                while ok_count < len(self.ossia_server.oscquery_slave_devices) and not any_error:
+                logger.info(f'I\'m master. Waiting for slaves to load...')
+                while (len(node_ok_list) + len(node_error_dict)) < len(self.ossia_server.oscquery_slave_devices):
                     ok_count = 0
                     for device in self.ossia_server.oscquery_slave_devices:
-                        if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'ERROR':
-                            node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
-                        elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'OK':
-                            ok_count += 1
+                        try:
+                            if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'ERROR':
+                                node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/subtype'][0].value + self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/data'][0].value
+                                # Reset the status field
+                                self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == ''
+                            elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == 'OK':
+                                if device not in node_ok_list:
+                                    logger.info(f'Slave {device} load successfull, OK!')
+                                    # Reset the status field
+                                    self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/load'][0].value == ''
+                                    node_ok_list.append(device)
+                        except KeyError:
+                            # a KeyError means that OSC route is not found because the slave is not present in OSC tree
+                            node_error_dict[device] = 'osc'
+                            # Reset the status field
+
+                    time.sleep(0.05)
 
                 if node_error_dict:
-                    # Some slave could not load the project
-                    self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':f'Errors loading project on nodes: {node_error_dict}'})
+                    # if only media errors we can continue (by now)...
+                    for item in node_error_dict.values():
+                        if item[0:5] != 'media':
+                            # Some slave could not load the project
+                            self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'slave_errors', 'value':f'Errors loading project on nodes: {node_error_dict}'})
 
-                    self._editor_request_uuid = ''
-                    self.script = None
-                    return
+                            self._editor_request_uuid = ''
+                            self.script = None
+                            # if there is any error on a slave different than media missing, we cancel the project loading and show mode change...
+                            return
+                        else:
+                            # Some slave loaded the project with media errors
+                            slave_media_error = True
 
-                else:
-                    # if slaves are correctly loaded, we, master, process now the script cuelist
-                    self.initial_cuelist_process(self.script.cuelist)
+                # if slaves are correctly loaded (even with missing media), we, master, process now the script cuelist
+                self.initial_cuelist_process(self.script.cuelist)
 
             else:
                 # If we are slave and everthing is OK till here, we perform the initial process of the script
@@ -885,21 +928,29 @@ class CuemsEngine():
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
         # Everything went OK while loading the project locally...
-        if self.cm.amimaster:
-            self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+        if local_media_error: # For slaves...
+            logger.info(f'Project loaded with local media errors...')
         else:
-            logger.info(f'Project loaded OK.')
-            self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'OK'
+            if self.cm.amimaster:
+                if slave_media_error:
+                    logger.warning(f'Project loaded OK but some slaves could not load all their media...')
+                    self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_deploy_needed'})
+                else:
+                    logger.info(f'Project loaded OK.')
+                    self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
 
-            self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
-            self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
-            self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-            self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'OK'
+            else:
+                self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'OK'
+
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'OK'
 
         self._editor_request_uuid = ''
 
     def load_cue_callback(self, **kwargs):
-        logger.info(f'OSC LOAD! -> CUE : {kwargs["value"]}')
+        logger.info(f'LOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
 
         cue_to_load = self.script.find(kwargs['value'])
 
@@ -908,7 +959,7 @@ class CuemsEngine():
                 cue_to_load.arm(self.cm, self.ossia_server, self.armedcues)
 
     def unload_cue_callback(self, **kwargs):
-        logger.info(f'OSC UNLOAD! -> CUE : {kwargs["value"]}')
+        logger.info(f'UNLOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
 
         cue_to_unload = self.script.find(kwargs['value'])
 
@@ -917,6 +968,8 @@ class CuemsEngine():
                 cue_to_unload.disarm(self.ossia_server)
 
     def go_cue_callback(self, **kwargs):
+        logger.info(f'GO CUE CALLBACK! -> ARGS : {kwargs["value"]}')
+
         cue_to_go = self.script.find(kwargs['value'])
 
         if cue_to_go is None:
@@ -934,6 +987,18 @@ class CuemsEngine():
                 logger.info(f'Current Cue: {self.ongoing_cue}')
 
     def go_callback(self, **kwargs):
+        try:
+            if kwargs['value'][-1] == '*':
+                return
+        except IndexError:
+            pass
+
+        # Mark back our load command on slaves
+        if self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value[-1] != '*':
+            self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value = kwargs['value'] + '*'
+
+        logger.info(f'GO CALLBACK! -> ARGS : {kwargs["value"]}')
+
         if self.script:
             # Call OSC go on all slaves:
             # by the moment we are using the direct /engine/command/go callback on the slaves
@@ -945,8 +1010,8 @@ class CuemsEngine():
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
 
-                        logger.info(f'Calling GO CUE via OSC on slave node {device}')
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/go'][0].value += 1
+                        logger.info(f'Calling GO CALLBACK via OSC on slave node {device}')
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/go'][0].value = 'go'
                     except Exception as e:
                         logger.exception(e)
 
@@ -962,12 +1027,11 @@ class CuemsEngine():
                     self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
                     return
 
-            if cue_to_go not in self.armedcues and cue_to_go._local:
+            if cue_to_go not in self.armedcues:
                 logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
             else:
                 self.ongoing_cue = cue_to_go
-                if cue_to_go._local:
-                    self.ongoing_cue.go(self.ossia_server, self.mtclistener)
+                self.ongoing_cue.go(self.ossia_server, self.mtclistener)
                 self.next_cue_pointer = self.ongoing_cue.get_next_cue()
                 self.go_offset = self.mtclistener.main_tc.milliseconds
 
@@ -983,7 +1047,7 @@ class CuemsEngine():
             logger.warning('No script loaded, cannot process GO command.')
 
     def pause_callback(self, **kwargs):
-        logger.info('OSC PAUSE!')
+        logger.info(f'PAUSE CALLBACK! -> ARGS : {kwargs["value"]}')
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_pause(self.mtcmaster)
@@ -992,7 +1056,7 @@ class CuemsEngine():
             logger.info('NO MTCMASTER ASSIGNED!')
 
     def stop_callback(self, **kwargs):
-        logger.info('OSC STOP!')
+        logger.info(f'STOP CALLBACK! -> ARGS : {kwargs["value"]}')
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_stop(self.mtcmaster)
@@ -1002,13 +1066,14 @@ class CuemsEngine():
             logger.info('NO MTCMASTER ASSIGNED!')
 
     def reset_all_callback(self, **kwargs):
-        logger.info('RESETALL!')
+        logger.info(f'RESET ALL CALLBACK! -> ARGS : {kwargs["value"]}')
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.disarm_all()
             self.armedcues.clear()
             self.disconnect_video_devs()
+            self.unload_video_devs()
             self.ongoing_cue = None
             self.go_offset = 0
 
@@ -1035,9 +1100,123 @@ class CuemsEngine():
             logger.exception(e)
 
     def deploy_callback(self, **kwargs):
-        pass
+        try:
+            if kwargs['value'][-1] == '*':
+                return
+        except IndexError:
+            pass
+
+        # Mark back our load command on slaves
+        if self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value[-1] != '*':
+            self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value = kwargs['value'] + '*'
+
+        logger.info(f'DEPLOY CALLBACK! -> ARGS : {kwargs["value"]}')
+
+        if not self.script and self.cm.amimaster:
+            # First the user should load/ready a project to try to deploy it... ERROR to UI!
+            self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Project not yet loaded!'})
+            logger.error(f'Deploy request failed because project is not yet loaded, request id: {self._editor_request_uuid}')
+            self._editor_request_uuid = ''
+            return
+        
+        try:
+            # Check local needs for script media
+            media_fail_list = self.script_media_check()
+        except Exception as e:
+            logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
+        
+        if media_fail_list:
+            if self.cm.amimaster:
+                # If local media check failed and I'm master... ERROR to UI!
+                self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
+                logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
+            else:
+                deploy_request_list = []
+                for item in list(media_fail_list.keys()):
+                    deploy_request_list.append('/media/' + item + '\n')
+
+                self.log_deploy_request(project_name=self.script.unix_name, tag_name='media', file_names=deploy_request_list)
+            
+                # If local media check failed and I'm slave... Try to deploy from master...
+                try:
+                    self.try_deploy(project_name=self.script.unix_name, tag_name='media')
+                except Exception as e:
+                    logger.exception(f'Exception raised while performing deploy: {e}')
+                    self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'ERROR'
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'error'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy raised and exception on this slave!'
+                else:
+                    self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
+
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                    self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy went OK on this slave!'
+
+        else:
+            if self.cm.amimaster:
+                ''' LAUNCH SLAVES DEPLOYS '''
+                # Call OSC go on all slaves:
+                # by the moment we are using the direct /engine/command/deploy callback on the slaves
+                for device in self.ossia_server.oscquery_slave_devices.keys():
+                    try:
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'deploy'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+
+                        logger.info(f'Calling DEPLOY via OSC on slave node {device}')
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/deploy'][0].value = self.script.unix_name
+                    except Exception as e:
+                        logger.exception(e)
+
+                ''' CHECK SLAVES DEPLOYS '''
+                # Check slaves deploy return
+                node_error_dict = {}
+                node_ok_list = []
+                logger.info(f'I\'m master. Waiting for slaves to deploy...')
+                while len(node_error_dict) + len(node_ok_list) < len(self.ossia_server.oscquery_slave_devices):
+                    ok_count = 0
+                    for device in self.ossia_server.oscquery_slave_devices:
+                        if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'ERROR':
+                            node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
+                            # Reset the status field
+                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
+                        elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'OK':
+                            logger.info(f'Slave {device} deploy successfull, OK!')
+                            # Reset the status field
+                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
+                            node_ok_list.append(device)
+
+                    time.sleep(0.05)
+
+                if node_error_dict:
+                    # Some slave could not load the project
+                    logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid} Node errors: {node_error_dict}')
+                    self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':f'Errors deploying on nodes: {node_error_dict}'})
+                else:
+                    logger.info(f'Deploy process completed succesfully on all slave nodes...')
+                    self.editor_queue.put({'type':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+
+            else:
+                # Deploy is not needed on this slave...
+                logger.info(f'Deploy requested from master but it is not needed on this slave')
+
+                self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
+
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/type'][0].value = 'OK'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_deploy'
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Deploy not needed on this slave!'
+
+        self._editor_request_uuid = ''
 
     def comms_callback(self, **kwargs):
+        logger.info(f'COMMS CALLBACK! -> ARGS : {kwargs["value"]}')
+
         if self.cm.amimaster:
             for device in self.ossia_server.oscquery_slave_devices:
                 logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/type"][0].value} // '
@@ -1051,12 +1230,16 @@ class CuemsEngine():
                         + f'value : {self.ossia_server._oscquery_registered_nodes["/engine/comms/value"][0].value}')
 
             if self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value == 'command' and self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'go':
+                self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'command_done'
+                self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'go_done'
                 self.go_callback()
 
     def action_uuid_callback(self, **kwargs):
         self._editor_request_uuid = kwargs['value']
 
     def test_callback(self, **kwargs):
+        logger.info(f'TEST CALLBACK! -> ARGS : {kwargs["value"]}')
+
         '''OSC callback for internal test porpouses'''
         self.test_data = kwargs['value']
 
@@ -1105,13 +1288,6 @@ class CuemsEngine():
                 string += f'\n{type(cue)} : {filename} : cue_uuid : {cue.uuid}'
             logger.error(string)
 
-            if not self.cm.amimaster:
-                deploy_request_list = []
-                for item in list(media_list.keys()):
-                    deploy_request_list.append('/media/' + item)
-
-                self.log_deploy_request(deploy_request_list)
-            
         return media_list
         
     def initial_cuelist_process(self, cuelist, caller = None):
