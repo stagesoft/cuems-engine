@@ -153,7 +153,7 @@ class OssiaServer(threading.Thread):
     def threaded_internal_loop(self):
         while self.server_running:
             # internally generated osc messages
-            while True:
+            while not self._oscquery_internal_messageq.empty():
                 internalq_message = self._oscquery_internal_messageq.get()
                 parameter, value = internalq_message
                 self.route_messages(parameter, value)
