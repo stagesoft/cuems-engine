@@ -279,10 +279,10 @@ class ConfigManager(Thread):
                 self.project_node_mappings = node
                 break
             
-        if not self.project_node_mappings:
-            raise Exception('Node uuid could not be recognised in the project outputs map')
-
         logger.info(f'Project {project_uname} mappings loaded')
+
+        if not self.project_node_mappings:
+            logger.warning(f'No mappings assigned for this node in project {project_uname}')
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
@@ -355,9 +355,10 @@ class ConfigManager(Thread):
                     for item in contents:
                         for key, values in item.items():
                             temp_node[section][key] = []
-                            for elem in values:
-                                for subkey, subvalue in elem.items():
-                                    temp_node[section][key].append(subvalue)
+                            if values:
+                                for elem in values:
+                                    for subkey, subvalue in elem.items():
+                                        temp_node[section][key].append(subvalue)
             temp_nodes.append(temp_node)
         
         mappings['nodes'] = temp_nodes
