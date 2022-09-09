@@ -82,9 +82,6 @@ class CuemsEngine():
             logger.exception(f'Exception while loading config: {e}')
             exit(-1)
 
-        # delete show.lock file if exist from previous sessions (should not if exit was clean)
-        self.remove_show_lock_file()
-        logger.warning(f'show.lock file found, DELETING')
 
         # Our empty script object
         self.script = None
@@ -545,22 +542,22 @@ class CuemsEngine():
 
 
     def set_show_lock_file(self):
-        show_lock_path = '/etc/cuems/show.lock'
+        show_lock_path = '/tpm/cuems.show.lock'
         if  not path.isfile(show_lock_path):
             try:
                 with open(show_lock_path, 'w') as file:
                     file.write(' ')
 
-                logger.warning("/etc/cuems/show.lock file written...")
+                logger.warning("/tpm/cuems.show.lock file written...")
             except:
                 logger.warning("Could not write show lock file")
 
     def remove_show_lock_file(self):
-        show_lock_path = '/etc/cuems/show.lock'
+        show_lock_path = '/tpm/cuems.show.lock'
         if path.isfile(show_lock_path):
             try:
                 remove(show_lock_path)
-                logger.warning("/etc/cuems/show.lock file removed...")
+                logger.warning("/tpm/cuems.show.lock file removed...")
             except OSError:
                 logger.warning("Could not delete master lock file")
 
