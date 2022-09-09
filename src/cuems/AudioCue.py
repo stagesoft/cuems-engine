@@ -124,7 +124,7 @@ class AudioCue(Cue):
                 self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
                 self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
-                ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                ossia.send_message(key, offset_to_go)
                 logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
                 logger.debug(f'Key error 1 in go_callback {key}')
@@ -132,7 +132,7 @@ class AudioCue(Cue):
                 # Connect to mtc signal
             try:
                 key = f'{self._osc_route}/mtcfollow'
-                ossia._oscquery_registered_nodes[key][0].value = 1
+                ossia.send_message(key, 1)
             except KeyError:
                 logger.debug(f'Key error 2 in go_callback {key}')
 
@@ -159,7 +159,7 @@ class AudioCue(Cue):
                     offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
                     try:
                         key = f'{self._osc_route}/offset'
-                        ossia._oscquery_registered_nodes[key][0].value = offset_to_go
+                        ossia.send_message(key, offset_to_go)
                     except KeyError:
                         logger.debug(f'Key error 3 in go_callback {key}')
 
@@ -168,7 +168,7 @@ class AudioCue(Cue):
             if self._local:                
                 try:
                     key = f'{self._osc_route}/mtcfollow'
-                    ossia._oscquery_registered_nodes[key][0].value = 0
+                    ossia.send_message(key, 0)
                 except KeyError:
                     logger.debug(f'Key error 4 in go_callback {key}')
 

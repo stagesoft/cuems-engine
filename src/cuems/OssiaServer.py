@@ -2,6 +2,7 @@
 import pyossia as ossia
 import time
 import threading
+from queue import Queue
 
 #from VideoPlayer import NodeVideoPlayers
 #from AudioPlayer import NodeAudioPlayers
@@ -42,6 +43,7 @@ class OssiaServer(threading.Thread):
         super().__init__(target=self.threaded_meta_loop, name='OSCMsgQueuesLoop')
         self.server_running = True
 
+        self.internal_queue_loop = threading.Thread(target=self.threaded_internal_loop, name='OSCInternalQueueLoop')
         self.local_queue_loop = threading.Thread(target=self.threaded_local_loop, name='OSCLocalQueueLoop')
         self.remote_queue_loop = threading.Thread(target=self.threaded_remote_loop, name='OSCRemoteQueueLoop')
 
@@ -61,7 +63,8 @@ class OssiaServer(threading.Thread):
         except Exception as e:
             logger.exception(e)
 
-
+        # Internal OSC sending queue 
+        self._oscquery_internal_messageq = Queue()
         # Local OSC messages queue
         self._oscquery_local_messageq = ossia.GlobalMessageQueue(self._oscquery_local_device)
 
@@ -90,9 +93,71 @@ class OssiaServer(threading.Thread):
         self.server_running = False
 
     def threaded_meta_loop(self):
+        self.internal_queue_loop.start()
         self.local_queue_loop.start()
         self.remote_queue_loop.start()
         # self.global_queue_loop.start()
+
+    def send_message(self, route, value):
+        self._oscquery_registered_nodes[route][0].value = value
+        ossia_parameter = self._oscquery_registered_nodes[route][0]
+        qmessage = ossia_parameter, value
+        self._oscquery_internal_messageq.put(qmessage)
+
+
+    def route_messages(self, parameter, value):
+        
+        # print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
+
+        # Try to copy the message on the appropriate nodes
+        try:
+            # if the message has a route to any of the local players...
+            if str(parameter.node) in self.osc_player_registered_nodes.keys():
+                self.osc_player_registered_nodes[str(parameter.node)][0].value = value
+                # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
+        except KeyError:
+            logger.info(f'OSC device has no {str(parameter.node)} node')
+        except Exception as e:
+            logger.exception(e)
+
+        # Try to copy the message on the appropriate nodes
+        try:
+            # if the message has a route to any of the local players...
+            if str(parameter.node) in self.oscquery_slave_registered_nodes.keys():
+                self.oscquery_slave_registered_nodes[str(parameter.node)][0].value = value
+                # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
+        except KeyError:
+            logger.info(f'OSC device has no {str(parameter.node)} node')
+        except Exception as e:
+            logger.exception(e)
+
+        if str(parameter.node)[:13] == '/engine/comms/':
+            # If we are master we filter the comms OSC messages and
+            # try to copy them to all the slaves directly
+            # print(f'Copying comms to slaves / master...')
+            for device in self.oscquery_slave_devices.keys():
+                self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+                self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
+
+        # Try to call a callback for that node if there is any
+        try:
+            if self._oscquery_registered_nodes[str(parameter.node)][1]:
+                # if the node has a callback, let's call it
+                self._oscquery_registered_nodes[str(parameter.node)][1](value=value)
+        except KeyError:
+            logger.info(f'OSCQuery local device has no {str(parameter.node)} node')
+        except Exception as e:
+            logger.exception(e)
+
+
+    def threaded_internal_loop(self):
+        while self.server_running:
+            # internally generated osc messages
+            while not self._oscquery_internal_messageq.empty():
+                internalq_message = self._oscquery_internal_messageq.get()
+                parameter, value = internalq_message
+                self.route_messages(parameter, value)
+
     
     def threaded_local_loop(self):
         while self.server_running:
@@ -101,47 +166,7 @@ class OssiaServer(threading.Thread):
             while (oscq_message != None):
                 parameter, value = oscq_message
 
-                # print(f'LOCAL QUEUE : param : {str(parameter.node)} value : {value}')
-
-                # Try to copy the message on the appropriate nodes
-                try:
-                    # if the message has a route to any of the local players...
-                    if str(parameter.node) in self.osc_player_registered_nodes.keys():
-                        self.osc_player_registered_nodes[str(parameter.node)][0].value = value
-                        # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
-                except KeyError:
-                    logger.info(f'OSC device has no {str(parameter.node)} node')
-                except Exception as e:
-                    logger.exception(e)
-
-                # Try to copy the message on the appropriate nodes
-                try:
-                    # if the message has a route to any of the local players...
-                    if str(parameter.node) in self.oscquery_slave_registered_nodes.keys():
-                        self.oscquery_slave_registered_nodes[str(parameter.node)][0].value = value
-                        # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
-                except KeyError:
-                    logger.info(f'OSC device has no {str(parameter.node)} node')
-                except Exception as e:
-                    logger.exception(e)
-
-                if str(parameter.node)[:13] == '/engine/comms/':
-                    # If we are master we filter the comms OSC messages and
-                    # try to copy them to all the slaves directly
-                    # print(f'Copying comms to slaves / master...')
-                    for device in self.oscquery_slave_devices.keys():
-                        self.oscquery_slave_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
-                        self._oscquery_registered_nodes[f'/{device}{str(parameter.node)}'][0].value = value
-
-                # Try to call a callback for that node if there is any
-                try:
-                    if self._oscquery_registered_nodes[str(parameter.node)][1]:
-                        # if the node has a callback, let's call it
-                        self._oscquery_registered_nodes[str(parameter.node)][1](value=value)
-                except KeyError:
-                    logger.info(f'OSCQuery local device has no {str(parameter.node)} node')
-                except Exception as e:
-                    logger.exception(e)
+                self.route_messages(parameter, value)
 
                 oscq_message = self._oscquery_local_messageq.pop()
             
