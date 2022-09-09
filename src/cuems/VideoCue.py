@@ -86,7 +86,8 @@ class VideoCue(Cue):
 
             try:
                 key = f'{self._osc_route}/jadeo/load'
-                ossia.send_message(key, value)=
+                value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
+                ossia.send_message(key, value)
                 logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
                 logger.debug(f'Key error 2 (load) in arm_callback {key}')
