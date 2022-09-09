@@ -82,6 +82,10 @@ class CuemsEngine():
             logger.exception(f'Exception while loading config: {e}')
             exit(-1)
 
+        # delete show.lock file if exist from previous sessions (should not if exit was clean)
+        self.remove_show_lock_file()
+        logger.warning(f'show.lock file found, DELETING')
+
         # Our empty script object
         self.script = None
         '''
@@ -1089,6 +1093,9 @@ class CuemsEngine():
             self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value = kwargs['value'] + '*'
 
         logger.info(f'RESET ALL CALLBACK! -> ARGS : {kwargs["value"]}')
+        
+        # delete show.lock file
+        self.remove_show_lock_file()
 
         # Call OSC go on all slaves:
         # by the moment we are using the direct /engine/command/go callback on the slaves
