@@ -5,11 +5,11 @@ from cuems.CuemsEngine import CuemsEngine
 from cuems.log import logger
 
 # Launch hardware discovery process
-try:
-    logger.info(f'Hardware discovery launched...')
-    CuemsHWDiscovery()
-except Exception as e:
-    logger.exception(f'Exception during HW discovery process:\n{e}')
+# try:
+#     logger.info(f'Hardware discovery launched...')
+#     CuemsHWDiscovery()
+# except Exception as e:
+#     logger.exception(f'Exception during HW discovery process:\n{e}')
 
 try:
     my_engine = CuemsEngine()
