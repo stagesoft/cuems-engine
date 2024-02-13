@@ -6,6 +6,10 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 from .Settings import Settings
 from .log import logger
 
+
+
+CUEMS_MASTER_LOCK_FILE = 'master.lock'
+
 ################################################################################
 # Config Manager Avahi monitoring import
 class NodeType(enum.Enum):
@@ -334,12 +338,15 @@ class ConfigManager(Thread):
         except Exception as e:
             logger.error("error: {} {}".format(type(e), e))
 
+    # def check_amimaster(self):
+    #     for name, node in self.avahi_monitor.listener.osc_services.items():
+    #         if node.properties[b'node_type'] == b'master' and self.node_conf['uuid'] == node.properties[b'uuid'].decode('utf8'):
+    #             self.amimaster = True
+    #             break
+            
     def check_amimaster(self):
-        for name, node in self.avahi_monitor.listener.osc_services.items():
-            if node.properties[b'node_type'] == b'master' and self.node_conf['uuid'] == node.properties[b'uuid'].decode('utf8'):
-                self.amimaster = True
-                break
-
+        if path.exists(path.join(self.cuems_conf_path, CUEMS_MASTER_LOCK_FILE)):
+            self.amimaster = True
 
     def process_network_mappings(self, mappings):
         '''Temporary process instead of reviewing xml read and convert to objects'''
