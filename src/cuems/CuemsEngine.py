@@ -739,6 +739,7 @@ class CuemsEngine():
             return
 
         # CHECK PROJECT MAPPINGS
+        ''' 20240219 Commented for proto_loop_fruta branch where we do not need to check mappings as they are hard coded
         try:
             if self.check_project_mappings():
                 logger.info('Project mappings check OK!')
@@ -805,7 +806,8 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script could not be loaded'
-
+        '''
+        
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
             if self.cm.amimaster:
@@ -826,6 +828,7 @@ class CuemsEngine():
             logger.info('Project script loaded OK!')
             self.script.unix_name = kwargs['value']
 
+        ''' 20240219 Commented for proto_loop_fruta branch where we do not need to check media loading as media is also fixed and hard coded
         try:
             media_fail_list = self.script_media_check()
         except Exception as e:
@@ -836,9 +839,9 @@ class CuemsEngine():
 
             if self.cm.amimaster:
                 pass
-                ''' By the moment we allow the show mode to get ready even if there are media files missing...
+                '''''' By the moment we allow the show mode to get ready even if there are media files missing...
                 # self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'subtype':'media', 'data':list(media_fail_list.keys())})
-                '''
+                ''''''
             else:
                 self.ossia_server._oscquery_registered_nodes['/engine/status/load'][0].value = 'ERROR'
 
@@ -849,15 +852,17 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Media not found'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/data'][0].value = list(media_fail_list.keys())
 
-            ''' By the moment we allow the show mode to get ready even if there are media files missing...
+            '''''' By the moment we allow the show mode to get ready even if there are media files missing...
             self.script = None
             self._editor_request_uuid = ''
             return
-            '''
+            ''''''
             local_media_error = True
         else:
             logger.info('Media check OK!')
+        '''
 
+        ''' 20240219 Commented for proto_loop_fruta branch where we do not need to check slaves loading as they are hard coded too and supposed to load correctly
         try:
             #### CHECK LOAD PROCESS ON SLAVES... :
             if self.cm.amimaster:
@@ -923,6 +928,7 @@ class CuemsEngine():
             self._editor_request_uuid = ''
             self.script = None
             return
+        '''
 
         # Then we force-arm the first item in the main list
         self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
