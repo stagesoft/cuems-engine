@@ -755,8 +755,9 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Wrong configuration on input/output mappings'
-            return
-
+            return    
+        ''' 
+        # THIS LOADS THE SCRIPT
         try:
             schema = path.join(self.cm.cuems_conf_path, 'script.xsd')
             xml_file = path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
@@ -776,7 +777,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Project script file not found'
-
+        '''
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
             if self.cm.amimaster:
