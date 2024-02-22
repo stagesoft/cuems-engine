@@ -542,22 +542,22 @@ class CuemsEngine():
 
 
     def set_show_lock_file(self):
-        show_lock_path = '/tpm/cuems.show.lock'
+        show_lock_path = '/tmp/cuems.show.lock'
         if  not path.isfile(show_lock_path):
             try:
                 with open(show_lock_path, 'w') as file:
                     file.write(' ')
 
-                logger.warning("/tpm/cuems.show.lock file written...")
+                logger.warning("/tmp/cuems.show.lock file written...")
             except:
                 logger.warning("Could not write show lock file")
 
     def remove_show_lock_file(self):
-        show_lock_path = '/tpm/cuems.show.lock'
+        show_lock_path = '/tmp/cuems.show.lock'
         if path.isfile(show_lock_path):
             try:
                 remove(show_lock_path)
-                logger.warning("/tpm/cuems.show.lock file removed...")
+                logger.warning("/tmp/cuems.show.lock file removed...")
             except OSError:
                 logger.warning("Could not delete master lock file")
 
