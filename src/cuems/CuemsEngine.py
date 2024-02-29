@@ -777,7 +777,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Project script file not found'
-        '''
+        
         except xmlschema.exceptions.XMLSchemaException as e:
             logger.exception(f'XML error: {e}')
             if self.cm.amimaster:
@@ -807,7 +807,7 @@ class CuemsEngine():
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action'][0].value = 'project_ready'
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                 self.ossia_server._oscquery_registered_nodes['/engine/comms/value'][0].value = 'Script could not be loaded'
-        '''
+        
         
         if self.script is None:
             logger.warning(f'Script could not be loaded. Check consistency and retry please.')
@@ -930,6 +930,8 @@ class CuemsEngine():
             self.script = None
             return
         '''
+        # master or slave, for the moment do the processing, (asume everithin loaded ok)
+        self.initial_cuelist_process(self.script.cuelist)
 
         # Then we force-arm the first item in the main list
         self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
@@ -1348,11 +1350,13 @@ class CuemsEngine():
             for index, item in enumerate(cuelist.contents):
                 if item.check_mappings(self.cm):
                     if isinstance(item, VideoCue) and item._local:
+                        logger.debug(f'{item.outputs}')
                         try:
                             for output in item.outputs:
                                 # TO DO : add support for multiple outputs
-                                # video_player_id = self.cm.get_video_player_id(output['output_name'])
-                                video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
+                                video_player_id = self.cm.get_video_player_id(output['output_name'])
+                                #video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
+                                logger.debug(video_player_id)
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
                         except Exception as e:

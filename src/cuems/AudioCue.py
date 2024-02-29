@@ -118,10 +118,18 @@ class AudioCue(Cue):
 
         # PLAY : specific audio cue stuff
         # Set offset
+
+        ### harcoded for TODO: proto_fruta, need fixx
+         #try to make all cues start at sync at 20 second timecode!
+        harcoded_go_offset = 20000
+
         if self._local:
             try:
                 key = f'{self._osc_route}/offset'
-                self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+                #self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds + harcoded_go_offset)
+                
+                self._start_mtc = CTimecode(frames=harcoded_go_offset)
+                
                 self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
                 ossia.send_message(key, offset_to_go)
@@ -212,20 +220,28 @@ class AudioCue(Cue):
             self._player.kill()
 
     def check_mappings(self, settings):
+        logger.debug('we are checking mapings')
         if not settings.project_node_mappings:
             return True
 
         found = True
         
         map_list = ['default']
+        logger.debug('we still are checking mapings')
 
         if settings.project_node_mappings['audio']['outputs']:
+            m = settings.project_node_mappings['audio']['outputs']
+            logger.debug(f'we still are checking mapings  {m}')
             for elem in settings.project_node_mappings['audio']['outputs']:
                 for map in elem['mappings']:
                     map_list.append(map['mapped_to'])
-
+        
         for output in self.outputs:
             # if output['node_uuid'] == settings.node_conf['uuid']:
+
+            # for the moment set all outputs to local TEMPORARY TODO: assign output
+            self._local = True
+            '''
             if output['output_name'][:36] == settings.node_conf['uuid']:
                 self._local = True
                 if output['output_name'][37:] not in map_list:
@@ -234,5 +250,5 @@ class AudioCue(Cue):
             else:
                 self._local = False
                 found = True
-
+            '''
         return found

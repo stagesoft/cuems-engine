@@ -118,12 +118,22 @@ class VideoCue(Cue):
         # PREWAIT
         if self.prewait > 0:
             sleep(self.prewait.milliseconds / 1000)
+        
+        ### harcoded for TODO: proto_fruta, need fixx
+         #try to make all cues start at sync at 10 second timecode!
+        harcoded_go_offset = 20000
+
 
         if self._local:
             # PLAY : specific video cue stuff
             try:
                 key = f'{self._osc_route}/jadeo/offset'
-                self._start_mtc = mtc.main_tc
+                #self._start_mtc = mtc.main_tc
+
+                ### harcoded for TODO: proto_fruta, need fixx             
+                self._start_mtc = CTimecode(frames=harcoded_go_offset)
+                
+                
                 duration = self.media.regions[0].out_time - self.media.regions[0].in_time
                 duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
                 self._end_mtc = self._start_mtc + duration
@@ -231,6 +241,9 @@ class VideoCue(Cue):
 
         for output in self.outputs:
             # if output['node_uuid'] == settings.node_conf['uuid']:
+
+            self._local = True
+            """             
             if output['output_name'][:36] == settings.node_conf['uuid']:
                 self._local = True
                 if output['output_name'][37:] not in map_list:
@@ -239,5 +252,5 @@ class VideoCue(Cue):
             else:
                 self._local = False
                 found = True
-
+            """
         return found

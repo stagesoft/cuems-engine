@@ -48,13 +48,13 @@
                     <output>
                         <name>0</name>
                         <mappings>
-                            <mapped_to>0</mapped_to>
+                            <mapped_to>salida_001</mapped_to>
                         </mappings>
                     </output>
                     <output>
                         <name>1</name>
                         <mappings>
-                            <mapped_to>1</mapped_to>
+                            <mapped_to>salida_002</mapped_to>
                         </mappings>
                     </output>
                 </outputs>
