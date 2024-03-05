@@ -241,9 +241,7 @@ class VideoCue(Cue):
 
         for output in self.outputs:
             # if output['node_uuid'] == settings.node_conf['uuid']:
-
-            self._local = True
-            """             
+           
             if output['output_name'][:36] == settings.node_conf['uuid']:
                 self._local = True
                 if output['output_name'][37:] not in map_list:
@@ -252,5 +250,5 @@ class VideoCue(Cue):
             else:
                 self._local = False
                 found = True
-            """
+            
         return found

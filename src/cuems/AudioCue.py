@@ -220,35 +220,29 @@ class AudioCue(Cue):
             self._player.kill()
 
     def check_mappings(self, settings):
-        logger.debug('we are checking mapings')
         if not settings.project_node_mappings:
             return True
 
         found = True
         
         map_list = ['default']
-        logger.debug('we still are checking mapings')
 
         if settings.project_node_mappings['audio']['outputs']:
             m = settings.project_node_mappings['audio']['outputs']
-            logger.debug(f'we still are checking mapings  {m}')
             for elem in settings.project_node_mappings['audio']['outputs']:
                 for map in elem['mappings']:
                     map_list.append(map['mapped_to'])
         
         for output in self.outputs:
-            # if output['node_uuid'] == settings.node_conf['uuid']:
+            #if output['node_uuid'] == settings.node_conf['uuid']:
 
-            # for the moment set all outputs to local TEMPORARY TODO: assign output
-            self._local = True
-            '''
             if output['output_name'][:36] == settings.node_conf['uuid']:
-                self._local = True
-                if output['output_name'][37:] not in map_list:
-                    found = False
-                    break
+                    self._local = True
+                    if output['output_name'][37:] not in map_list:
+                        found = False
+                        break
             else:
                 self._local = False
                 found = True
-            '''
+            
         return found

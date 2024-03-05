@@ -1354,9 +1354,8 @@ class CuemsEngine():
                         try:
                             for output in item.outputs:
                                 # TO DO : add support for multiple outputs
-                                video_player_id = self.cm.get_video_player_id(output['output_name'])
-                                #video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
-                                logger.debug(video_player_id)
+                                video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
+                                logger.debug(f'video player id: {video_player_id}')
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
                         except Exception as e:
