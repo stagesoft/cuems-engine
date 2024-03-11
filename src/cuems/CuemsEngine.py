@@ -489,9 +489,12 @@ class CuemsEngine():
     def log_deploy_request(self, project_name='', tag_name='project', file_names=[]):
         if project_name:
             if tag_name == 'project':
-                file_names = [  '/projects/' + project_name + '/script.xml\n',
-                                '/projects/' + project_name + '/mappings.xml\n', 
-                                '/projects/' + project_name + '/settings.xml\n']
+               ### proto fruta, disabe mappings and settngs since they are hardwired for this project
+               # file_names = [  '/projects/' + project_name + '/script.xml\n',
+               #                 '/projects/' + project_name + '/mappings.xml\n', 
+               #                 '/projects/' + project_name + '/settings.xml\n']
+               
+                file_names = [  '/projects/' + project_name + '/script.xml\n']
 
             try:
                 with open(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log'), 'w') as f:
