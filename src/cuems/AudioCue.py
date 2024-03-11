@@ -73,7 +73,8 @@ class AudioCue(Cue):
                 self._player = AudioPlayer( self._conf.osc_port_index, 
                                             self._conf.node_conf['audioplayer']['path'],
                                             self._conf.node_conf['audioplayer']['args'],
-                                            str(path.join(self._conf.library_path, 'media', self.media['file_name'])))
+                                            str(path.join(self._conf.library_path, 'media', self.media['file_name'])),
+                                            self.uuid)
             except Exception as e:
                 raise e
 

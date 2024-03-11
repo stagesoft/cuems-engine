@@ -8,7 +8,7 @@ from .log import logger
 import time
 
 class AudioPlayer(Thread):
-    def __init__(self, port_index, path, args, media):
+    def __init__(self, port_index, path, args, media, uuid=None):
         super().__init__()
         self.port = port_index['start']
         while self.port in port_index['used']:
@@ -23,6 +23,7 @@ class AudioPlayer(Thread):
         self.path = path
         self.args = args
         self.media = media
+        self.uuid = uuid
 
     '''        
     def __init_thread(self):
@@ -41,7 +42,11 @@ class AudioPlayer(Thread):
             if self.args:
                 for arg in self.args.split():
                     process_call_list.append(arg)
-            process_call_list.extend(['--port', str(self.port), self.media])
+            if self.uuid != None:
+                uuid_slug = self.uuid[32:]
+                process_call_list.extend(['--port', str(self.port), '--uuid', uuid_slug, self.media])
+            else:
+                process_call_list.extend(['--port', str(self.port), self.media])
             # self.p=subprocess.Popen(process_call_list, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             # self.stdout, self.stderr = self.p.communicate()
 
