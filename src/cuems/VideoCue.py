@@ -120,8 +120,8 @@ class VideoCue(Cue):
             sleep(self.prewait.milliseconds / 1000)
         
         ### harcoded for TODO: proto_fruta, need fixx
-         #try to make all cues start at sync at 10 second timecode!
-        harcoded_go_offset = 20000
+         #try to make all cues start at sync at 40 second timecode!
+        harcoded_go_offset = 40
 
 
         if self._local:
@@ -130,9 +130,9 @@ class VideoCue(Cue):
                 key = f'{self._osc_route}/jadeo/offset'
                 #self._start_mtc = mtc.main_tc
 
-                ### harcoded for TODO: proto_fruta, need fixx             
-                self._start_mtc = CTimecode(frames=harcoded_go_offset)
-                
+                ### harcoded for TODO: proto_fruta, need fixx  
+                #framerate in 25fps base           
+                self._start_mtc = CTimecode(start_seconds = harcoded_go_offset, framerate=25)
                 
                 duration = self.media.regions[0].out_time - self.media.regions[0].in_time
                 duration = duration.return_in_other_framerate(mtc.main_tc.framerate)

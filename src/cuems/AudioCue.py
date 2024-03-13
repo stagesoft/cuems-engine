@@ -121,15 +121,16 @@ class AudioCue(Cue):
         # Set offset
 
         ### harcoded for TODO: proto_fruta, need fixx
-         #try to make all cues start at sync at 20 second timecode!
-        harcoded_go_offset = 20000
+         #try to make all cues start at sync at 40 second timecode!
+        harcoded_go_offset = 40
 
         if self._local:
             try:
                 key = f'{self._osc_route}/offset'
-                #self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds + harcoded_go_offset)
+                #framerate in milliseconds base, 1frame = 1 milliseconds
+                #self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
                 
-                self._start_mtc = CTimecode(frames=harcoded_go_offset)
+                self._start_mtc = CTimecode(start_seconds = harcoded_go_offset)
                 
                 self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
                 offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
