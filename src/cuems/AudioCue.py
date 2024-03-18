@@ -176,7 +176,7 @@ class AudioCue(Cue):
                     self._end_mtc = self._start_mtc + duration
                     offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
                     #now callculate rounded time to frames in milliseconds for audioplayer
-                    offset_to_go = offset_to_go * (1000/mtc.main_tc.framerate)
+                    offset_to_go = offset_to_go * 40
                     try:
                         key = f'{self._osc_route}/offset'
                         ossia.send_message(key, offset_to_go)
