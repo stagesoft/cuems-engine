@@ -138,7 +138,7 @@ class AudioCue(Cue):
                 cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
                 offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
                 #now callculate rounded time to frames in milliseconds for audioplayer
-                offset_to_go = offset_to_go * (1000/mtc.main_tc.framerate)
+                offset_to_go = offset_to_go * 40
                 ossia.send_message(key, offset_to_go)
                 logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
