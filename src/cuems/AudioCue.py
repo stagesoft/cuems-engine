@@ -130,10 +130,15 @@ class AudioCue(Cue):
                 #framerate in milliseconds base, 1frame = 1 milliseconds
                 #self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
                 
-                self._start_mtc = CTimecode(start_seconds = harcoded_go_offset)
-                
-                self._end_mtc = self._start_mtc + (self.media.regions[0].out_time - self.media.regions[0].in_time)
-                offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
+                self._start_mtc = CTimecode(start_seconds = harcoded_go_offset, framerate=25)
+                # round IN FRAMES SO IT MATCHES VIDEO DURATION when doing loops with audio an video
+                duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+                duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+                self._end_mtc = self._start_mtc + duration
+                cue_in_time_fr_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
+                offset_to_go = cue_in_time_fr_adjusted.frame_number - self._start_mtc.frame_number
+                #now callculate rounded time to frames in milliseconds for audioplayer
+                offset_to_go = offset_to_go * (1000/mtc.main_tc.framerate)
                 ossia.send_message(key, offset_to_go)
                 logger.info(key + " " + str(ossia._oscquery_registered_nodes[key][0].value))
             except KeyError:
@@ -157,6 +162,8 @@ class AudioCue(Cue):
         try:
             loop_counter = 0
             duration = self.media.regions[0].out_time - self.media.regions[0].in_time
+            duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+            in_time_adjusted = self.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
 
             while not self.media.regions[0].loop or loop_counter < self.media.regions[0].loop:
                 while self._player.is_alive() and (mtc.main_tc.milliseconds < self._end_mtc.milliseconds):
@@ -164,9 +171,12 @@ class AudioCue(Cue):
 
                 if self._local:
                     # Recalculate offset and apply
-                    self._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
-                    self._end_mtc = self._start_mtc + (duration)
-                    offset_to_go = float(-(self._start_mtc.milliseconds) + self.media.regions[0].in_time.milliseconds)
+                    # round IN FRAMES SO IT MATCHES VIDEO DURATION when doing loops with audio an video
+                    self._start_mtc = mtc.main_tc
+                    self._end_mtc = self._start_mtc + duration
+                    offset_to_go = in_time_adjusted.frame_number - self._start_mtc.frame_number
+                    #now callculate rounded time to frames in milliseconds for audioplayer
+                    offset_to_go = offset_to_go * (1000/mtc.main_tc.framerate)
                     try:
                         key = f'{self._osc_route}/offset'
                         ossia.send_message(key, offset_to_go)
