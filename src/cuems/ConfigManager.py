@@ -144,9 +144,11 @@ class ConfigManager(Thread):
         netmap_file = path.join(self.cuems_conf_path, 'network_map.xml')
         try:
             netmap = Settings(schema=netmap_schema, xmlfile=netmap_file)
-            netmap.pop('xmlns:cms')
-            netmap.pop('xmlns:xsi')
-            netmap.pop('xsi:schemaLocation')
+#            netmap.pop('xmlns:cms')
+#            netmap.pop('xmlns:xsi')
+            if "schemaLocation" in netmap:
+                netmap.pop('schemaLocation')
+                
             self.network_map = netmap['CuemsNodeDict']
         except FileNotFoundError as e:
             raise e
