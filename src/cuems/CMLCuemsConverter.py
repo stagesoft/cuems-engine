@@ -1,7 +1,8 @@
 import xmlschema
-from xmlschema.namespaces import XSI_NAMESPACE
-from xmlschema.etree import etree_element, lxml_etree_element, etree_register_namespace, \
-    lxml_etree_register_namespace
+from xml.etree.ElementTree import Element
+from xml.etree.ElementTree import register_namespace as etree_register_namespace
+from lxml.etree import Element as lxml_etree_element
+from lxml.etree import register_namespace as lxml_etree_register_namespace
 from xmlschema.exceptions import XMLSchemaTypeError, XMLSchemaValueError
 from collections import namedtuple
 
@@ -14,18 +15,18 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
                  cdata_prefix=None, indent=4, strip_namespaces=True,
                  preserve_root=False, force_dict=False, force_list=False, **kwargs):
 
-        if etree_element_class is None or etree_element_class is etree_element:
+        if etree_element_class is None or etree_element_class is Element:
             register_namespace = etree_register_namespace
         elif etree_element_class is lxml_etree_element:
             register_namespace = lxml_etree_register_namespace
         else:
             raise XMLSchemaTypeError("unsupported element class {!r}".format(etree_element_class))
 
-        super(CMLCuemsConverter, self).__init__(namespaces, register_namespace, strip_namespaces)
+        super(CMLCuemsConverter, self).__init__(namespaces=None, register_namespace=register_namespace, strip_namespaces=strip_namespaces)
 
         self.dict = dict_class or dict
         self.list = list_class or list
-        self.etree_element_class = etree_element_class or etree_element
+        self.etree_element_class = etree_element_class or Element
         self.text_key = text_key
         self.attr_prefix = attr_prefix
         self.cdata_prefix = cdata_prefix
@@ -52,7 +53,7 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
             result_dict.update(
                 ('%s:%s' % (self.ns_prefix, k) if k else self.ns_prefix, v)
                 for k, v in self._namespaces.items()
-                if v in schema_namespaces or v == XSI_NAMESPACE
+                if v in schema_namespaces
             )
 
         if xsd_type.is_simple() or xsd_type.has_simple_content():
@@ -67,7 +68,7 @@ class CMLCuemsConverter(xmlschema.XMLSchemaConverter):
             if data.attributes:
                 result_dict.update(t for t in self.map_attributes(data.attributes))
 
-            has_single_group = xsd_type.content_type.is_single()
+#            has_single_group = xsd_type.content_type.is_single()
             list_types = list if self.list is list else (self.list, list)
             dict_types = dict if self.dict is dict else (self.dict, dict)
             if data.content:
