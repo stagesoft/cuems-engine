@@ -32,6 +32,7 @@ def f(text):
 
 server = CuemsWsServer(engine_queue, editor_queue, settings_dict, mappings_dict)
 logger.info('start server')
+time.sleep(5)
 server.start(9092)
 
 f('playing')

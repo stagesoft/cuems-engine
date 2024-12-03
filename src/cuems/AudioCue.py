@@ -1,5 +1,5 @@
 from os import path
-from pyossia import ossia
+from pyossia import ossia_python as ossia
 from time import sleep
 from threading import Thread
 
