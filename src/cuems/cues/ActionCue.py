@@ -7,7 +7,7 @@ from threading import Thread
 from .Cue import Cue
 # from .AudioPlayer import AudioPlayer
 # from .OssiaServer import PlayerOSCConfData
-from .log import logger
+from ..log import logger
 
 class ActionCue(Cue):
     def __init__(self, init_dict = None):
@@ -122,4 +122,3 @@ class ActionCue(Cue):
             return True
         else:
             return False
-

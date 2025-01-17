@@ -24,10 +24,10 @@ from .mtcmaster import libmtcmaster
 
 from .log import logger
 from .OssiaServer import OssiaServer, MasterOSCQueryConfData, SlaveOSCQueryConfData, PlayerOSCConfData
-from .CueList import CueList
-from .VideoCue import VideoCue
-from .VideoPlayer import VideoPlayer
-from .ActionCue import ActionCue
+from .cues.CueList import CueList
+from .cues.VideoCue import VideoCue
+from .players.VideoPlayer import VideoPlayer
+from .cues.ActionCue import ActionCue
 from .XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
@@ -140,6 +140,9 @@ class CuemsEngine():
                                         osc_port=self.cm.node_conf['oscquery_osc_port'], 
                                         master = self.cm.amimaster)
 
+        # DEV: This is a temporary solution to resend signals from main to remote engines
+        # DEV: Status nodes are used in the current implementation to check the status of the engine from the web interface
+        # DEV: Should be substituted by a more robust system based on pynng
         # Initial OSC nodes to tell ossia to configure
         OSC_ENGINE_CONF = { '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
                             '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],

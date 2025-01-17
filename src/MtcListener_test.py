@@ -5,8 +5,8 @@ import click
 from log import *
 
 from functools import partial
-from Cue import Cue
-from CueList import CueList
+from cuems.cues.Cue import Cue
+from cuems.cues.CueList import CueList
 from CueProcessor import CuePriorityQueu, CueQueueProcessor
 from MtcListener import MtcListener
 

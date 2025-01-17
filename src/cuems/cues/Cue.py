@@ -1,7 +1,7 @@
-from .CTimecode import CTimecode
+from ..CTimecode import CTimecode
 from .CueOutput import AudioCueOutput, VideoCueOutput, DmxCueOutput
-from .Media import Media
-from .log import logger
+from ....dev.Media import Media
+from ..log import logger
 import uuid as uuid_module
 from time import sleep
 from threading import Thread

@@ -2,8 +2,8 @@ import uuid as uuid_module
 from time import sleep
 from threading import Thread
 from .Cue import Cue
-from .CTimecode import CTimecode
-from .log import logger
+from ..CTimecode import CTimecode
+from ..log import logger
 
 
 class CueList(Cue):
@@ -157,4 +157,3 @@ class CueList(Cue):
         self._local = True
 
         return True
-

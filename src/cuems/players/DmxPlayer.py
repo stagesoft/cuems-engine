@@ -3,7 +3,7 @@ from threading import Thread
 import os
 import pyossia as ossia
 
-from .log import logger
+from ..log import logger
 
 import time
 
@@ -65,4 +65,3 @@ class DmxPlayer(Thread):
                 Thread.start(self)
             else:
                 logger.debug("AudioPlayer allready running")
-

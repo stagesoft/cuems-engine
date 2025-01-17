@@ -1,20 +1,20 @@
 # DEV: Move to cuems-utils
 import distutils.util
 
-from .CuemsScript import CuemsScript
-from .CueList import CueList
-from .Cue import Cue
-from .Media import Media, region
-from .UI_properties import UI_properties
-from .CueOutput import CueOutput, AudioCueOutput, VideoCueOutput, DmxCueOutput
-from .AudioCue import AudioCue
-from .VideoCue import VideoCue
-from .ActionCue import ActionCue
-from .DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
-from .ActionCue import ActionCue
-from .CTimecode import CTimecode
-from .log import logger
-from .cuems_nodeconf.CuemsNode import CuemsNodeDict, CuemsNode
+from ..CuemsScript import CuemsScript
+from ..cues.CueList import CueList
+from ..cues.Cue import Cue
+from ....dev.Media import Media, region
+from ..UI_properties import UI_properties
+from ..cues.CueOutput import CueOutput, AudioCueOutput, VideoCueOutput, DmxCueOutput
+from ..cues.AudioCue import AudioCue
+from ..cues.VideoCue import VideoCue
+from ..cues.ActionCue import ActionCue
+from ..cues.DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
+from ..cues.ActionCue import ActionCue
+from ..CTimecode import CTimecode
+from ..log import logger
+from ..cuems_nodeconf.CuemsNode import CuemsNodeDict, CuemsNode
 
 PARSER_SUFFIX = 'Parser'
 GENERIC_PARSER = 'GenericParser'

@@ -5,9 +5,9 @@ from collections.abc import Mapping
 from os import path
 from pyossia import ossia
 from .Cue import Cue
-from .DmxPlayer import DmxPlayer
-from .OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
-from .log import logger
+from ..players.DmxPlayer import DmxPlayer
+from ..OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
+from ..log import logger
 
 #### TODO: asegurar asignacion de escenas a cue, no copia!!
 

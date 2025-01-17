@@ -1,5 +1,5 @@
 from .log import logger
-from .CueList import CueList
+from .cues.CueList import CueList
 import uuid as uuid_module
 from .cuems_editor.CuemsUtils import date_now_iso_utc
 

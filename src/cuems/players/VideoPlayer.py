@@ -4,7 +4,7 @@ import os
 from sys import stdout, stderr
 import pyossia as ossia
 
-from .log import logger
+from ..log import logger
 
 import time
 

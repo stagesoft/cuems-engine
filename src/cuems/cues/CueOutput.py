@@ -1,4 +1,4 @@
-from .log import logger
+from ..log import logger
 
 class CueOutput(dict):
     def __init__(self, init_dict = None):

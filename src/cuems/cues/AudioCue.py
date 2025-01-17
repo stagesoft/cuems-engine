@@ -4,10 +4,10 @@ from time import sleep
 from threading import Thread
 
 from .Cue import Cue
-from .CTimecode import CTimecode
-from .AudioPlayer import AudioPlayer
-from .OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
-from .log import logger
+from ..CTimecode import CTimecode
+from ..players.AudioPlayer import AudioPlayer
+from ..OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
+from ..log import logger
 
 class AudioCue(Cue):
     # And dinamically attach it to the ossia for remote control it

@@ -4,10 +4,10 @@ from threading import Thread
 from time import sleep
 
 from .Cue import Cue
-from .CTimecode import CTimecode
-from .VideoPlayer import VideoPlayer
-from .OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
-from .log import logger
+from ..CTimecode import CTimecode
+from ..players.VideoPlayer import VideoPlayer
+from ..OssiaServer import OssiaServer, OSCConfData, PlayerOSCConfData
+from ..log import logger
 class VideoCue(Cue):
     '''
     OSC_VIDEOPLAYER_CONF = {'/jadeo/xscale' : [ossia.ValueType.Float, None],

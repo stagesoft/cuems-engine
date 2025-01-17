@@ -1,12 +1,12 @@
 #%%
-from cuems.Cue import Cue
-from cuems.AudioCue import AudioCue
-from cuems.DmxCue import DmxCue
+from cuems.cues.Cue import Cue
+from cuems.cues.AudioCue import AudioCue
+from cuems.cues.DmxCue import DmxCue
 from cuems.CuemsScript import CuemsScript
-from cuems.CueList import CueList
+from cuems.cues.CueList import CueList
 from cuems.CTimecode import CTimecode
 from cuems.Settings import Settings
-from cuems.DictParser import CuemsParser
+from cuems.xml.DictParser import CuemsParser
 from cuems.XmlBuilder import XmlBuilder
 from cuems.XmlReaderWriter import XmlReader, XmlWriter
 
