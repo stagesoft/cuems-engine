@@ -1,8 +1,8 @@
 import xmlschema
 from xml.etree.ElementTree import Element
 from xml.etree.ElementTree import register_namespace as etree_register_namespace
-from lxml.etree import Element as lxml_etree_element
-from lxml.etree import register_namespace as lxml_etree_register_namespace
+from xml.etree import Element as lxml_etree_element
+from xml.etree import register_namespace as lxml_etree_register_namespace
 from xmlschema.exceptions import XMLSchemaTypeError, XMLSchemaValueError
 from collections import namedtuple
 

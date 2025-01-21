@@ -2,14 +2,9 @@
 """ For the moment it works with pip3 install xmlschema==1.2.2
  """
 
-import xml.etree.ElementTree as ET
-import xmlschema
-import datetime  as DT
 import os
-import json
 
-from .log import logger
-from .CTimecode import CTimecode
+from ..log import logger
 from .CMLCuemsConverter import CMLCuemsConverter
 from .DictParser import CuemsParser
 from .XmlBuilder import XmlBuilder

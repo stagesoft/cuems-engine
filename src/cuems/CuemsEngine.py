@@ -28,7 +28,7 @@ from .cues.CueList import CueList
 from .cues.VideoCue import VideoCue
 from .players.VideoPlayer import VideoPlayer
 from .cues.ActionCue import ActionCue
-from .XmlReaderWriter import XmlReader
+from .xml.XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
 CUEMS_CONF_PATH = '/etc/cuems/'
