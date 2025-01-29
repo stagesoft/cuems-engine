@@ -263,9 +263,11 @@ class OssiaServer(threading.Thread):
 
     def add_other_nodes(self, data):
         if isinstance(data, SlaveOSCQueryConfData):
-            self.oscquery_slave_devices[data.device_name] = ossia.OSCQueryDevice(  data.device_name, 
-                                                                                    f'ws://{data.host}:{data.ws_port}', 
-                                                                                    data.osc_port)
+            self.oscquery_slave_devices[data.device_name] = ossia.OSCQueryDevice(
+                data.device_name,
+                f'ws://{data.host}:{data.ws_port}',
+                data.osc_port
+            )
 
             self.oscquery_slave_devices[data.device_name].update()
             # node_vec = self.oscquery_slave_devices[data.device_name].root_node.get_nodes()

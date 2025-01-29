@@ -239,6 +239,8 @@ class CuemsEngine():
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = item['action']
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = item['action_uuid']
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = item['value']
+
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = '{"cmd": "command", "action": "' + item['action'] + '", "action_uuid": "' + item['action_uuid'] + '", "value": "' + item['value'] + '"}'
                 except KeyError as e:
                     logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
 
@@ -315,11 +317,13 @@ class CuemsEngine():
 
                     try:
                         # Assign a videoplayer object
-                        self._video_players[player_id]['player'] = VideoPlayer( port, 
-                                                                                item,
-                                                                                self.cm.node_conf['videoplayer']['path'],
-                                                                                self.cm.node_conf['videoplayer']['args'],
-                                                                                '')
+                        self._video_players[player_id]['player'] = VideoPlayer(
+                            port,
+                            item,
+                            self.cm.node_conf['videoplayer']['path'],
+                            self.cm.node_conf['videoplayer']['args'],
+                            ''
+                        )
                     except Exception as e:
                         raise e
 
@@ -328,28 +332,33 @@ class CuemsEngine():
                     # And dinamically attach it to the ossia for remote control it
                     self._video_players[player_id]['route'] = f'/players/videoplayer-{index}'
 
-                    OSC_VIDEOPLAYER_CONF = {    '/jadeo/xscale' : [ossia.ValueType.Float, None],
-                                                '/jadeo/yscale' : [ossia.ValueType.Float, None], 
-                                                '/jadeo/corners' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner1' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner2' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner3' : [ossia.ValueType.List, None],
-                                                '/jadeo/corner4' : [ossia.ValueType.List, None],
-                                                '/jadeo/start' : [ossia.ValueType.Int, None],
-                                                '/jadeo/load' : [ossia.ValueType.String, None],
-                                                '/jadeo/cmd' : [ossia.ValueType.String, None],
-                                                '/jadeo/quit' : [ossia.ValueType.Int, None],
-                                                '/jadeo/offset' : [ossia.ValueType.String, None],
-                                                '/jadeo/offset.1' : [ossia.ValueType.Int, None],
-                                                '/jadeo/midi/connect' : [ossia.ValueType.String, None],
-                                                '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
-                                                }
+                    OSC_VIDEOPLAYER_CONF = {
+                        '/jadeo/xscale' : [ossia.ValueType.Float, None],
+                        '/jadeo/yscale' : [ossia.ValueType.Float, None], 
+                        '/jadeo/corners' : [ossia.ValueType.List, None],
+                        '/jadeo/corner1' : [ossia.ValueType.List, None],
+                        '/jadeo/corner2' : [ossia.ValueType.List, None],
+                        '/jadeo/corner3' : [ossia.ValueType.List, None],
+                        '/jadeo/corner4' : [ossia.ValueType.List, None],
+                        '/jadeo/start' : [ossia.ValueType.Int, None],
+                        '/jadeo/load' : [ossia.ValueType.String, None],
+                        '/jadeo/cmd' : [ossia.ValueType.String, None],
+                        '/jadeo/quit' : [ossia.ValueType.Int, None],
+                        '/jadeo/offset' : [ossia.ValueType.String, None],
+                        '/jadeo/offset.1' : [ossia.ValueType.Int, None],
+                        '/jadeo/midi/connect' : [ossia.ValueType.String, None],
+                        '/jadeo/midi/disconnect' : [ossia.ValueType.Int, None]
+                    }
 
-                    self.ossia_server.add_player_nodes( PlayerOSCConfData(  device_name=self._video_players[player_id]['route'], 
-                                                                            host=self.cm.node_conf['osc_dest_host'], 
-                                                                            in_port=port,
-                                                                            out_port=port + 1, 
-                                                                            dictionary=OSC_VIDEOPLAYER_CONF))
+                    self.ossia_server.add_player_nodes(
+                        PlayerOSCConfData(
+                            device_name=self._video_players[player_id]['route'], 
+                            host=self.cm.node_conf['osc_dest_host'], 
+                            in_port=port,
+                            out_port=port + 1,
+                            dictionary=OSC_VIDEOPLAYER_CONF
+                        )
+                    )
             else:
                 logger.info('No video outputs detected.')
         except Exception as e:
@@ -616,10 +625,14 @@ class CuemsEngine():
 
                     self.cm.osc_port_index['used'].append(udp_port)
 
-                    self.ossia_server.add_slave_nodes( SlaveOSCQueryConfData(   device_name = decoded_uuid, 
-                                                                                host = node.parsed_addresses()[0], 
-                                                                                ws_port = int(node.port), 
-                                                                                osc_port = udp_port) )
+                    self.ossia_server.add_slave_nodes(
+                        SlaveOSCQueryConfData(
+                            device_name = decoded_uuid, 
+                            host = node.parsed_addresses()[0], 
+                            ws_port = int(node.port), 
+                            osc_port = udp_port
+                        )
+                    )
                 
                     logger.info(f'Loaded OSCQuery tree for slave node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
 
@@ -638,10 +651,14 @@ class CuemsEngine():
                     self.cm.osc_port_index['used'].append(udp_port)
 
                     decoded_uuid = node.properties[b'uuid'].decode('utf8')
-                    self.ossia_server.add_master_node( SlaveOSCQueryConfData(  device_name = decoded_uuid, 
-                                                                                host = node.parsed_addresses()[0], 
-                                                                                ws_port = int(node.port), 
-                                                                                osc_port = udp_port) )
+                    self.ossia_server.add_master_node(
+                        SlaveOSCQueryConfData(
+                            device_name = decoded_uuid, 
+                            host = node.parsed_addresses()[0], 
+                            ws_port = int(node.port), 
+                            osc_port = udp_port
+                        )
+                    )
                 
                     logger.info(f'Loaded OSCQuery tree for master node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
                     break
@@ -659,7 +676,7 @@ class CuemsEngine():
                 return
             else:
                 # Mark back our load command on slaves
-                self.ossia_server._oscquery_registered_nodes[f'/engine/command/load'][0].value = kwargs['value'] + '*'
+                self.ossia_server._oscquery_registered_nodes['/engine/command/load'][0].value = kwargs['value'] + '*'
         except IndexError:
             return
 
