@@ -1,29 +1,13 @@
-from mtcmaster import libmtcmaster
-from pynng import Req0
-import json
-import signal
-
-data = {'cmd':'play'}
-data_time = {'cmd':'set_time','params':{'nanos':333}}
+import asyncio
+import ComunicatorServices
 
 address = "ipc:///tmp/libmtcmaster.sock"
+command = {'cmd': 'play'}
 
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-with Req0(dial=address) as requester:
-    requester.send(json.dumps(data).encode())  # Convert the data to JSON and send it
-                   
-    try:
-        reply = requester.recv()
-        print (f"Received: {reply}")
-    except Exception as e:
-        print(f"Error while processing request: {e}")
 
-    requester.send(json.dumps(data_time).encode())  # Convert the data to JSON and send it
-                   
-    try:
-        reply = requester.recv()
-        print (f"Received: {reply}")
-    except Exception as e:
-        print(f"Error while processing request: {e}")
+async def main():
+    await ComunicatorServices.Comunicator(address).send_request(command)
 
-    
+if __name__ == "__main__":
+    asyncio.run(main())
+
