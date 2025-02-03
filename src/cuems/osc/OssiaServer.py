@@ -1,8 +1,8 @@
 # from threading import Thread
+from pyossia import LocalDevice, ValueType
+from typing import Union
 
-from pyossia import LocalDevice, ValueType, Node, AccessMode
-
-import time
+from OSCNodes import OSCNodes
 
 OSC_CLIENT_PORT = 9989
 OSC_REQ_PORT = 9091
@@ -31,16 +31,20 @@ OSCQUERY_WS_PORT = 40255
     @return bool
 """
 
-class OssiaServer():
-    def __init__(self, name: str = None):
-        self.nodes = {}
+class OssiaServer(OSCNodes):
+    def __init__(
+            self,
+            name: str = None,
+            log: bool = False,
+            endpoints: Union[dict, list] = None
+        ):
+        super().__init__()
         if not name:
             name = self.__class__.__name__
         self.device = LocalDevice(name)
-        self.setup_server(True)
-
-    def add_node(self, path: str):
-        self.nodes[path] = self.device.add_node(path)
+        self.setup_server(log)
+        if endpoints:
+            self.create_endpoints(endpoints)
 
     def setup_server(self, logging: bool = False):
         """Create a local OSC server
@@ -54,12 +58,14 @@ class OssiaServer():
             self.device.create_oscquery_server(
                 OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT, logging
             )
-            # self.device.create_osc_server(
-            #     "127.0.0.1", OSC_CLIENT_PORT, OSC_REQ_PORT, logging
-            # )
+            self.device.create_osc_server(
+                "127.0.0.1", OSC_CLIENT_PORT, OSC_REQ_PORT, logging
+            )
         except Exception as e:
             print(e)
 
+
+"""Logging testing functions"""
 def print_node(node):
     print(node)
     params = node.get_parameters()
@@ -76,66 +82,40 @@ def iterate_on_devices(node):
         else:
             print("No children")
 
-def add_int_param(node, value):
-    param = node.create_parameter(ValueType.Int)
-    param.value = value
-    # passes parameter value into it
-    # param.add_callback(parameter_callback_print_value)
-
-    # passes Node object and paramenter value into it
-    param.add_callback_param(parameter_callback_print)
-    param.access_mode = AccessMode.Bi # default value
-
-def parameter_callback_print(node, value):
-    print(f"Parameter changed at {node} to {value}")
-
-def parameter_callback_print_value(value):
-    print(f"[+] Recieved Parameter value: {value}")
-
-def set_value(device, path: str, value):
-    n_ = device.find_node(path)
-    if isinstance(n_, Node):
-        n_.parameter.push_value(value)
-        # n_.parameter.fetch_value()
-    else:
-        print(f"[!] Node not found: {path}")
+def print_callback(node, value):
+    print(
+        f"Parameter changed at {node} to {value} [node value: {node.parameter.value}]"
+    )
 
 if __name__ == "__main__":
-    os = OssiaServer()
-    os.add_node("/test")
-    os.add_node("/test2")
-    os.add_node("/test/subcmd")
-    add_int_param(os.nodes["/test"], 10)
-    add_int_param(os.nodes["/test2"], 210)
-    add_int_param(os.nodes["/test/subcmd"], 230)
 
-    # iterate_on_devices(os.device.root_node)
-    
-    #time.sleep(5)
+    from time import sleep
 
-    os.add_node("/test3")
-    add_int_param(os.nodes["/test3"], 310)
-    
-    #time.sleep(5)
-
-    os.add_node("/test4")
-    add_int_param(os.nodes["/test4"], 310)
-    
-    time.sleep(15)
+    test_endpoints = {
+        "/test1": [ValueType.Int, print_callback, 10],
+        "/test2": [ValueType.Int, print_callback, 20],
+        "/test3": [ValueType.Int, print_callback, 30],
+        "/test4": [ValueType.Int, print_callback, 40],
+        "/test/subcmd": [ValueType.Int, None, 330]
+    }
+    os = OssiaServer(log = True, endpoints = test_endpoints)
+        
     iterate_on_devices(os.device.root_node)
 
-    time.sleep(15)
     try:
         while True:
             # pass
             in_str = input('[?] Usage: <path>:<value>\n')
             if in_str:
                 path, value = in_str.split(":")
-                print(f"[+] Path: {path}, Value: {int(value)}")
-                set_value(os.device, path, int(value))
+                try:
+                    print(f"[+] Path: {path}, Value: {int(value)}")
+                    os.set_value(path, int(value))
+                except Exception as e:
+                    print(f'[!] {e}')
                 in_str = None
             else:
-                pass
+                sleep(0.01)
     except KeyboardInterrupt as e:
         print(": KeyboardInterrupt recieved")
         print("Server Ending...")

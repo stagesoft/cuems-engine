@@ -1,58 +1,64 @@
+from enum import Enum
+from pyossia.ossia_python import OSCDevice, OSCQueryDevice, ValueType
 from time import sleep
+from typing import Union
 
-from pyossia import OSCQueryDevice, ossia
-from OssiaServer import iterate_on_devices, add_int_param, set_value, OSC_CLIENT_PORT, OSC_REQ_PORT, OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT
+from OssiaServer import OSC_CLIENT_PORT, OSC_REQ_PORT, OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT
+from OSCNodes import OSCNodes
 
-class RemoteOssia():
-    def __init__(self, host: str = "127.0.0.1"):
-        print(self.__class__.__name__)
+def new_osc_device(cls) -> OSCDevice:
+    x = OSCDevice(
+        "cuems", f"ws://{cls.host}:{OSCQUERY_WS_PORT}", OSC_REQ_PORT, OSC_CLIENT_PORT
+    )
+    return x
+
+def new_oscquery_device(cls) -> OSCQueryDevice:
+    x = OSCQueryDevice(
+        "cuems", cls.url, OSCQUERY_REQ_PORT
+    )
+    x.update()
+    return x
+
+class RemoteDevices(Enum):
+    OSC = new_osc_device
+    OSCQUERY = new_oscquery_device
+    DISPATCHER = None
+
+class RemoteOssia(OSCNodes):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        remote_type: RemoteDevices = RemoteDevices.OSC,
+        endpoints: Union[dict, list] = None
+    ):
+        super().__init__()
         self.host = host
-        self.url = f"ws://{host}:{OSCQUERY_WS_PORT}"
-        self.client = OSCQueryDevice(
-            "cuems", self.url, OSCQUERY_REQ_PORT
-        )
-        self.client.update()
+        print(f"Using remote device: {remote_type.__annotations__}")
+        self.bind_device(remote_type)
+        if endpoints:
+            self.create_endpoints(endpoints)
 
-    def new_osc_device(self):
-        self.osc = ossia.OSCDevice(
-            "cuems", self.host, OSC_REQ_PORT, OSC_CLIENT_PORT
-        )
-    
-    def add_device(self, path: str):
-        self.client.add_node(path)
+    def bind_device(self, remote_type: RemoteDevices):
+        self.device = remote_type(self)
 
 if __name__ == "__main__":
-
-    ro = RemoteOssia()
-    # ro.new_osc_device()
-    # iterate_on_devices(ro.osc.root_node)
-    base_node = ro.client.find_node("/")
-    sleep(3)
-
-    # Add new node
-    root_node = base_node.add_node("/")
-
-    new_node = root_node.add_node("/test3")
-    add_int_param(new_node, 80)
-
-    # Try adding value from OSCDevice
-    new_node = root_node.add_node("/test4")
-    add_int_param(new_node, 40)
     
-    iterate_on_devices(root_node)
-    sleep(3)
+    from OssiaServer import iterate_on_devices, print_callback
+
+    test_endpoints = {
+        "/test1": [ValueType.Int, print_callback],
+        "/test2": [ValueType.Int, print_callback]
+    }
+    
+    ro = RemoteOssia(
+        endpoints = test_endpoints
+    )
+    
+    iterate_on_devices(ro.device.root_node)
 
     try:
         while True:
             pass
-            # in_str = input('[?] Usage: <path>:<value>\n')
-            # if in_str:
-            #     path, value = in_str.split(":")
-            #     print(f"[+] Path: {path}, Value: {int(value)}")
-            #     set_value(ro.osc, path, int(value))
-            #     in_str = None
-            # else:
-            #     pass
     except KeyboardInterrupt as e:
         print(": KeyboardInterrupt recieved")
         print("Remote Ending...")
