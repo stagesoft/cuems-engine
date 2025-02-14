@@ -19,7 +19,7 @@ class ComunicatorService(ABC):
 
 
 
-class Nng_request_resopone(ComunicatorService):
+class Nng_request_response(ComunicatorService):
     """ Communicates over NNG (nanomsg)  """,
 
     def __init__(self, address, resquester_dials=True):
@@ -93,7 +93,7 @@ class Nng_request_resopone(ComunicatorService):
         await socket.asend(encoded_response)
 
 class Comunicator(ComunicatorService):
-    def __init__(self, address, comunicator_service = Nng_request_resopone, nng_mode=True):
+    def __init__(self, address, comunicator_service = Nng_request_response, nng_mode=True):
         self.address = address
         self.nng_mode = nng_mode
         self.comunicator_service = comunicator_service(self.address, resquester_dials=self.nng_mode)
