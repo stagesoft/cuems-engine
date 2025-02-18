@@ -69,6 +69,13 @@ class CuemsParser():
             return _string
 
     def parse(self):
+        #temp fixx 
+        #TODO: get root class and ignore schemaLocation info before parsing
+        try:
+            del self.init_dict['schemaLocation']
+        except KeyError:
+            logger.debug("Error trying to remove schemaLocation info before parsing")    
+
         parser_class, class_string = self.get_parser_class(self.get_first_key(self.init_dict))
         item_obj = parser_class(init_dict=self.get_contained_dict(self.init_dict), class_string=class_string).parse()
         return item_obj
