@@ -4,15 +4,6 @@ import json
 import signal
 import sys
 
-class GracefulKiller:
-  kill_now = False
-  def __init__(self):
-    signal.signal(signal.SIGINT, self.exit_gracefully)
-    signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-  def exit_gracefully(self, signum, frame):
-    self.kill_now = True
-
 
 class MtcmasterRunner():
 
@@ -20,7 +11,6 @@ class MtcmasterRunner():
     def __init__(self):
         self.mtcmaster = libmtcmaster.MTCSender_create()
         self.address = "ipc:///tmp/libmtcmaster.sock"
-        self.killer = GracefulKiller()
 
     def _listener(self):
         self.command = {'play': self.play, 'pause': self.pause,'stop': self.stop,'set_time': self.set_time}
