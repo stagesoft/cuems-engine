@@ -17,13 +17,28 @@ from .cuems_nodeconf.CuemsNode import CuemsNodeDict, CuemsNode
 
 PARSER_SUFFIX = 'Parser'
 GENERIC_PARSER = 'GenericParser'
+#TODO: XML_ROOT_TAG get from constants storage
+XML_ROOT_TAG = 'CuemsScript'
+
 
 class GenericDict(dict):
     pass
 
 class CuemsParser():
     def __init__(self, init_dict):
-        self.init_dict=init_dict
+        try:
+            if next(iter(init_dict)) != XML_ROOT_TAG:
+                root_value = init_dict[XML_ROOT_TAG]
+                self.init_dict = {XML_ROOT_TAG: root_value}
+                logger.debug("Found root tag and is not the firs one, extracting")
+                logger.debug(self.init_dict)
+            else:
+                self.init_dict = init_dict
+                
+        except KeyError:
+            self.init_dict = init_dict
+            logger.debug("No root tag found, using provided dictionary")
+            logger.debug(self.init_dict)
 
     def get_parser_class(self, class_string):
         parser_name = class_string + PARSER_SUFFIX
@@ -69,13 +84,6 @@ class CuemsParser():
             return _string
 
     def parse(self):
-        #temp fixx 
-        #TODO: get root class and ignore schemaLocation info before parsing
-        try:
-            del self.init_dict['schemaLocation']
-        except KeyError:
-            logger.debug("Error trying to remove schemaLocation info before parsing")    
-
         parser_class, class_string = self.get_parser_class(self.get_first_key(self.init_dict))
         item_obj = parser_class(init_dict=self.get_contained_dict(self.init_dict), class_string=class_string).parse()
         return item_obj

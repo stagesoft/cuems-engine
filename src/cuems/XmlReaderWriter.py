@@ -73,13 +73,6 @@ class XmlReader(CuemsXml):
 
     def read(self):
         xml_dict = self.schema_object.to_dict(self.xmlfile, validation='strict',  strip_namespaces=False)
-        # remove namespace info from xml 
-        try:
-            del xml_dict['xmlns:cms']
-            del xml_dict['xmlns:xsi']
-            del xml_dict['xsi:schemaLocation']
-        except KeyError:
-            logger.warning('Error triying to remove namespace info on read')
 
         return xml_dict
 
