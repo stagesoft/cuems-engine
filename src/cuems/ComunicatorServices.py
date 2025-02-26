@@ -92,6 +92,37 @@ class Nng_request_response(ComunicatorService):
     async def _respond(self, socket, encoded_response):
         await socket.asend(encoded_response)
 
+    def sync_send_request(self, request):
+        """
+        Synchronously send a request to the specified address and return the response.
+
+        This function is a wrapper around the asynchronous `send_request` method. It uses
+        `asyncio.run` to run the asynchronous function and wait for its completion.
+
+        Parameters:
+        - request (dict): The request to be sent. It should be a dictionary.
+
+        Returns:
+        - dict: The response received from the address. It will be a dictionary.
+        """
+        response = asyncio.run(self.send_request(request))
+        return response
+
+    def sync_reply(self, request_processor):
+        """
+        Synchronously handle incoming requests and respond using the provided request processor.
+
+        This function is a wrapper around the asynchronous `reply` method. It uses
+        `asyncio.run` to run the asynchronous function and wait for its completion.
+
+        Parameters:
+        - request_processor (Callable[[dict], dict]): A function that takes a request dictionary as input and returns a response dictionary.
+
+        Returns:
+        - None
+        """
+        asyncio.run(self.reply(request_processor))
+
 class Comunicator(ComunicatorService):
     def __init__(self, address, comunicator_service = Nng_request_response, nng_mode=True):
         self.address = address
@@ -104,3 +135,12 @@ class Comunicator(ComunicatorService):
 
     async def reply(self, request_processor):
        await self.comunicator_service.reply(request_processor)
+
+
+    def sync_send_request(self, request):
+        response = self.comunicator_service.sync_send_request(request)
+        return response
+    
+    
+    def sync_reply(self, request_processor):
+        self.comunicator_service.sync_reply(request_processor)
