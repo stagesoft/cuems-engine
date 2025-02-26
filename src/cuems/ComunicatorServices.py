@@ -3,6 +3,7 @@ from collections.abc import Callable
 import asyncio
 import json
 from pynng import Req0, Rep0
+from cuemsutils.log import logged, Logger
 
 class ComunicatorService(ABC):
     @abstractmethod
@@ -42,6 +43,7 @@ class Nng_request_response(ComunicatorService):
 
 
 
+    @logged
     async def send_request(self, request):
         """
         Send a request to the specified address and return the response.
@@ -54,19 +56,19 @@ class Nng_request_response(ComunicatorService):
         """
         with Req0(**self.params_request) as socket:
             while await asyncio.sleep(0, result=True):
-                print(f"Sending: {request}")
+                Logger.log_debug(f"Sending: {request}")
                 encoded_request = json.dumps(request).encode()
                 await socket.asend(encoded_request)
                 response = await self._get_response(socket)
                 decoded_response = json.loads(response.decode())
-                print(f"receiving: {decoded_response}")
+                Logger.log_debug(f"receiving: {decoded_response}")
                 return decoded_response
 
     async def _get_response(self, socket):
         response = await socket.arecv()
         return response
 
-
+    @logged
     async def reply(self, request_processor):
         """
         Asynchronously handle incoming requests and respond using the provided request processor.
@@ -84,7 +86,7 @@ class Nng_request_response(ComunicatorService):
             while await asyncio.sleep(0, result=True):
                 request = await socket.arecv()
                 decoded_request = json.loads(request.decode())  # Parse the JSON request
-                print(f"Received: {decoded_request}")
+                Logger.log_debug(f"Received: {decoded_request}")
                 response = request_processor(decoded_request)
                 encoded_response = json.dumps(response).encode()
                 await self._respond(socket, encoded_response)
