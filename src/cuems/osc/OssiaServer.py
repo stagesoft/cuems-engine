@@ -55,11 +55,11 @@ class OssiaServer(OSCNodes):
         logging (bool): enable protocol logging. Default is False
         """
         try:
-            self.device.create_oscquery_server(
-                OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT, logging
-            )
+            # self.device.create_oscquery_server(
+            #     OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT, logging
+            # )
             self.device.create_osc_server(
-                "127.0.0.1", OSC_CLIENT_PORT, OSC_REQ_PORT, logging
+                "127.0.0.1", OSC_CLIENT_PORT, OSC_REQ_PORT + 1, logging
             )
         except Exception as e:
             print(e)
@@ -87,16 +87,31 @@ def print_callback(node, value):
         f"Parameter changed at {node} to {value} [node value: {node.parameter.value}]"
     )
 
+TEST_STR = 'goo'
+import sys
+import inspect
+def print_test(x: str = TEST_STR):
+    frame = sys._getframe(0)
+    print(frame)
+    print(frame.f_back)
+    print(inspect.getmodule(frame))
+    print(inspect.getmodule(frame.f_back))
+    print(frame.f_code.co_name)
+    print(f'name: {__name__}')
+    print(f'func name: {print_test.__name__}')
+    print(f'module: {print_test.__module__}')
+    print(f'constant: {x}')
+
 if __name__ == "__main__":
 
     from time import sleep
 
     test_endpoints = {
-        "/test1": [ValueType.Int, print_callback, 10],
-        "/test2": [ValueType.Int, print_callback, 20],
+        # "/test1": [ValueType.Int, print_callback, 10],
+        # "/test2": [ValueType.Int, print_callback, 20],
         "/test3": [ValueType.Int, print_callback, 30],
         "/test4": [ValueType.Int, print_callback, 40],
-        "/test/subcmd": [ValueType.Int, None, 330]
+        # "/test/subcmd": [ValueType.Int, None, 330]
     }
     os = OssiaServer(log = True, endpoints = test_endpoints)
         
@@ -104,18 +119,18 @@ if __name__ == "__main__":
 
     try:
         while True:
-            # pass
-            in_str = input('[?] Usage: <path>:<value>\n')
-            if in_str:
-                path, value = in_str.split(":")
-                try:
-                    print(f"[+] Path: {path}, Value: {int(value)}")
-                    os.set_value(path, int(value))
-                except Exception as e:
-                    print(f'[!] {e}')
-                in_str = None
-            else:
-                sleep(0.01)
+            pass
+            # in_str = input('[?] Usage: <path>:<value>\n')
+            # if in_str:
+            #     path, value = in_str.split(":")
+            #     try:
+            #         print(f"[+] Path: {path}, Value: {int(value)}")
+            #         os.set_value(path, int(value))
+            #     except Exception as e:
+            #         print(f'[!] {e}')
+            #     in_str = None
+            # else:
+            #     sleep(0.01)
     except KeyboardInterrupt as e:
         print(": KeyboardInterrupt recieved")
         print("Server Ending...")

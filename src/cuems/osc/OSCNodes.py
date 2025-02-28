@@ -1,5 +1,5 @@
 from inspect import signature
-from pyossia import Node, ValueType
+from pyossia import Node, ValueType, ossia
 from typing import Union
 
 class OSCNodes(object):
@@ -35,7 +35,10 @@ class OSCNodes(object):
         """
         if not self.device:
             raise AttributeError("No device found")
-        self.nodes[path] = self.device.add_node(path)
+        try:
+            self.nodes[path] = self.device.add_node(path)
+        except AttributeError:
+            self.nodes[path] = self.device.root_node.add_node(path)
 
     def get_node(self, path: str):
         """Get a node from the collection
@@ -54,6 +57,7 @@ class OSCNodes(object):
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
+        _.repetition_filter = ossia.RepetitionFilter.On
         if callback:
             l = len(signature(callback).parameters)
             if l == 1:
