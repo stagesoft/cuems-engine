@@ -1,3 +1,0 @@
-[console_scripts]
-ossia_server = ossia_server:main
-

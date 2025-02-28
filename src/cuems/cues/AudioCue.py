@@ -70,11 +70,19 @@ class AudioCue(Cue):
         # Assign its own audioplayer object
         if self._local:
             try:
-                self._player = AudioPlayer( self._conf.osc_port_index, 
-                                            self._conf.node_conf['audioplayer']['path'],
-                                            self._conf.node_conf['audioplayer']['args'],
-                                            str(path.join(self._conf.library_path, 'media', self.media['file_name'])),
-                                            self.uuid)
+                self._player = AudioPlayer(
+                    self._conf.osc_port_index, 
+                    self._conf.node_conf['audioplayer']['path'],
+                    self._conf.node_conf['audioplayer']['args'],
+                    str(
+                        path.join(
+                            self._conf.library_path,
+                            'media',
+                            self.media['file_name']
+                        )
+                    ),
+                    self.uuid
+                )
             except Exception as e:
                 raise e
 
@@ -83,11 +91,15 @@ class AudioCue(Cue):
             # And dinamically attach it to the ossia for remote control it
             self._osc_route = f'/players/audioplayer-{self.uuid}'
 
-            ossia.add_player_nodes( PlayerOSCConfData(  device_name=self._osc_route, 
-                                                        host=self._conf.node_conf['osc_dest_host'], 
-                                                        in_port=self._player.port,
-                                                        out_port=self._player.port + 1, 
-                                                        dictionary=self.OSC_AUDIOPLAYER_CONF) )
+            ossia.add_player_nodes(
+                PlayerOSCConfData(
+                    device_name=self._osc_route, 
+                    host=self._conf.node_conf['osc_dest_host'], 
+                    in_port=self._player.port,
+                    out_port=self._player.port + 1, 
+                    dictionary=self.OSC_AUDIOPLAYER_CONF
+                )
+            )
 
         self.loaded = True
         if not self in self._armed_list:
@@ -105,7 +117,11 @@ class AudioCue(Cue):
             raise Exception(f'{self.__class__.__name__} {self.uuid} not loaded to go')
         else:
             # THREADED GO
-            self._go_thread = Thread(name = f'GO:{self.__class__.__name__}:{self.uuid}', target = self.go_thread_func, args = [ossia, mtc])
+            self._go_thread = Thread(
+                name = f'GO:{self.__class__.__name__}:{self.uuid}',
+                target = self.go_thread_func,
+                args = [ossia, mtc]
+            )
             self._go_thread.start()
 
     def go_thread_func(self, ossia, mtc):
