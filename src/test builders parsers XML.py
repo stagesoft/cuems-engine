@@ -7,8 +7,8 @@ from cuems.cues.CueList import CueList
 from cuems.CTimecode import CTimecode
 from cuems.Settings import Settings
 from cuems.xml.DictParser import CuemsParser
-from cuems.XmlBuilder import XmlBuilder
-from cuems.XmlReaderWriter import XmlReader, XmlWriter
+from cuems.xml.XmlBuilder import XmlBuilder
+from cuems.xml.XmlReaderWriter import XmlReader, XmlWriter
 
 import xml.etree.ElementTree as ET
 
