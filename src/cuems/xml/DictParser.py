@@ -14,7 +14,6 @@ from ..cues.DmxCue import DmxCue, DmxScene, DmxUniverse, DmxChannel
 from ..cues.ActionCue import ActionCue
 from ..CTimecode import CTimecode
 from ..log import logger
-from ..cuems_nodeconf.CuemsNode import CuemsNodeDict, CuemsNode
 
 PARSER_SUFFIX = 'Parser'
 GENERIC_PARSER = 'GenericParser'

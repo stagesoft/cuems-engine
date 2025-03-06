@@ -14,13 +14,11 @@ from ast import literal_eval
 from .CTimecode import CTimecode
 import xmlschema.exceptions
 
-from .cuems_editor.CuemsWsServer import CuemsWsServer
-from .cuems_nodeconf.CuemsNodeConf import CuemsNodeConf
-from .cuems_hwdiscovery.CuemsHwDiscovery import CuemsHWDiscovery
-from .cuems_deploy.CuemsDeploy import CuemsDeploy
-
 from .MtcListener import MtcListener
 from .mtcmaster import libmtcmaster
+
+from .tools.CuemsDeploy import CuemsDeploy
+from .tools.comunicate import hwdiscovery_callback, EditorWsServer
 
 from .log import logger
 from .OssiaServer import OssiaServer, MasterOSCQueryConfData, SlaveOSCQueryConfData, PlayerOSCConfData
@@ -114,7 +112,7 @@ class CuemsEngine():
             settings_dict['discovery_timeout'] = self.cm.node_conf['discovery_timeout']
             self.engine_queue = MPQueue()
             self.editor_queue = MPQueue()
-            self.ws_server = CuemsWsServer(self.engine_queue, self.editor_queue, settings_dict, self.cm.network_mappings)
+            self.ws_server = EditorWsServer(self.engine_queue, self.editor_queue, settings_dict, self.cm.network_mappings)
             try:
                 self.ws_server.start(self.cm.node_conf['websocket_port'])
             except KeyError:
@@ -258,8 +256,7 @@ class CuemsEngine():
                         self._editor_request_uuid = item['action_uuid']
                         logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         try:
-                            CuemsNodeConf()
-                            CuemsHWDiscovery()
+                            hwdiscovery_callback()
                         except:
                             self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
                             logger.error(f'HW discovery failed after editor request id: {self._editor_request_uuid}')
@@ -1043,13 +1040,6 @@ class CuemsEngine():
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_play(self.mtcmaster)
 
-        except Exception as e:
-            logger.exception(e)
-
-    def hwdiscovery_callback(self, **kwargs):
-        try:
-            CuemsNodeConf()
-            CuemsHWDiscovery()
         except Exception as e:
             logger.exception(e)
 

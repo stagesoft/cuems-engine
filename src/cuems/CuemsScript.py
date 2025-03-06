@@ -1,7 +1,6 @@
 from .log import logger
 from .cues.CueList import CueList
 import uuid as uuid_module
-from .cuems_editor.CuemsUtils import date_now_iso_utc
 
 class CuemsScript(dict):
     def __init__(self, init_dict = None):
