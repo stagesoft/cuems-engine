@@ -1,7 +1,0 @@
-README.md
-setup.py
-src/osc_control_stagelab.egg-info/PKG-INFO
-src/osc_control_stagelab.egg-info/SOURCES.txt
-src/osc_control_stagelab.egg-info/dependency_links.txt
-src/osc_control_stagelab.egg-info/entry_points.txt
-src/osc_control_stagelab.egg-info/top_level.txt

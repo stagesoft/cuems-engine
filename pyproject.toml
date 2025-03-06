@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cuemsengine"
+dynamic = ["version"]
+description = "Reusable classes and methods for CueMS system"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "GPL-3.0"
+keywords = []
+authors = [
+  { name = "Ion Reguera", email = "ion@stagelab.com" },
+  { name = "Adrià Masip", email = "adria.back@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "cuemsutils==0.0.4-post1",
+    "lxml==5.3.0",
+    "xmlschema==3.4.3"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-cov",
+]
+
+[project.urls]
+Documentation = "https://github.com/stagesoft/cuems-engine#readme"
+Issues = "https://github.com/stagesoft/cuems-engine/issues"
+Source = "https://github.com/stagesoft/cuems-engine"
+
+[tool.hatch.version]
+path = "src/cuemsengine/__init__.py"
+
+[tool.hatch.build]
+include = ["src/cuemsengine/xml/schemas"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cuemsengine"]
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0"
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/cuemsengine tests}"
+
+[tool.coverage.run]
+source_pkgs = ["cuemsengine", "tests"]
+branch = true
+parallel = true
+omit = []
+
+[tool.coverage.paths]
+cuemsengine = ["src/cuemsengine", "*/cuems-engine/src/cuemsengine"]
+tests = ["tests", "*/cuems-engine/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]

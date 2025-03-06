@@ -9,7 +9,7 @@ from .log import logger
 
 from .CTimecode import CTimecode
 
-from .CMLCuemsConverter import CMLCuemsConverter
+from .xml.CMLCuemsConverter import CMLCuemsConverter
 
 class Settings(dict):
     def __init__(self, schema = None, xmlfile = None, *arg, **kw):
