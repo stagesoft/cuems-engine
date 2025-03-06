@@ -1,14 +1,9 @@
 from functools import singledispatch
 
-from .Cue import Cue
-from .CueList import CueList
-from .AudioCue import AudioCue
-from .ActionCue import ActionCue
-from .DmxCue import DmxCue
-from .VideoCue import VideoCue
-
-from ..log import Logger
-from ..CTimecode import CTimecode
+from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
+from cuemsutils.cues.Cue import Cue
+from cuemsutils.log import Logger
+from cuemsutils.CTimecode import CTimecode
 
 @singledispatch
 def run_cue(cue: Cue, ossia, mtc):

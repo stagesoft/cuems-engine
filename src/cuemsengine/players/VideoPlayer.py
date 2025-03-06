@@ -1,4 +1,3 @@
-from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 from cuemsutils.log import logged
 
 from .Player import Player

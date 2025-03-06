@@ -1,12 +1,9 @@
 from functools import singledispatch
 from os import path
 
-from .Cue import Cue
-from .AudioCue import AudioCue
-from .DmxCue import DmxCue
-from .VideoCue import VideoCue
-
-from ..log import Logger
+from cuemsutils.cues import AudioCue, DmxCue, VideoCue
+from cuemsutils.cues.Cue import Cue
+from cuemsutils.log import Logger
 
 @singledispatch
 def arm_cue(cue: Cue, ossia):
