@@ -1,4 +1,4 @@
-from cuemsengine.cuems_deploy.CuemsDeploy import CuemsDeploy
+from cuems.cuems_deploy.CuemsDeploy import CuemsDeploy
 
 
 deployer = CuemsDeploy(library_path='/opt/test')

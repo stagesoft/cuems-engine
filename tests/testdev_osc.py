@@ -3,7 +3,7 @@ from time import sleep
 import sys
 import inspect
 
-from cuemsengine.osc.OssiaServer import iterate_on_devices, print_callback
+from cuems.osc.OssiaServer import iterate_on_devices, print_callback
 TEST_STR = 'goo'
 
 """Logging testing functions"""

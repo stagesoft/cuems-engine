@@ -1,4 +1,4 @@
-from ..src.cuemsengine.CTimecode import CTimecode
+from ..src.cuems.CTimecode import CTimecode
 
 class Media(dict):
     def __init__(self, init_dict = None):
