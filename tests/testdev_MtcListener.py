@@ -5,10 +5,10 @@ import click
 from log import *
 
 from functools import partial
-from cuems.cues.Cue import Cue
-from cuems.cues.CueList import CueList
+from cuemsengine.cues.Cue import Cue
+from cuemsengine.cues.CueList import CueList
 from CueProcessor import CuePriorityQueu, CueQueueProcessor
-from cuems.MtcListener import MtcListener
+from cuemsengine.MtcListener import MtcListener
 
 def check_cues(timecode, queue, timelist):
     if ((timelist) and (timelist[0].time <= timecode)):
