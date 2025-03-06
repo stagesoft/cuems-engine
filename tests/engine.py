@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from cuems.cuems_hwdiscovery.CuemsHwDiscovery import CuemsHWDiscovery
-from cuems.CuemsEngine import CuemsEngine
-from cuems.log import logger
+from cuemsengine.cuems_hwdiscovery.CuemsHwDiscovery import CuemsHWDiscovery
+from cuemsengine.CuemsEngine import CuemsEngine
+from cuemsengine.log import logger
 
 # Launch hardware discovery process
 # try:

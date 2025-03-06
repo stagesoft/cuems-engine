@@ -1,6 +1,6 @@
 
-from cuems.log import logger
-from cuems.cuems_editor.CuemsWsServer import CuemsWsServer
+from cuemsengine.log import logger
+from cuemsengine.cuems_editor.CuemsWsServer import CuemsWsServer
 
 from multiprocessing import Queue
 import time
