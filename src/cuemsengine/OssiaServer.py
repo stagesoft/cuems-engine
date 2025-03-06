@@ -6,7 +6,7 @@ from queue import Queue
 
 #from VideoPlayer import NodeVideoPlayers
 #from AudioPlayer import NodeAudioPlayers
-from .log import logger
+from cuemsutils.log import Logger
 
 ''' NOT IMPLEMENTED YET
 class LocalOSCQDevice():
@@ -16,7 +16,7 @@ class LocalOSCQDevice():
         self._osc_port = osc_port
         self._device = ossia.LocalDevice(self.name)
         self._device.create_oscquery_server(self.osc_port, self.ws_port, log)
-        logger.info(f'Local OscQuery device opened with ports: WS {ws_port} OSC {osc_port}')
+        Logger.info(f'Local OscQuery device opened with ports: WS {ws_port} OSC {osc_port}')
 
         self.nodes = {}
         self.queue = ossia.MessageQueue(self._device)
@@ -59,9 +59,9 @@ class OssiaServer(threading.Thread):
         try:
             while not self._oscquery_local_device.create_oscquery_server(osc_port, ws_port, False):
                 ws_port += 1
-            logger.info(f'Local OscQuery device opened with ports: WS {ws_port} OSC {osc_port}')
+            Logger.info(f'Local OscQuery device opened with ports: WS {ws_port} OSC {osc_port}')
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
         # Internal OSC sending queue 
         self._oscquery_internal_messageq = Queue()
@@ -116,9 +116,9 @@ class OssiaServer(threading.Thread):
                 self.osc_player_registered_nodes[str(parameter.node)][0].value = value
                 # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
         except KeyError:
-            logger.info(f'OSC device has no {str(parameter.node)} node')
+            Logger.info(f'OSC device has no {str(parameter.node)} node')
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
         # Try to copy the message on the appropriate nodes
         try:
@@ -127,9 +127,9 @@ class OssiaServer(threading.Thread):
                 self.oscquery_slave_registered_nodes[str(parameter.node)][0].value = value
                 # print(f'Message on the LOCAL queue copied to osc_player_registered_nodes - {str(parameter.node)} : {value}')
         except KeyError:
-            logger.info(f'OSC device has no {str(parameter.node)} node')
+            Logger.info(f'OSC device has no {str(parameter.node)} node')
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
         if str(parameter.node)[:13] == '/engine/comms/':
             # If we are master we filter the comms OSC messages and
@@ -145,9 +145,9 @@ class OssiaServer(threading.Thread):
                 # if the node has a callback, let's call it
                 self._oscquery_registered_nodes[str(parameter.node)][1](value=value)
         except KeyError:
-            logger.info(f'OSCQuery local device has no {str(parameter.node)} node')
+            Logger.info(f'OSCQuery local device has no {str(parameter.node)} node')
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
 
     def threaded_internal_loop(self):
@@ -205,9 +205,9 @@ class OssiaServer(threading.Thread):
                             self.oscquery_slave_registered_nodes[str(parameter.node)][0].value = value
                             print(f'Message on the REMOTE queue copied to oscquery_slave_registered_nodes - {str(parameter.node)} : {value}')
                     except KeyError:
-                        logger.info(f'OSC device has no {str(parameter.node)} node')
+                        Logger.info(f'OSC device has no {str(parameter.node)} node')
                     except Exception as e:
-                        logger.exception(e)
+                        Logger.exception(e)
                     '''
 
 
@@ -246,7 +246,7 @@ class OssiaServer(threading.Thread):
                 # conf[1] holds the method to call when received such a route
                 self._oscquery_registered_nodes[data.device_name + route] = [parameter, conf[1]]
 
-            # logger.info(f'OSC Nodes listening on {data.in_port}: {self.osc_player_registered_nodes[data.device_name + route]}')
+            # Logger.info(f'OSC Nodes listening on {data.in_port}: {self.osc_player_registered_nodes[data.device_name + route]}')
 
     def add_master_node(self, data):
         ''' Just an alias to add_other_nodes to make code more readable
@@ -301,7 +301,7 @@ class OssiaServer(threading.Thread):
                 
                 self._oscquery_registered_nodes[f'{route}'] = [parameter, conf[1]]
 
-            # logger.info(f'OSCQuery Nodes registered: {data}')
+            # Logger.info(f'OSCQuery Nodes registered: {data}')
 
     def remove_nodes(self, data):
         if isinstance(data, OSCConfData):
@@ -309,12 +309,12 @@ class OssiaServer(threading.Thread):
                 try:
                     self.osc_player_registered_nodes.pop(data.device_name + route)
                 except Exception as e:
-                    logger.exception(e)
+                    Logger.exception(e)
 
                 try:
                     self._oscquery_registered_nodes.pop(data.device_name + route)
                 except Exception as e:
-                    logger.exception(e)
+                    Logger.exception(e)
 
             try:
                 self.osc_player_devices.pop(data.device_name)
@@ -322,9 +322,9 @@ class OssiaServer(threading.Thread):
                 try:
                     self.oscquery_slave_devices.pop(data.device_name)
                 except Exception as e:
-                    logger.exception(e)
+                    Logger.exception(e)
             except Exception as e:
-                logger.exception(e)
+                Logger.exception(e)
             
 
 class OSCConfData(dict):

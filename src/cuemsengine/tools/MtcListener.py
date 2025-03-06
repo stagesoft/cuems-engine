@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 
 import mido
+from threading import Thread
 
-import threading
-import queue
-from functools import partial
-import time
+from cuemsutils.CTimecode import CTimecode
+from cuemsutils.log import Logger
 
-# some_file.py
-
-from .CTimecode import CTimecode
-from .log import logger
-
-class MtcListener(threading.Thread):
+class MtcListener(Thread):
     def __init__(self, step_callback=None, reset_callback=None, port=None):
         # self.main_tc = CTimecode('0:0:0:0')
         self.main_tc = CTimecode()
@@ -48,7 +42,7 @@ class MtcListener(threading.Thread):
             ports = mido.get_input_names() # pylint: disable=maybe-no-member
             mtc_ports = [s for s in ports if "mtc" in s.lower()]
             self.port_name = mtc_ports[-1] if mtc_ports else ports[-1]
-            #logger.info ('Listener MIDI port: ' + self.port_name)
+            #Logger.info ('Listener MIDI port: ' + self.port_name)
         else:
             self.port_name = port
             # print("hay port")
@@ -56,7 +50,7 @@ class MtcListener(threading.Thread):
     def run(self):
         self.port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member
 
-        logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
+        Logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
 
     def stop(self):
         self.port.close()
@@ -77,12 +71,12 @@ class MtcListener(threading.Thread):
             if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
                 data = message.data[4:]
                 tc = self.__mtc_decode(data)
-                logger.debug('FF:' + tc.__str__())
+                Logger.debug('FF:' + tc.__str__())
                 self.__update_timecode(tc)
             
 
         else:
-            logger.debug(message)
+            Logger.debug(message)
             raise(NotImplementedError)
     
     def __mtc_decode(self, mtc_bytes):

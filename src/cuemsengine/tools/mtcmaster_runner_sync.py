@@ -2,7 +2,6 @@ from mtcmaster import libmtcmaster
 from pynng import Rep0
 import json
 import signal
-import sys
 
 
 class MtcmasterRunner():

@@ -3,13 +3,11 @@
 
 import xml.etree.ElementTree as ET
 import xmlschema
-import datetime  as DT
 import os
-from .log import logger
 
-from .CTimecode import CTimecode
-
-from .xml.CMLCuemsConverter import CMLCuemsConverter
+from cuemsutils.log import Logger
+from cuemsutils.CTimecode import CTimecode
+from cuemsutils.xml.CMLCuemsConverter import CMLCuemsConverter
 
 class Settings(dict):
     def __init__(self, schema = None, xmlfile = None, *arg, **kw):
@@ -23,13 +21,13 @@ class Settings(dict):
     
     def __backup(self):
         if os.path.isfile(self.xmlfile):
-            logger.info("File exist")
+            Logger.info("File exist")
             try:
                 os.rename(self.xmlfile, "{}.back".format(self.xmlfile))
             except OSError:
-                logger.error("Cannot create settings backup")
+                Logger.error("Cannot create settings backup")
         else:
-            logger.error("Settings file not found")
+            Logger.error("Settings file not found")
     
     @property
     def schema(self):
@@ -72,7 +70,7 @@ class Settings(dict):
         try:
             schema_file = open(self.schema)
         except FileNotFoundError:
-            logger.error(f'{self.schema} XSD file not found')
+            Logger.error(f'{self.schema} XSD file not found')
 
         schema = xmlschema.XMLSchema11(schema_file, base_url='', converter=CMLCuemsConverter)
         # schema = xmlschema.XMLSchema(schema_file, base_url='')
@@ -80,7 +78,7 @@ class Settings(dict):
         try:
             xml_file = open(self.xmlfile)
         except FileNotFoundError:
-            logger.error(f'{self.xmlfile} XML file not found')
+            Logger.error(f'{self.xmlfile} XML file not found')
             raise
 
         xml_dict = schema.to_dict(xml_file, dict_class=dict, list_class=list, validation='strict',  strip_namespaces=True, attr_prefix='')

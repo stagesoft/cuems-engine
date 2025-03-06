@@ -1,5 +1,4 @@
 from ctypes import *
-#import .log
 
 try:
     libmtcmaster = cdll.LoadLibrary('libmtcmaster.so.0')

@@ -1,12 +1,11 @@
 from threading import Thread
 from time import sleep
 
-from .Cue import Cue
-from .VideoCue import VideoCue
-from .AudioCue import AudioCue
+from cuemsutils.cues import Cue, VideoCue, AudioCue
+from cuemsutils.log import logged
+
 from .run_cue import run_cue
 from .arm_cue import arm_cue
-from ..log import logged
 
 class CueHandler():
     """

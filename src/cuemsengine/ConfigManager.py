@@ -3,8 +3,10 @@ from os import path, mkdir, environ
 import enum
 import time
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
+
+from cuemsutils.log import Logger
+
 from .Settings import Settings
-from .log import logger
 
 
 
@@ -33,10 +35,10 @@ class MyAvahiListener():
         try:
             if type_ == '_cuems_nodeconf._tcp.local.':
                 self.nodeconf_services.pop(name)
-                #logger.info(f'Avahi nodeconf service removed: {name}')
+                #Logger.info(f'Avahi nodeconf service removed: {name}')
             elif type_ == '_cuems_osc._tcp.local.':
                 self.osc_services.pop(name)
-                #logger.info(f'Avahi OSC service removed: {name}')
+                #Logger.info(f'Avahi OSC service removed: {name}')
         except KeyError:
             pass
 
@@ -114,7 +116,7 @@ class ConfigManager(Thread):
         try:
             self.load_node_conf()
         except Exception as e:
-            logger.exception(f'Exception catched while load_node_conf: {e}')
+            Logger.exception(f'Exception catched while load_node_conf: {e}')
             raise e
 
         self.check_amimaster()
@@ -123,14 +125,14 @@ class ConfigManager(Thread):
             try:
                 self.load_network_map()
             except Exception as e:
-                logger.exception(f'Exception catched while load_network_map: {e}')
+                Logger.exception(f'Exception catched while load_network_map: {e}')
                 raise e
 
         if not nodeconf:
             try:
                 self.load_net_and_node_mappings()
             except Exception as e:
-                logger.exception(f'Exception catched while load_net_and_node_mappings: {e}')
+                Logger.exception(f'Exception catched while load_net_and_node_mappings: {e}')
                 raise e
 
 
@@ -153,7 +155,7 @@ class ConfigManager(Thread):
         except FileNotFoundError as e:
             raise e
         else:
-            logger.info('Network map loaded on master')
+            Logger.info('Network map loaded on master')
 
 
     def load_node_conf(self):
@@ -165,19 +167,19 @@ class ConfigManager(Thread):
             raise e
 
         if engine_settings['Settings']['library_path'] == None:
-            logger.warning('No library path specified in settings. Assuming default ~/cuems_library.')
+            Logger.warning('No library path specified in settings. Assuming default ~/cuems_library.')
             self.library_path = path.join(environ['HOME'], 'cuems_library')
         else:
             self.library_path = engine_settings['Settings']['library_path']
 
         if engine_settings['Settings']['tmp_path'] == None:
-            logger.warning('No temp upload path specified in settings. Assuming default /tmp/cuemsupload.')
+            Logger.warning('No temp upload path specified in settings. Assuming default /tmp/cuemsupload.')
             self.tmp_path = path.join('/', 'tmp', 'cuems')
         else:
             self.tmp_path = engine_settings['Settings']['tmp_path']
 
         if engine_settings['Settings']['database_name'] == None:
-            logger.warning('No database name specified in settings. Assuming default project-manager.db.')
+            Logger.warning('No database name specified in settings. Assuming default project-manager.db.')
             self.database_name = 'project-manager.db'
         else:
             self.database_name = engine_settings['Settings']['database_name']
@@ -189,11 +191,11 @@ class ConfigManager(Thread):
 
         self.node_conf = engine_settings['Settings']['node']
 
-        logger.info(f'Cuems node_{self.node_conf["uuid"]} config loaded')
-        #logger.info(f'Node conf: {self.node_conf}')
-        #logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
-        #logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
-        #logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
+        Logger.info(f'Cuems node_{self.node_conf["uuid"]} config loaded')
+        #Logger.info(f'Node conf: {self.node_conf}')
+        #Logger.info(f'Audio player conf: {self.node_conf["audioplayer"]}')
+        #Logger.info(f'Video player conf: {self.node_conf["videoplayer"]}')
+        #Logger.info(f'DMX player conf: {self.node_conf["dmxplayer"]}')
 
     def load_net_and_node_mappings(self):
         settings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
@@ -208,7 +210,7 @@ class ConfigManager(Thread):
         except KeyError:
             pass
         except Exception as e:
-            logger.exception(f'Exception in load_net_and_node_mappings: {e}')
+            Logger.exception(f'Exception in load_net_and_node_mappings: {e}')
 
         self.network_mappings = self.process_network_mappings(self.network_mappings.copy())
 
@@ -236,7 +238,7 @@ class ConfigManager(Thread):
         except FileNotFoundError as e:
             raise e
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
         conf.pop('xmlns:cms')
         conf.pop('xmlns:xsi')
@@ -249,7 +251,7 @@ class ConfigManager(Thread):
                     corrected_dict.update(item)
                 self.project_conf[key] = corrected_dict
 
-        logger.info(f'Project {project_uname} settings loaded')
+        Logger.info(f'Project {project_uname} settings loaded')
 
     def load_project_mappings(self, project_uname):
         mappings_schema = path.join(self.cuems_conf_path, 'project_mappings.xsd')
@@ -262,7 +264,7 @@ class ConfigManager(Thread):
 
             self.using_default_mappings = False
         except FileNotFoundError as e:
-            logger.info(f'Project mappings not found. Adopting default mappings.')
+            Logger.info(f'Project mappings not found. Adopting default mappings.')
 
             self.using_default_mappings = True
             self.project_mappings = self.node_mappings
@@ -271,7 +273,7 @@ class ConfigManager(Thread):
         except KeyError:
             pass
         except Exception as e:
-            logger.exception(f'Exception in load_project_mappings: {e}')
+            Logger.exception(f'Exception in load_project_mappings: {e}')
 
         self.number_of_nodes = int(self.project_mappings['number_of_nodes'])
         # By now we need to correct the data structure from the xml
@@ -285,10 +287,10 @@ class ConfigManager(Thread):
                 self.project_node_mappings = node
                 break
             
-        logger.info(f'Project {project_uname} mappings loaded')
+        Logger.info(f'Project {project_uname} mappings loaded')
 
         if not self.project_node_mappings:
-            logger.warning(f'No mappings assigned for this node in project {project_uname}')
+            Logger.warning(f'No mappings assigned for this node in project {project_uname}')
 
     def get_video_player_id(self, mapping_name):
         if mapping_name == 'default':
@@ -317,7 +319,7 @@ class ConfigManager(Thread):
         try:
             if not path.exists(self.library_path):
                 mkdir(self.library_path)
-                logger.info(f'Creating library forlder {self.library_path}')
+                Logger.info(f'Creating library forlder {self.library_path}')
 
             if not path.exists( path.join(self.library_path, 'projects') ) :
                 mkdir(path.join(self.library_path, 'projects'))
@@ -338,7 +340,7 @@ class ConfigManager(Thread):
                 mkdir( self.tmp_path )
 
         except Exception as e:
-            logger.error("error: {} {}".format(type(e), e))
+            Logger.error("error: {} {}".format(type(e), e))
 
     # def check_amimaster(self):
     #     for name, node in self.avahi_monitor.listener.osc_services.items():

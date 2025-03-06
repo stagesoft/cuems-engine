@@ -1,13 +1,9 @@
-
-from cuemsengine.log import logger
-from cuemsengine.cuems_editor.CuemsWsServer import CuemsWsServer
-
-from multiprocessing import Queue
 import time
 import uuid
 import os
 
-
+from cuemsutils.log import Logger
+from cuemsengine.tools.comunicate import EditorWsServer
 
 settings_dict = {}
 settings_dict['session_uuid'] = str(uuid.uuid1())
@@ -21,15 +17,13 @@ mappings_dict = {'number_of_nodes': 1, 'default_audio_input': '0367f391-ebf4-48b
 try:
     if not os.path.exists(settings_dict['tmp_path']):
         os.mkdir(settings_dict['tmp_path'])
-        logger.info('creating tmp upload folder {}'.format(settings_dict['tmp_path']))
+        Logger.info('creating tmp upload folder {}'.format(settings_dict['tmp_path']))
 except Exception as e:
     print("error: {} {}".format(type(e), e))
 
 
-
-
-server = CuemsWsServer(settings_dict, mappings_dict)
-logger.info('start server')
+server = EditorWsServer(settings_dict, mappings_dict)
+Logger.info('start server')
 time.sleep(5)
 server.start(9092)
 

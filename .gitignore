@@ -5,3 +5,6 @@ __pycache__
 *.pyc
 *.ipynb
 .python-version
+.pytest_cache
+
+dist/
