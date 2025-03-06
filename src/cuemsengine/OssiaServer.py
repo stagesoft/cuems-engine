@@ -334,6 +334,7 @@ class OSCConfData(dict):
 
 class MasterOSCQueryConfData(OSCConfData):
     pass
+
 class PlayerOSCConfData(OSCConfData):
     def __init__(self, device_name, host = '', in_port = 0, out_port = 0, dictionary = {}):
         self.device_name = device_name

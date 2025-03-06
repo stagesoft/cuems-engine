@@ -1,10 +1,9 @@
 from enum import Enum
-from pyossia.ossia_python import OSCDevice, OSCQueryDevice, ValueType
-from time import sleep
+from pyossia.ossia_python import OSCDevice, OSCQueryDevice
 from typing import Union
 
-from OssiaServer import OSC_CLIENT_PORT, OSC_REQ_PORT, OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT
-from OSCNodes import OSCNodes
+from .OssiaServer import OSC_CLIENT_PORT, OSC_REQ_PORT, OSCQUERY_REQ_PORT, OSCQUERY_WS_PORT
+from .OssiaNodes import OssiaNodes
 
 def new_osc_device(cls) -> OSCDevice:
     x = OSCDevice(
@@ -29,7 +28,7 @@ class RemoteDevices(Enum):
     OSCQUERY = new_oscquery_device
     DISPATCHER = None
 
-class RemoteOssia(OSCNodes):
+class RemoteOssia(OssiaNodes):
     def __init__(
         self,
         host: str = "127.0.0.1",

@@ -1,8 +1,8 @@
 # from threading import Thread
-from pyossia import LocalDevice, ValueType
+from pyossia import LocalDevice
 from typing import Union
 
-from OSCNodes import OSCNodes
+from .OssiaNodes import OssiaNodes
 
 OSC_CLIENT_PORT = 9989
 OSC_REQ_PORT = 9091
@@ -31,7 +31,7 @@ OSCQUERY_WS_PORT = 40255
     @return bool
 """
 
-class OssiaServer(OSCNodes):
+class OssiaServer(OssiaNodes):
     def __init__(
             self,
             name: str = None,

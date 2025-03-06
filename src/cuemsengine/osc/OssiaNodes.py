@@ -2,7 +2,9 @@ from inspect import signature
 from pyossia import Node, ValueType, ossia
 from typing import Union
 
-class OSCNodes(object):
+from cuemsutils.log import logged
+
+class OssiaNodes(object):
     """Manage a collection of OSC nodes.
     
     Internal static methods allow to:
@@ -69,6 +71,7 @@ class OSCNodes(object):
         if value:
             _.push_value(value)
 
+    @logged
     def set_value(self, node: Union[Node, str], value):
         """Set a value to a node
         """
@@ -79,8 +82,7 @@ class OSCNodes(object):
                 raise ValueError("Node not found")
         try:
             node.parameter.push_value(value)
-        except Exception as e:
-            print(e)
+        except Exception:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
     def create_endpoint(self, path: str, param_args: list = None):
