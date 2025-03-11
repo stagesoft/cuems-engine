@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cuemsengine"
 dynamic = ["version"]
-description = "Reusable classes and methods for CueMS system"
+description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0"
@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "cuemsutils==0.0.4-post1",
     "mido==1.3.3",
+    "pyossia @ file://{root}/../libossia/build/src/ossia-python/",
     "zeroconf==0.146.1",
 ]
 
@@ -49,8 +50,12 @@ packages = ["src/cuemsengine"]
 extra-dependencies = [
   "mypy>=1.0.0"
 ]
+
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/cuemsengine tests}"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.coverage.run]
 source_pkgs = ["cuemsengine", "tests"]

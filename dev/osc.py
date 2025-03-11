@@ -3,32 +3,7 @@ from time import sleep
 import sys
 import inspect
 
-from cuemsengine.osc.OssiaServer import OssiaServer
-from cuemsengine.osc.RemoteOssia import RemoteOssia
-from pyossia import ValueType
 TEST_STR = 'goo'
-
-"""Logging testing functions"""
-def print_node(node):
-    print(node)
-    params = node.get_parameters()
-    # print(str(params)) # Parameter objects addresses
-    for param in params:
-        print(f"Parameter info: [node: {param.node}, value: {param.value}, value_type: {param.value_type}]")
-
-def iterate_on_devices(node):
-    print_node(node)
-    for child in node.children():
-        print_node(child)
-        if child.children():
-            iterate_on_devices(child)
-        else:
-            print("No children")
-
-def print_callback(node, value):
-    print(
-        f"Parameter changed at {node} to {value} [node value: {node.parameter.value}]"
-    )
 
 def print_test(x: str = TEST_STR):
     frame = sys._getframe(0)
@@ -41,6 +16,7 @@ def print_test(x: str = TEST_STR):
     print(f'func name: {print_test.__name__}')
     print(f'module: {print_test.__module__}')
     print(f'constant: {x}')
+
 
 if __name__ == '__main__':
 
@@ -62,7 +38,7 @@ if __name__ == '__main__':
         "/test4": [ValueType.Int, print_callback, 30]
     }
 
-    ro = RemoteOssia(
+    ro = OssiaClient(
         endpoints = test_endpoints,
         # remote_type = RemoteDevices.OSCQUERY
     )
