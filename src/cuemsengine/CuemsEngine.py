@@ -10,23 +10,20 @@ import pyossia as ossia
 from uuid import uuid1
 from functools import partial
 from ast import literal_eval
-
-from .CTimecode import CTimecode
 import xmlschema.exceptions
 
-from .MtcListener import MtcListener
-from .mtcmaster import libmtcmaster
+from cuemsutils import CTimecode
+from cuemsutils.log import Logger
+from cuemsutils.cues import CueList, VideoCue, ActionCue
+from cuemsutils.xml.XmlReaderWriter import XmlReader
 
+from .tools.MtcListener import MtcListener
+from .tools.mtcmaster import libmtcmaster
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.comunicate import hwdiscovery_callback, EditorWsServer
 
-from .log import logger
 from .OssiaServer import OssiaServer, MasterOSCQueryConfData, SlaveOSCQueryConfData, PlayerOSCConfData
-from .cues.CueList import CueList
-from .cues.VideoCue import VideoCue
 from .players.VideoPlayer import VideoPlayer
-from .cues.ActionCue import ActionCue
-from .xml.XmlReaderWriter import XmlReader
 from .ConfigManager import ConfigManager
 
 CUEMS_CONF_PATH = '/etc/cuems/'
@@ -42,9 +39,9 @@ class CuemsEngine():
     '''
 
     def __init__(self):
-        logger.info('CUEMS ENGINE INITIALIZATION')
+        Logger.info('CUEMS ENGINE INITIALIZATION')
         # Main thread ids
-        logger.info(f'Main thread PID: {getpid()}')
+        Logger.info(f'Main thread PID: {getpid()}')
 
         # Running flag
         self.stop_requested = False
@@ -67,10 +64,10 @@ class CuemsEngine():
         try:
             self.cm = ConfigManager(path=CUEMS_CONF_PATH)
         except FileNotFoundError:
-            logger.critical('Node config file could not be found. Exiting !!!!!')
+            Logger.critical('Node config file could not be found. Exiting !!!!!')
             exit(-1)
         except Exception as e:
-            logger.exception(f'Exception while loading config: {e}')
+            Logger.exception(f'Exception while loading config: {e}')
             exit(-1)
 
 
@@ -97,12 +94,12 @@ class CuemsEngine():
                                             step_callback=partial(CuemsEngine.mtc_step_callback, self), 
                                             reset_callback=partial(CuemsEngine.mtc_step_callback, self, CTimecode('0:0:0:0')))
         except KeyError:
-            logger.error('mtc_port config could bot be properly loaded. Exiting.')
+            Logger.error('mtc_port config could bot be properly loaded. Exiting.')
             exit(-1)
 
         # WebSocket server
         if (self.cm.amimaster):
-            logger.info('Master node starting Websocket Server')
+            Logger.info('Master node starting Websocket Server')
             settings_dict = {}
             settings_dict['session_uuid'] = str(uuid1())
             settings_dict['library_path'] = self.cm.library_path
@@ -117,19 +114,19 @@ class CuemsEngine():
                 self.ws_server.start(self.cm.node_conf['websocket_port'])
             except KeyError:
                 self.stop_all_threads()
-                logger.exception('Config error, websocket_port key not found in settings. Exiting.')
+                Logger.exception('Config error, websocket_port key not found in settings. Exiting.')
                 exit(-1)
             except Exception as e:
                 self.stop_all_threads()
-                logger.error('Exception when starting websocket server. Exiting.')
-                logger.exception(e)
+                Logger.error('Exception when starting websocket server. Exiting.')
+                Logger.exception(e)
                 exit(-1)    
             else:
                 # Threaded own queue consumer loop
                 self.engine_queue_loop = threading.Thread(target=self.engine_queue_consumer, name='engineq_consumer')
                 self.engine_queue_loop.start()
         else:
-            logger.info('Slave node, no WS server needed')
+            Logger.info('Slave node, no WS server needed')
 
 
         # OSSIA OSCQuery server
@@ -185,9 +182,9 @@ class CuemsEngine():
         try:
             self.check_video_devs()
         except Exception as e:
-            logger.error(f'Error checking & starting video devices...')
-            logger.exception(e)
-            logger.error(f'Exiting...')
+            Logger.error(f'Error checking & starting video devices...')
+            Logger.exception(e)
+            Logger.error(f'Exiting...')
             exit(-1)
 
         try:
@@ -197,7 +194,7 @@ class CuemsEngine():
                 time.sleep(0.5)
             self.add_nodes_oscquery_devices()
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
         # Everything is ready now and should be working, let's run!
         while not self.stop_requested:
@@ -209,7 +206,7 @@ class CuemsEngine():
         while not self.stop_requested:
             if not self.engine_queue.empty():
                 item = self.engine_queue.get()
-                logger.debug(f'Received queue message from WS server: {item}')
+                Logger.debug(f'Received queue message from WS server: {item}')
                 self.editor_command_callback(item)
             time.sleep(0.004)
 
@@ -229,7 +226,7 @@ class CuemsEngine():
                 try:
                     self.assign_nodes_values('command', item)
                 except KeyError as e:
-                    logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in _oscquery_registered_nodes")
+                    Logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in _oscquery_registered_nodes")
 
                 try:
                     for device in self.ossia_server.oscquery_slave_devices:
@@ -240,7 +237,7 @@ class CuemsEngine():
 
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = '{"cmd": "command", "action": "' + item['action'] + '", "action_uuid": "' + item['action_uuid'] + '", "value": "' + item['value'] + '"}'
                 except KeyError as e:
-                    logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
+                    Logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
 
                 if item['action'] not in ['project_ready', 'hw_discovery', 'project_deploy']:
                     self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
@@ -248,18 +245,18 @@ class CuemsEngine():
                 else:
                     if item['action'] == 'project_ready':
                         self._editor_request_uuid = item['action_uuid']
-                        logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        Logger.info(f'Load project command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
 
                         self.load_project_callback(value = item['value'])
             
                     elif item['action'] == 'hw_discovery':
                         self._editor_request_uuid = item['action_uuid']
-                        logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
+                        Logger.info(f'HW discovery command received via WS. project: {item["value"]} request: {self._editor_request_uuid}')
                         try:
                             hwdiscovery_callback()
                         except:
                             self.editor_queue.put({'type':'error', 'action':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'HW discovery failed, check logs.'})
-                            logger.error(f'HW discovery failed after editor request id: {self._editor_request_uuid}')
+                            Logger.error(f'HW discovery failed after editor request id: {self._editor_request_uuid}')
                             self._editor_request_uuid = ''
                         else:
                             self.editor_queue.put({'type':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
@@ -267,11 +264,11 @@ class CuemsEngine():
 
                     elif item['action'] == 'project_deploy':
                         self._editor_request_uuid = item['action_uuid']
-                        logger.info(f'Deploy command received via WS. Editor request uuid: {self._editor_request_uuid}')
+                        Logger.info(f'Deploy command received via WS. Editor request uuid: {self._editor_request_uuid}')
                         self.deploy_callback(value = item['value'])
 
             except KeyError:
-                logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
+                Logger.exception(f'Not recognized communications with WSServer. Queue msg received: {item}')
 
     #########################################################
     # Check functions
@@ -357,9 +354,9 @@ class CuemsEngine():
                         )
                     )
             else:
-                logger.info('No video outputs detected.')
+                Logger.info('No video outputs detected.')
         except Exception as e:
-            logger.exception(f'Exception raise when checking vidio outputs: {e}.')
+            Logger.exception(f'Exception raise when checking vidio outputs: {e}.')
 
     def quit_video_devs(self):
         for dev in self._video_players.values():
@@ -367,7 +364,7 @@ class CuemsEngine():
             try:
                 self.ossia_server.osc_player_registered_nodes[key][0].value = 'quit'
             except Exception as e:
-                logger.exception(e)
+                Logger.exception(e)
 
     def disconnect_video_devs(self):
         for dev in self._video_players.values():
@@ -375,7 +372,7 @@ class CuemsEngine():
                 key = f'{dev["route"]}/jadeo/cmd'
                 self.ossia_server.osc_player_registered_nodes[key][0].value = 'midi disconnect'
             except KeyError:
-                logger.exception(f'Key error (cmd midi disconnect) in disconnect all method {key}')
+                Logger.exception(f'Key error (cmd midi disconnect) in disconnect all method {key}')
 
     def unload_video_devs(self):
         for dev in self._video_players.values():
@@ -384,7 +381,7 @@ class CuemsEngine():
                 # ossia._oscquery_registered_nodes[key][0].value = str(path.join(self._conf.library_path, 'media', self.media.file_name))
                 self.ossia_server.osc_player_registered_nodes[key][0].value = ''
             except Exception as e:
-                logger.debug(f'Exception while unloading video players: {e}')
+                Logger.debug(f'Exception while unloading video players: {e}')
 
     def check_dmx_devs(self):
         pass
@@ -399,21 +396,21 @@ class CuemsEngine():
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_stop(self.mtcmaster)
                 libmtcmaster.MTCSender_release(self.mtcmaster)
-                logger.info('MTC Master released')
+                Logger.info('MTC Master released')
         except Exception as e:
-            logger.exception(f'MTC Master could not be released: {e}')
+            Logger.exception(f'MTC Master could not be released: {e}')
 
         try:
             self.disarm_all()
-            logger.info('Cues disarmed')
+            Logger.info('Cues disarmed')
         except Exception as e:
-            logger.exception(f'Exception raised disarming all cues: {e}')
+            Logger.exception(f'Exception raised disarming all cues: {e}')
 
         try:
             self.quit_video_devs()
-            logger.info('Quitted video devs')
+            Logger.info('Quitted video devs')
         except Exception as e:
-            logger.exception(f'Exception raised when quitting video devs: {e}')
+            Logger.exception(f'Exception raised when quitting video devs: {e}')
 
         self.stop_requested = True
 
@@ -427,51 +424,51 @@ class CuemsEngine():
                 while not self.editor_queue.empty():
                     self.editor_queue.get()
                 self.editor_queue.close()
-                logger.debug('IPC queues clean and closed')
+                Logger.debug('IPC queues clean and closed')
         except Exception as e:
-            logger.exception(f'Exception raised when cleaning and closing IPC queues: {e}')
+            Logger.exception(f'Exception raised when cleaning and closing IPC queues: {e}')
 
         try:
             if self.cm.amimaster:
                 self.ws_server.stop()
-                logger.info(f'Ws-server thread finished')
+                Logger.info(f'Ws-server thread finished')
         except Exception as e:
-            logger.exception(f'Exception raised when stopping Ws-server: {e}')
+            Logger.exception(f'Exception raised when stopping Ws-server: {e}')
 
         try:
             self.ossia_server.stop()
             self.ossia_server.join()
-            logger.info(f'Ossia server thread finished')
+            Logger.info(f'Ossia server thread finished')
         except Exception as e:
-            logger.exception(f'Exception raised when stopping Ossia server: {e}')
+            Logger.exception(f'Exception raised when stopping Ossia server: {e}')
 
         self.cm.join()
 
     #########################################################
     # Status check functions
     def print_all_status(self):
-        logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
+        Logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
         if self.cm.is_alive():
-            logger.info(self.cm.getName() + ' is alive)')
+            Logger.info(self.cm.getName() + ' is alive)')
         else:
-            logger.info(self.cm.getName() + ' is not alive, trying to restore it')
+            Logger.info(self.cm.getName() + ' is not alive, trying to restore it')
             self.cm.start()
 
         '''
         if self.ws_server.is_alive():
-            logger.info(self.ws_server.getName() + ' is alive')
+            Logger.info(self.ws_server.getName() + ' is alive')
             try:
                 # os.kill(self.ws_pid, 0)
             except OSError:
-                logger.info('\tws child process is NOT running')
+                Logger.info('\tws child process is NOT running')
             else:
-                logger.info('\tws child process is running')
+                Logger.info('\tws child process is running')
         else:
-            logger.info(self.ws_server.getName() + ' is not alive, trying to restore it')
+            Logger.info(self.ws_server.getName() + ' is not alive, trying to restore it')
             # self.ws_server.start()
         '''
 
-        logger.info(f'MTC: {self.mtclistener.timecode()}')
+        Logger.info(f'MTC: {self.mtclistener.timecode()}')
 
     #########################################################
     # Usefull callbacks and functions
@@ -483,7 +480,7 @@ class CuemsEngine():
     def deploy_requests_reset(self, project_name='', tag_name=''): # DEV: static with tmp_path parameter
         path_to_reset = path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')
         with open(path_to_reset, 'w') as f:
-            logger.info(f'Rsync requests log file {path_to_reset} emptied!!')
+            Logger.info(f'Rsync requests log file {path_to_reset} emptied!!')
 
     def log_deploy_request(self, project_name='', tag_name='project', file_names=[]): # DEV: static with tmp_path parameter
         if project_name:
@@ -499,7 +496,7 @@ class CuemsEngine():
                 with open(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log'), 'w') as f:
                     f.writelines(file_names)
             except Exception as e:
-                logger.exception(f'Exception raised when writing rsync request log file: {e}')
+                Logger.exception(f'Exception raised when writing rsync request log file: {e}')
                 return False
             else:
                 return True
@@ -511,7 +508,7 @@ class CuemsEngine():
 
                 if deploy_manager.sync(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')):
                     # If deploy is successful...
-                    logger.info(f'Deploy sync successful from master')
+                    Logger.info(f'Deploy sync successful from master')
 
                     self.set_node_value('/engine/status', 'deploy', 'OK')
                     self.assign_nodes_values({
@@ -522,7 +519,7 @@ class CuemsEngine():
                     })
                 else:
                     # If deploy is NOT succesful...
-                    logger.error(f'Deploy sync returned errors. {deploy_manager.errors}')
+                    Logger.error(f'Deploy sync returned errors. {deploy_manager.errors}')
                     self.set_node_value('/engine/status', 'deploy', 'ERROR')
                     self.assign_nodes_values({
                         'type': 'error',
@@ -532,7 +529,7 @@ class CuemsEngine():
                     })
             except Exception as e:
                 # If deploy raised any exception...
-                logger.error(f'Deploy raised an exception {e} after master request id : {self._editor_request_uuid}')
+                Logger.error(f'Deploy raised an exception {e} after master request id : {self._editor_request_uuid}')
                 self.set_node_value('/engine/status', 'deploy', 'ERROR')
                 self.assign_nodes_values({
                     'type': 'error',
@@ -549,18 +546,18 @@ class CuemsEngine():
             try:
                 with open(show_lock_path, 'w') as file:
                     file.write(' ')
-                logger.warning("/tmp/cuems.show.lock file written...")
+                Logger.warning("/tmp/cuems.show.lock file written...")
             except:
-                logger.warning("Could not write show lock file")
+                Logger.warning("Could not write show lock file")
 
     def remove_show_lock_file(self): # DEV: static
         show_lock_path = '/tmp/cuems.show.lock' # DEV: Should be an external constant
         if path.isfile(show_lock_path):
             try:
                 remove(show_lock_path)
-                logger.warning("/tmp/cuems.show.lock file removed...")
+                Logger.warning("/tmp/cuems.show.lock file removed...")
             except OSError:
-                logger.warning("Could not delete master lock file")
+                Logger.warning("Could not delete master lock file")
 
     ########################################################
     # System signals handlers
@@ -569,37 +566,37 @@ class CuemsEngine():
         try:
             self.stop_all_threads()
         except:
-            logger.exception('Exception when closing all threads')
+            Logger.exception('Exception when closing all threads')
 
         time.sleep(0.1)
         string = f'SIGTERM received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
-        logger.info(string)
+        Logger.info(string)
         exit()
 
     def sigIntHandler(self, sigNum, frame): # DEV: static
         try:
             self.stop_all_threads()
         except:
-            logger.exception('Exception when closing all threads')
+            Logger.exception('Exception when closing all threads')
 
         time.sleep(0.1)
         string = f'SIGINT received! Exiting with result code: {sigNum}'
         print('\n\n' + string + '\n\n')
-        logger.info(string)
+        Logger.info(string)
         exit()
 
     def sigChldHandler(self, sigNum, frame):
         pass
-        # logger.info('Child process signal received, maybe from ws-server')
+        # Logger.info('Child process signal received, maybe from ws-server')
         # wait_return = os.waitid(os.P_PID, self.ws_pid, os.WEXITED)
-        # logger.info(wait_return)
+        # Logger.info(wait_return)
         #if wait_return.si_code
 
     def sigUsr1Handler(self, sigNum, frame):
         string = 'RUNNING!'
         print('[' + string + '] [OK]')
-        logger.info(string)
+        Logger.info(string)
 
     def sigUsr2Handler(self, sigNum, frame):
         self.print_all_status()
@@ -609,7 +606,7 @@ class CuemsEngine():
     # OSC devices usefull methods
     def add_nodes_oscquery_devices(self): # DEV looks like a ConfigManager or OssiaServer method
         if self.cm.amimaster:
-            logger.info(f'----- Master node trying to add slave nodes to OSCQuery tree -----')
+            Logger.info(f'----- Master node trying to add slave nodes to OSCQuery tree -----')
 
             # Create OSC remote device routes for each slave node
             for name, node in self.cm.avahi_monitor.listener.osc_services.items():
@@ -631,11 +628,11 @@ class CuemsEngine():
                         )
                     )
                 
-                    logger.info(f'Loaded OSCQuery tree for slave node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
+                    Logger.info(f'Loaded OSCQuery tree for slave node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
 
-            logger.info(f'----- All slave nodes added to the OSC tree in some way -----')
+            Logger.info(f'----- All slave nodes added to the OSC tree in some way -----')
         else:
-            logger.info(f'----- Slave node trying to add master node to OSCQuery tree -----')
+            Logger.info(f'----- Slave node trying to add master node to OSCQuery tree -----')
 
             # Create OSC remote device routes for each slave node
             for name, node in self.cm.avahi_monitor.listener.osc_services.items():
@@ -657,10 +654,10 @@ class CuemsEngine():
                         )
                     )
                 
-                    logger.info(f'Loaded OSCQuery tree for master node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
+                    Logger.info(f'Loaded OSCQuery tree for master node {decoded_uuid}\n    ip : {node.parsed_addresses()[0]} ws : {node.port} udp : {udp_port}')
                     break
 
-            logger.info(f'----- MASTER node added to the OSC tree in some way -----')
+            Logger.info(f'----- MASTER node added to the OSC tree in some way -----')
 
     ########################################################
 
@@ -677,10 +674,10 @@ class CuemsEngine():
         except IndexError:
             return
 
-        logger.info(f'PROJECT READY/LOAD CALLBACK! -> PROJECT : {kwargs["value"]}')
+        Logger.info(f'PROJECT READY/LOAD CALLBACK! -> PROJECT : {kwargs["value"]}')
 
         # As we only allow one project in show mode we dismantle whatever other was loaded previously to this one...
-        logger.info(f'Unloading previous content on video players...')
+        Logger.info(f'Unloading previous content on video players...')
         self.unload_video_devs()
 
         # Init working stuff...
@@ -699,10 +696,10 @@ class CuemsEngine():
                 try:
                     self.assign_slave_nodes_values(device, 'command', device_values)
 
-                    logger.info(f'Calling load project {kwargs["value"]} via OSC on slave node {device}')
+                    Logger.info(f'Calling load project {kwargs["value"]} via OSC on slave node {device}')
                     self.set_slave_node_value(device, '/engine/command', 'load', kwargs['value'])
                 except Exception as e:
-                    logger.exception(e)
+                    Logger.exception(e)
         else:
             # Let's request a deploy of the project files
             self.log_deploy_request(project_name = kwargs['value'], tag_name = 'project')
@@ -722,24 +719,24 @@ class CuemsEngine():
         # LOAD PROJECT SETTINGS
         try:
             self.cm.load_project_settings(kwargs["value"])
-            # logger.info(self.cm.project_conf)
+            # Logger.info(self.cm.project_conf)
         except FileNotFoundError:
             '''Not loading project settings yet, so no need to check any further '''
-            logger.info(f'Project settings file not found. Adopting defaults.')
+            Logger.info(f'Project settings file not found. Adopting defaults.')
         except:
-            logger.info(f'Project settings error while loading. Adopting defaults.')
+            Logger.info(f'Project settings error while loading. Adopting defaults.')
 
         # LOAD PROJECT MAPPINGS
         try:
             self.cm.load_project_mappings(kwargs["value"])
-            logger.info('Project mappings load OK!')
-            # logger.info(self.cm.project_mappings)
+            Logger.info('Project mappings load OK!')
+            # Logger.info(self.cm.project_mappings)
         except Exception as e:
-            logger.info(f'Exception raised while loading project mappings: {type(e)} {e}')
+            Logger.info(f'Exception raised while loading project mappings: {type(e)} {e}')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Mapping files error while loading.'})
             else:
-                logger.info(f'Project mappings file problem. Noted to get it from master.')
+                Logger.info(f'Project mappings file problem. Noted to get it from master.')
                 self.set_node_value('/engine/status', 'load', 'ERROR')
                 self.assign_nodes_values({
                     'type': 'error',
@@ -757,12 +754,12 @@ class CuemsEngine():
             reader = XmlReader( schema, xml_file )
             self.script = reader.read_to_objects()
         except FileNotFoundError:
-            logger.error('Project script file not found')
+            Logger.error('Project script file not found')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Project script file not found'})
                 self._editor_request_uuid = ''
             else:
-                logger.info(f'Project script not found. Noted to get it from master.')
+                Logger.info(f'Project script not found. Noted to get it from master.')
                 self.set_node_value('/engine/status', 'load', 'ERROR')
                 self.assign_nodes_values({
                     'type': 'error',
@@ -772,12 +769,12 @@ class CuemsEngine():
                     'value': 'Project script file not found'
                 })
         except xmlschema.exceptions.XMLSchemaException as e:
-            logger.exception(f'XML error: {e}')
+            Logger.exception(f'XML error: {e}')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Script XML parsing error'})
                 self._editor_request_uuid = ''
             else:
-                logger.info(f'Project script XML exception.')
+                Logger.info(f'Project script XML exception.')
                 self.set_node_value('/engine/status', 'load', 'ERROR')
                 self.assign_nodes_values({
                     'type': 'error',
@@ -788,12 +785,12 @@ class CuemsEngine():
                 })
 
         except Exception as e:
-            logger.error(f'Project script could not be loaded {e}')
+            Logger.error(f'Project script could not be loaded {e}')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
                 self._editor_request_uuid = ''
             else:
-                logger.info(f'Project script could not be loaded. Check logs.')
+                Logger.info(f'Project script could not be loaded. Check logs.')
                 self.set_node_value('/engine/status', 'load', 'ERROR')
                 self.assign_nodes_values({
                     'type': 'error',
@@ -804,11 +801,11 @@ class CuemsEngine():
                 })        
         
         if self.script is None:
-            logger.warning(f'Script could not be loaded. Check consistency and retry please.')
+            Logger.warning(f'Script could not be loaded. Check consistency and retry please.')
             if self.cm.amimaster:
                 self.editor_queue.put({'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Script could not be loaded'})
             else:
-                logger.info(f'Project script could not be loaded. Check logs.')
+                Logger.info(f'Project script could not be loaded. Check logs.')
                 
                 self.set_node_value('/engine/status', 'load', 'ERROR')
                 self.assign_nodes_values({
@@ -822,7 +819,7 @@ class CuemsEngine():
             self._editor_request_uuid = ''
             return
         else:
-            logger.info('Project script loaded OK!')
+            Logger.info('Project script loaded OK!')
             self.script.unix_name = kwargs['value']
 
         # master or slave, for the moment do the processing, (asume everithin loaded ok)
@@ -839,15 +836,15 @@ class CuemsEngine():
             libmtcmaster.MTCSender_play(self.mtcmaster)
 
         if local_media_error:
-            logger.info(f'Project loaded with local media errors...')
+            Logger.info(f'Project loaded with local media errors...')
 
         if self.cm.amimaster:
             if not local_media_error:
                 if not slave_media_error:
                     self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-                    logger.info(f'Project loaded OK.')
+                    Logger.info(f'Project loaded OK.')
                 else:
-                    logger.warning(f'Some slaves could not load all their media...')
+                    Logger.warning(f'Some slaves could not load all their media...')
                     self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_deploy_needed'})
             else:
                 self.editor_queue.put({'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_missing_media'})
@@ -861,14 +858,14 @@ class CuemsEngine():
             })
 
         # Everything went OK while loading the project locally...
-        logger.info(f'Project load COMPLETED!')
+        Logger.info(f'Project load COMPLETED!')
 
         self.set_show_lock_file()
 
         self._editor_request_uuid = ''
 
     def load_cue_callback(self, **kwargs):
-        logger.info(f'LOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
+        Logger.info(f'LOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
 
         cue_to_load = self.script.find(kwargs['value'])
 
@@ -877,7 +874,7 @@ class CuemsEngine():
                 cue_to_load.arm(self.cm, self.ossia_server, self.armedcues)
 
     def unload_cue_callback(self, **kwargs):
-        logger.info(f'UNLOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
+        Logger.info(f'UNLOAD CUE CALLBACK! -> CUE : {kwargs["value"]}')
 
         cue_to_unload = self.script.find(kwargs['value'])
 
@@ -886,23 +883,23 @@ class CuemsEngine():
                 cue_to_unload.disarm(self.ossia_server)
 
     def go_cue_callback(self, **kwargs):
-        logger.info(f'GO CUE CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'GO CUE CALLBACK! -> ARGS : {kwargs["value"]}')
 
         cue_to_go = self.script.find(kwargs['value'])
 
         if cue_to_go is None:
-            logger.error(f'Cue {kwargs["value"]} does not exist.')
+            Logger.error(f'Cue {kwargs["value"]} does not exist.')
         else:
             if cue_to_go not in self.armedcues:
-                logger.error(f'Cue {kwargs["value"]} not prepared. Prepare it first.')
+                Logger.error(f'Cue {kwargs["value"]} not prepared. Prepare it first.')
             else:
-                logger.info(f'Cue {kwargs["value"]} in armedcues list. Ready!')
-                logger.info(f'OSC GO! -> CUE : {cue_to_go.uuid}')
+                Logger.info(f'Cue {kwargs["value"]} in armedcues list. Ready!')
+                Logger.info(f'OSC GO! -> CUE : {cue_to_go.uuid}')
 
                 cue_to_go.go(self.ossia_server, self.mtclistener)
 
                 self.ongoing_cue = cue_to_go
-                logger.info(f'Current Cue: {self.ongoing_cue}')
+                Logger.info(f'Current Cue: {self.ongoing_cue}')
 
     def go_callback(self, **kwargs):
         try:
@@ -915,7 +912,7 @@ class CuemsEngine():
         if self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value[-1] != '*':
             self.ossia_server._oscquery_registered_nodes[f'/engine/command/go'][0].value = kwargs['value'] + '*'
 
-        logger.info(f'GO CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'GO CALLBACK! -> ARGS : {kwargs["value"]}')
 
         if self.script:
             # Call OSC go on all slaves:
@@ -930,10 +927,10 @@ class CuemsEngine():
                             'value': ''
                         })
 
-                        logger.info(f'Calling GO CALLBACK via OSC on slave node {device}')
+                        Logger.info(f'Calling GO CALLBACK via OSC on slave node {device}')
                         self.set_slave_node_value(device, '/engine/command', 'go', 'go')
                     except Exception as e:
-                        logger.exception(e)
+                        Logger.exception(e)
 
             if not self.ongoing_cue:
                 cue_to_go = self.script.cuelist.contents[0]
@@ -941,14 +938,14 @@ class CuemsEngine():
                 if self.next_cue_pointer:
                     cue_to_go = self.next_cue_pointer
                 else:
-                    logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
+                    Logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
                     self.ongoing_cue = None
                     self.go_offset = 0
                     self.script.cuelist.contents[0].arm(self.cm, self.ossia_server, self.armedcues)
                     return
 
             if cue_to_go not in self.armedcues:
-                logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
+                Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
             else:
                 self.ongoing_cue = cue_to_go
                 self.ongoing_cue.go(self.ossia_server, self.mtclistener)
@@ -963,26 +960,26 @@ class CuemsEngine():
                     self.set_node_value('/engine/status', 'nextcue', "")
                 self.set_node_value('/engine/status', 'running', 1)
         else:
-            logger.warning('No script loaded, cannot process GO command.')
+            Logger.warning('No script loaded, cannot process GO command.')
 
     def pause_callback(self, **kwargs):
-        logger.info(f'PAUSE CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'PAUSE CALLBACK! -> ARGS : {kwargs["value"]}')
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_pause(self.mtcmaster)
             self.ossia_server._oscquery_registered_nodes['/engine/status/running'][0].value = int(not self.ossia_server._oscquery_registered_nodes['/engine/status/running'][0].value)
         except:
-            logger.info('NO MTCMASTER ASSIGNED!')
+            Logger.info('NO MTCMASTER ASSIGNED!')
 
     def stop_callback(self, **kwargs):
-        logger.info(f'STOP CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'STOP CALLBACK! -> ARGS : {kwargs["value"]}')
         try:
             if self.cm.amimaster:
                 libmtcmaster.MTCSender_stop(self.mtcmaster)
             self.go_offset = 0
             self.ossia_server._oscquery_registered_nodes['/engine/status/running'][0].value = 0
         except:
-            logger.info('NO MTCMASTER ASSIGNED!')
+            Logger.info('NO MTCMASTER ASSIGNED!')
 
     def reset_all_callback(self, **kwargs):
         try:
@@ -995,7 +992,7 @@ class CuemsEngine():
         if self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value[-1] != '*':
             self.ossia_server._oscquery_registered_nodes[f'/engine/command/resetall'][0].value = kwargs['value'] + '*'
 
-        logger.info(f'RESET ALL CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'RESET ALL CALLBACK! -> ARGS : {kwargs["value"]}')
         
         # delete show.lock file
         self.remove_show_lock_file()
@@ -1012,10 +1009,10 @@ class CuemsEngine():
                         'value': ''
                     })
 
-                    logger.info(f'Calling RESETALL CALLBACK via OSC on slave node {device}')
+                    Logger.info(f'Calling RESETALL CALLBACK via OSC on slave node {device}')
                     self.set_slave_node_value(device, '/engine/command', 'resetall', 'resetall')
                 except Exception as e:
-                    logger.exception(e)
+                    Logger.exception(e)
 
         try:
             if self.cm.amimaster:
@@ -1041,7 +1038,7 @@ class CuemsEngine():
                 libmtcmaster.MTCSender_play(self.mtcmaster)
 
         except Exception as e:
-            logger.exception(e)
+            Logger.exception(e)
 
     def deploy_callback(self, **kwargs):
         try:
@@ -1054,12 +1051,12 @@ class CuemsEngine():
         if self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value[-1] != '*':
             self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value = kwargs['value'] + '*'
 
-        logger.info(f'DEPLOY CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'DEPLOY CALLBACK! -> ARGS : {kwargs["value"]}')
 
         if not self.script and self.cm.amimaster:
             # First the user should load/ready a project to try to deploy it... ERROR to UI!
             self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Project not yet loaded!'})
-            logger.error(f'Deploy request failed because project is not yet loaded, request id: {self._editor_request_uuid}')
+            Logger.error(f'Deploy request failed because project is not yet loaded, request id: {self._editor_request_uuid}')
             self._editor_request_uuid = ''
             return
         
@@ -1067,13 +1064,13 @@ class CuemsEngine():
             # Check local needs for script media
             media_fail_list = self.script_media_check()
         except Exception as e:
-            logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
+            Logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
         
         if media_fail_list:
             if self.cm.amimaster:
                 # If local media check failed and I'm master... ERROR to UI!
                 self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
-                logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
+                Logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
             else:
                 deploy_request_list = []
                 for item in list(media_fail_list.keys()):
@@ -1085,7 +1082,7 @@ class CuemsEngine():
                 try:
                     self.try_deploy(project_name=self.script.unix_name, tag_name='media')
                 except Exception as e:
-                    logger.exception(f'Exception raised while performing deploy: {e}')
+                    Logger.exception(f'Exception raised while performing deploy: {e}')
                     self.set_node_value('/engine/status', 'deploy', 'ERROR')
                     self.assign_nodes_values({
                         'type': 'error',
@@ -1119,16 +1116,16 @@ class CuemsEngine():
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
 
-                        logger.info(f'Calling DEPLOY via OSC on slave node {device}')
+                        Logger.info(f'Calling DEPLOY via OSC on slave node {device}')
                         self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/deploy'][0].value = self.script.unix_name
                     except Exception as e:
-                        logger.exception(e)
+                        Logger.exception(e)
 
                 ''' CHECK SLAVES DEPLOYS '''
                 # Check slaves deploy return
                 node_error_dict = {}
                 node_ok_list = []
-                logger.info(f'I\'m master. Waiting for slaves to deploy...')
+                Logger.info(f'I\'m master. Waiting for slaves to deploy...')
                 while len(node_error_dict) + len(node_ok_list) < len(self.ossia_server.oscquery_slave_devices):
                     ok_count = 0
                     for device in self.ossia_server.oscquery_slave_devices:
@@ -1137,7 +1134,7 @@ class CuemsEngine():
                             # Reset the status field
                             self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
                         elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'OK':
-                            logger.info(f'Slave {device} deploy successfull, OK!')
+                            Logger.info(f'Slave {device} deploy successfull, OK!')
                             # Reset the status field
                             self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
                             node_ok_list.append(device)
@@ -1146,15 +1143,15 @@ class CuemsEngine():
 
                 if node_error_dict:
                     # Some slave could not load the project
-                    logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid} Node errors: {node_error_dict}')
+                    Logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid} Node errors: {node_error_dict}')
                     self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':f'Errors deploying on nodes: {node_error_dict}'})
                 else:
-                    logger.info(f'Deploy process completed succesfully on all slave nodes...')
+                    Logger.info(f'Deploy process completed succesfully on all slave nodes...')
                     self.editor_queue.put({'type':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
 
             else:
                 # Deploy is not needed on this slave...
-                logger.info(f'Deploy requested from master but it is not needed on this slave')
+                Logger.info(f'Deploy requested from master but it is not needed on this slave')
 
                 self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
 
@@ -1168,16 +1165,16 @@ class CuemsEngine():
         self._editor_request_uuid = ''
 
     def comms_callback(self, **kwargs):
-        logger.info(f'COMMS CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'COMMS CALLBACK! -> ARGS : {kwargs["value"]}')
 
         if self.cm.amimaster:
             for device in self.ossia_server.oscquery_slave_devices:
-                logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/type"][0].value} // '
+                Logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/type"][0].value} // '
                             + f'action : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/action"][0].value} // '
                             + f'action_uuid : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/action_uuid"][0].value} // '
                             + f'value : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/value"][0].value}')
         else:
-            logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value} // '
+            Logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value} // '
                         + f'action : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value} // '
                         + f'action_uuid : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action_uuid"][0].value} // '
                         + f'value : {self.ossia_server._oscquery_registered_nodes["/engine/comms/value"][0].value}')
@@ -1191,7 +1188,7 @@ class CuemsEngine():
         self._editor_request_uuid = kwargs['value']
 
     def test_callback(self, **kwargs):
-        logger.info(f'TEST CALLBACK! -> ARGS : {kwargs["value"]}')
+        Logger.info(f'TEST CALLBACK! -> ARGS : {kwargs["value"]}')
 
         '''OSC callback for internal test porpouses'''
         self.test_data = kwargs['value']
@@ -1200,20 +1197,20 @@ class CuemsEngine():
             try:
                 self.editor_command_callback(item=literal_eval(self.test_data))
             except Exception as e:
-                logger.exception(f'Exception raised in test_thread: {e}')
+                Logger.exception(f'Exception raised in test_thread: {e}')
         else:
             try:
                 d = literal_eval(self.test_data)
                 d['type'] = 'test'
                 self.assign_nodes_values(d)
             except Exception as e:
-                logger.exception(f'Exception raised in test_thread: {e}')
+                Logger.exception(f'Exception raised in test_thread: {e}')
 
     def test_thread_function(self):
         try:
             self.editor_command_callback(item=literal_eval(self.test_data))
         except Exception as e:
-            logger.exception(f'Exception raised in test_thread: {e}')
+            Logger.exception(f'Exception raised in test_thread: {e}')
 
     ########################################################
 
@@ -1237,7 +1234,7 @@ class CuemsEngine():
             string = f'These media files could not be found:'
             for filename, cue in media_list.items():
                 string += f'\n{type(cue)} : {filename} : cue_uuid : {cue.uuid}'
-            logger.error(string)
+            Logger.error(string)
 
         return media_list
         
@@ -1250,16 +1247,16 @@ class CuemsEngine():
             for index, item in enumerate(cuelist.contents):
                 if item.check_mappings(self.cm):
                     if isinstance(item, VideoCue) and item._local:
-                        logger.debug(f'{item.outputs}')
+                        Logger.debug(f'{item.outputs}')
                         try:
                             for output in item.outputs:
                                 # TO DO : add support for multiple outputs
                                 video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
-                                logger.debug(f'video player id: {video_player_id}')
+                                Logger.debug(f'video player id: {video_player_id}')
                                 item._player = self._video_players[video_player_id]['player']
                                 item._osc_route = self._video_players[video_player_id]['route']
                         except Exception as e:
-                            logger.exception(e)
+                            Logger.exception(e)
                             raise e
                 else:
                     raise Exception(f"Cue outputs badly assigned in cue : {item.uuid}")
@@ -1287,7 +1284,7 @@ class CuemsEngine():
                     item._action_target_object = self.script.find(item.action_target)
 
         except Exception as e:
-            logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
+            Logger.error(f'Error arming cuelist : {cuelist.uuid} : {e}')
             raise
             
     def disarm_all(self):
