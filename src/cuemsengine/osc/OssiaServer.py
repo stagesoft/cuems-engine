@@ -5,10 +5,8 @@ from typing import Union
 from .OssiaNodes import OssiaNodes
 from .helpers import ServerDevices
 
-ENGINE_CLIENT_PORT = 9000
-ENGINE_SERVER_PORT = 9001
-OSCQUERY_REQ_PORT = 40250
-OSCQUERY_WS_PORT = 40255
+OSCSERVER_LOCAL_PORT = 9000
+OSCSERVER_REMOTE_PORT = 9001
 
 class OssiaServer(OssiaNodes):
     def __init__(
@@ -16,8 +14,8 @@ class OssiaServer(OssiaNodes):
             name: str = None,
             log: bool = False,
             host: str = "127.0.0.1",
-            client_port: int = ENGINE_CLIENT_PORT,
-            server_port: int = ENGINE_SERVER_PORT,
+            remote_port: int = OSCSERVER_REMOTE_PORT,
+            local_port: int = OSCSERVER_LOCAL_PORT,
             server: ServerDevices = ServerDevices.OSC,
             endpoints: Union[dict, list] = None
         ):
@@ -27,8 +25,8 @@ class OssiaServer(OssiaNodes):
         self.host = host
         self.device = LocalDevice(name)
         self.logging = log
-        self.client_port = client_port
-        self.server_port = server_port
+        self.remote_port = remote_port
+        self.local_port = local_port
         self.setup_server(server)
         if endpoints:
             self.create_endpoints(endpoints)

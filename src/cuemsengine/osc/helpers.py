@@ -2,11 +2,20 @@ from enum import Enum
 from pyossia.ossia_python import OSCDevice, OSCQueryDevice
 
 def new_osc_device(cls) -> OSCDevice:
+    """An OSC device is required to deal with a remote application using OSC protocol
+
+    Parameters:
+     - name (str): name of the device
+     - host (str): host ip address
+     - remote_port (int): port where osc messages have to be sent to be catch by a remote client to listen to the local device
+     - local_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
+ 
+ """
     x = OSCDevice(
         "cuems",
         cls.host,
-        cls.client_port,
-        cls.server_port
+        cls.remote_port,
+        cls.local_port
     )
     return x
 
@@ -31,18 +40,18 @@ def set_osc_server(cls) -> bool:
     Make the local device able to handle osc request and emit osc message
     
     Parameters:
-    server_port (int): where osc messages have to be sent to be catch by a remote
-        client to listen to the local device
-    client_port (int): port used by any remote client to deal with the local device
-    log (bool): enable protocol logging
+     - host (str): host ip address
+     - remote_port (int): port where osc messages have to be sent to be catch by a remote client to listen to the local device
+     - local_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
+     - log (bool): enable protocol logging
 
     Returns:
     bool: True if the server has been created successfully
     """
     return cls.device.create_osc_server(
         cls.host,
-        cls.server_port,
-        cls.client_port,
+        cls.remote_port,
+        cls.local_port,
         cls.logging
     )
 
@@ -52,10 +61,9 @@ def set_oscquery_server(cls) -> bool:
     Make the local device able to handle oscquery request
 
     Parameters:
-    @param int port where OSC requests have to be sent by any remote client to deal with the local device
-    @param int port where WebSocket requests have to be sent by any remote client
-        to deal with the local device
-    @param bool enable protocol logging
+     - osc_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
+     - ws_port (int) port where WebSocket requests have to be sent by any remote client to deal with the local device
+     - log (bool): enable protocol logging
 
     Returns:
     bool: True if the server has been created successfully

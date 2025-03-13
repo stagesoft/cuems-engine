@@ -4,22 +4,22 @@ from typing import Union
 from .OssiaNodes import OssiaNodes
 from .helpers import ClientDevices
 
-OSC_CLIENT_PORT = 9090
-OSC_REQ_PORT = 9091
+OSCCLIENT_LOCAL_PORT = 9009
+OSCCLIENT_REMOTE_PORT = 9001
 
 class OssiaClient(OssiaNodes):
     def __init__(
         self,
         host: str = "127.0.0.1",
-        client_port: int = OSC_CLIENT_PORT,
-        server_port: int = OSC_REQ_PORT,
+        local_port: int = OSCCLIENT_LOCAL_PORT,
+        remote_port: int = OSCCLIENT_REMOTE_PORT,
         remote_type: ClientDevices = ClientDevices.OSC,
         endpoints: Union[dict, list] = None
     ):
         super().__init__()
         self.host = host
-        self.client_port = client_port
-        self.server_port = server_port
+        self.remote_port = remote_port
+        self.local_port = local_port
         self.bind_device(remote_type)
         if endpoints:
             self.create_endpoints(endpoints)
