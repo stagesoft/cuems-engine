@@ -13,7 +13,7 @@ def run_cue(cue: Cue, ossia, mtc):
     pass
 
 @run_cue.register
-def _(cue: CueList, ossia, mtc):
+def run_cueList(cue: CueList, ossia, mtc):
     """
     Run a CueList
 
@@ -29,7 +29,7 @@ def _(cue: CueList, ossia, mtc):
         )
 
 @run_cue.register
-def _(cue: ActionCue, ossia, mtc):
+def run_actionCue(cue: ActionCue, ossia, mtc):
     """
     Run an ActionCue
     """
@@ -47,6 +47,7 @@ def _(cue: ActionCue, ossia, mtc):
         cue._action_target_object.enabled = True
     elif cue.action_type == 'disable':
         cue._action_target_object.enabled = False
+    # DEV: To be implemented
     elif cue.action_type == 'fade_in':
         cue._action_target_object.enabled = False
     elif cue.action_type == 'fade_out':
@@ -61,7 +62,7 @@ def _(cue: ActionCue, ossia, mtc):
         cue._action_target_object.enabled = False
 
 @run_cue.register
-def _(cue: AudioCue, ossia, mtc):
+def run_audioCue(cue: AudioCue, ossia, mtc):
     """
     Run an AudioCue
     """
@@ -96,7 +97,7 @@ def _(cue: AudioCue, ossia, mtc):
             )
 
 @run_cue.register
-def _(cue: DmxCue, ossia, mtc):
+def run_dmxCue(cue: DmxCue, ossia, mtc):
     """
     Run a DmxCue
     """
@@ -122,7 +123,7 @@ def _(cue: DmxCue, ossia, mtc):
         )
 
 @run_cue.register
-def _(cue: VideoCue, ossia, mtc):
+def run_videoCue(cue: VideoCue, ossia, mtc):
     """
     Run a VideoCue
     """
