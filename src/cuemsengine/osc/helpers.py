@@ -33,7 +33,6 @@ class ClientDevices(Enum):
     OSCQUERY = new_oscquery_device
     PYOSC = None
 
-
 def set_osc_server(cls) -> bool:
     """LocalDevice.create_osc_server
 

@@ -20,10 +20,10 @@ class OssiaNodes(object):
         - dictionary of paths (k) and parameter arguments (v)
 
     Parameter arguments must be lists containing:
-        - pyossia.ValueType
-        - callback function (optional)
-        - initial / default value (optional)
-        - Note: to set a parameter value without a callback, pass None as the second argument
+        - `pyossia.ValueType`
+        - callback function (*optional*)
+        - initial / default value (*optional*)
+        - **Note**: to set a parameter value without a callback, pass None as the second argument
     
     """
     def __init__(self):
@@ -80,18 +80,16 @@ class OssiaNodes(object):
                 node = self.nodes[node]
             except KeyError:
                 raise ValueError("Node not found")
-        try:
-            node.parameter.push_value(value)
-        except Exception:
+        node.parameter.push_value(value)
+        if node.parameter.value != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
     def create_endpoint(self, path: str, param_args: list = None):
         """Create an endpoint as a node with parameter
         """
         self.set_node(path)
-        if param_args:
-            if isinstance(param_args, list):
-                self.set_parameter(self.nodes[path], *param_args)
+        if param_args and isinstance(param_args, list):
+            self.set_parameter(self.nodes[path], *param_args)
 
     def create_endpoints(self, paths: Union[dict, list]):
         """Create multiple endpoints

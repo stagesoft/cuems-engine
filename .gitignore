@@ -15,5 +15,6 @@ dist/
 *.log-*
 nohup.out
 *.pid
+.coverage*
 
 dev/local/
