@@ -56,12 +56,12 @@ class Nng_request_response(ComunicatorService):
         """
         with Req0(**self.params_request) as socket:
             while await asyncio.sleep(0, result=True):
-                Logger.log_debug(f"Sending: {request}")
+                Logger.debug(f"Sending: {request}")
                 encoded_request = json.dumps(request).encode()
                 await socket.asend(encoded_request)
                 response = await self._get_response(socket)
                 decoded_response = json.loads(response.decode())
-                Logger.log_debug(f"receiving: {decoded_response}")
+                Logger.debug(f"receiving: {decoded_response}")
                 return decoded_response
 
     async def _get_response(self, socket):
@@ -86,7 +86,7 @@ class Nng_request_response(ComunicatorService):
             while await asyncio.sleep(0, result=True):
                 request = await socket.arecv()
                 decoded_request = json.loads(request.decode())  # Parse the JSON request
-                Logger.log_debug(f"Received: {decoded_request}")
+                Logger.debug(f"Received: {decoded_request}")
                 response = request_processor(decoded_request)
                 encoded_response = json.dumps(response).encode()
                 await self._respond(socket, encoded_response)
