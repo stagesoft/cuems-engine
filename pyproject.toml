@@ -23,10 +23,11 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "cuemsutils==0.0.4-post1",
+    "cuemsutils==0.0.5",
     "mido==1.3.3",
     "pyossia @ file://{root}/../libossia/build/src/ossia-python/",
     "python-osc==1.9.3",
+    "rtmidi==2.5.0",
     "zeroconf==0.146.1",
 ]
 

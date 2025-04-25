@@ -1,7 +1,7 @@
 from ctypes import *
 
 try:
-    libmtcmaster = cdll.LoadLibrary('libmtcmaster.so.0')
+    libmtcmaster = cdll.LoadLibrary('libmtcmaster.so.0.1')
 except:
     libmtcmaster = None
     raise ImportError('libmtcmaster import error')

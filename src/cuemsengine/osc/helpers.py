@@ -22,8 +22,8 @@ def new_osc_device(cls) -> OSCDevice:
 def new_oscquery_device(cls) -> OSCQueryDevice:
     x = OSCQueryDevice(
         "cuems",
-        f"ws://{cls.host}:{cls.server_port}",
-        cls.client_port
+        f"ws://{cls.host}:{cls.remote_port}",
+        cls.local_port
     )
     x.update()
     return x
@@ -68,8 +68,8 @@ def set_oscquery_server(cls) -> bool:
     bool: True if the server has been created successfully
     """
     return cls.device.create_oscquery_server(
-        cls.client_port,
-        cls.server_port,
+        cls.local_port,
+        cls.remote_port,
         cls.logging
     )
 
