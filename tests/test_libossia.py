@@ -525,6 +525,8 @@ def test_oscquery_server_clients_main_thread():
     def client2_callback(value):
         client2_res.append(value)
 
+    sleep(0.5)
+
     # ACT
     # Create server and clients
     server = OssiaServer(
