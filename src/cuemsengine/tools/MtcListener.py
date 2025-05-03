@@ -88,12 +88,9 @@ class MtcListener(Thread):
         # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60) //  TODO: goes to frame 0 in tc, non existent frame, changed to tc 0:0:0:0 = frame 1
         return CTimecode('{}:{}:{}:{}'.format(hrs, mins, secs, frs), framerate=fps)
 
-
-
     def __mtc_decode_full_frame(self, full_frame_bytes):
         mtc_bytes = full_frame_bytes[5:-1]
         return self.__mtc_decode(mtc_bytes)
-
 
     def __mtc_decode_quarter_frames(self, frame_pieces):
         mtc_bytes = bytearray(4)

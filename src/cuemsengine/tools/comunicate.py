@@ -1,5 +1,6 @@
 """Utilites to call the hardware discovery tool."""
 from cuemsutils.log import logged
+from cuemsutils.ComunicatorServices import Comunicator
 
 HWDISCOVERY_IPC = 'ipc:///tmp/hwdiscovery.ipc'
 NODECONF_IPC = 'ipc:///tmp/nodeconf.ipc'
@@ -46,6 +47,7 @@ def call_editor():
     Call the editor tool
     """
     comunicate(EDITOR_IPC)
+    return Comunicator(EDITOR_IPC)
 
 class EditorWsServer():
     def __init__(self, *args, **kwargs):

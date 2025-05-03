@@ -6,7 +6,7 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 
 from cuemsutils.log import Logger
 
-from .Settings import Settings
+from ..Settings import Settings
 
 
 
@@ -316,41 +316,48 @@ class ConfigManager(Thread):
         raise Exception(f'Audio output wrongly mapped')
 
     def check_dir_hierarchy(self):
+        paths_to_check = [
+            path.join(self.library_path, 'projects'),
+            path.join(self.library_path, 'media'),
+            path.join(self.library_path, 'trash'),
+            path.join(self.library_path, 'trash', 'projects'),
+            path.join(self.library_path, 'trash', 'media'),
+            self.tmp_path
+        ]
         try:
             if not path.exists(self.library_path):
                 mkdir(self.library_path)
                 Logger.info(f'Creating library forlder {self.library_path}')
 
-            if not path.exists( path.join(self.library_path, 'projects') ) :
-                mkdir(path.join(self.library_path, 'projects'))
-
-            if not path.exists( path.join(self.library_path, 'media') ) :
-                mkdir(path.join(self.library_path, 'media'))
-
-            if not path.exists( path.join(self.library_path, 'trash') ) :
-                mkdir(path.join(self.library_path, 'trash'))
-
-            if not path.exists( path.join(self.library_path, 'trash', 'projects') ) :
-                mkdir(path.join(self.library_path, 'trash', 'projects'))
-
-            if not path.exists( path.join(self.library_path, 'trash', 'media') ) :
-                mkdir(path.join(self.library_path, 'trash', 'media'))
-
-            if not path.exists( self.tmp_path ) :
-                mkdir( self.tmp_path )
-
+            for each_path in paths_to_check:
+                if not path.exists(each_path):
+                    mkdir(each_path)
         except Exception as e:
             Logger.error("error: {} {}".format(type(e), e))
-
-    # def check_amimaster(self):
-    #     for name, node in self.avahi_monitor.listener.osc_services.items():
-    #         if node.properties[b'node_type'] == b'master' and self.node_conf['uuid'] == node.properties[b'uuid'].decode('utf8'):
-    #             self.amimaster = True
-    #             break
-            
+    
     def check_amimaster(self):
+        # for name, node in self.avahi_monitor.listener.osc_services.items():
+        #     if node.properties[b'node_type'] == b'master' and self.node_conf['uuid'] == node.properties[b'uuid'].decode('utf8'):
+        #         self.amimaster = True
+        #         break
         if path.exists(path.join(self.cuems_conf_path, CUEMS_MASTER_LOCK_FILE)):
             self.amimaster = True
+
+    def check_project_mappings(self):
+        if self.using_default_mappings:
+            return True
+
+        nodes_to_check = [self.project_node_mappings]
+        for node in nodes_to_check:
+            for area, contents in node.items():
+                if isinstance(contents, dict):
+                    for section, elements in contents.items():
+                        for element in elements:
+                            if element['name'] not in self.node_hw_outputs[f'{area}_{section}']:
+                                err_str = f'Project {area} {section} mapping incorrect: {element["name"]} not present in node: {self.node_conf["uuid"]}'
+                                Logger.error(err_str)
+                                raise Exception(err_str)
+        return True
 
     def process_network_mappings(self, mappings):
         '''Temporary process instead of reviewing xml read and convert to objects'''
@@ -373,5 +380,4 @@ class ConfigManager(Thread):
             temp_nodes.append(temp_node)
         
         mappings['nodes'] = temp_nodes
-
         return mappings

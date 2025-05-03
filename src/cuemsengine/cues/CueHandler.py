@@ -20,7 +20,7 @@ class CueHandler():
     _armed_cues = []
 
     def __new__(cls, *args, **kwargs):
-        """Ensure only one instance is created"""
+        """Singleton pattern: Ensure only one instance is created"""
         if not cls._instace:
             cls._instace = super(CueHandler, cls).__new__(cls)
         return cls._instace
@@ -75,6 +75,13 @@ class CueHandler():
             return True
     
         return False
+    
+    @staticmethod
+    def disarm_all():
+        """Disarms all cues"""
+        for cue in CueHandler._armed_cues:
+            CueHandler.disarm(cue)
+        CueHandler._armed_cues.clear()
 
     @staticmethod
     def get_next_cue(cue: Cue) -> Cue:
