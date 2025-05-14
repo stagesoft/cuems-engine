@@ -1,16 +1,16 @@
 """Utilites to call the hardware discovery tool."""
 from cuemsutils.log import logged
-from cuemsutils.ComunicatorServices import Comunicator
+from cuemsutils.CommunicatorServices import Communicator
 
 HWDISCOVERY_IPC = 'ipc:///tmp/hwdiscovery.ipc'
 NODECONF_IPC = 'ipc:///tmp/nodeconf.ipc'
 EDITOR_IPC = 'ipc:///tmp/editor.ipc'
 
-def comunicate(ipc: str):
+def communicate(ipc: str):
     """
-    Comunicate with external tools
+    Communicate with external tools
     """
-    message = f"Comunicating with {ipc}"
+    message = f"Communicating with {ipc}"
     # context = zmq.Context()
     # socket = context.socket(zmq.REQ)
     # socket.connect(ipc)
@@ -32,22 +32,22 @@ def call_hwdiscovery():
     """
     Call the hardware discovery tool
     """
-    comunicate(HWDISCOVERY_IPC)
+    communicate(HWDISCOVERY_IPC)
 
 @logged
 def call_nodeconf():
     """
     Call the node configuration tool
     """
-    comunicate(NODECONF_IPC)
+    communicate(NODECONF_IPC)
 
 @logged
 def call_editor():
     """
     Call the editor tool
     """
-    comunicate(EDITOR_IPC)
-    return Comunicator(EDITOR_IPC)
+    communicate(EDITOR_IPC)
+    return Communicator(EDITOR_IPC)
 
 class EditorWsServer():
     def __init__(self, *args, **kwargs):
