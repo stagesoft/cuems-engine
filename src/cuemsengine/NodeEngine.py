@@ -5,7 +5,13 @@ from .cues.CueHandler import CueHandler
 from .players import AudioPlayer, DmxPlayer, VideoPlayer
 
 class NodeEngine(BaseEngine):
-    """This engine manages players for each node
+    """
+    This engine manages players for each node
+    
+    Communicates with the ControllerEngine via OSCQuery
+    
+    Interacts with Player objects via OSC
+
     It is responsible for:
       - Starting and stopping players
       - Monitoring player status
@@ -15,8 +21,6 @@ class NodeEngine(BaseEngine):
       - Providing a clean interface for starting and stopping players
       - Providing a clean interface for monitoring player status
     
-    Communicates with the ControllerEngine via OSCQuery
-    Interacts with Player objects via OSC
     """
 
     def __init__(self):

@@ -7,3 +7,9 @@ Run
 python3 test_engine.py
 ```
 to check out.
+
+
+## Release notes
+
+### v0.1.0
+Initial release.

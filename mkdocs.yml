@@ -1,0 +1,9 @@
+site_name: cuemsutils
+repo_url: https://github.com/cuems/cuems-utils
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python

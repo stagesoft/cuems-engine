@@ -18,3 +18,4 @@ nohup.out
 .coverage*
 
 dev/local/
+site/

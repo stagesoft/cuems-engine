@@ -28,12 +28,12 @@ class BaseEngine:
         self.script = None
         self.show_locked = False
         self.stop_requested = False
-        '''
-        CUE "POINTERS":
-        here we use the "standard" point of view that there is an
-        ongoing cue already running (one or many, at least the last to be gone)
-        and a pointer indicating which is the next to be gone when go is pressed
-        '''
+
+        ## dev: CUE "POINTERS":
+        # here we use the "standard" point of view that there is an
+        # ongoing cue already running (one or many, at least the last to be gone)
+        # and a pointer indicating which is the next to be gone when go is pressed
+        
         self.ongoing_cue = None
         self.next_cue_pointer = None
 
