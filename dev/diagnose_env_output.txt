@@ -1,0 +1,115 @@
+=== Environment Diagnostic Information ===
+
+=== Hatch Version ===
+Hatch, version 1.14.0
+
+=== Python Information ===
+version: 3.11.2 (main, Mar 27 2023, 23:42:44) [GCC 11.2.0]
+implementation: CPython
+platform: Linux-6.1.0-34-amd64-x86_64-with-glibc2.36
+executable: /home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine/bin/python
+
+=== Path Information ===
+PYTHONPATH: Not set
+
+sys.path:
+  - /disk/Projects/StageLab/cuems-engine
+  - /home/adria/anaconda3/envs/cuems_debian12/lib/python311.zip
+  - /home/adria/anaconda3/envs/cuems_debian12/lib/python3.11
+  - /home/adria/anaconda3/envs/cuems_debian12/lib/python3.11/lib-dynload
+  - /home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine/lib/python3.11/site-packages
+  - /disk/Projects/StageLab/cuems-engine/src
+
+site_packages:
+  - /home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine/lib/python3.11/site-packages
+current_dir: /disk/Projects/StageLab/cuems-engine
+src_dir_exists: True
+src_cuemsengine_exists: True
+
+=== Hatch Environment Variables ===
+HATCH_ENV_ACTIVE=default
+CONDA_PROMPT_MODIFIER=(cuems_debian12) 
+LANGUAGE=en_GB:en
+USER=adria
+LC_TIME=ca_ES.UTF-8
+XDG_SESSION_TYPE=wayland
+GIT_ASKPASS=/tmp/.mount_Cursor86xCWI/usr/share/cursor/resources/app/extensions/git/dist/askpass.sh
+SHLVL=3
+LD_LIBRARY_PATH=/tmp/.mount_Cursor86xCWI/usr/lib/:/tmp/.mount_Cursor86xCWI/usr/lib32/:/tmp/.mount_Cursor86xCWI/usr/lib64/:/tmp/.mount_Cursor86xCWI/lib/:/tmp/.mount_Cursor86xCWI/lib/i386-linux-gnu/:/tmp/.mount_Cursor86xCWI/lib/x86_64-linux-gnu/:/tmp/.mount_Cursor86xCWI/lib/aarch64-linux-gnu/:/tmp/.mount_Cursor86xCWI/lib32/:/tmp/.mount_Cursor86xCWI/lib64/:
+HOME=/home/adria
+CHROME_DESKTOP=cursor.desktop
+APPDIR=/tmp/.mount_Cursor86xCWI
+CONDA_SHLVL=2
+TERM_PROGRAM_VERSION=0.49.5
+DESKTOP_SESSION=gnome
+PERLLIB=/tmp/.mount_Cursor86xCWI/usr/share/perl5/:/tmp/.mount_Cursor86xCWI/usr/lib/perl5/:
+GTK_MODULES=gail:atk-bridge
+VSCODE_GIT_ASKPASS_MAIN=/tmp/.mount_Cursor86xCWI/usr/share/cursor/resources/app/extensions/git/dist/askpass-main.js
+PS1=\[]633;A\](cuems_debian12) (base) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ \[]633;B\]
+LC_MONETARY=ca_ES.UTF-8
+VSCODE_GIT_ASKPASS_NODE=/tmp/.mount_Cursor86xCWI/usr/share/cursor/cursor
+PYDEVD_DISABLE_FILE_VALIDATION=1
+SYSTEMD_EXEC_PID=1972
+BUNDLED_DEBUGPY_PATH=/home/adria/.vscode/extensions/ms-python.debugpy-2025.4.1-linux-x64/bundled/libs/debugpy
+IM_CONFIG_CHECK_ENV=1
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+COLORTERM=truecolor
+_CE_M=
+IM_CONFIG_PHASE=1
+WAYLAND_DISPLAY=wayland-0
+LOGNAME=adria
+CONDA_ROOT=/home/adria/anaconda3
+OWD=/home/adria
+_=/home/adria/anaconda3/envs/cuems_debian12/bin/hatch
+XDG_SESSION_CLASS=user
+USERNAME=adria
+TERM=xterm-256color
+GNOME_DESKTOP_SESSION_ID=this-is-deprecated
+_CE_CONDA=
+PATH=/home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine/bin:/home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine/bin:/home/adria/bin:/home/adria/anaconda3/envs/cuems_debian12/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/home/adria/bin:/home/adria/bin:/home/adria/anaconda3/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/home/adria/bin:/home/adria/bin:/home/adria/anaconda3/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/home/adria/bin:/home/adria/bin
+SESSION_MANAGER=local/lenovo:@/tmp/.ICE-unix/1927,unix/lenovo:/tmp/.ICE-unix/1927
+GDM_LANG=en_GB.UTF-8
+APPIMAGE=/home/adria/Cursor-0.49.5-x86_64.AppImage
+XDG_MENU_PREFIX=gnome-
+GNOME_TERMINAL_SCREEN=/org/gnome/Terminal/screen/0a24c360_480b_42c7_9d2a_bddcce0f8e9c
+GNOME_SETUP_DISPLAY=:1
+XDG_RUNTIME_DIR=/run/user/1000
+GDK_BACKEND=x11
+DISPLAY=:0
+HATCH_UV=/home/adria/anaconda3/envs/cuems_debian12/bin/uv
+VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/adria/.vscode/extensions/ms-python.debugpy-2025.4.1-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-6ed3a2966c8c224c.txt
+LANG=en_GB.UTF-8
+XDG_CURRENT_DESKTOP=GNOME
+CONDA_PREFIX_1=/home/adria/anaconda3
+XMODIFIERS=@im=ibus
+XDG_SESSION_DESKTOP=gnome
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.DG2R52
+LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.swp=00;90:*.tmp=00;90:*.dpkg-dist=00;90:*.dpkg-old=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:
+VSCODE_GIT_IPC_HANDLE=/run/user/1000/vscode-git-89d0d26b7a.sock
+GNOME_TERMINAL_SERVICE=:1.207
+CONDA_PREFIX_2=/home/adria/anaconda3/envs/cuems_debian12
+TERM_PROGRAM=vscode
+CURSOR_TRACE_ID=65d29ce147b34a29b8e19cbe56eae92e
+SSH_AGENT_LAUNCHER=openssh
+SSH_AUTH_SOCK=/run/user/1000/keyring/ssh
+GSETTINGS_SCHEMA_DIR=/tmp/.mount_Cursor86xCWI/usr/share/glib-2.0/schemas/:
+CONDA_PYTHON_EXE=/home/adria/anaconda3/bin/python
+ORIGINAL_XDG_CURRENT_DESKTOP=GNOME
+SHELL=/bin/bash
+ARGV0=/home/adria/Cursor-0.49.5-x86_64.AppImage
+QT_ACCESSIBILITY=1
+GDMSESSION=gnome
+CONDA_DEFAULT_ENV=cuems_debian12
+LC_MEASUREMENT=ca_ES.UTF-8
+VSCODE_GIT_ASKPASS_EXTRA_ARGS=
+QT_IM_MODULE=ibus
+VIRTUAL_ENV=/home/adria/.local/share/hatch/env/virtual/cuemsengine/btOilmyM/cuemsengine
+PWD=/disk/Projects/StageLab/cuems-engine
+CONDA_EXE=/home/adria/anaconda3/bin/conda
+XDG_DATA_DIRS=/tmp/.mount_Cursor86xCWI/usr/share/:/usr/local/share:/usr/share:/usr/share/gnome:/home/adria/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share/:/usr/share/
+LC_NUMERIC=ca_ES.UTF-8
+CONDA_PREFIX=/home/adria/anaconda3/envs/cuems_debian12
+LC_PAPER=ca_ES.UTF-8
+QT_PLUGIN_PATH=/tmp/.mount_Cursor86xCWI/usr/lib/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/i386-linux-gnu/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/x86_64-linux-gnu/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/aarch64-linux-gnu/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib32/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib64/qt4/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/qt5/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/i386-linux-gnu/qt5/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/x86_64-linux-gnu/qt5/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib/aarch64-linux-gnu/qt5/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib32/qt5/plugins/:/tmp/.mount_Cursor86xCWI/usr/lib64/qt5/plugins/:
+VTE_VERSION=7006
+
