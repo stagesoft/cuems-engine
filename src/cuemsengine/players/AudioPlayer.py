@@ -1,6 +1,8 @@
 from cuemsutils.log import logged
 
 from .Player import Player
+from ..osc.OssiaClient import PlayerClient
+from ..osc.endpoints import OSC_AUDIOPLAYER_CONF
 
 class AudioPlayer(Player):
     def __init__(self, port_index, path, args, media, uuid=None):
@@ -31,3 +33,10 @@ class AudioPlayer(Player):
         process_call_list.append(self.media)
         
         self.call_subprocess(process_call_list)
+
+class AudioClient(PlayerClient):
+    def __init__(self, player_port: int):
+        super().__init__(
+            local_port = player_port,
+            endpoints = OSC_AUDIOPLAYER_CONF
+        )

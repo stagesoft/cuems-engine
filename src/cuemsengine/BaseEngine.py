@@ -2,24 +2,29 @@ import signal
 from functools import partial
 from os import path, getpid, remove
 from time import sleep
-from cuemsutils import CTimecode
+from cuemsutils.CTimecode import CTimecode
 from cuemsutils.log import Logger, logged
+from cuemsutils.xml import XmlReaderWriter
 from .tools.MtcListener import MtcListener
 from .tools.ConfigManager import ConfigManager
-
+from .osc import ValueType
 CUEMS_CONF_PATH = '/etc/cuems/'
 SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
+MTC_PORT = 10000
 
 class BaseEngine:
-    def __init__(self):
+    def __init__(self, with_cm: bool = True, with_mtc: bool = True):
         self.node_name = None
-        self.mtc_port = None
+        self.mtc_port = MTC_PORT
         self._timecode = None
+        self.status = EngineStatus()
         self.pid = getpid()
         Logger.info(f"Starting {self.__class__.__name__} with PID {self.pid}")
 
-        self.set_config_manager()
-        self.set_mtc_listener()
+        if with_cm:
+            self.set_config_manager()
+        if with_mtc:
+            self.set_mtc_listener()
     
         # Engine parameters
         self.go_offset = 0
@@ -141,6 +146,14 @@ class BaseEngine:
         except KeyError:
             Logger.error('Tmp path not found in config. Exiting !!!!!')
             exit(-1)
+    
+    def find_hosts(self) -> list:
+        """Hardcoded for now, should be replaced by a discovery system"""
+        return [
+            'node1',
+            'node2',
+            'node3'
+        ]
 
     ### SIGNALS HANDLERS ###
     def register_signals(self) -> None:
@@ -252,3 +265,216 @@ class BaseEngine:
                 return False
             else:
                 return True
+
+    ### STATUS ###
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
+        """Set the status of the engine
+        
+        Args:
+            property (str): The property to set
+            value (str): The value to set
+            strict (bool): If True, raise an AttributeError if the property is not found
+        """
+        if f"_{property}" in self.status.__dict__.keys():
+            Logger.debug(f'Setting {property} to {value}')
+            self.status.__setattr__(property, value)
+        else:
+            Logger.error(f'Property {property} not found in EngineStatus')
+            if strict:
+                raise AttributeError(f'Property {property} not found in EngineStatus')
+    
+    def get_status(self, property: str, strict: bool = False) -> str:
+        """Get the status of the engine
+        
+        Args:
+            property (str): The property to get
+            strict (bool): If True, raise an AttributeError if the property is not found
+        """
+        value = getattr(self.status, property, "NotFound")
+        if value == "NotFound":
+            Logger.error(f'Property {property} not found in EngineStatus')
+            if strict:
+                raise AttributeError(f'Property {property} not found in EngineStatus')
+        return value
+    
+    def status_callback(self, endpoint: str, value: str) -> None:
+        """Callback for the status endpoint"""
+        Logger.debug(f'Status callback received: {endpoint} = {value}')
+        parameter = endpoint.split('/')[-1]
+        self.set_status(parameter, value)
+
+    def build_status_endpoints(self, host: str) -> dict:
+        """Build the endpoints for a NodeEngine"""
+        keys = self.status.__dict__.keys()
+        endpoints = {}
+        for key in keys:
+            endpoints[f"/{host}/status/{key[1:]}"] = [
+                ValueType.String,
+                self.status_callback
+            ]
+        return endpoints
+
+    @logged
+    def read_script(self, project_name: str) -> None:
+        xml_file = path.join(self.cm.library_path, 'projects', project_name, 'script.xml')
+        if not path.isfile(xml_file):
+            raise FileNotFoundError(f'Script file {xml_file} not found')
+        reader = XmlReaderWriter(xml_file = xml_file)
+        self.script = reader.read_to_objects()
+
+class EngineStatus:
+    def __init__(self):
+        # Set all properties to None
+        self.load = None
+        self.loadcue = None
+        self.go = None
+        self.gocue = None
+        self.pause = None
+        self.stop = None
+        self.resetall = None
+        self.preload = None
+        self.unload = None
+        self.hwdiscovery = None
+        self.deploy = None
+        self.test = None
+        self.timecode = None
+        self.currentcue = None
+        self.nextcue = None
+        self.running = None
+    
+    @property
+    def load(self) -> str:
+        return self._load
+
+    @load.setter 
+    def load(self, value: str) -> None:
+        self._load = value
+
+    @property
+    def loadcue(self) -> str:
+        return self._loadcue
+
+    @loadcue.setter
+    def loadcue(self, value: str) -> None:
+        self._loadcue = value
+
+    @property
+    def go(self) -> str:
+        return self._go
+
+    @go.setter
+    def go(self, value: str) -> None:
+        self._go = value
+
+    @property
+    def gocue(self) -> str:
+        return self._gocue
+
+    @gocue.setter
+    def gocue(self, value: str) -> None:
+        self._gocue = value
+
+    @property
+    def pause(self) -> str:
+        return self._pause
+
+    @pause.setter
+    def pause(self, value: str) -> None:
+        self._pause = value
+
+    @property
+    def stop(self) -> str:
+        return self._stop
+
+    @stop.setter
+    def stop(self, value: str) -> None:
+        self._stop = value
+
+    @property
+    def resetall(self) -> str:
+        return self._resetall
+
+    @resetall.setter
+    def resetall(self, value: str) -> None:
+        self._resetall = value
+
+    @property
+    def preload(self) -> str:
+        return self._preload
+
+    @preload.setter
+    def preload(self, value: str) -> None:
+        self._preload = value
+
+    @property
+    def unload(self) -> str:
+        return self._unload
+
+    @unload.setter
+    def unload(self, value: str) -> None:
+        self._unload = value
+
+    @property
+    def hwdiscovery(self) -> str:
+        return self._hwdiscovery
+
+    @hwdiscovery.setter
+    def hwdiscovery(self, value: str) -> None:
+        self._hwdiscovery = value
+
+    @property
+    def deploy(self) -> str:
+        return self._deploy
+
+    @deploy.setter
+    def deploy(self, value: str) -> None:
+        self._deploy = value
+
+    @property
+    def test(self) -> str:
+        return self._test
+
+    @test.setter
+    def test(self, value: str) -> None:
+        self._test = value
+        self.test_recieved = value
+
+    @property
+    def test_recieved(self) -> int:
+        return self._recieved
+
+    @test_recieved.setter
+    def test_recieved(self, value: int) -> None:
+        pass
+
+    @property
+    def timecode(self) -> int:
+        return self._timecode
+
+    @timecode.setter
+    def timecode(self, value: int) -> None:
+        self._timecode = value
+
+    @property
+    def currentcue(self) -> str:
+        return self._currentcue
+
+    @currentcue.setter
+    def currentcue(self, value: str) -> None:
+        self._currentcue = value
+
+    @property
+    def nextcue(self) -> str:
+        return self._nextcue
+
+    @nextcue.setter
+    def nextcue(self, value: str) -> None:
+        self._nextcue = value
+
+    @property
+    def running(self) -> int:
+        return self._running
+
+    @running.setter
+    def running(self, value: int) -> None:
+        self._running = value

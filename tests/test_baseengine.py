@@ -7,7 +7,7 @@ from cuemsengine.BaseEngine import BaseEngine
 
 @pytest.fixture
 def daemon():
-    return BaseEngine()
+    return BaseEngine(with_cm = False, with_mtc = False)
 @pytest.fixture
 def mock_signal():
     with patch('signal.signal') as mock_signal_obj:
@@ -51,3 +51,37 @@ def test_signal_handling_graceful_exit(daemon):
     proc.join(timeout=1)
 
     assert proc.exitcode == 0 or proc.exitcode is None  # None means graceful stop
+
+def test_engine_status(daemon):
+    assert daemon.status.load is None
+    assert daemon.status.loadcue is None
+    assert daemon.status.go is None
+    assert daemon.status.gocue is None
+    assert daemon.status.pause is None
+    assert daemon.status.stop is None
+    assert daemon.status.resetall is None
+    assert daemon.status.preload is None
+    assert daemon.status.unload is None
+    assert daemon.status.hwdiscovery is None
+    assert daemon.status.deploy is None
+    assert daemon.status.test is None
+    assert daemon.status.timecode is None
+    assert daemon.status.currentcue is None
+    assert daemon.status.nextcue is None
+    assert daemon.status.running is None
+
+def test_set_status(daemon):
+    daemon.set_status('load', 'test')
+    assert daemon.status.load == 'test'
+
+def test_get_status(daemon):
+    daemon.set_status('load', 'test')
+    assert daemon.get_status('load') == 'test'
+
+def test_get_status_none(daemon, caplog):
+    assert daemon.get_status('none') is "NotFound"
+    assert "Property none not found in EngineStatus" in caplog.text
+
+def test_set_status_none(daemon, caplog):
+    daemon.set_status('none', 'test')
+    assert "Property none not found in EngineStatus" in caplog.text

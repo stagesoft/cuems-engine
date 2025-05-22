@@ -1,7 +1,8 @@
 from threading import Thread
 from time import sleep
 
-from cuemsutils.cues import Cue, VideoCue, AudioCue
+from cuemsutils.cues import VideoCue, AudioCue
+from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import logged
 
 from .run_cue import run_cue
@@ -103,8 +104,8 @@ class CueHandler():
         # THREADED GO
         thread = Thread(
             name = f'GO:{cue.__class__.__name__}:{cue.uuid}',
-            target = cue.go_threaded,
-            args = [ossia, mtc]
+            target = CueHandler.go_threaded,
+            args = [cue, ossia, mtc]
         )
         thread.start()
         return thread

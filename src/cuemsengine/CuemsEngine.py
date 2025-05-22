@@ -14,15 +14,17 @@ from cuemsutils.xml.XmlReaderWriter import XmlReader
 
 from .tools.mtcmaster import libmtcmaster
 from .tools.CuemsDeploy import CuemsDeploy
-from .tools.comunicate import hwdiscovery_callback
+from .tools.communicate import hwdiscovery_callback
 
 from .OssiaServer import OssiaServer, MasterOSCQueryConfData, SlaveOSCQueryConfData, PlayerOSCConfData
+
+from .ControllerEngine import ControllerEngine
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 
 
 # %%
-class CuemsEngine():
+class CuemsEngine(ControllerEngine):
     
 
     def __init__(self):
@@ -51,40 +53,25 @@ class CuemsEngine():
         # DEV: Status nodes are used in the current implementation to check the status of the engine from the web interface
         # DEV: Should be substituted by a more robust system based on pynng
         # Initial OSC nodes to tell ossia to configure
-        OSC_ENGINE_CONF = { '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
-                            '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],
-                            '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
-                            '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
-                            '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
-                            '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
-                            '/engine/command/resetall' : [ossia.ValueType.String, self.reset_all_callback],
-                            '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
-                            '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
-                            '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
-                            '/engine/command/deploy' : [ossia.ValueType.String, self.deploy_callback],
-                            '/engine/command/test' : [ossia.ValueType.String, self.test_callback],
-                            '/engine/comms/type' : [ossia.ValueType.String, self.comms_callback],
-                            '/engine/comms/subtype' : [ossia.ValueType.String, None],
-                            '/engine/comms/action' : [ossia.ValueType.String, None],
-                            '/engine/comms/action_uuid' : [ossia.ValueType.String, self.action_uuid_callback],
-                            '/engine/comms/value' : [ossia.ValueType.String, None],
-                            '/engine/comms/data' : [ossia.ValueType.String, None],
-                            '/engine/status/load' : [ossia.ValueType.String, None],
-                            '/engine/status/loadcue' : [ossia.ValueType.String, None],
-                            '/engine/status/go' : [ossia.ValueType.String, None],
-                            '/engine/status/gocue' : [ossia.ValueType.String, None],
-                            '/engine/status/pause' : [ossia.ValueType.String, None],
-                            '/engine/status/stop' : [ossia.ValueType.String, None],
-                            '/engine/status/resetall' : [ossia.ValueType.String, None],
-                            '/engine/status/preload' : [ossia.ValueType.String, None],
-                            '/engine/status/unload' : [ossia.ValueType.String, None],
-                            '/engine/status/hwdiscovery' : [ossia.ValueType.String, None],
-                            '/engine/status/deploy' : [ossia.ValueType.String, None],
-                            '/engine/status/test' : [ossia.ValueType.String, self.test_callback],
-                            '/engine/status/timecode' : [ossia.ValueType.Int, None], 
-                            '/engine/status/currentcue' : [ossia.ValueType.String, None],
-                            '/engine/status/nextcue' : [ossia.ValueType.String, None],
-                            '/engine/status/running' : [ossia.ValueType.Int, None]
+        OSC_ENGINE_CONF = {
+            '/engine/command/load' : [ossia.ValueType.String, self.load_project_callback],
+            '/engine/command/loadcue' : [ossia.ValueType.String, self.load_cue_callback],
+            '/engine/command/go' : [ossia.ValueType.String, self.go_callback],
+            '/engine/command/gocue' : [ossia.ValueType.String, self.go_cue_callback],
+            '/engine/command/pause' : [ossia.ValueType.Impulse, self.pause_callback],
+            '/engine/command/stop' : [ossia.ValueType.Impulse, self.stop_callback],
+            '/engine/command/resetall' : [ossia.ValueType.String, self.reset_all_callback],
+            '/engine/command/preload' : [ossia.ValueType.String, self.load_cue_callback],
+            '/engine/command/unload' : [ossia.ValueType.String, self.unload_cue_callback],
+            '/engine/command/hwdiscovery' : [ossia.ValueType.Impulse, self.hwdiscovery_callback],
+            '/engine/command/deploy' : [ossia.ValueType.String, self.deploy_callback],
+            '/engine/command/test' : [ossia.ValueType.String, self.test_callback],
+            '/engine/comms/type' : [ossia.ValueType.String, self.comms_callback],
+            '/engine/comms/subtype' : [ossia.ValueType.String, None],
+            '/engine/comms/action' : [ossia.ValueType.String, None],
+            '/engine/comms/action_uuid' : [ossia.ValueType.String, self.action_uuid_callback],
+            '/engine/comms/value' : [ossia.ValueType.String, None],
+            '/engine/comms/data' : [ossia.ValueType.String, None]
                             }
 
         self.ossia_server.add_local_nodes(MasterOSCQueryConfData(device_name=self.cm.node_conf['uuid'], dictionary=OSC_ENGINE_CONF))
@@ -108,12 +95,12 @@ class CuemsEngine():
         try:
             self._editor_request_uuid = item['action_uuid']
         except KeyError:
-            self.editor_queue.put({"type":"error", "action":None, 'action_uuid':None, "value":"No action uuid submitted"})
+            self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
             return
 
         try:
             if item['type'] not in ['error', 'initial_settings']:
-                self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Response not recognized"})
+                self.error_to_editor(self._editor_request_uuid, "Response not recognized")
                 self._editor_request_uuid = ''
         except KeyError:
             try:
@@ -134,7 +121,7 @@ class CuemsEngine():
                     Logger.exception(f"/engine/comms/ parameters not copied because '{e}' does not exist in oscquery_slave_registered_nodes")
 
                 if item['action'] not in ['project_ready', 'hw_discovery', 'project_deploy']:
-                    self.editor_queue.put({"type":"error", "action":None, 'action_uuid':self._editor_request_uuid, "value":"Command not recognized"})
+                    self.error_to_editor(self._editor_request_uuid, "Command not recognized")
                     self._editor_request_uuid = ''
                 else:
                     if item['action'] == 'project_ready':
@@ -483,10 +470,7 @@ class CuemsEngine():
 
         # THIS LOADS THE SCRIPT
         try:
-            schema = path.join(self.cm.cuems_conf_path, 'script.xsd')
-            xml_file = path.join(self.cm.library_path, 'projects', kwargs['value'], 'script.xml')
-            reader = XmlReader( schema, xml_file )
-            self.script = reader.read_to_objects()
+            self.read_script(kwargs['value'])
         except FileNotFoundError:
             Logger.error('Project script file not found')
             if self.cm.amimaster:
@@ -784,10 +768,12 @@ class CuemsEngine():
                             + f'action_uuid : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/action_uuid"][0].value} // '
                             + f'value : {self.ossia_server.oscquery_slave_registered_nodes[f"/{device}/engine/comms/value"][0].value}')
         else:
-            Logger.debug(f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value} // '
-                        + f'action : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value} // '
-                        + f'action_uuid : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action_uuid"][0].value} // '
-                        + f'value : {self.ossia_server._oscquery_registered_nodes["/engine/comms/value"][0].value}')
+            Logger.debug(
+                f'COMMS CALLBACK: {kwargs["value"]}\ntype : {self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value} // '
+                    + f'action : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value} // '
+                    + f'action_uuid : {self.ossia_server._oscquery_registered_nodes["/engine/comms/action_uuid"][0].value} // '
+                    + f'value : {self.ossia_server._oscquery_registered_nodes["/engine/comms/value"][0].value}'
+            )
 
             if self.ossia_server._oscquery_registered_nodes["/engine/comms/type"][0].value == 'command' and self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'go':
                 self.ossia_server._oscquery_registered_nodes["/engine/comms/action"][0].value == 'command_done'

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
+    <xs:element name="CuemsNetworkMap">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="CuemsNodeDict" minOccurs="0" maxOccurs="1" type="cms:NodeDictType" />
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="NodeDictType">
+        <xs:sequence>
+            <xs:element name="CuemsNode" minOccurs="0" maxOccurs="unbounded" type="cms:NodeType" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="NodeType">
+        <xs:sequence>
+            <!-- <xs:element name="present" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/> -->
+            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="xs:string"/>
+            <xs:element name="mac" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="name" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="node_type" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="ip" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="port" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="PutType">
+        <xs:sequence>
+            <xs:element name="name" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"></xs:element>
+            <xs:element name="mappings">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="mapped_to" minOccurs="1" maxOccurs="unbounded" type="xs:string"></xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="NonEmptyString">
+        <xs:restriction base="xs:string">
+            <xs:minLength value="1" />
+            <xs:pattern value=".*[^\s].*" />
+        </xs:restriction>
+    </xs:simpleType>
+</xs:schema>

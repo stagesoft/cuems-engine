@@ -23,9 +23,10 @@ class NodeEngine(BaseEngine):
     
     """
 
-    def __init__(self):
+    def __init__(self, config: dict):
         super().__init__()
         self.cue_handler = CueHandler()
+        self.config = config
         self.set_video_players()
         self.run()
 

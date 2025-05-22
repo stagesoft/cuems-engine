@@ -231,7 +231,6 @@ def test_transmission_on_threaded_client():
     server = OssiaServer(endpoints=server_endpoints)
     client = OssiaClient(
         local_port = 9003,
-        remote_port = 9001,
         endpoints = client_endpoints
     )
 

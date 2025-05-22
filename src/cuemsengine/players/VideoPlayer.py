@@ -1,6 +1,8 @@
 from cuemsutils.log import logged
 
 from .Player import Player
+from ..osc.OssiaClient import PlayerClient
+from ..osc.endpoints import OSC_VIDEOPLAYER_CONF
 
 class VideoPlayer(Player):
     def __init__(self, port, output, path, args, media):
@@ -27,3 +29,10 @@ class VideoPlayer(Player):
 
     def port(self):
         return self._port
+
+class VideoClient(PlayerClient):
+    def __init__(self, player_port: int):
+        super().__init__(
+            local_port = player_port,
+            endpoints = OSC_VIDEOPLAYER_CONF
+        )

@@ -27,3 +27,20 @@ class OssiaClient(OssiaNodes):
     def bind_device(self, remote_type: ClientDevices):
         print(f"Using remote device: {remote_type.__annotations__}")
         self.device = remote_type(self)
+
+class NodeClient(OssiaClient):
+    def __init__(self, host: str, local_port: int, endpoints: dict):
+        super().__init__(
+            host = host,
+            local_port = local_port,
+            remote_type = ClientDevices.OSCQUERY,
+            endpoints = endpoints
+        )
+
+class PlayerClient(OssiaClient):
+    def __init__(self, player_port: int, endpoints: dict):
+        super().__init__(
+            local_port = player_port,
+            remote_type = ClientDevices.OSC,
+            endpoints = endpoints
+        )
