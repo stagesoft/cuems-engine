@@ -3,7 +3,7 @@ import uuid
 import os
 
 from cuemsutils.log import Logger
-from cuemsengine.tools.comunicate import EditorWsServer
+from cuemsengine.tools.communicate import EditorWsServer
 
 settings_dict = {}
 settings_dict['session_uuid'] = str(uuid.uuid1())

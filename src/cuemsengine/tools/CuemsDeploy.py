@@ -15,7 +15,6 @@ class CuemsDeploy():
         self.master_ip = self.__avahi_resolve(self.master_hostname)
 
         self.address = f'rsync://cuems_library_rsync@{self.master_ip}/cuems'
-
         
         if not library_path:
             self.library_path = '/opt/cuems_library/'
@@ -37,10 +36,6 @@ class CuemsDeploy():
             return ip
         except subprocess.CalledProcessError as e:
             return False
-        
-
-        
-
 
     def sync(self, path):
         #rsync -rv --files-from=/opt/cuems_library/files.tmp --log-file=/tmp/cuems_rsync.log rsync://master.local/cuems /opt/cuems_library/
@@ -61,4 +56,3 @@ class CuemsDeploy():
             errors_list.pop()
             self.errors = errors_list
             return False
-
