@@ -415,9 +415,9 @@ def test_oscquery_multiple_clients_in_separate_processes():
     from cuemsengine.osc.helpers import ServerDevices, ClientDevices
     from threading import Event
 
-    SERVER_LOCAL = 9096
-    SERVER_REMOTE = 9996
-    CLIENT_LOCAL = 9097
+    SERVER_LOCAL = 9098
+    SERVER_REMOTE = 9998
+    CLIENT_LOCAL = 9099
     server_res = Queue()
     client1_res = Queue()
     client2_res = Queue()

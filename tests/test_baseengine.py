@@ -79,7 +79,7 @@ def test_get_status(daemon):
     assert daemon.get_status('load') == 'test'
 
 def test_get_status_none(daemon, caplog):
-    assert daemon.get_status('none') is "NotFound"
+    assert daemon.get_status('none') == "NotFound"
     assert "Property none not found in EngineStatus" in caplog.text
 
 def test_set_status_none(daemon, caplog):

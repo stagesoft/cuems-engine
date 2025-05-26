@@ -64,7 +64,7 @@ allow-direct-references = true
 [tool.coverage.run]
 source_pkgs = ["cuemsengine", "tests"]
 branch = true
-parallel = true
+concurrency = ["multiprocessing"]
 omit = []
 
 [tool.coverage.paths]
