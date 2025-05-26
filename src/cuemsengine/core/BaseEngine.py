@@ -9,7 +9,6 @@ from ..tools.ConfigManager import ConfigManager
 from ..osc import ValueType
 from .SignalEngine import SignalEngine
 
-CUEMS_CONF_PATH = '/etc/cuems/'
 MTC_PORT = 10000
 
 class BaseEngine(SignalEngine):
@@ -88,7 +87,7 @@ class BaseEngine(SignalEngine):
     def set_config_manager(self) -> None:
         """Set the ConfigManager"""
         try:
-            self.cm = ConfigManager(path = CUEMS_CONF_PATH)
+            self.cm = ConfigManager()
         except FileNotFoundError:
             Logger.error('Node config file could not be found. Exiting !!!!!')
             exit(-1)
