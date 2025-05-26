@@ -3,7 +3,7 @@ import pytest
 import signal
 from unittest.mock import patch
 
-from cuemsengine.BaseEngine import BaseEngine
+from cuemsengine.core.BaseEngine import BaseEngine
 
 @pytest.fixture
 def daemon():

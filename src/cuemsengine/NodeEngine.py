@@ -1,6 +1,6 @@
 from cuemsutils.log import Logger, logged
 
-from .BaseEngine import BaseEngine
+from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CueHandler
 from .players import AudioPlayer, DmxPlayer, VideoPlayer
 
