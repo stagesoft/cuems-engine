@@ -1,9 +1,7 @@
-from threading import Thread
 from os import path, mkdir, environ, remove
 
 from cuemsutils.log import Logger, logged
-
-from ..Settings import Settings
+from cuemsutils.xml import Settings, NetworkMap, ProjectMappings
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 LIBRARY_PATH = '.local/share/cuems/'
@@ -40,6 +38,7 @@ class ConfigManager():
         self.using_default_mappings = False
 
         self.number_of_nodes = 1
+        self.project_name = ''
 
         self.load_config()
 
@@ -68,24 +67,16 @@ class ConfigManager():
 
     def _load_network_map(self):
         try:
-            netmap_file = self.conf_path('network_map.xml')
-            netmap = Settings(
-                schema='network_map',
-                xmlfile=netmap_file
-            )
-            self.network_map = netmap['CuemsNodeDict']
+            netmap = NetworkMap(self.conf_path('network_map.xml'))
+            self.network_map = netmap.xml_dict['CuemsNodeDict']
         except Exception as e:
             Logger.exception(f'Exception catched while load_network_map: {e}')
             raise e
 
     def _load_node_conf(self):
         try:
-            settings_file = self.conf_path('settings.xml')
-            engine_settings = Settings(
-                schema = 'settings',
-                xmlfile = settings_file
-            )
-            engine_settings = engine_settings['Settings']
+            engine_settings = Settings(self.conf_path('settings.xml'))
+            engine_settings = engine_settings.xml_dict['Settings']
         except Exception as e:
             Logger.exception(f'Exception catched while load_node_conf: {e}')
             raise e
@@ -116,15 +107,13 @@ class ConfigManager():
         Loads the network and node mappings.
         """
         try:
-            settings_file = self.project_path('mappings.xml')
+            settings_file = self.project_path(self.project_name, 'mappings.xml')
         except FileNotFoundError as e:
             settings_file = self.conf_path('default_mappings.xml')
 
         try:
-            self.network_mappings = Settings(
-                schema='project_mappings',
-                xmlfile=settings_file
-            )
+            self.network_mappings = ProjectMappings(settings_file)
+            self.network_mappings = self.network_mappings.xml_dict
         except Exception as e:
             Logger.exception(f'Exception in load_net_and_node_mappings: {e}')
 
@@ -187,10 +176,8 @@ class ConfigManager():
     def _load_project_mappings(self, project_uname):
         try:
             mappings_path = self.project_path(project_uname, 'mappings.xml')
-            self.project_mappings = Settings(
-                schema='project_mappings',
-                xmlfile=mappings_path
-            )
+            self.project_mappings = ProjectMappings(mappings_path)
+            self.project_mappings = self.project_mappings.xml_dict
         except FileNotFoundError as e:
             Logger.info(f'Project mappings not found. Adopting default mappings.')
             self.project_mappings = self.node_mappings

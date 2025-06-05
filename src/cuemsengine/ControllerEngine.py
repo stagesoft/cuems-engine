@@ -11,7 +11,7 @@ from .core.BaseEngine import BaseEngine
 from .tools.communicate import EditorWsServer
 from .osc import OssiaServer, ServerDevices
 
-CONTROLLER_HOST = "main.local"
+CONTROLLER_HOST = "controller.local"
 
 class ControllerEngine(BaseEngine):
     '''
@@ -40,7 +40,8 @@ class ControllerEngine(BaseEngine):
         self.engine_queue = MPQueue()
         self.editor_queue = MPQueue()
         
-        self.set_comms()
+        self.set_ws_server()
+        self.set_communicators()
 
         self.run()
 
@@ -87,6 +88,13 @@ class ControllerEngine(BaseEngine):
             )
             self.engine_queue_loop.start()
 
+    def set_communicators(self):
+        pass
+        # self.backend = Communicator(address = AddressHandler.get("backend"))
+        # self.hw_discovery = Communicator(address = AddressHandler.get("hw_discovery"))
+        # self.mtc = Communicator(address = AddressHandler.get("mtc"))
+        # self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
+
     def stop(self):
         self.stop_queues()
         self.stop_comms()
@@ -106,10 +114,26 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_comms(self):
+        self.stop_mtc()
+        self.stop_ws_server()
+
+    @logged
+    def stop_ws_server(self):
         self.ws_server.stop()
         if hasattr(self.ws_server, 'close'):
             self.ws_server.close()
         Logger.info('Websocket server stopped')
+
+    @logged
+    def stop_mtc(self):
+        stop = self.mtc.send_request({'cmd':'stop'})
+        release = self.mtc.send_request({'cmd':'release'})
+        if stop['resp'] != 'ok' or release['resp'] != 'ok':
+            Logger.error('MTC master could not be stopped')
+            Logger.error(f"Stop: {stop['resp']}")
+            Logger.error(f"Release: {release['resp']}")
+        else:
+            Logger.info('MTC master stopped')
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')

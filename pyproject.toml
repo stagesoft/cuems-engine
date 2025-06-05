@@ -23,9 +23,10 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "cuemsutils==0.0.7.post1",
+    "cuemsutils==0.0.7.post2",
     "mido==1.3.3",
-    "pyossia @ file://../libossia/build/src/ossia-python/dist/pyossia-2.0.0rc4+141.gd0976a683-cp311-cp311-linux_x86_64.whl",
+    "pyossia @ file://{root}/../libossia/build/src/ossia-python/dist/pyossia-1.0.4+1522.g55def6157-cp311-cp311-linux_x86_64.whl",
+    "python-daemon==3.1.2",
     "python-osc==1.9.3",
     "rtmidi==2.5.0",
     "zeroconf==0.146.1",
@@ -35,6 +36,10 @@ dependencies = [
 Documentation = "https://github.com/stagesoft/cuems-engine#readme"
 Issues = "https://github.com/stagesoft/cuems-engine/issues"
 Source = "https://github.com/stagesoft/cuems-engine"
+
+[project.scripts]
+node-engine = "scripts.node_engine:main"
+controller-engine = "scripts.controller_engine:main"
 
 [tool.hatch.version]
 path = "src/cuemsengine/__init__.py"

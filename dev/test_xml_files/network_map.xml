@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<cms:CuemsNetworkMap xmlns:cms="http://stagelab.net/cuems"
+<cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://stagelab.net/cuems /etc/cuems/network_map.xsd">
+    xsi:schemaLocation="https://stagelab.coop/cuems/ https://stagelab.coop/cuems/network_map.xsd">
     <CuemsNodeDict>
         <CuemsNode>
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>

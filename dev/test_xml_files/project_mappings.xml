@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<cms:CuemsProjectMappings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems /etc/cuems/project_mappings.xsd">
+<cms:CuemsProjectMappings xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/project_mappings.xsd">
     <number_of_nodes>2</number_of_nodes>
     <default_audio_input>2cf05d21cca3 system:capture_1</default_audio_input>
     <default_audio_output>2cf05d21cca3 system:playback_1</default_audio_output>

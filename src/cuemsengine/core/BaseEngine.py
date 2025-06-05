@@ -97,14 +97,14 @@ class BaseEngine(SignalEngine):
         
         # Get node name from config as a check step
         try:
-            self.node_name = str(self.cm.node_conf['name'])
+            self.node_name = str(self.cm.node_conf['uuid'])
         except KeyError:
             Logger.error('Node name not found in config. Exiting !!!!!')
             exit(-1)
 
         # Get tmp path from config as a check step
         try:
-            self.tmp_path = str(self.cm.node_conf['tmp_path'])
+            self.tmp_path = str(self.cm.tmp_path)
         except KeyError:
             Logger.error('Tmp path not found in config. Exiting !!!!!')
             exit(-1)

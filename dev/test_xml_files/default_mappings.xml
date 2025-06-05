@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<cms:CuemsProjectMappings xmlns:cms="http://stagelab.net/cuems"
+<cms:CuemsProjectMappings xmlns:cms="https://stagelab.coop/cuems/"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://stagelab.net/cuems /etc/cuems/project_mappings.xsd">
+    xsi:schemaLocation="https://stagelab.coop/cuems/ /etc/cuems/project_mappings.xsd">
     <number_of_nodes>1</number_of_nodes>
     <default_audio_input>0367f391-ebf4-48b2-9f26-000000000001_system:capture_1</default_audio_input>
     <default_audio_output>0367f391-ebf4-48b2-9f26-000000000001_system:playback_1</default_audio_output>

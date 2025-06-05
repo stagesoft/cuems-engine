@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<cms:CuemsSettings xmlns:cms="http://stagelab.net/cuems" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://stagelab.net/cuems ../cuems/settings.xsd">
+<cms:CuemsSettings xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/settings.xsd">
     <Settings>
         <library_path>/opt/cuems_library</library_path>
         <tmp_path>/tmp/cuems</tmp_path>

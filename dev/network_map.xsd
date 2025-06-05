@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
+<xs:schema targetNamespace="https://stagelab.coop/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="https://stagelab.coop/cuems">
     <xs:element name="CuemsNetworkMap">
         <xs:complexType>
             <xs:sequence>

@@ -34,15 +34,6 @@ class CuemsEngine(ControllerEngine):
         self.test_thread = threading.Thread(target=self.test_thread_function, name='test_thread')
         self._editor_request_uuid = ''
 
-        # Our empty script object
-        self.armedcues = list()
-
-        # MTC master object creation through bound library and open port
-        if self.cm.amimaster:
-            self.mtcmaster = libmtcmaster.MTCSender_create()
-
-        # MTC listener (could be usefull)
- 
         # OSSIA OSCQuery server
         self.ossia_server = OssiaServer(node_id=self.cm.node_conf['uuid'], 
                                         ws_port=self.cm.node_conf['oscquery_ws_port'], 
@@ -158,14 +149,6 @@ class CuemsEngine(ControllerEngine):
     def stop_all_threads(self):
 
         try:
-            if self.cm.amimaster:
-                libmtcmaster.MTCSender_stop(self.mtcmaster)
-                libmtcmaster.MTCSender_release(self.mtcmaster)
-                Logger.info('MTC Master released')
-        except Exception as e:
-            Logger.exception(f'MTC Master could not be released: {e}')
-
-        try:
             self.ossia_server.stop()
             self.ossia_server.join()
             Logger.info(f'Ossia server thread finished')
@@ -175,43 +158,6 @@ class CuemsEngine(ControllerEngine):
 
     #########################################################
     # Usefull callbacks and functions
-    def _update_deploy_status(self, status: str, message: str, device: str = None):
-        """Helper method to update deployment status across nodes"""
-        if device:
-            self.set_slave_node_value(device, '/engine/status', 'deploy', status)
-            self.assign_slave_nodes_values(device, {
-                'type': 'OK' if status == 'OK' else 'error',
-                'action': 'project_deploy',
-                'action_uuid': self._editor_request_uuid,
-                'value': message
-            })
-        else:
-            self.set_node_value('/engine/status', 'deploy', status)
-            self.assign_nodes_values({
-                'type': 'OK' if status == 'OK' else 'error',
-                'action': 'project_deploy',
-                'action_uuid': self._editor_request_uuid,
-                'value': message
-            })
-
-    def _handle_deploy_success(self, device: str = None):
-        """Helper method to handle successful deployment"""
-        if device:
-            Logger.info(f'Slave {device} deploy successful, OK!')
-            self._update_deploy_status('OK', 'Deploy went OK on this slave!', device)
-        else:
-            Logger.info(f'Deploy sync successful from master')
-            self._update_deploy_status('OK', 'Deploy successful!')
-
-    def _handle_deploy_error(self, error_msg: str, device: str = None):
-        """Helper method to handle deployment errors"""
-        if device:
-            Logger.error(f'Deploy failed on slave {device}: {error_msg}')
-            self._update_deploy_status('ERROR', error_msg, device)
-        else:
-            Logger.error(f'Deploy sync returned errors. {error_msg}')
-            self._update_deploy_status('ERROR', error_msg)
-
     def try_deploy(self, project_name='', tag_name='project'):
         if project_name:
             try:
@@ -221,107 +167,38 @@ class CuemsEngine(ControllerEngine):
                 )
 
                 if deploy_manager.sync(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')):
-                    self._handle_deploy_success()
+                    # If deploy is successful...
+                    Logger.info(f'Deploy sync successful from master')
+
+                    self.set_node_value('/engine/status', 'deploy', 'OK')
+                    self.assign_nodes_values({
+                        'type': 'OK',
+                        "action": 'project_deploy',
+                        'action_uuid': self._editor_request_uuid,
+                        'value': 'Deploy succesful!'
+                    })
                 else:
-                    self._handle_deploy_error(deploy_manager.errors)
+                    # If deploy is NOT succesful...
+                    Logger.error(f'Deploy sync returned errors. {deploy_manager.errors}')
+                    self.set_node_value('/engine/status', 'deploy', 'ERROR')
+                    self.assign_nodes_values({
+                        'type': 'error',
+                        'action': 'project_deploy',
+                        'action_uuid': self._editor_request_uuid,
+                        'value': deploy_manager.errors
+                    })
             except Exception as e:
+                # If deploy raised any exception...
                 Logger.error(f'Deploy raised an exception {e} after master request id : {self._editor_request_uuid}')
-                self._handle_deploy_error('Local deploy fail!')
-
-            self.deploy_requests_reset(project_name=project_name, tag_name=tag_name)
-
-    def deploy_callback(self, **kwargs):
-        try:
-            if kwargs['value'][-1] == '*':
-                return
-        except IndexError:
-            pass
-
-        # Mark back our load command on slaves
-        if self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value[-1] != '*':
-            self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value = kwargs['value'] + '*'
-
-        Logger.info(f'DEPLOY CALLBACK! -> ARGS : {kwargs["value"]}')
-
-        if not self.script and self.cm.amimaster:
-            self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Project not yet loaded!'})
-            Logger.error(f'Deploy request failed because project is not yet loaded, request id: {self._editor_request_uuid}')
-            self._editor_request_uuid = ''
-            return
-        
-        try:
-            media_fail_list = self.script_media_check()
-        except Exception as e:
-            Logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
-        
-        if media_fail_list:
-            if self.cm.amimaster:
-                self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
-                Logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
-            else:
-                deploy_request_list = []
-                for item in list(media_fail_list.keys()):
-                    deploy_request_list.append('/media/' + item + '\n')
-
-                self.log_deploy_request(project_name=self.script.unix_name, tag_name='media', file_names=deploy_request_list)
-            
-                try:
-                    self.try_deploy(project_name=self.script.unix_name, tag_name='media')
-                except Exception as e:
-                    Logger.exception(f'Exception raised while performing deploy: {e}')
-                    self._handle_deploy_error('Deploy raised an exception on this slave!')
-                else:
-                    self._handle_deploy_success()
-
-        else:
-            if self.cm.amimaster:
-                ''' LAUNCH SLAVES DEPLOYS '''
-                device_values = {
-                    'action': 'deploy',
+                self.set_node_value('/engine/status', 'deploy', 'ERROR')
+                self.assign_nodes_values({
+                    'type': 'error',
+                    'action': 'project_deploy',
                     'action_uuid': self._editor_request_uuid,
-                    'value': ''
-                }
-                for device in self.ossia_server.oscquery_slave_devices.keys():
-                    try:
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'deploy'
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+                    'value': 'Local deploy fail!'
+                })
 
-                        Logger.info(f'Calling DEPLOY via OSC on slave node {device}')
-                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/deploy'][0].value = self.script.unix_name
-                    except Exception as e:
-                        Logger.exception(e)
-
-                ''' CHECK SLAVES DEPLOYS '''
-                node_error_dict = {}
-                node_ok_list = []
-                Logger.info(f'I\'m master. Waiting for slaves to deploy...')
-                while len(node_error_dict) + len(node_ok_list) < len(self.ossia_server.oscquery_slave_devices):
-                    ok_count = 0
-                    for device in self.ossia_server.oscquery_slave_devices:
-                        if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'ERROR':
-                            node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
-                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
-                        elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'OK':
-                            Logger.info(f'Slave {device} deploy successful, OK!')
-                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
-                            node_ok_list.append(device)
-
-                    time.sleep(0.05)
-
-                if node_error_dict:
-                    Logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid} Node errors: {node_error_dict}')
-                    self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':f'Errors deploying on nodes: {node_error_dict}'})
-                else:
-                    Logger.info(f'Deploy process completed successfully on all slave nodes...')
-                    self.editor_queue.put({'type':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
-
-            else:
-                Logger.info(f'Deploy requested from master but it is not needed on this slave')
-                self._handle_deploy_success()
-
-        self._editor_request_uuid = ''
+            self.deploy_requests_reset(project_name = project_name, tag_name = tag_name)
 
     ########################################################
     # OSC devices usefull methods
@@ -757,6 +634,130 @@ class CuemsEngine(ControllerEngine):
 
         except Exception as e:
             Logger.exception(e)
+
+    def deploy_callback(self, **kwargs):
+        try:
+            if kwargs['value'][-1] == '*':
+                return
+        except IndexError:
+            pass
+
+        # Mark back our load command on slaves
+        if self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value and self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value[-1] != '*':
+            self.ossia_server._oscquery_registered_nodes[f'/engine/command/deploy'][0].value = kwargs['value'] + '*'
+
+        Logger.info(f'DEPLOY CALLBACK! -> ARGS : {kwargs["value"]}')
+
+        if not self.script and self.cm.amimaster:
+            # First the user should load/ready a project to try to deploy it... ERROR to UI!
+            self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Project not yet loaded!'})
+            Logger.error(f'Deploy request failed because project is not yet loaded, request id: {self._editor_request_uuid}')
+            self._editor_request_uuid = ''
+            return
+        
+        try:
+            # Check local needs for script media
+            media_fail_list = self.script_media_check()
+        except Exception as e:
+            Logger.exception(f'Exception raised while performing media check: {type(e)} {e}')
+        
+        if media_fail_list:
+            if self.cm.amimaster:
+                # If local media check failed and I'm master... ERROR to UI!
+                self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'Master local media check failed, check logs.'})
+                Logger.error(f'Master local media check failed after deploy ws request, request id: {self._editor_request_uuid}')
+            else:
+                deploy_request_list = []
+                for item in list(media_fail_list.keys()):
+                    deploy_request_list.append('/media/' + item + '\n')
+
+                self.log_deploy_request(project_name=self.script.unix_name, tag_name='media', file_names=deploy_request_list)
+            
+                # If local media check failed and I'm slave... Try to deploy from master...
+                try:
+                    self.try_deploy(project_name=self.script.unix_name, tag_name='media')
+                except Exception as e:
+                    Logger.exception(f'Exception raised while performing deploy: {e}')
+                    self.set_node_value('/engine/status', 'deploy', 'ERROR')
+                    self.assign_nodes_values({
+                        'type': 'error',
+                        'action': 'project_deploy',
+                        'action_uuid': self._editor_request_uuid,
+                        'value': 'Deploy raised and exception on this slave!'
+                    })
+                else:
+                    self.set_node_value('/engine/status', 'deploy', 'OK')
+                    self.assign_nodes_values({
+                        'type': 'OK',
+                        'action': 'project_deploy',
+                        'action_uuid': self._editor_request_uuid,
+                        'value': 'Deploy went OK on this slave!'
+                    })
+
+        else:
+            if self.cm.amimaster:
+                ''' LAUNCH SLAVES DEPLOYS '''
+                # Call OSC go on all slaves:
+                # by the moment we are using the direct /engine/command/deploy callback on the slaves
+                device_values = {
+                    'action': 'deploy',
+                    'action_uuid': self._editor_request_uuid,
+                    'value': ''
+                }
+                for device in self.ossia_server.oscquery_slave_devices.keys():
+                    try:
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/type'][0].value = 'command'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action'][0].value = 'deploy'
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/action_uuid'][0].value = self._editor_request_uuid
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/comms/value'][0].value = ''
+
+                        Logger.info(f'Calling DEPLOY via OSC on slave node {device}')
+                        self.ossia_server.oscquery_slave_registered_nodes[f'/{device}/engine/command/deploy'][0].value = self.script.unix_name
+                    except Exception as e:
+                        Logger.exception(e)
+
+                ''' CHECK SLAVES DEPLOYS '''
+                # Check slaves deploy return
+                node_error_dict = {}
+                node_ok_list = []
+                Logger.info(f'I\'m master. Waiting for slaves to deploy...')
+                while len(node_error_dict) + len(node_ok_list) < len(self.ossia_server.oscquery_slave_devices):
+                    ok_count = 0
+                    for device in self.ossia_server.oscquery_slave_devices:
+                        if self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'ERROR':
+                            node_error_dict[device] = self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/comms/value'][0].value
+                            # Reset the status field
+                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
+                        elif self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == 'OK':
+                            Logger.info(f'Slave {device} deploy successfull, OK!')
+                            # Reset the status field
+                            self.ossia_server._oscquery_registered_nodes[f'/{device}/engine/status/deploy'][0].value == ''
+                            node_ok_list.append(device)
+
+                    time.sleep(0.05)
+
+                if node_error_dict:
+                    # Some slave could not load the project
+                    Logger.error(f'Deploy failed in some slave node. Editor request id: {self._editor_request_uuid} Node errors: {node_error_dict}')
+                    self.editor_queue.put({'type':'error', 'action':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':f'Errors deploying on nodes: {node_error_dict}'})
+                else:
+                    Logger.info(f'Deploy process completed succesfully on all slave nodes...')
+                    self.editor_queue.put({'type':'project_deploy', 'action_uuid':self._editor_request_uuid, 'value':'OK'})
+
+            else:
+                # Deploy is not needed on this slave...
+                Logger.info(f'Deploy requested from master but it is not needed on this slave')
+
+                self.ossia_server._oscquery_registered_nodes['/engine/status/deploy'][0].value = 'OK'
+
+                self.assign_nodes_values({
+                    'type': 'OK',
+                    'action': 'project_deploy',
+                    'action_uuid': self._editor_request_uuid,
+                    'value': 'Deploy not needed on this slave!'
+                })
+
+        self._editor_request_uuid = ''
 
     def comms_callback(self, **kwargs):
         Logger.info(f'COMMS CALLBACK! -> ARGS : {kwargs["value"]}')
