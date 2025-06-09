@@ -20,7 +20,8 @@ class EngineStatus:
         self.currentcue = None
         self.nextcue = None
         self.running = None
-    
+        self.test_recieved = 0
+
     @property
     def load(self) -> str:
         return self._load
@@ -116,7 +117,8 @@ class EngineStatus:
     @test.setter
     def test(self, value: str) -> None:
         self._test = value
-        self.test_recieved = value
+        if value is not None:
+            self.test_recieved += 1
 
     @property
     def test_recieved(self) -> int:
@@ -124,7 +126,7 @@ class EngineStatus:
 
     @test_recieved.setter
     def test_recieved(self, value: int) -> None:
-        pass
+        self._recieved = value
 
     @property
     def timecode(self) -> int:

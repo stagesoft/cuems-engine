@@ -11,19 +11,19 @@ class SignalEngine:
     """
     A class that handles system signals and status tracking.
     """
-    def __init__(self):
+    def __init__(self, with_signals: bool = True):
         self.status = EngineStatus()
         self.pid = getpid()
         Logger.info(f"Starting {self.__class__.__name__} with PID {self.pid}")
         self.running = False
         self.show_locked = False
 
-        self.register_signals()
+        if with_signals:
+            self.register_signals()
 
     ### RUNNING LOGIC ###
     @logged
     def start(self) -> None:
-        self.register_signals()
         self.running = True
         Logger.info(f"{self.__class__.__name__} started")
         self.run()
@@ -98,7 +98,7 @@ class SignalEngine:
             try:
                 with open(SHOW_LOCK_PATH, 'w') as file:
                     file.write(' ')
-                Logger.warning("/tmp/cuems.show.lock file written...")
+                Logger.info("/tmp/cuems.show.lock file written...")
                 self.show_locked = True
             except:
                 Logger.warning("Could not write show lock file")
@@ -107,7 +107,7 @@ class SignalEngine:
         if path.isfile(SHOW_LOCK_PATH):
             try:
                 remove(SHOW_LOCK_PATH)
-                Logger.warning("/tmp/cuems.show.lock file removed...")
+                Logger.info("/tmp/cuems.show.lock file removed...")
                 self.show_locked = False
             except OSError:
                 Logger.warning("Could not delete master lock file")
@@ -140,7 +140,8 @@ class SignalEngine:
 
     def handle_print_all(self, sigNum, frame) -> None:
         Logger.info(f"STATUS REQUEST BY SIGUSR2 SIGNAL {sigNum}")
-        self.print_all_status()
+        if hasattr(self, 'print_all_status'):
+            self.print_all_status()
 
     def handle_print_running(self, sigNum, frame) -> None:
         run_str = "" if self.running else " NOT"
