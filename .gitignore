@@ -19,3 +19,5 @@ nohup.out
 
 dev/local/
 site/
+.venv/*
+!.venv/pyvenv.cfg
