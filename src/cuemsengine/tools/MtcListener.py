@@ -48,7 +48,10 @@ class MtcListener(Thread):
             # print("hay port")
 
     def run(self):
-        self.port = mido.open_input(self.port_name, callback= self.__handle_message) # pylint: disable=maybe-no-member
+        self.port = mido.open_input(
+            self.port_name,
+            callback = self.__handle_message
+        ) # pylint: disable=maybe-no-member
 
         Logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
 

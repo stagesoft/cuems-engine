@@ -9,7 +9,7 @@ from ..tools.ConfigManager import ConfigManager
 from ..osc import ValueType
 from .SignalEngine import SignalEngine
 
-MTC_PORT = 10000
+MTC_PORT = "Midi Through Port-0"
 
 class BaseEngine(SignalEngine):
     def __init__(self, with_cm: bool = True, with_mtc: bool = True):
@@ -73,8 +73,9 @@ class BaseEngine(SignalEngine):
             self.mtc_listener = MtcListener(
                 port=self.mtc_port,
                 step_callback = mtc_step,
-                reset_callback = mtc_reset,
+                reset_callback = mtc_reset
             )
+            self.mtc_listener.run()
         else:
             Logger.error('MTC port not set, cannot create MtcListener')
             self.stop()
