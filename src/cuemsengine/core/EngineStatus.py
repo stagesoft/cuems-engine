@@ -1,7 +1,9 @@
 
 class EngineStatus:
+    """
+    A class that represents the status of an engine.
+    """
     def __init__(self):
-        # Set all properties to None
         self.load = None
         self.loadcue = None
         self.go = None

@@ -24,4 +24,4 @@ jobs:
       run: pip install mkdocs mkdocs-material mkdocstrings-python
 
     - name: Deploy to GitHub Pages
-      run: PYTHONPATH=src mkdocs gh-deploy --force
+      run: mkdocs gh-deploy --force

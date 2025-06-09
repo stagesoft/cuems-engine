@@ -13,6 +13,13 @@ MTC_PORT = 10000
 
 class BaseEngine(SignalEngine):
     def __init__(self, with_cm: bool = True, with_mtc: bool = True):
+        """
+        Initialize the BaseEngine.
+
+        Args:
+            with_cm (bool): Whether to initialize the ConfigManager. Default is True.
+            with_mtc (bool): Whether to initialize the MTC listener. Default is True.
+        """
         super().__init__()
         self.node_name = None
         self.mtc_port = MTC_PORT
