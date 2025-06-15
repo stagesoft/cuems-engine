@@ -206,7 +206,7 @@ class ControllerEngine(BaseEngine):
             'value': value
         })
 
-    def error_to_editor(self, action_uuid, value):
+    def error_to_editor(self, action_uuid, value, action = None):
         self.put_to_editor(
-            'error', None, action_uuid, value
+            'error', action, action_uuid, value
         )
