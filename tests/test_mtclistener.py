@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import mido
 from cuemsengine.tools.MtcListener import MtcListener
-from cuemsutils.CTimecode import CTimecode
+from cuemsutils.tools.CTimecode import CTimecode
 
 class TestMtcListener:
     @pytest.fixture

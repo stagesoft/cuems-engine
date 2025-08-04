@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import mido
+from typing import Callable
 from threading import Thread
 
-from cuemsutils.CTimecode import CTimecode
 from cuemsutils.log import Logger
+from cuemsutils.tools.CTimecode import CTimecode
 
 class MtcListener(Thread):
-    def __init__(self, step_callback=None, reset_callback=None, port=None):
+    def __init__(self, step_callback: Callable | None = None, reset_callback: Callable | None = None, port: str | None = None):
         # self.main_tc = CTimecode('0:0:0:0')
         self.main_tc = CTimecode()
         self.main_tc.set_fractional(True)
@@ -27,19 +28,19 @@ class MtcListener(Thread):
         return self.main_tc
 
     def milliseconds(self):
-        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))
+        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate))) # type: ignore[attr-defined]
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
         if (self.main_tc.milliseconds == 0):
-            if self.step_callback != None:
+            if self.step_callback != None and self.reset_callback != None:
                 self.reset_callback()
         if self.step_callback != None:
             self.step_callback(self.main_tc) 
 
     def __open_port(self, port):
         if port == None:
-            ports = mido.get_input_names() # pylint: disable=maybe-no-member
+            ports = mido.get_input_names() # type: ignore[attr-defined]
             mtc_ports = [s for s in ports if "mtc" in s.lower()]
             self.port_name = mtc_ports[-1] if mtc_ports else ports[-1]
             #Logger.info ('Listener MIDI port: ' + self.port_name)
@@ -48,10 +49,10 @@ class MtcListener(Thread):
             # print("hay port")
 
     def run(self):
-        self.port = mido.open_input(
+        self.port = mido.open_input( # type: ignore[attr-defined]
             self.port_name,
             callback = self.__handle_message
-        ) # pylint: disable=maybe-no-member
+        )
 
         Logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
 
@@ -103,8 +104,9 @@ class MtcListener(Thread):
             mtc_index = 3 - piece//2    # quarter frame pieces are in reverse order of mtc_encode
             this_frame = frame_pieces[piece]
             if this_frame is bytearray or this_frame is list:
-                this_frame = this_frame[1]
-            data = this_frame & 15      # ignore the frame_piece marker bits
+                this_frame = this_frame[1] # type: ignore[index]
+            # ignore the frame_piece marker bits
+            data = this_frame & 15      # type: ignore[operator]
             if piece % 2 == 0:
                 # 'even' pieces came from the low nibble
                 # and the first piece is 0, so it's even
