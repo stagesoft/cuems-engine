@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cms:CuemsSettings xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/settings.xsd">
     <Settings>
+        <conf_path>/etc/cuems</conf_path>
         <library_path>/opt/cuems_library</library_path>
         <tmp_path>/tmp/cuems</tmp_path>
         <database_name>project-manager.db</database_name>
         <show_lock_file>show.lock</show_lock_file>
+        <editor_url>formitgo.local</editor_url>
+        <controller_url>controller.local</controller_url>
+        <templates_path>/usr/share/cuems</templates_path>
+        <controller_interfaces_template>interfaces.controller</controller_interfaces_template>
+        <node_interfaces_template>interfaces.node</node_interfaces_template>
+        <controller_lock_file>controller.lock</controller_lock_file>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
             <mac>2cf05d21cca3</mac>

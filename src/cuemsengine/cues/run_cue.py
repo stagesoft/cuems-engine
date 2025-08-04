@@ -3,7 +3,7 @@ from functools import singledispatch
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
-from cuemsutils.CTimecode import CTimecode
+from cuemsutils.tools.CTimecode import CTimecode
 
 @singledispatch
 def run_cue(cue: Cue, ossia, mtc):

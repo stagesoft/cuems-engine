@@ -4,7 +4,7 @@ from time import sleep
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from cuemsutils.CommunicatorServices import Communicator
+from cuemsutils.tools.CommunicatorServices import Communicator
 # from cuemsutils.AddressHandler import AddressHandler
 
 from .core.BaseEngine import BaseEngine
@@ -35,13 +35,14 @@ class ControllerEngine(BaseEngine):
       - Handling the MTC master system
       - Handling the NodeConf system
     '''
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.engine_queue = MPQueue()
         self.editor_queue = MPQueue()
         
-        self.set_ws_server()
-        self.set_communicators()
+        # self.set_ws_server()
+        self.set_comms()
+        self.set_editor_request('')
 
         self.run()
 
@@ -49,6 +50,7 @@ class ControllerEngine(BaseEngine):
     def set_comms(self):
         self.set_ws_server()
         self.set_oscquery_server()
+        self.set_communicators()
 
     def set_ws_server(self):
         """Set the websocket server for the front-end"""
@@ -59,7 +61,8 @@ class ControllerEngine(BaseEngine):
             'tmp_path': self.cm.tmp_path,
             'database_name': self.cm.database_name,
             'load_timeout': self.cm.node_conf['load_timeout'],
-            'discovery_timeout': self.cm.node_conf['discovery_timeout']
+            'discovery_timeout': self.cm.node_conf['discovery_timeout'],
+            'websocket_port': self.cm.node_conf['websocket_port']
         }
         self.ws_server = EditorWsServer(
             self.engine_queue,
@@ -70,7 +73,7 @@ class ControllerEngine(BaseEngine):
         self._editor_request_uuid = ''
         
         try:
-            self.ws_server.start(self.cm.node_conf['websocket_port'])
+            self.ws_server.start()
         except KeyError:
             self.stop()
             Logger.error('Config error, websocket_port key not found in settings. Exiting.')
@@ -80,13 +83,12 @@ class ControllerEngine(BaseEngine):
             Logger.error('Exception when starting websocket server. Exiting.')
             Logger.error(e)
             exit(-1)
-        else:
-            # Threaded own queue consumer loop
-            self.engine_queue_loop = Thread(
-                target=self.engine_queue_consumer,
-                name='engineq_consumer'
-            )
-            self.engine_queue_loop.start()
+        # Threaded own queue consumer loop
+        # self.engine_queue_loop = Thread(
+        #     target=self.engine_queue_consumer,
+        #     name='engineq_consumer'
+        # )
+        # self.engine_queue_loop.start()
 
     def set_communicators(self):
         pass
@@ -104,7 +106,8 @@ class ControllerEngine(BaseEngine):
     def stop_queues(self):
         while not self.engine_queue.empty():
             self.engine_queue.get()
-        self.engine_queue_loop.join()
+        # if self.engine_queue_loop:
+        #     self.engine_queue_loop.join()
         self.engine_queue.close()
 
         while not self.editor_queue.empty():
@@ -114,8 +117,10 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_comms(self):
-        self.stop_mtc()
-        self.stop_ws_server()
+        if self.mtc:
+            self.stop_mtc()
+        if self.ws_server:
+            self.stop_ws_server()
 
     @logged
     def stop_ws_server(self):
@@ -178,7 +183,7 @@ class ControllerEngine(BaseEngine):
     def handle_editor_command(self, action, value):
         command_dict = {
             'project_deploy': self.deploy_callback,
-            'project_ready': self.load_project_callback,
+            'project_ready': self.load_project,
             'hw_discovery': self.hw_discovery_callback
         }
         if action in command_dict.keys():
@@ -192,11 +197,21 @@ class ControllerEngine(BaseEngine):
             server = ServerDevices.OSCQUERY
         )
 
+    def set_oscquery_values(self, values: dict):
+        for key, value in values.items():
+            self.oscquery_server.set_value(key, value)
+
     def register_node_engines(self) -> None:
         """Register the NodeEngines in the OSCQuery server"""
         for host in self.find_hosts():
             endpoints = self.build_status_endpoints(host)
             self.oscquery_server.create_endpoints(endpoints)
+
+    def set_editor_request(self, value):
+        self._editor_request_uuid = value
+
+    def get_editor_request(self):
+        return self._editor_request_uuid
 
     def put_to_editor(self, type, action, action_uuid, value):
         self.editor_queue.put({
@@ -206,7 +221,50 @@ class ControllerEngine(BaseEngine):
             'value': value
         })
 
-    def error_to_editor(self, action_uuid, value, action = None):
+    def error_to_editor(self, value, action_uuid = None, action = None):
+        if not action_uuid:
+            action_uuid = self.get_editor_request()
+        if not action:
+            action = 'error'
         self.put_to_editor(
             'error', action, action_uuid, value
         )
+
+    def load_project(self, project_name):
+        Logger.info(f'Loading project {project_name}')
+        self.reset_script()
+        
+        try:
+            self.cm.load_project_config(project_name)
+        except Exception as e:
+            Logger.error(f'Error loading project config: {e}')
+            self.error_to_editor(
+                f"Project config error: {e}",
+                'project_ready'
+            )
+            self.set_editor_request('')
+            return
+
+        try:
+            self.read_script(project_name)
+        except Exception as e:
+            Logger.error(f'Error loading project script: {e}')
+            self.error_to_editor(
+                f"Project script error: {e}",
+                'project_ready'
+            )
+            self.set_editor_request('')
+            return
+        
+        Logger.info(f'Script from {project_name} loaded')
+        self.script.unix_name = project_name
+
+        self.set_oscquery_values({
+            '/engine/command/load': project_name
+        })
+
+        # Confirm the project is loaded
+        self.set_status('load', project_name)
+        self.set_show_lock_file()
+        self.set_editor_request('')
+        Logger.info(f'Project {project_name} loaded')

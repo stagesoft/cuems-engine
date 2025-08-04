@@ -1,10 +1,10 @@
 """Utilites to call the hardware discovery tool."""
 from cuemsutils.log import logged
-from cuemsutils.CommunicatorServices import Communicator
+from cuemsutils.tools.CommunicatorServices import Communicator
 
-HWDISCOVERY_IPC = 'ipc:///tmp/hwdiscovery.ipc'
-NODECONF_IPC = 'ipc:///tmp/nodeconf.ipc'
-EDITOR_IPC = 'ipc:///tmp/editor.ipc'
+HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
+NODECONF_IPC = '/tmp/nodeconf.ipc'
+EDITOR_IPC = '/tmp/editor.ipc'
 
 def communicate(ipc: str):
     """

@@ -2,6 +2,7 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CueHandler
+from .tools.CuemsDeploy import CuemsDeploy
 from .players import AudioPlayer, DmxPlayer, VideoPlayer
 from .osc import ValueType
 
@@ -23,12 +24,31 @@ class NodeEngine(BaseEngine):
       - Providing a clean interface for monitoring player status
     
     """
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.deploy_manager = CuemsDeploy(
+            library_path=self.cm.library_path,
+            tmp_path=self.cm.tmp_path
+        )
         self.cue_handler = CueHandler()
         self.set_video_players()
         self.run()
+
+    def load_project(self, project):
+        """Load the project files to the node"""
+        # Obtain the project files
+        self.deploy_project(project)
+        self.cm.load_project_config(project)
+        self.read_script(project)
+        self.deploy_media(project)
+
+        # Start cue dependencies
+        self.set_video_players()
+
+        # Confirm the project is loaded
+        self.set_show_lock_file()
+        self.set_status('load', project)
+        Logger.info(f'Project {project} loaded')
 
     @logged
     def stop(self):
@@ -46,16 +66,17 @@ class NodeEngine(BaseEngine):
         self.disconnect_video_devs()
         self.unload_video_devs()
 
-    def set_video_players(self):
-        """Set the video players"""
-        self._video_players = {}
-        try:
-            self.check_video_devs()
-        except Exception as e:
-            Logger.error(f'Error checking & starting video devices...')
-            Logger.error(e)
-            Logger.error(f'Exiting...')
-            exit(-1)
+    def deploy_project(self, project):
+        """Deploy the project files to the node"""
+        self.deploy_manager.sync_files(project, 'project')
+
+    def deploy_media(self, project):
+        """Deploy the media files to the node"""
+        if not self.script:
+            Logger.error('No script loaded')
+            return
+        file_names = self.script.get_own_media(config=self.cm)
+        self.deploy_manager.sync_files(project, 'media', file_names)
 
     # Check functions
     def check_audio_devs(self):
@@ -124,6 +145,21 @@ class NodeEngine(BaseEngine):
                 Logger.info('No video outputs detected.')
         except Exception as e:
             Logger.exception(f'Exception raise when checking video outputs: {e}.')
+    
+    def check_dmx_devs(self):
+        pass
+
+    # Video functions
+    def set_video_players(self):
+        """Set the video players"""
+        self._video_players = {}
+        try:
+            self.check_video_devs()
+        except Exception as e:
+            Logger.error(f'Error checking & starting video devices...')
+            Logger.error(e)
+            Logger.error(f'Exiting...')
+            exit(-1)
 
     def quit_video_devs(self):
         for dev in self._video_players.values():
@@ -149,6 +185,3 @@ class NodeEngine(BaseEngine):
                 self.ossia_server.osc_player_registered_nodes[key][0].value = ''
             except Exception as e:
                 Logger.debug(f'Exception while unloading video players: {e}')
-
-    def check_dmx_devs(self):
-        pass
