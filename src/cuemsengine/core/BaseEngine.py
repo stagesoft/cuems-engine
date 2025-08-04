@@ -1,40 +1,45 @@
 from functools import partial
-from os import path
-from cuemsutils.CTimecode import CTimecode
+from os import path, remove
+
 from cuemsutils.log import Logger, logged
 from cuemsutils.xml import XmlReaderWriter
+from cuemsutils.tools.CTimecode import CTimecode
+from cuemsutils.tools.ConfigManager import ConfigManager
+from cuemsutils.tools.SignalEngine import SignalEngine
 
+from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
-from ..tools.ConfigManager import ConfigManager
 from ..osc import ValueType
-from .SignalEngine import SignalEngine
 
 MTC_PORT = "Midi Through Port-0"
+SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
 
 class BaseEngine(SignalEngine):
-    def __init__(self, with_cm: bool = True, with_mtc: bool = True):
+    def __init__(self, with_cm: bool = True, with_mtc: bool = True, with_signals: bool = True):
         """
         Initialize the BaseEngine.
 
         Args:
             with_cm (bool): Whether to initialize the ConfigManager. Default is True.
             with_mtc (bool): Whether to initialize the MTC listener. Default is True.
+            with_signals (bool): Whether to initialize the SignalEngine. Default is True.
         """
-        super().__init__()
+        # Engine parameters
+        self.go_offset = 0
+        self.script = None
+        self.stop_requested = False
         self.node_name = None
+        self.node_host = None
         self.mtc_port = MTC_PORT
-        self._timecode = None
+        self.timecode = None
+        self.status = EngineStatus()
 
+        super().__init__(with_signals=with_signals)
+    
         if with_cm:
             self.set_config_manager()
         if with_mtc:
             self.set_mtc_listener()
-    
-        # Engine parameters
-        self.go_offset = 0
-        self.node_host = f"http://{self.node_name}.local"
-        self.script = None
-        self.stop_requested = False
 
         ## dev: CUE "POINTERS":
         # here we use the "standard" point of view that there is an
@@ -47,18 +52,56 @@ class BaseEngine(SignalEngine):
         Logger.info(f"{self.__class__.__name__}@{self.node_name} initialized, waiting start signal")
 
     @property
-    def timecode(self) -> str:
+    def timecode(self) -> str | None:
         return self._timecode
     
     @timecode.setter
-    def timecode(self, value: str) -> None:
+    def timecode(self, value: str | None) -> None:
         self._timecode = value
         if hasattr(self, 'on_timecode_change'):
-            self.on_timecode_change(value)
+            self.on_timecode_change(value) # type: ignore[attr-defined]
 
     def stop_all(self) -> None:
         self.stop_mtc_listener()
-        self.cm.join()
+        self.remove_show_lock_file()
+        self.stop()
+
+    ### STATUS ###
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
+        """Set the status of the engine
+        
+        Args:
+            property (str): The property to set
+            value (str): The value to set
+            strict (bool): If True, raise an AttributeError if the property is not found
+        """
+        if f"_{property}" in self.status.__dict__.keys():
+            Logger.debug(f'Setting {property} to {value}')
+            self.status.__setattr__(property, value)
+        else:
+            Logger.error(f'Property {property} not found in EngineStatus')
+            if strict:
+                raise AttributeError(f'Property {property} not found in EngineStatus')
+    
+    def get_status(self, property: str, strict: bool = False) -> str:
+        """Get the status of the engine
+        
+        Args:
+            property (str): The property to get
+            strict (bool): If True, raise an AttributeError if the property is not found
+        """
+        value = getattr(self.status, property, "NotFound")
+        if value == "NotFound":
+            Logger.error(f'Property {property} not found in EngineStatus')
+            if strict:
+                raise AttributeError(f'Property {property} not found in EngineStatus')
+        return value
+    
+    def status_callback(self, endpoint: str, value: str) -> None:
+        """Callback for the status endpoint"""
+        Logger.debug(f'Status callback received: {endpoint} = {value}')
+        parameter = endpoint.split('/')[-1]
+        self.set_status(parameter, value)
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:
@@ -87,6 +130,13 @@ class BaseEngine(SignalEngine):
             self.mtc_listener.join()
             self.mtc_listener = None
 
+    def reset_script(self) -> None:
+        if self.script:
+            self.script = None
+            self.ongoing_cue = None
+            self.next_cue_pointer = None
+            self.go_offset = 0
+
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset:
             self.timecode = mtc.milliseconds - self.go_offset
@@ -94,15 +144,17 @@ class BaseEngine(SignalEngine):
     ### CONFIG MANAGER ###
     def set_config_manager(self) -> None:
         """Set the ConfigManager"""
+        from cuemsutils.xml import ProjectMappings
         try:
-            self.cm = ConfigManager()
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
         except FileNotFoundError:
             Logger.error('Node config file could not be found. Exiting !!!!!')
             exit(-1)
         except Exception as e:
             Logger.error(f'Exception while loading config: {e}')
             exit(-1)
-        
+        Logger.info(f'Node conf: {self.cm.node_conf}')
         # Get node name from config as a check step
         try:
             self.node_name = str(self.cm.node_conf['uuid'])
@@ -148,31 +200,7 @@ class BaseEngine(SignalEngine):
         '''
 
         Logger.info(f'MTC: {self.mtc_listener.timecode()}')
-
-    ### DEPLOY ###
-    def deploy_requests_reset(self, project_name='', tag_name=''): # DEV: static with tmp_path parameter
-        path_to_reset = path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log')
-        with open(path_to_reset, 'w') as f:
-            Logger.info(f'Rsync requests log file {path_to_reset} emptied!!')
             
-
-    def log_deploy_request(self, project_name='', tag_name='project', file_names=[]): # DEV: static with tmp_path parameter
-        if project_name:
-            if tag_name == 'project':
-               file_names = [
-                   '/projects/' + project_name + '/script.xml\n',
-                    '/projects/' + project_name + '/mappings.xml\n', 
-                    '/projects/' + project_name + '/settings.xml\n'
-                ]
-            try:
-                with open(path.join(self.cm.tmp_path, f'rsync_request_{project_name}_{tag_name}.log'), 'w') as f:
-                    f.writelines(file_names)
-            except Exception as e:
-                Logger.error(f'Exception raised when writing rsync request log file: {e}')
-                return False
-            else:
-                return True
-
     def build_status_endpoints(self, host: str) -> dict:
         """Build the endpoints for a NodeEngine"""
         keys = self.status.__dict__.keys()
@@ -184,10 +212,33 @@ class BaseEngine(SignalEngine):
             ]
         return endpoints
 
+    ### SHOW LOCK FILE ###
+    def set_show_lock_file(self): # DEV: static
+        if not path.isfile(SHOW_LOCK_PATH):
+            try:
+                with open(SHOW_LOCK_PATH, 'w') as file:
+                    file.write(' ')
+                Logger.info("/tmp/cuems.show.lock file written...")
+                self.show_locked = True
+            except:
+                Logger.warning("Could not write show lock file")
+
+    def remove_show_lock_file(self): # DEV: static
+        if path.isfile(SHOW_LOCK_PATH):
+            try:
+                remove(SHOW_LOCK_PATH)
+                Logger.info("/tmp/cuems.show.lock file removed...")
+                self.show_locked = False
+            except OSError:
+                Logger.warning("Could not delete master lock file")
+
     @logged
     def read_script(self, project_name: str) -> None:
         xml_file = path.join(self.cm.library_path, 'projects', project_name, 'script.xml')
         if not path.isfile(xml_file):
             raise FileNotFoundError(f'Script file {xml_file} not found')
-        reader = XmlReaderWriter(xml_file = xml_file)
+        reader = XmlReaderWriter(
+            schema_name = 'script',
+            xmlfile = xml_file
+        )
         self.script = reader.read_to_objects()

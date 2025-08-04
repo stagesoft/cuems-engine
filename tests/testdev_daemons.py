@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 from cuemsengine.NodeEngine import NodeEngine
 from cuemsengine.ControllerEngine import ControllerEngine
-from cuemsengine.core.daemon import run_daemon
+from cuemsutils.daemon import run_daemon
 from cuemsutils.log import Logger
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def mock_config_path():
     def mock_conf_path(file):
         return test_conf_path / file
         
-    with patch('cuemsengine.tools.ConfigManager.ConfigManager.conf_path', 
+    with patch('cuemsutils.tools.ConfigManager.ConfigManager.conf_path', 
                side_effect=mock_conf_path):
         yield test_conf_path
 

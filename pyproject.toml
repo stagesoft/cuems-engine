@@ -23,13 +23,11 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "cuemsutils==0.0.7.post2",
+    "cuemsutils @ file:///disk/Projects/StageLab/cuems-utils/dist/cuemsutils-0.0.9rc3-py3-none-any.whl#sha1=204ff7ad4ed4a71762f73a32bad93da95a092676",
     "mido==1.3.3",
-    "pyossia==1.0.4",
+    "python-rtmidi",
     "python-daemon==3.1.2",
     "python-osc==1.9.3",
-    "rtmidi==2.5.0",
-    "zeroconf==0.146.1",
 ]
 
 [project.urls]
