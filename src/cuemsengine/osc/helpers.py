@@ -1,5 +1,10 @@
 from enum import Enum
-from pyossia.ossia_python import OSCDevice, OSCQueryDevice
+from typing import Callable, Union
+from pyossia.ossia_python import OSCDevice, OSCQueryDevice # type: ignore[attr-defined]
+
+# Type aliases for device setup functions
+ServerSetupFunction = Callable[..., bool]
+ClientSetupFunction = Callable[..., Union[OSCDevice, OSCQueryDevice]]
 
 def new_osc_device(cls) -> OSCDevice:
     """An OSC device is required to deal with a remote application using OSC protocol

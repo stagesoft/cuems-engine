@@ -1,8 +1,11 @@
 from inspect import signature
 from pyossia import Node, ValueType, ossia
-from typing import Union
-
+from typing import Union, Any
+from time import sleep
 from cuemsutils.log import logged
+
+CLEANUP_DELAY = 0.3
+STARTUP_DELAY = 0.3
 
 class OssiaNodes(object):
     """Manage a collection of OSC nodes.
@@ -52,6 +55,17 @@ class OssiaNodes(object):
         """
         del self.nodes[path]
 
+    def remove_device(self) -> None:
+        """Remove the device and all nodes from the collection
+        """
+        node_keys = list(self.nodes.keys())
+        for node in node_keys:
+            self.remove_node(node)
+        self.nodes = {}
+        del self.device
+        sleep(CLEANUP_DELAY)
+        self.device = None
+
     @staticmethod
     def set_parameter(node: Node, value_type, callback = None, value = None):
         """Set a parameter to a node
@@ -80,18 +94,18 @@ class OssiaNodes(object):
                 node = self.nodes[node]
             except KeyError:
                 raise ValueError("Node not found")
-        node.parameter.push_value(value)
-        if node.parameter.value != value:
+        node.parameter.push_value(value) # type: ignore[attr-defined]
+        if node.parameter.value != value: # type: ignore[attr-defined]
             raise ValueError(f"Could not set {str(node)} to {value}")
 
-    def create_endpoint(self, path: str, param_args: list = None):
+    def create_endpoint(self, path: str, param_args: list | None = None):
         """Create an endpoint as a node with parameter
         """
         self.set_node(path)
         if param_args and isinstance(param_args, list):
             self.set_parameter(self.nodes[path], *param_args)
 
-    def create_endpoints(self, paths: Union[dict, list]):
+    def create_endpoints(self, paths: dict[str, Any] | list[str]):
         """Create multiple endpoints
         """
         if isinstance(paths, list):
@@ -100,3 +114,7 @@ class OssiaNodes(object):
         elif isinstance(paths, dict):
             for path, params in paths.items():
                 self.create_endpoint(path, params)
+
+    def __del__(self):
+        self.remove_device()
+        del self
