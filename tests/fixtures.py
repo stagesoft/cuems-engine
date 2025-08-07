@@ -1,6 +1,7 @@
 from pytest import fixture
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 from cuemsengine.core.BaseEngine import MTC_PORT
+from pathlib import Path
 
 @fixture
 def mock_config_manager():
@@ -66,3 +67,52 @@ def ossia_server_factory():
         finally:
             del server
     yield create_server
+
+
+@fixture
+def mock_config_path():
+    """Mock ConfigManager to use test XML files"""
+    test_conf_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+    from os import environ
+    environ['CUEMS_CONF_PATH'] = str(test_conf_path)
+
+@fixture
+def mock_avahi_resolve():
+    """Mock avahi-resolve-host-name to return a fixed IP address"""
+    def mock_avahi_resolve(hostname):
+        return '192.168.1.1'
+    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy._avahi_resolve', 
+               side_effect=mock_avahi_resolve):
+        yield
+
+# @fixture
+# def mock_library_path():
+#     """Mock library path to use test XML files"""
+#     test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+    
+#     # Patch the library_path attribute after ConfigManager instantiation
+#     with patch('cuemsutils.tools.ConfigManager.ConfigManager.library_path', 
+#                new_callable=PropertyMock, return_value=str(test_library_path)):
+#         yield test_library_path
+
+# Alternative approach using monkeypatch (uncomment if preferred):
+@fixture
+def mock_library_path(monkeypatch):
+    """Mock library path using monkeypatch"""
+    test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+    
+    def mock_library_path_getter(self):
+        return str(test_library_path)
+    
+    monkeypatch.setattr('cuemsutils.tools.ConfigManager.ConfigManager.library_path', 
+                       property(mock_library_path_getter))
+    yield test_library_path
+
+# Most direct approach - patch the attribute value (uncomment if preferred):
+# @fixture
+# def mock_library_path():
+#     """Mock library path by patching the attribute value directly"""
+#     test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+    
+#     with patch('cuemsutils.tools.ConfigManager.ConfigManager.library_path'):
+#         yield test_library_path

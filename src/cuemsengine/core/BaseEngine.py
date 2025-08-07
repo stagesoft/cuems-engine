@@ -26,6 +26,9 @@ class BaseEngine(SignalEngine):
             with_signals (bool): Whether to initialize the SignalEngine. Default is True.
         """
         # Engine parameters
+        self.with_cm = with_cm
+        self.with_mtc = with_mtc
+        self.with_signals = with_signals
         self.go_offset = 0
         self.script = None
         self.stop_requested = False
@@ -37,9 +40,9 @@ class BaseEngine(SignalEngine):
 
         super().__init__(with_signals=with_signals)
     
-        if with_cm:
+        if self.with_cm:
             self.set_config_manager()
-        if with_mtc:
+        if self.with_mtc:
             self.set_mtc_listener()
 
         ## dev: CUE "POINTERS":
@@ -63,9 +66,9 @@ class BaseEngine(SignalEngine):
             self.on_timecode_change(value) # type: ignore[attr-defined]
 
     def stop_all(self) -> None:
-        self.stop_mtc_listener()
+        if self.with_mtc:
+            self.stop_mtc_listener()
         self.remove_show_lock_file()
-        self.stop()
 
     ### STATUS ###
     def set_status(self, property: str, value: str, strict: bool = False) -> None:

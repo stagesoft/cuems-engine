@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Multimedia :: Video :: Display"
 ]
 dependencies = [
-    "cuemsutils @ file:///disk/Projects/StageLab/cuems-utils/dist/cuemsutils-0.0.9rc3-py3-none-any.whl#sha1=204ff7ad4ed4a71762f73a32bad93da95a092676",
+    "cuemsutils @ file:///disk/Projects/StageLab/cuems-utils/dist/cuemsutils-0.0.9rc3-py3-none-any.whl#sha1=9138c68b528d3f6980b43c0c024898a02ba63c47",
     "mido==1.3.3",
     "python-rtmidi",
     "python-daemon==3.1.2",

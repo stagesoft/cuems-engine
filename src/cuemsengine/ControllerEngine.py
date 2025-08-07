@@ -9,9 +9,10 @@ from cuemsutils.tools.CommunicatorServices import Communicator
 
 from .core.BaseEngine import BaseEngine
 from .tools.communicate import EditorWsServer
-from .osc import OssiaServer, ServerDevices
+from .osc import OssiaServer, ServerDevices, ENGINE_CMD_ENDPOINTS
+from .osc.helpers import include_function_endpoints
 
-CONTROLLER_HOST = "controller.local"
+CONTROLLER_HOST = "localhost" #"controller.local"
 
 class ControllerEngine(BaseEngine):
     '''
@@ -39,6 +40,7 @@ class ControllerEngine(BaseEngine):
         super().__init__(**kwargs)
         self.engine_queue = MPQueue()
         self.editor_queue = MPQueue()
+        self.ws_server = None
         
         # self.set_ws_server()
         self.set_comms()
@@ -48,8 +50,8 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def set_comms(self):
-        self.set_ws_server()
-        self.set_oscquery_server()
+        # self.set_ws_server()
+        self.set_oscquery()
         self.set_communicators()
 
     def set_ws_server(self):
@@ -117,10 +119,12 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_comms(self):
-        if self.mtc:
+        if self.with_mtc:
             self.stop_mtc()
         if self.ws_server:
             self.stop_ws_server()
+        if self.oscquery_server:
+            self.oscquery_server.remove_device()
 
     @logged
     def stop_ws_server(self):
@@ -143,7 +147,9 @@ class ControllerEngine(BaseEngine):
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
         if self.go_offset:
-            self.send_oscquery_value(f'/engine/status/timecode', value)
+            self.set_oscquery_values({
+                '/engine/status/timecode': value
+            })
 
     def engine_queue_consumer(self):
         while not self.stop_requested:
@@ -178,7 +184,6 @@ class ControllerEngine(BaseEngine):
             self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
             self._editor_request_uuid = ''
             return
-        
 
     def handle_editor_command(self, action, value):
         command_dict = {
@@ -191,11 +196,38 @@ class ControllerEngine(BaseEngine):
         else:
             raise ValueError(f'Command {action} not recognized')
 
-    def set_oscquery_server(self):
+    def set_oscquery(self):
+        Logger.info("Starting oscquery for Controller")
+        self.set_oscquery_server(self.get_status_endpoints())
+        self.apply_oscquery_commands()
+
+    def set_oscquery_server(self, endpoints: dict = None):
         self.oscquery_server = OssiaServer(
             host = CONTROLLER_HOST,
-            server = ServerDevices.OSCQUERY
+            server = ServerDevices.OSCQUERY,
+            endpoints = endpoints
         )
+
+    def apply_oscquery_commands(self):
+        cmd_dict = {
+            'load': self.load_project,
+            'loadcue': None, # self.load_cue,
+            'go': None, # self.go_callback,
+            'gocue': None, # self.go_cue_callback,
+            'pause': None, # self.pause_callback,
+            'stop': None, # self.stop_callback,
+            'resetall': None, # self.reset_all_callback,
+            'preload': None, # self.load_cue_callback,
+            'unload': None, # self.unload_cue_callback,
+            'hwdiscovery': None, # self.hw_discovery_callback,
+            'deploy': None, # self.deploy_callback,
+            'test': None # self.test_callback
+        }
+        endpoints = include_function_endpoints(
+            ENGINE_CMD_ENDPOINTS,
+            cmd_dict
+        )
+        self.oscquery_server.create_endpoints(endpoints)
 
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
@@ -231,6 +263,10 @@ class ControllerEngine(BaseEngine):
         )
 
     def load_project(self, project_name):
+        if self.get_status('load') == project_name:
+            Logger.info(f'Project {project_name} already loaded')
+            return
+
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
         
@@ -258,13 +294,13 @@ class ControllerEngine(BaseEngine):
         
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
+        self.set_status('load', project_name)
 
         self.set_oscquery_values({
             '/engine/command/load': project_name
         })
 
         # Confirm the project is loaded
-        self.set_status('load', project_name)
         self.set_show_lock_file()
         self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')

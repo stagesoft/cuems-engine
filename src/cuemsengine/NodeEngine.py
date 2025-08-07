@@ -1,10 +1,12 @@
 from cuemsutils.log import Logger, logged
 
+
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CueHandler
+from .osc import OssiaClient, ClientDevices, ValueType, ENGINE_CMD_ENDPOINTS, AUDIO_ENDPOINTS, VIDEO_ENDPOINTS, DMX_ENDPOINTS
+from .osc.helpers import include_function_endpoints
 from .tools.CuemsDeploy import CuemsDeploy
-from .players import AudioPlayer, DmxPlayer, VideoPlayer
-from .osc import ValueType
+from .players import VideoPlayer
 
 class NodeEngine(BaseEngine):
     """
@@ -31,11 +33,16 @@ class NodeEngine(BaseEngine):
             tmp_path=self.cm.tmp_path
         )
         self.cue_handler = CueHandler()
+        self.set_oscquery()
         self.set_video_players()
         self.run()
 
     def load_project(self, project):
         """Load the project files to the node"""
+        if self.get_status('load') == project:
+            Logger.info(f'Project {project} already loaded')
+            return
+
         # Obtain the project files
         self.deploy_project(project)
         self.cm.load_project_config(project)
@@ -47,6 +54,7 @@ class NodeEngine(BaseEngine):
 
         # Confirm the project is loaded
         self.set_show_lock_file()
+        self.script.unix_name = project
         self.set_status('load', project)
         Logger.info(f'Project {project} loaded')
 
@@ -66,6 +74,45 @@ class NodeEngine(BaseEngine):
         self.disconnect_video_devs()
         self.unload_video_devs()
 
+    # OSCQuery functions
+    def set_oscquery(self):
+        """Set the OSCQuery infrastructure"""
+        Logger.info("Starting oscquery for Node")
+        self.set_oscquery_client()
+        self.apply_oscquery_commands()
+
+    def set_oscquery_client(self, endpoints: dict = None):
+        self.oscquery_client = OssiaClient(
+            host = self.cm.node_conf['osc_dest_host'],
+            remote_type = ClientDevices.OSCQUERY,
+            endpoints = endpoints
+        )
+
+    def apply_oscquery_commands(self):
+        cmd_dict = {
+            'load': self.load_project,
+            'loadcue': None, # self.load_cue,
+            'go': None, # self.go_callback,
+            'gocue': None, # self.go_cue_callback,
+            'pause': None, # self.pause_callback,
+            'stop': None, # self.stop_callback,
+            'resetall': None, # self.reset_all_callback,
+            'preload': None, # self.load_cue_callback,
+            'unload': None, # self.unload_cue_callback,
+            'hwdiscovery': None, # self.hw_discovery_callback,
+            'deploy': None, # self.deploy_callback,
+            'test': None # self.test_callback
+        }
+        endpoints = include_function_endpoints(
+            ENGINE_CMD_ENDPOINTS,
+            cmd_dict
+        )
+        self.oscquery_client.create_endpoints(endpoints)
+
+    def set_oscquery_values(self, values: dict):
+        for key, value in values.items():
+            self.oscquery_client.set_value(key, value)
+
     def deploy_project(self, project):
         """Deploy the project files to the node"""
         self.deploy_manager.sync_files(project, 'project')
@@ -76,6 +123,10 @@ class NodeEngine(BaseEngine):
             Logger.error('No script loaded')
             return
         file_names = self.script.get_own_media(config=self.cm)
+        if len(file_names) == 0:
+            Logger.info('No media files to deploy')
+            return
+
         self.deploy_manager.sync_files(project, 'media', file_names)
 
     # Check functions

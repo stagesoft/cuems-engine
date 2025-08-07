@@ -84,3 +84,19 @@ class ServerDevices(Enum):
     OSC = set_osc_server
     OSCQUERY = set_oscquery_server
     PYOSC = None
+
+def include_function_endpoints(endpoints: dict, cmd_dict: dict) -> dict:
+    """Include the function endpoints in the endpoints dictionary
+
+    Args:
+        endpoints (dict): the endpoints dictionary
+        cmd_dict (dict): the command dictionary
+
+    Returns:
+        dict: the endpoints dictionary with the function endpoints included
+    """
+    for key, value in endpoints.items():
+        func = cmd_dict.get(key.split('/')[-1])
+        if func:
+            endpoints[key] = [value[0], func]
+    return endpoints

@@ -43,11 +43,3 @@ class OssiaServer(OssiaNodes):
         if not done:
             self.remove_device()
             raise Exception("Server setup failed")
-
-class NodeServer(OssiaServer):
-    def __init__(self, host: str, local_port: int, endpoints: dict):
-        super().__init__(
-            host = host,
-            local_port = local_port,
-            endpoints = endpoints
-        )
