@@ -15,12 +15,16 @@ authors = [
   { name = "Adrià Masip", email = "adria.back@gmail.com" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: Players",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Display"
 ]
 dependencies = [
     "cuemsutils @ file:///disk/Projects/StageLab/cuems-utils/dist/cuemsutils-0.0.9rc3-py3-none-any.whl#sha1=204ff7ad4ed4a71762f73a32bad93da95a092676",
@@ -28,6 +32,16 @@ dependencies = [
     "python-rtmidi",
     "python-daemon==3.1.2",
     "python-osc==1.9.3",
+]
+[project.optional-dependencies]
+dev = [
+    "psutil",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
+    "black",
+    "isort",
+    "flake8",
 ]
 
 [project.urls]
@@ -57,35 +71,80 @@ dependencies = [
 ]
 installer = "pip"
 
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-addopts = "-v"
-
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.coverage.run]
-source_pkgs = ["cuemsengine", "tests"]
-branch = true
-concurrency = ["multiprocessing"]
-omit = []
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-v",
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "cuems: marks tests as using CUEMS engines (automatic cleanup)",
+]
+# Ensure proper cleanup on keyboard interrupt
+junit_duration_report = "call"
 
-[tool.coverage.paths]
-cuemsengine = ["src/cuemsengine", "*/cuems-engine/src/cuemsengine"]
-tests = ["tests", "*/cuems-engine/tests"]
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
 
 [tool.coverage.report]
 show_missing = true
 exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]
 
-[tool.hatch.envs.types]
-extra-dependencies = [
-  "mypy>=1.0.0"
-]
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
 
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/cuemsengine tests}"
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88

@@ -6,7 +6,7 @@ from pyossia import ValueType
 from .fixtures import ossia_client_factory, ossia_server_factory
 from pytest import raises
 
-def test_oscqueryserver_in_separate_process():
+def test_oscqueryserver_in_separate_process(process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
@@ -31,7 +31,7 @@ def test_oscqueryserver_in_separate_process():
         server.set_value("/test", 80)
         sleep(0.5)  # Allow time for value to be set
 
-    server_process = Process(target=run_server, args=(server_res,))
+    server_process = process_cleanup(Process(target=run_server, args=(server_res,)))
     server_process.start()
 
     # ASSERT
@@ -43,7 +43,7 @@ def test_oscqueryserver_in_separate_process():
     assert server_res.get() == 10, "Initial value was not set to 10"
     assert server_res.get() == 80, "Modified value was not set to 80"
 
-    # Cleanup
+    # Cleanup - now handled automatically by process_cleanup fixture
     server_process.terminate()
 
 
