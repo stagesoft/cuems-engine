@@ -5,4 +5,4 @@
 ::: cuemsengine.osc.OssiaServer
 ::: cuemsengine.osc.PyOsc
 ::: cuemsengine.osc.helpers
-<!-- ::: cuemsengine.osc.endpoints -->
+::: cuemsengine.osc.endpoints
