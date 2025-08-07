@@ -203,7 +203,8 @@ class ControllerEngine(BaseEngine):
 
     def set_oscquery_server(self, endpoints: dict = None):
         self.oscquery_server = OssiaServer(
-            host = CONTROLLER_HOST,
+            # host = CONTROLLER_HOST,
+            remote_port = self.cm.node_conf['oscquery_ws_port'],
             server = ServerDevices.OSCQUERY,
             endpoints = endpoints
         )

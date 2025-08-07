@@ -61,19 +61,19 @@ class TestBaseEngine:
         """Test stop_all method"""
         engine = BaseEngine(with_cm=True, with_mtc=True)
         
-        engine.stop_all()
+        engine.stop()
         
         assert engine.stop_requested is True
         assert engine.running is False
 
 
 def test_get_status_endpoints(env_config_path):
+    from cuemsengine.osc import ValueType
     engine = BaseEngine(with_cm=True, with_mtc=True)
-    print(engine.get_all_status_names())
-    print(vars(engine.status).keys())
     endpoints = engine.get_status_endpoints()
     for k, v in endpoints.items():
         status_name = k.split('/')[-1]
         assert status_name in engine.get_all_status_names()
-        assert v[0] == engine.status_callback
-        assert v[1] == getattr(engine.status, status_name)
+        assert v[0] == ValueType.String
+        assert v[1] == engine.status_callback
+        assert v[2] == getattr(engine.status, status_name)

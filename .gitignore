@@ -21,3 +21,5 @@ dev/local/
 site/
 .venv/*
 !.venv/pyvenv.cfg
+
+dev/test_xml_files/media/

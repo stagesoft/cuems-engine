@@ -1,6 +1,6 @@
 from cuemsutils.log import Logger, logged
 
-
+from .ControllerEngine import CONTROLLER_HOST
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CueHandler
 from .osc import OssiaClient, ClientDevices, ValueType, ENGINE_CMD_ENDPOINTS, AUDIO_ENDPOINTS, VIDEO_ENDPOINTS, DMX_ENDPOINTS
@@ -83,7 +83,9 @@ class NodeEngine(BaseEngine):
 
     def set_oscquery_client(self, endpoints: dict = None):
         self.oscquery_client = OssiaClient(
-            host = self.cm.node_conf['osc_dest_host'],
+            # host = CONTROLLER_HOST,
+            local_port = self.cm.node_conf['osc_in_port_base'],
+            remote_port = self.cm.node_conf['oscquery_ws_port'],
             remote_type = ClientDevices.OSCQUERY,
             endpoints = endpoints
         )
@@ -122,7 +124,7 @@ class NodeEngine(BaseEngine):
         if not self.script:
             Logger.error('No script loaded')
             return
-        file_names = self.script.get_own_media(config=self.cm)
+        file_names = self.script.get_own_media_filenames(config=self.cm)
         if len(file_names) == 0:
             Logger.info('No media files to deploy')
             return
