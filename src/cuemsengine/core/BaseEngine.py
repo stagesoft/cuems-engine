@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Any
 from os import path, remove
 
 from cuemsutils.log import Logger, logged
@@ -100,8 +101,14 @@ class BaseEngine(SignalEngine):
     def status_callback(self, endpoint: str, value: str) -> None:
         """Callback for the status endpoint"""
         Logger.debug(f'Status callback received: {endpoint} = {value}')
-        parameter = endpoint.split('/')[-1]
+        parameter = str(endpoint).split('/')[-1]
         self.set_status(parameter, value)
+
+    def get_all_status_names(self) -> list[str]:
+        return [i[1:] for i in vars(self.status).keys()]
+    
+    def get_status_endpoints(self) -> dict[str, list[Any]]:
+        return {f"/engine/status/{k[1:]}": [ValueType.String, self.status_callback, v] for k,v in vars(self.status).items()}
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:

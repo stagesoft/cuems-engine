@@ -19,7 +19,7 @@ class EngineStatus:
         self.currentcue = None
         self.nextcue = None
         self.running = None
-        self.test_recieved = 0
+        self.recieved = 0
 
     @property
     def load(self) -> str | None:
@@ -117,14 +117,14 @@ class EngineStatus:
     def test(self, value: str | None) -> None:
         self._test = value
         if value is not None:
-            self.test_recieved += 1
+            self.recieved += 1
 
     @property
-    def test_recieved(self) -> int:
+    def recieved(self) -> int:
         return self._recieved
 
-    @test_recieved.setter
-    def test_recieved(self, value: int) -> None:
+    @recieved.setter
+    def recieved(self, value: int) -> None:
         self._recieved = value
 
     @property
