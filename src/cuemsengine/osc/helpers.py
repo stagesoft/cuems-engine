@@ -19,7 +19,7 @@ def new_osc_device(cls) -> OSCDevice:
         OSCDevice: an OSC device
     """
     x = OSCDevice(
-        "cuems",
+        cls.name,
         cls.host,
         cls.remote_port,
         cls.local_port
@@ -28,7 +28,7 @@ def new_osc_device(cls) -> OSCDevice:
 
 def new_oscquery_device(cls) -> OSCQueryDevice:
     x = OSCQueryDevice(
-        "cuems",
+        cls.name,
         f"ws://{cls.host}:{cls.remote_port}",
         cls.local_port
     )

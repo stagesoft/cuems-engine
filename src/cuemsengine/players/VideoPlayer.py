@@ -31,8 +31,9 @@ class VideoPlayer(Player):
         return self._port
 
 class VideoClient(PlayerClient):
-    def __init__(self, player_port: int):
+    def __init__(self, player_port: int, name: str = "videoplayer"):
         super().__init__(
             local_port = player_port,
+            name = name,
             endpoints = OSC_VIDEOPLAYER_CONF
         )

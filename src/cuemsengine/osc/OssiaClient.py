@@ -14,10 +14,12 @@ class OssiaClient(OssiaNodes):
         local_port: int = OSCCLIENT_LOCAL_PORT,
         remote_port: int = OSCCLIENT_REMOTE_PORT,
         remote_type: ClientSetupFunction = ClientDevices.OSC,
-        endpoints: Union[dict, list] | None = None
+        endpoints: Union[dict, list] | None = None,
+        name: str = "cuems"
     ):
         super().__init__()
         self.host = host
+        self.name = name
         self.remote_port = remote_port
         self.local_port = local_port
         self.bind_device(remote_type)
@@ -41,9 +43,10 @@ class NodeClient(OssiaClient):
         )
 
 class PlayerClient(OssiaClient):
-    def __init__(self, player_port: int, endpoints: dict):
+    def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
         super().__init__(
             local_port = player_port,
             remote_type = ClientDevices.OSC,
-            endpoints = endpoints
+            endpoints = endpoints,
+            name = name
         )

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from cuemsengine.ControllerEngine import ControllerEngine
-from cuemsengine.core.daemon import run_daemon
+from cuemsutils.daemon import run_daemon
 
 def main():
     # Create and run engine

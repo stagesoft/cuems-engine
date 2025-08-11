@@ -46,8 +46,6 @@ class ControllerEngine(BaseEngine):
         self.set_comms()
         self.set_editor_request('')
 
-        self.run()
-
     @logged
     def set_comms(self):
         # self.set_ws_server()
@@ -196,6 +194,7 @@ class ControllerEngine(BaseEngine):
         else:
             raise ValueError(f'Command {action} not recognized')
 
+    # OSCQuery functions
     def set_oscquery(self):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
@@ -213,7 +212,7 @@ class ControllerEngine(BaseEngine):
         cmd_dict = {
             'load': self.load_project,
             'loadcue': None, # self.load_cue,
-            'go': None, # self.go_callback,
+            'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
             'pause': None, # self.pause_callback,
             'stop': None, # self.stop_callback,
@@ -305,3 +304,18 @@ class ControllerEngine(BaseEngine):
         self.set_show_lock_file()
         self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')
+
+    def go_script(self, value):
+        if self.get_status('go') == value:
+            return
+
+        if not self.script:
+            Logger.warning('No script loaded, cannot process GO command.')
+            return
+        
+        self.set_status('go', value)
+        
+        self.set_oscquery_values({
+            '/engine/status/running': 1,
+            '/engine/command/go': value
+        })
