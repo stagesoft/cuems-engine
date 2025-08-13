@@ -38,9 +38,13 @@ class NodeEngine(BaseEngine):
         self.cue_handler = CueHandler()
         self.port_handler = PortHandler()
         self.port_handler.set_ports(cue=None, ports=self.get_config_ports())
+        
+
+    #def start(self):
         self.set_oscquery()
         self.set_video_players()
-
+    #    super().start()
+        
     @logged
     def stop(self):
         self.stop_node_engine()

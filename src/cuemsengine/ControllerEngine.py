@@ -42,10 +42,15 @@ class ControllerEngine(BaseEngine):
         self.editor_queue = MPQueue()
         self.ws_server = None
         
+        
+
+
+    def start(self):
         # self.set_ws_server()
         self.set_comms()
         self.set_editor_request('')
-
+        super().start()
+    
     @logged
     def set_comms(self):
         # self.set_ws_server()
