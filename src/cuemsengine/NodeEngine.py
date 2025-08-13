@@ -5,7 +5,8 @@ from cuemsutils.helpers import as_cuemsdict
 from .ControllerEngine import CONTROLLER_HOST
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CueHandler
-from .osc import OssiaClient, ClientDevices, ValueType, ENGINE_CMD_ENDPOINTS, AUDIO_ENDPOINTS, VIDEO_ENDPOINTS, DMX_ENDPOINTS
+from .osc import ClientDevices, ValueType, ENGINE_CMD_ENDPOINTS, AUDIO_ENDPOINTS, VIDEO_ENDPOINTS, DMX_ENDPOINTS
+from .osc.OssiaClient import OssiaClient
 from .osc.helpers import include_function_endpoints
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PortHandler
@@ -70,12 +71,13 @@ class NodeEngine(BaseEngine):
 
     def set_oscquery_client(self, endpoints: dict = None):
         self.oscquery_client = OssiaClient(
-            # host = CONTROLLER_HOST,
+            host = CONTROLLER_HOST,
             local_port = self.cm.node_conf['osc_in_port_base'],
             remote_port = self.cm.node_conf['oscquery_ws_port'],
             remote_type = ClientDevices.OSCQUERY,
             endpoints = endpoints
         )
+        Logger.debug(f"OscQueryClient created: {self.oscquery_client}")
 
     def apply_oscquery_commands(self):
         cmd_dict = {

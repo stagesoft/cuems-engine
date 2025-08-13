@@ -1,11 +1,11 @@
 from multiprocessing import Queue as MPQueue
 from threading import Thread
 from time import sleep
+import asyncio
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from cuemsutils.tools.CommunicatorServices import Communicator
-# from cuemsutils.AddressHandler import AddressHandler
+from .tools.communicate import editor_listener, CommunicatorListener
 
 from .core.BaseEngine import BaseEngine
 from .tools.communicate import EditorWsServer
@@ -88,6 +88,9 @@ class ControllerEngine(BaseEngine):
             Logger.error('Exception when starting websocket server. Exiting.')
             Logger.error(e)
             exit(-1)
+        
+        # asyncio Communicator listening loops
+        
         # Threaded own queue consumer loop
         # self.engine_queue_loop = Thread(
         #     target=self.engine_queue_consumer,
@@ -96,11 +99,20 @@ class ControllerEngine(BaseEngine):
         # self.engine_queue_loop.start()
 
     def set_communicators(self):
-        pass
-        # self.backend = Communicator(address = AddressHandler.get("backend"))
+        Logger.info('Setting up Communicators!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         # self.hw_discovery = Communicator(address = AddressHandler.get("hw_discovery"))
         # self.mtc = Communicator(address = AddressHandler.get("mtc"))
-        # self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
+        #self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
+        listener = CommunicatorListener(self.editor_command_callback)
+        loop = asyncio.new_event_loop()
+        t = Thread(target=self.start_asyncio_loop, args=(loop,), daemon=True)
+        t.start()
+        self._listener_task = asyncio.run_coroutine_threadsafe(listener.listen(), loop)
+
+
+    def start_asyncio_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
 
     def stop(self):
         self.stop_queues()
@@ -176,7 +188,7 @@ class ControllerEngine(BaseEngine):
             return
 
         try:
-            self.handle_editor_command(
+           return self.handle_editor_command(
                 action = item['action'],
                 value = item['value']
             )
@@ -189,13 +201,16 @@ class ControllerEngine(BaseEngine):
             return
 
     def handle_editor_command(self, action, value):
+        Logger.info(f'Handling editor command: {action} with value: {value}')
         command_dict = {
-            'project_deploy': self.deploy_callback,
+        #    'project_deploy': self.deploy_callback,
             'project_ready': self.load_project,
-            'hw_discovery': self.hw_discovery_callback
+        #    'hw_discovery': self.hw_discovery_callback
         }
         if action in command_dict.keys():
-            command_dict[action](value)
+            _editor_request_uuid = self._editor_request_uuid
+            if command_dict[action](value):
+                return self.put_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid)
         else:
             raise ValueError(f'Command {action} not recognized')
 
@@ -215,7 +230,8 @@ class ControllerEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-            'load': self.load_project,
+           # 'load': self.load_project,
+           # disabled for now, as it triggers a doble load when calling from the editor
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
@@ -250,13 +266,14 @@ class ControllerEngine(BaseEngine):
     def get_editor_request(self):
         return self._editor_request_uuid
 
-    def put_to_editor(self, type, action, action_uuid, value):
-        self.editor_queue.put({
+    def put_to_editor(self, type=None, action=None, request_uuid=None, value=None):
+        Logger.debug(f'Putting to editor: type={type}, action={action}, request_uuid={request_uuid}, value={value}')
+        return_message={
             'type': type,
-            'action': action,
-            'action_uuid': action_uuid,
-            'value': value
-        })
+            'value': value,
+            'action_uuid': request_uuid
+        }
+        return return_message
 
     def error_to_editor(self, value, action_uuid = None, action = None):
         if not action_uuid:
@@ -270,7 +287,7 @@ class ControllerEngine(BaseEngine):
     def load_project(self, project_name):
         if self.get_status('load') == project_name:
             Logger.info(f'Project {project_name} already loaded')
-            return
+            return True
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
@@ -308,7 +325,8 @@ class ControllerEngine(BaseEngine):
         # Confirm the project is loaded
         self.set_show_lock_file()
         self.set_editor_request('')
-        Logger.info(f'Project {project_name} loaded')
+        Logger.info(f'Project {project_name} loaded!!!!')
+        return True
 
     def go_script(self, value):
         if self.get_status('go') == value:

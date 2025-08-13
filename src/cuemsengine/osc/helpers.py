@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Callable, Union
 from pyossia.ossia_python import OSCDevice, OSCQueryDevice # type: ignore[attr-defined]
+from cuemsutils.log import logged, Logger
+from datetime import datetime
 
 # Type aliases for device setup functions
 ServerSetupFunction = Callable[..., bool]
@@ -24,6 +26,7 @@ def new_osc_device(cls) -> OSCDevice:
         cls.remote_port,
         cls.local_port
     )
+    Logger.debug(f"OSCDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port}")
     return x
 
 def new_oscquery_device(cls) -> OSCQueryDevice:
@@ -33,6 +36,7 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
         cls.local_port
     )
     x.update()
+    Logger.debug(f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port} {datetime.now()}")
     return x
 
 class ClientDevices(Enum):
@@ -54,6 +58,7 @@ def set_osc_server(cls) -> bool:
     Returns:
         bool: True if the server has been created successfully
     """
+    Logger.debug(f'creating osc server for {cls.name} on {cls.host}:{cls.local_port} -> {cls.remote_port}')
     return cls.device.create_osc_server(
         cls.host,
         cls.remote_port,
@@ -74,6 +79,7 @@ def set_oscquery_server(cls) -> bool:
     Returns:
         bool: True if the server has been created successfully
     """
+    Logger.debug(f'creating oscquery server on {cls.host}:{cls.remote_port} -> {cls.local_port}')
     return cls.device.create_oscquery_server(
         cls.local_port,
         cls.remote_port,
