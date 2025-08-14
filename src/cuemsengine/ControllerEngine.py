@@ -93,7 +93,7 @@ class ControllerEngine(BaseEngine):
         # self.mtc = Communicator(address = AddressHandler.get("mtc"))
         #self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
         listener_addresses = {'editor': 'ipc://tmp/editor.ipc'}
-        dialer_adresses = {'nodeconf': 'ipc://tmp/nodeconf.ipc'}
+        dialer_adresses = {'hw_discovery': 'ipc://tmp/hw_discovery.ipc'}
         self.communications_thread = ComsThread(self.msg_queue, self.editor_command_callback, listener_addresses, dialer_adresses)
         self.communications_thread.start()
 
@@ -106,15 +106,11 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_queues(self):
-        while not self.engine_queue.empty():
-            self.engine_queue.get()
-        # if self.engine_queue_loop:
-        #     self.engine_queue_loop.join()
-        self.engine_queue.close()
 
-        while not self.editor_queue.empty():
-            self.editor_queue.get()
-        self.editor_queue.close()
+
+        while not self.msg_queue.empty():
+            self.msg_queue.get()
+        self.msg_queue.close()
         Logger.debug('IPC queues clean and closed')
 
     @logged
@@ -152,13 +148,6 @@ class ControllerEngine(BaseEngine):
                 '/engine/status/timecode': value
             })
 
-    def engine_queue_consumer(self):
-        while not self.stop_requested:
-            if not self.engine_queue.empty():
-                item = self.engine_queue.get()
-                Logger.debug(f'Received queue message from WS server: {item}')
-                self.editor_command_callback(item)
-            sleep(0.004)
 
     def editor_command_callback(self, item):
         _item_keys = item.keys()
@@ -173,10 +162,10 @@ class ControllerEngine(BaseEngine):
             return self.error_to_editor(self._editor_request_uuid, "Response not recognized")
 
         try:
-            self.handle_editor_command(
+            return self.handle_editor_command(
                 action = item['action'],
                 value = item['value']
-            )
+            ) 
         except Exception as e:
             Logger.error(
                 f'Error handling editor command: {e}'
@@ -204,16 +193,16 @@ class ControllerEngine(BaseEngine):
 
     def msg_hwdiscovery(self, request: dict) -> None:
         try:
-            Logger.debug(f"Putting msg to hwdiscovery in message queue: {request}")
-            msg_destionation = {'destination': 'hwdiscovery'}
+            
+            msg_destionation = {'destination': 'hw_discovery'}
             dict_values = { 'value': request}
             msg = msg_destionation | dict_values # merge dictionaries
-
+            Logger.debug(f"Putting msg to hw_discovery in message queue: {msg}")
             self.msg_queue.put(msg)
-            return True
+            return None
         except Exception as e:
-            Logger.error(f"Error putting message to hwdiscovery: {e}")
-            return self.error_to_editor(f"Error putting message to hwdiscovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
+            Logger.error(f"Error putting message to hw_discovery: {e}")
+            return self.error_to_editor(f"Error putting message to hw_discovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
 
 
     # OSCQuery functions
@@ -232,7 +221,8 @@ class ControllerEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-            'load': self.load_project,
+            #'load': self.load_project,
+            # disabled because it trigers a doble load when called from editor
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
@@ -267,13 +257,15 @@ class ControllerEngine(BaseEngine):
     def get_editor_request(self):
         return self._editor_request_uuid
 
-    def put_to_editor(self, type, action, request_uuid, value):
-        self.editor_queue.put({
+    def put_to_editor(self, type=None, action=None, request_uuid=None, value=None):
+        
+        return_message={
             'type': type,
-            'action': action,
-            'action_uuid': request_uuid,
-            'value': value
-        })
+            'value': value,
+            'action_uuid': request_uuid
+        }
+        Logger.debug(f'Putting to editor: {return_message}')
+        return return_message
 
     def error_to_editor(self, value, request_uuid = None, action = None):
         if not action_uuid:
@@ -291,7 +283,7 @@ class ControllerEngine(BaseEngine):
     def load_project(self, project_name):
         if self.get_status('load') == project_name:
             Logger.info(f'Project {project_name} already loaded')
-            return
+            return True
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
@@ -330,6 +322,7 @@ class ControllerEngine(BaseEngine):
         self.set_show_lock_file()
         self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')
+        return True
 
     def go_script(self, value):
         if self.get_status('go') == value:

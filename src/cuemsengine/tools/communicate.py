@@ -9,6 +9,7 @@ import time
 HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
 NODECONF_IPC = '/tmp/nodeconf.ipc'
 EDITOR_IPC = '/tmp/editor.ipc'
+TIMEOUT = 10  # seconds
 
 def communicate(ipc: str):
     """
@@ -75,7 +76,7 @@ class ComsThread(threading.Thread):
         self.dialer_adresses = dialer_adresses if dialer_adresses is not None else {}
         self.dialers = {}
         self.queue = queue
-        self.timeout = 20000
+        self.timeout = TIMEOUT * 1000
         self.stop_requested = False
         self.send_contexts= []
         threading.Thread.__init__(self, name='Communications', daemon=True)
@@ -100,8 +101,9 @@ class ComsThread(threading.Thread):
                     decoded_msg =json.loads(msg.decode())
                     Logger.info(f"Received message: {decoded_msg}")
                     response = self.editor_callback(decoded_msg)
+                    Logger.debug(f"Response to send: {response}")
                     encoded_response = json.dumps(response).encode()
-                    listener.send(encoded_response)
+                    listener.send(encoded_response, block=False)
                 except pynng.exceptions.TryAgain:
                     pass
                 except Exception as e:
@@ -109,32 +111,33 @@ class ComsThread(threading.Thread):
                 
 
             if not self.queue.empty():
-                msg = self.engine_queue.get()
+                msg = self.queue.get()
                 Logger.debug(f'Received queue message from main thread: {msg}')
                 match msg['destination']:
-                    case 'nodeconf':
+                    case 'hw_discovery':
                         try:
-                            
-                            new_context = self.dialers['nodeconf'].new_context()
-                            Logger.debug(f'Sending message to nodeconf via {context}')
+                            Logger.debug(f"Sending message to hw_discovery with  dialer {self.dialers['hw_discovery']}")
+                            new_context = self.dialers['hw_discovery'].new_context()
                             encoded_request = json.dumps(msg).encode()
                             new_context.send(encoded_request)
                             self.send_contexts.append(new_context)
                         except pynng.exceptions.Timeout:
-                            Logger.error(f'Timeout in sending message to nodeconf')
+                            Logger.error(f'Timeout in sending message to hw_dicovery')
                         
-            
+
             for context in self.send_contexts:
                 try:
                     Logger.debug(f'trying to receive response from {context}')
-                    response = context.recv(block=False)
+                    response = context.recv()
+                    Logger.debug(f'Received response: {response}')
                     decoded_response = json.loads(response.decode())
-                    Logger.info(f"Received response: {decoded_response} from {context}")
-                    self.send_contexts.remove(context)
                 except pynng.exceptions.TryAgain:
                     pass
                 except Exception as e:
-                    Logger.error(f"Error in dialer: {e}")
+                    Logger.error(f"Error triying to recevie msg: {e}")
+                finally:
+                    context.close()
+                    self.send_contexts.remove(context)
                 
             time.sleep(0.1)  # Sleep to prevent busy waiting
 
