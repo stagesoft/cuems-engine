@@ -1,14 +1,13 @@
-from multiprocessing import Queue as MPQueue
+from queue import Queue
 from threading import Thread
 from time import sleep
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from cuemsutils.tools.CommunicatorServices import Communicator
-# from cuemsutils.AddressHandler import AddressHandler
+from .tools.communicate import ComsThread
 
 from .core.BaseEngine import BaseEngine
-from .tools.communicate import EditorWsServer
+from .tools.communicate import ComsThread
 from .osc import OssiaServer, ServerDevices, ENGINE_CMD_ENDPOINTS
 from .osc.helpers import include_function_endpoints
 
@@ -38,8 +37,7 @@ class ControllerEngine(BaseEngine):
     '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.engine_queue = MPQueue()
-        self.editor_queue = MPQueue()
+        self.msg_queue = Queue()
         self.ws_server = None
         
         
@@ -69,12 +67,6 @@ class ControllerEngine(BaseEngine):
             'discovery_timeout': self.cm.node_conf['discovery_timeout'],
             'websocket_port': self.cm.node_conf['websocket_port']
         }
-        self.ws_server = EditorWsServer(
-            self.engine_queue,
-            self.editor_queue,
-            settings_dict,
-            self.cm.network_mappings
-        )
         self._editor_request_uuid = ''
         
         try:
@@ -96,11 +88,16 @@ class ControllerEngine(BaseEngine):
         # self.engine_queue_loop.start()
 
     def set_communicators(self):
-        pass
-        # self.backend = Communicator(address = AddressHandler.get("backend"))
-        # self.hw_discovery = Communicator(address = AddressHandler.get("hw_discovery"))
+        Logger.info('Setting up Communicators')
+        #self.hw_discovery = call_hwdiscovery()
         # self.mtc = Communicator(address = AddressHandler.get("mtc"))
-        # self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
+        #self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
+        listener_addresses = {'editor': 'ipc://tmp/editor.ipc'}
+        dialer_adresses = {'nodeconf': 'ipc://tmp/nodeconf.ipc'}
+        self.communications_thread = ComsThread(self.msg_queue, self.editor_command_callback, listener_addresses, dialer_adresses)
+        self.communications_thread.start()
+
+
 
     def stop(self):
         self.stop_queues()
@@ -128,6 +125,7 @@ class ControllerEngine(BaseEngine):
             self.stop_ws_server()
         if self.oscquery_server:
             self.oscquery_server.remove_device()
+        self._loop.call_soon_threadsafe(self._loop.stop)
 
     @logged
     def stop_ws_server(self):
@@ -165,15 +163,14 @@ class ControllerEngine(BaseEngine):
     def editor_command_callback(self, item):
         _item_keys = item.keys()
         if 'action_uuid' not in _item_keys:
-            self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
-            return
+            return self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
         self._editor_request_uuid = item['action_uuid']
 
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
-                self.error_to_editor(self._editor_request_uuid, "Response not recognized")
+                
                 self._editor_request_uuid = ''
-            return
+            return self.error_to_editor(self._editor_request_uuid, "Response not recognized")
 
         try:
             self.handle_editor_command(
@@ -184,20 +181,40 @@ class ControllerEngine(BaseEngine):
             Logger.error(
                 f'Error handling editor command: {e}'
             )
-            self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
+            
             self._editor_request_uuid = ''
-            return
+            return self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
 
     def handle_editor_command(self, action, value):
         command_dict = {
-            'project_deploy': self.deploy_callback,
+        #    'project_deploy': self.deploy_callback,
             'project_ready': self.load_project,
-            'hw_discovery': self.hw_discovery_callback
+            'hw_discovery': self.msg_hwdiscovery
         }
         if action in command_dict.keys():
-            command_dict[action](value)
+            _editor_request_uuid = self._editor_request_uuid
+            result = command_dict[action](value)
+            if result:
+                return self.put_to_editor(type=action, action=action, value='OK', request_uuid=_editor_request_uuid)
+            else:
+                return result
         else:
             raise ValueError(f'Command {action} not recognized')
+        
+
+    def msg_hwdiscovery(self, request: dict) -> None:
+        try:
+            Logger.debug(f"Putting msg to hwdiscovery in message queue: {request}")
+            msg_destionation = {'destination': 'hwdiscovery'}
+            dict_values = { 'value': request}
+            msg = msg_destionation | dict_values # merge dictionaries
+
+            self.msg_queue.put(msg)
+            return True
+        except Exception as e:
+            Logger.error(f"Error putting message to hwdiscovery: {e}")
+            return self.error_to_editor(f"Error putting message to hwdiscovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
+
 
     # OSCQuery functions
     def set_oscquery(self):
@@ -250,22 +267,26 @@ class ControllerEngine(BaseEngine):
     def get_editor_request(self):
         return self._editor_request_uuid
 
-    def put_to_editor(self, type, action, action_uuid, value):
+    def put_to_editor(self, type, action, request_uuid, value):
         self.editor_queue.put({
             'type': type,
             'action': action,
-            'action_uuid': action_uuid,
+            'action_uuid': request_uuid,
             'value': value
         })
 
-    def error_to_editor(self, value, action_uuid = None, action = None):
+    def error_to_editor(self, value, request_uuid = None, action = None):
         if not action_uuid:
             action_uuid = self.get_editor_request()
         if not action:
             action = 'error'
-        self.put_to_editor(
-            'error', action, action_uuid, value
-        )
+        return_message={
+            'type': type,
+            'value': value,
+            'action_uuid': request_uuid
+        }
+        Logger.error(f'Error to editor: {return_message}')
+        return return_message
 
     def load_project(self, project_name):
         if self.get_status('load') == project_name:
@@ -279,23 +300,23 @@ class ControllerEngine(BaseEngine):
             self.cm.load_project_config(project_name)
         except Exception as e:
             Logger.error(f'Error loading project config: {e}')
-            self.error_to_editor(
+            
+            self.set_editor_request('')
+            return self.error_to_editor(
                 f"Project config error: {e}",
                 'project_ready'
             )
-            self.set_editor_request('')
-            return
 
         try:
             self.read_script(project_name)
         except Exception as e:
             Logger.error(f'Error loading project script: {e}')
-            self.error_to_editor(
+            
+            self.set_editor_request('')
+            return self.error_to_editor(
                 f"Project script error: {e}",
                 'project_ready'
             )
-            self.set_editor_request('')
-            return
         
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
