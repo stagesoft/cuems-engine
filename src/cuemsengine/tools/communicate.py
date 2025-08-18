@@ -100,7 +100,8 @@ class ComsThread(threading.Thread):
                     msg = listener.recv(block=False)
                     decoded_msg =json.loads(msg.decode())
                     Logger.info(f"Received message: {decoded_msg}")
-                    response = self.editor_callback(decoded_msg)
+                    self.editor_callback(decoded_msg)
+                    response = self.get_from_queue("editor")
                     Logger.debug(f"Response to send: {response}")
                     encoded_response = json.dumps(response).encode()
                     listener.send(encoded_response, block=False)
@@ -141,6 +142,10 @@ class ComsThread(threading.Thread):
                 
             time.sleep(0.1)  # Sleep to prevent busy waiting
 
+    def get_from_queue(self, destination):
+        self.get_from_qeueue ()
+    def get_from_qeueue(self):
+        pass
 
                 
 

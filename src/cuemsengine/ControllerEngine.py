@@ -199,7 +199,7 @@ class ControllerEngine(BaseEngine):
             msg = msg_destionation | dict_values # merge dictionaries
             Logger.debug(f"Putting msg to hw_discovery in message queue: {msg}")
             self.msg_queue.put(msg)
-            return None
+            
         except Exception as e:
             Logger.error(f"Error putting message to hw_discovery: {e}")
             return self.error_to_editor(f"Error putting message to hw_discovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
