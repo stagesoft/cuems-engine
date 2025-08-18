@@ -2,25 +2,31 @@
 from cuemsutils.log import logged, Logger
 from cuemsutils.tools.CommunicatorServices import Communicator
 import threading
-from pynng import Req0, Rep0, Timeout, TryAgain
+import asyncio
+import culsans
+import pynng
 import json
+import time
+
+import pynng
 
 HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
 NODECONF_IPC = '/tmp/nodeconf.ipc'
 EDITOR_IPC = '/tmp/editor.ipc'
+TIMEOUT = 10  # seconds
 
 def communicate(ipc: str):
     """
     Communicate with external tools
     """
-
     message = f"Communicating with {ipc}"
     # context = zmq.Context()
     # socket = context.socket(zmq.REQ)
     # socket.connect(ipc)
     # socket.send_string('Hello')
     # message = socket.recv()
-    return Communicator(ipc)
+    return message
+
 @logged
 def hwdiscovery_callback(*args, **kwargs):
         nodeconf_msg = call_nodeconf()
@@ -45,91 +51,88 @@ def call_nodeconf():
     communicate(NODECONF_IPC)
 
 @logged
-def editor_listener():
+def call_editor():
     """
     Call the editor tool
     """
-    
-    return communicate(EDITOR_IPC)
+    communicate(EDITOR_IPC)
+    return Communicator(EDITOR_IPC)
 
 class EditorWsServer():
     def __init__(self, *args, **kwargs):
         self.editor = None
 
     def start(self):
-        self.editor = editor_listener()
+        self.editor = call_editor()
         return self.editor
     
     def stop(self):
         self.editor = None
         return self.editor
     
-class CommunicatorListener():
-    def __init__(self, editor_callback: callable):
-        self.editor = editor_listener()
-        self.editor_callback = editor_callback
-
-    async def listen(self):
-        Logger.info(f"Starting editor listener ######################### on {EDITOR_IPC}")
-        await self.editor.reply(self.editor_callback)
-
+    
 
 class ComsThread(threading.Thread):
-    def __init__(self, queue,  editor_callback: callable, listener_adresses: list = None, dialer_adresses: dict = None):
+    def __init__(self, async_queue: culsans.SyncQueue[int],  editor_callback: callable):
+        Logger.debug('Initializing communications thread')
         self.editor_callback = editor_callback
+        self.async_msg_queue = async_queue
+        self.timeout = TIMEOUT * 1000
+        self.stop_requested = False
+        self.send_contexts= []
+        threading.Thread.__init__(self, name='Communications', daemon=True)
+        self.editor = call_editor()
+        self.hw_dicovery = call_hwdiscovery()
+        self.nodeconf = call_nodeconf()
         
-        self.listener_adresses = listener_adresses if listener_adresses is not None else {}
-        self.listeners = {}
-        self.dialer_adresses = dialer_adresses if dialer_adresses is not None else {}
-        self.dialers = {}
-        self.queue = queue
-        self.timeout = 20000
-        threading.Thread.__init__(self)
-
+        
+ 
 
     def run(self):
-        Logger.info("Starting Coms_thread")
-        for name, address in self.listener_adresses.items():
-           self.listeners[name] = Rep0(listen=address, send_timeout=self.timeout, recv_timeout=self.timeout)
-            
-            
-        for name, address in self.dialer_adresses.items():
-            self.dialers[name] = Req0(dial=address, send_timeout=self.timeout, recv_timeout=self.timeout)
+        Logger.debug('Comms thread run called')
+        self.event_loop = asyncio.new_event_loop()
+        self.event_loop.run_until_complete(self.run_asyncio_comms())
+        self.event_loop.run_until_complete(self.event_loop.shutdown_asyncgens())
+        self.event_loop.close()
+
+    def stop(self):
+        stop_requested = True
+        #self.event_loop.call_soon_threadsafe(self.queue_task.cancel)
+        asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
     
-        while not self.stop_requested:
-            for listener in self.listeners:
-                try:
-                    msg = listener.recv(blocking=False)
-                    Logger.info(f"Received message: {msg}")
-                    response = self.editor_callback(msg)
-                    encoded_response = json.dumps(response).encode()
-                    listener.send(encoded_response)
-                except Exception as e:
-                    Logger.error(f"Error in listener: {e}")
-                except TryAgain:
-                    pass  # no message received yet, try again    
-
-            if not self.queue.empty():
-                msg = self.engine_queue.get()
-                Logger.debug(f'Received queue message from main thread: {msg}')
-                match msg['destination']:
-                    case 'nodeconf':
-                        try:
-                            encoded_request = json.dumps(msg).encode()
-                            self.dialers['nodeconf'].send(encoded_request)
-                        except Timeout:
-                            Logger.error(f'Timeout in sending message to nodeconf')
-                        
-            for name, dialer in self.dialers.items():
-                try:
-                    response = dialer.recv(bloking=False)
-                    decoded_response = json.loads(response.decode())
-                    Logger.info(f"Received response: {decoded_response} from {name}")
-                except Exception as e:
-                    Logger.error(f"Error in dialer: {e}")
-                except TryAgain:
-                    pass  # no response received yet, try again
-
-
+    async def stop_async(self):
+        self.event_loop.call_soon_threadsafe(self.event_loop.stop)
+        Logger.info('event loop stoped')
                 
+
+    async def run_asyncio_comms(self):
+        Logger.info('Starting asyncio communications')
+        #await self.editor.reply(self.editor_callback)
+
+        # rep = pynng.Rep0(listen= 'ipc:///tmp/editor.ipc')
+        # context = rep.new_context()
+        # request = await context.arecv()
+        # decoded_request = json.loads(request.decode())  # Parse the JSON request
+        # Logger.debug(f"Received: {decoded_request}")
+        # await self.editor_callback(decoded_request, context)
+
+        #await self.editor.responder_get_request(self.editor_callback)
+
+
+        editor_task = asyncio.create_task(self.editor.responder_get_request(self.editor_callback))
+        #queue_task = asyncio.create_task(self.get_from_queue())
+        await editor_task
+        #await queue_task
+        Logger.debug('asyncio comms finished')
+        #
+
+    async def respond_to_editor(self, message, context):
+        Logger.debug(f'Sending to editor: {message}')
+        await context.asend(json.dumps(message).encode())
+
+    async def get_from_queue(self, destination):
+        if self.async_msg_queue.empty():
+            msg = await self.async_queue.get()
+            return msg
+        else: return None                
 

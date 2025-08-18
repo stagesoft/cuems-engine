@@ -1,14 +1,14 @@
-from queue import Queue
+from culsans import Queue
 from threading import Thread
 from time import sleep
 import asyncio
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from .tools.communicate import editor_listener, ComsThread
+from .tools.communicate import ComsThread
 
 from .core.BaseEngine import BaseEngine
-from .tools.communicate import EditorWsServer, call_hwdiscovery, call_nodeconf, hwdiscovery_callback
+from .tools.communicate import ComsThread
 from .osc import OssiaServer, ServerDevices, ENGINE_CMD_ENDPOINTS
 from .osc.helpers import include_function_endpoints
 
@@ -38,7 +38,9 @@ class ControllerEngine(BaseEngine):
     '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.msg_queue = Queue()
+        self._msg_queue = Queue()
+        self.sync_msg_queue = self._msg_queue.sync_q
+        self.async_msg_queue = self._msg_queue.async_q
         self.ws_server = None
         
         
@@ -81,9 +83,6 @@ class ControllerEngine(BaseEngine):
             Logger.error('Exception when starting websocket server. Exiting.')
             Logger.error(e)
             exit(-1)
-        
-        # asyncio Communicator listening loops
-        
         # Threaded own queue consumer loop
         # self.engine_queue_loop = Thread(
         #     target=self.engine_queue_consumer,
@@ -93,20 +92,15 @@ class ControllerEngine(BaseEngine):
 
     def set_communicators(self):
         Logger.info('Setting up Communicators')
-        self.hw_discovery = call_hwdiscovery()
+        #self.hw_discovery = call_hwdiscovery()
         # self.mtc = Communicator(address = AddressHandler.get("mtc"))
         #self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
-        listener = CommunicatorListener(self.editor_command_callback)
-        self._loop = asyncio.new_event_loop()
-        Logger.debug(f'Starting asyncio loop {self._loop}')
-        t = Thread(target=self.start_asyncio_loop, args=(self._loop,), daemon=True)
-        t.start()
-        self._editor_listener_task = asyncio.run_coroutine_threadsafe(listener.listen(), self._loop)
+        listener_addresses = {'editor': 'ipc://tmp/editor.ipc'}
+        dialer_adresses = {'hw_discovery': 'ipc://tmp/hw_discovery.ipc'}
+        self.communications_thread = ComsThread(self.async_msg_queue, self.editor_command_callback)
+        self.communications_thread.start()
 
 
-    def start_asyncio_loop(self, loop: asyncio.AbstractEventLoop) -> None:
-        asyncio.set_event_loop(loop)
-        loop.run_forever()
 
     def stop(self):
         self.stop_queues()
@@ -115,15 +109,11 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_queues(self):
-        while not self.engine_queue.empty():
-            self.engine_queue.get()
-        # if self.engine_queue_loop:
-        #     self.engine_queue_loop.join()
-        self.engine_queue.close()
 
-        while not self.editor_queue.empty():
-            self.editor_queue.get()
-        self.editor_queue.close()
+
+        while not self.sync_msg_queue.empty():
+            self.sync_msg_queue.get()
+        self.sync_msg_queue.close()
         Logger.debug('IPC queues clean and closed')
 
     @logged
@@ -161,41 +151,35 @@ class ControllerEngine(BaseEngine):
                 '/engine/status/timecode': value
             })
 
-    def engine_queue_consumer(self):
-        while not self.stop_requested:
-            if not self.engine_queue.empty():
-                item = self.engine_queue.get()
-                Logger.debug(f'Received queue message from WS server: {item}')
-                self.editor_command_callback(item)
-            sleep(0.004)
 
-    def editor_command_callback(self, item):
+    def editor_command_callback(self, item, context):
+        Logger.debug(f'Received editor command: {item}, with context: {context}')
         _item_keys = item.keys()
         if 'action_uuid' not in _item_keys:
-            return self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
+            self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
         self._editor_request_uuid = item['action_uuid']
 
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
                 
                 self._editor_request_uuid = ''
-            return self.error_to_editor(self._editor_request_uuid, "Response not recognized")
+            self.error_to_editor(self._editor_request_uuid, "Response not recognized")
 
         try:
-           return self.handle_editor_command(
+            self.handle_editor_command(
                 action = item['action'],
-                value = item['value']
-            )
+                value = item['value'], 
+                context = None
+            ) 
         except Exception as e:
             Logger.error(
                 f'Error handling editor command: {e}'
             )
             
             self._editor_request_uuid = ''
-            return self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
+            self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
 
-    def handle_editor_command(self, action, value):
-        Logger.info(f'Handling editor command: {action} with value: {value}')
+    def handle_editor_command(self, action, value, context=None):
         command_dict = {
         #    'project_deploy': self.deploy_callback,
             'project_ready': self.load_project,
@@ -203,32 +187,26 @@ class ControllerEngine(BaseEngine):
         }
         if action in command_dict.keys():
             _editor_request_uuid = self._editor_request_uuid
-            result = command_dict[action](value)
-            if result:
-                return self.put_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid)
-            else:
-                return result
+            success  = command_dict[action](value, context)
+            if success:
+                self.put_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid, context=context)
+            
         else:
             raise ValueError(f'Command {action} not recognized')
         
 
-    def msg_hwdiscovery(self, request):
-        Logger.debug(f"Received HW discovery request: {request}, caling dialer with {self.hw_discovery}")
-        Logger.debug(f' asyncio loop was {self._loop}')
-        self._loop = asyncio.get_event_loop()
-        Logger.debug(f'asyncio loop now is {self._loop}')
-        caller=CominunicatorDialer(self.hw_discovery)
-        task = asyncio.ensure_future(caller.dial(request), loop=self._loop)
-        #self._hwdiscovery_dialer_task = asyncio.run(caller.dial(request))
-        reply = self._hwdiscovery_dialer_task.result()
-        #if reply:
-        #    Logger.debug(f"Received HW discovery response: {reply}")
-        #    return True
-        #else:
-        #    return False
-        #return True if reply['resp'] == 'ok' else False
-
-    #    https://stackoverflow.com/questions/49330905/how-to-run-a-coroutine-and-wait-it-result-from-a-sync-func-when-the-loop-is-runn/53354264
+    def msg_hwdiscovery(self, request: dict, context=None) -> None:
+        try:
+            
+            msg_destionation = {'destination': 'hw_discovery'}
+            dict_values = { 'value': request}
+            msg = msg_destionation | dict_values # merge dictionaries
+            Logger.debug(f"Putting msg to hw_discovery in message queue: {msg}")
+            self.msg_queue.put(msg)
+            
+        except Exception as e:
+            Logger.error(f"Error putting message to hw_discovery: {e}")
+            return self.error_to_editor(f"Error putting message to hw_discovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
 
 
     # OSCQuery functions
@@ -247,8 +225,8 @@ class ControllerEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-           # 'load': self.load_project,
-           # disabled for now, as it triggers a doble load when calling from the editor
+            #'load': self.load_project,
+            # disabled because it trigers a doble load when called from editor
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
@@ -283,16 +261,18 @@ class ControllerEngine(BaseEngine):
     def get_editor_request(self):
         return self._editor_request_uuid
 
-    def put_to_editor(self, type=None, action=None, request_uuid=None, value=None):
-        Logger.debug(f'Putting to editor: type={type}, action={action}, request_uuid={request_uuid}, value={value}')
+    def put_to_editor(self, type=None, action=None, request_uuid=None, value=None, context=None):
+        
         return_message={
             'type': type,
             'value': value,
             'action_uuid': request_uuid
         }
-        return return_message
+        Logger.debug(f'Putting to editor: {return_message}')
+        future = asyncio.run_coroutine_threadsafe(self.communications_thread.respond_to_editor(return_message, context), self.communications_thread.event_loop)
+        future.result()
 
-    def error_to_editor(self, value, request_uuid = None, action = None):
+    def error_to_editor(self, value, request_uuid = None, action = None, context=None):
         if not action_uuid:
             action_uuid = self.get_editor_request()
         if not action:
@@ -303,9 +283,12 @@ class ControllerEngine(BaseEngine):
             'action_uuid': request_uuid
         }
         Logger.error(f'Error to editor: {return_message}')
-        return return_message
+        future = asyncio.run_coroutine_threadsafe(self.communications_thread.respond_to_editor(return_message, context), self.communications_thread.event_loop)
+        future.result()
+        #self.sync_msg_queue.put(return_message)
+        #https://tutorialedge.net/python/concurrency/asyncio-event-loops-tutorial/#the-run_forever-method
 
-    def load_project(self, project_name):
+    def load_project(self, project_name, context=None):
         if self.get_status('load') == project_name:
             Logger.info(f'Project {project_name} already loaded')
             return True
@@ -319,7 +302,7 @@ class ControllerEngine(BaseEngine):
             Logger.error(f'Error loading project config: {e}')
             
             self.set_editor_request('')
-            return self.error_to_editor(
+            self.error_to_editor(
                 f"Project config error: {e}",
                 'project_ready'
             )
@@ -330,7 +313,7 @@ class ControllerEngine(BaseEngine):
             Logger.error(f'Error loading project script: {e}')
             
             self.set_editor_request('')
-            return self.error_to_editor(
+            self.error_to_editor(
                 f"Project script error: {e}",
                 'project_ready'
             )
@@ -346,7 +329,7 @@ class ControllerEngine(BaseEngine):
         # Confirm the project is loaded
         self.set_show_lock_file()
         self.set_editor_request('')
-        Logger.info(f'Project {project_name} loaded!!!!')
+        Logger.info(f'Project {project_name} loaded')
         return True
 
     def go_script(self, value):
