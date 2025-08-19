@@ -1,14 +1,12 @@
-from culsans import Queue
 from threading import Thread
 from time import sleep
 import asyncio
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from .tools.communicate import ComsThread, TIMEOUT
 
 from .core.BaseEngine import BaseEngine
-from .tools.communicate import ComsThread
+from .tools.communicate import AsyncCommsThread, TIMEOUT
 from .osc import OssiaServer, ServerDevices, ENGINE_CMD_ENDPOINTS
 from .osc.helpers import include_function_endpoints
 
@@ -38,83 +36,32 @@ class ControllerEngine(BaseEngine):
     '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._msg_queue = Queue()
-        self.sync_msg_queue = self._msg_queue.sync_q
-        self.async_msg_queue = self._msg_queue.async_q
         self.ws_server = None
         
         
 
 
     def start(self):
-        # self.set_ws_server()
         self.set_comms()
         self.set_editor_request('')
         super().start()
     
     @logged
     def set_comms(self):
-        # self.set_ws_server()
         self.set_oscquery()
         self.set_communicators()
 
-    def set_ws_server(self):
-        """Set the websocket server for the front-end"""
-        Logger.info(f'ControllerEngine@{self.node_name} starting Websocket Server')
-        settings_dict = {
-            'session_uuid': str(new_uuid()),
-            'library_path': self.cm.library_path,
-            'tmp_path': self.cm.tmp_path,
-            'database_name': self.cm.database_name,
-            'load_timeout': self.cm.node_conf['load_timeout'],
-            'discovery_timeout': self.cm.node_conf['discovery_timeout'],
-            'websocket_port': self.cm.node_conf['websocket_port']
-        }
-        self._editor_request_uuid = ''
-        
-        try:
-            self.ws_server.start()
-        except KeyError:
-            self.stop()
-            Logger.error('Config error, websocket_port key not found in settings. Exiting.')
-            exit(-1)
-        except Exception as e:
-            self.stop()
-            Logger.error('Exception when starting websocket server. Exiting.')
-            Logger.error(e)
-            exit(-1)
-        # Threaded own queue consumer loop
-        # self.engine_queue_loop = Thread(
-        #     target=self.engine_queue_consumer,
-        #     name='engineq_consumer'
-        # )
-        # self.engine_queue_loop.start()
 
     def set_communicators(self):
         Logger.info('Setting up Communicators')
-        #self.hw_discovery = call_hwdiscovery()
-        # self.mtc = Communicator(address = AddressHandler.get("mtc"))
-        #self.node_conf = Communicator(address = AddressHandler.get("node_conf"))
-        listener_addresses = {'editor': 'ipc://tmp/editor.ipc'}
-        dialer_adresses = {'hw_discovery': 'ipc://tmp/hw_discovery.ipc'}
-        self.communications_thread = ComsThread(self.async_msg_queue, self.editor_command_callback)
+        self.communications_thread = AsyncCommsThread(self.editor_command_callback)
         self.communications_thread.start()
 
 
 
     def stop(self):
-        self.stop_queues()
         self.stop_comms()
         super().stop()
-
-    @logged
-    def stop_queues(self):
-
-
-        while not self.sync_msg_queue.empty():
-            self.sync_msg_queue.get()
-        self.sync_msg_queue.close()
-        Logger.debug('IPC queues clean and closed')
 
     @logged
     def stop_comms(self):
@@ -126,12 +73,6 @@ class ControllerEngine(BaseEngine):
             self.oscquery_server.remove_device()
         self._loop.call_soon_threadsafe(self._loop.stop)
 
-    @logged
-    def stop_ws_server(self):
-        self.ws_server.stop()
-        if hasattr(self.ws_server, 'close'):
-            self.ws_server.close()
-        Logger.info('Websocket server stopped')
 
     @logged
     def stop_mtc(self):
@@ -181,7 +122,7 @@ class ControllerEngine(BaseEngine):
 
     def handle_editor_command(self, action, value, context=None):
         command_dict = {
-        #    'project_deploy': self.deploy_callback,
+            'project_deploy': self.deploy_callback,
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery
         }

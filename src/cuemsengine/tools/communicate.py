@@ -3,12 +3,7 @@ from cuemsutils.log import logged, Logger
 from cuemsutils.tools.CommunicatorServices import Communicator
 import threading
 import asyncio
-import culsans
-import pynng
 import json
-import time
-
-import pynng
 
 HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
 NODECONF_IPC = '/tmp/nodeconf.ipc'
@@ -40,11 +35,10 @@ def get_editor_comm():
 
     
 
-class ComsThread(threading.Thread):
-    def __init__(self, async_queue: culsans.SyncQueue[int],  editor_callback: callable):
+class AsyncCommsThread(threading.Thread):
+    def __init__(self, editor_callback: callable):
         Logger.debug('Initializing communications thread')
         self.editor_callback = editor_callback
-        self.async_msg_queue = async_queue
         self.timeout = TIMEOUT * 1000
         self.stop_requested = False
         self.send_contexts= []
@@ -63,7 +57,6 @@ class ComsThread(threading.Thread):
         self.event_loop.run_forever()
     def stop(self):
         stop_requested = True
-        #self.event_loop.call_soon_threadsafe(self.queue_task.cancel)
         asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
     
     async def stop_async(self):
@@ -73,22 +66,9 @@ class ComsThread(threading.Thread):
 
     async def run_asyncio_comms(self):
         Logger.info('Starting asyncio communications')
-        #await self.editor.reply(self.editor_callback)
-
-        # rep = pynng.Rep0(listen= 'ipc:///tmp/editor.ipc')
-        # context = rep.new_context()
-        # request = await context.arecv()
-        # decoded_request = json.loads(request.decode())  # Parse the JSON request
-        # Logger.debug(f"Received: {decoded_request}")
-        # await self.editor_callback(decoded_request, context)
-
-        #await self.editor.responder_get_request(self.editor_callback)
-
-
         editor_task = asyncio.create_task(self.editor_listener())
-        #queue_task = asyncio.create_task(self.get_from_queue())
         await editor_task
-        #await queue_task
+
         Logger.debug('asyncio comms finished')
         #
     async def editor_listener(self):
@@ -100,11 +80,5 @@ class ComsThread(threading.Thread):
 
     async def respond_to_editor(self, message, context):
         Logger.debug(f'Sending to editor: {message}, with context ')
-        await context.asend(json.dumps(message).encode())
-
-    async def get_from_queue(self, destination):
-        if self.async_msg_queue.empty():
-            msg = await self.async_queue.get()
-            return msg
-        else: return None                
+        await context.asend(json.dumps(message).encode())           
 
