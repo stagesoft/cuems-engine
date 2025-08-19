@@ -13,63 +13,31 @@ import pynng
 HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
 NODECONF_IPC = '/tmp/nodeconf.ipc'
 EDITOR_IPC = '/tmp/editor.ipc'
-TIMEOUT = 10  # seconds
+TIMEOUT = 15  # seconds
 
-def communicate(ipc: str):
-    """
-    Communicate with external tools
-    """
-    message = f"Communicating with {ipc}"
-    # context = zmq.Context()
-    # socket = context.socket(zmq.REQ)
-    # socket.connect(ipc)
-    # socket.send_string('Hello')
-    # message = socket.recv()
-    return message
+
 
 @logged
-def hwdiscovery_callback(*args, **kwargs):
-        nodeconf_msg = call_nodeconf()
-        discovery_msg = call_hwdiscovery()
-        return {
-            'discovery': discovery_msg,
-            'nodeconf': nodeconf_msg
-        }
-
-@logged
-def call_hwdiscovery():
+def get_hwdiscovery_comm():
     """
     Call the hardware discovery tool
     """
-    communicate(HWDISCOVERY_IPC)
+    return Communicator(HWDISCOVERY_IPC)
 
 @logged
-def call_nodeconf():
+def get_nodeconf_comm():
     """
     Call the node configuration tool
     """
-    communicate(NODECONF_IPC)
+    return Communicator(NODECONF_IPC)
 
 @logged
-def call_editor():
+def get_editor_comm():
     """
     Call the editor tool
     """
-    communicate(EDITOR_IPC)
     return Communicator(EDITOR_IPC)
 
-class EditorWsServer():
-    def __init__(self, *args, **kwargs):
-        self.editor = None
-
-    def start(self):
-        self.editor = call_editor()
-        return self.editor
-    
-    def stop(self):
-        self.editor = None
-        return self.editor
-    
     
 
 class ComsThread(threading.Thread):
@@ -81,9 +49,9 @@ class ComsThread(threading.Thread):
         self.stop_requested = False
         self.send_contexts= []
         threading.Thread.__init__(self, name='Communications', daemon=True)
-        self.editor = call_editor()
-        self.hw_dicovery = call_hwdiscovery()
-        self.nodeconf = call_nodeconf()
+        self.editor = get_editor_comm()
+        self.hw_discovery = get_hwdiscovery_comm()
+        self.nodeconf = get_nodeconf_comm()
         
         
  
@@ -91,10 +59,8 @@ class ComsThread(threading.Thread):
     def run(self):
         Logger.debug('Comms thread run called')
         self.event_loop = asyncio.new_event_loop()
-        self.event_loop.run_until_complete(self.run_asyncio_comms())
-        self.event_loop.run_until_complete(self.event_loop.shutdown_asyncgens())
-        self.event_loop.close()
-
+        self.event_loop.create_task(self.run_asyncio_comms())
+        self.event_loop.run_forever()
     def stop(self):
         stop_requested = True
         #self.event_loop.call_soon_threadsafe(self.queue_task.cancel)
@@ -119,15 +85,21 @@ class ComsThread(threading.Thread):
         #await self.editor.responder_get_request(self.editor_callback)
 
 
-        editor_task = asyncio.create_task(self.editor.responder_get_request(self.editor_callback))
+        editor_task = asyncio.create_task(self.editor_listener())
         #queue_task = asyncio.create_task(self.get_from_queue())
         await editor_task
         #await queue_task
         Logger.debug('asyncio comms finished')
         #
+    async def editor_listener(self):
+        Logger.info('Editor listener started')
+        await self.editor.responder_connect()
+        while not self.stop_requested:
+            Logger.debug(f'waiting for editor message')
+            await self.editor.responder_get_request(self.editor_callback)
 
     async def respond_to_editor(self, message, context):
-        Logger.debug(f'Sending to editor: {message}')
+        Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
 
     async def get_from_queue(self, destination):

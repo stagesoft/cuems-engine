@@ -5,7 +5,7 @@ import asyncio
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
-from .tools.communicate import ComsThread
+from .tools.communicate import ComsThread, TIMEOUT
 
 from .core.BaseEngine import BaseEngine
 from .tools.communicate import ComsThread
@@ -169,7 +169,7 @@ class ControllerEngine(BaseEngine):
             self.handle_editor_command(
                 action = item['action'],
                 value = item['value'], 
-                context = None
+                context = context
             ) 
         except Exception as e:
             Logger.error(
@@ -183,33 +183,72 @@ class ControllerEngine(BaseEngine):
         command_dict = {
         #    'project_deploy': self.deploy_callback,
             'project_ready': self.load_project,
-            'hw_discovery': self.msg_hwdiscovery
+            'hw_discovery': self.hwdiscovery
         }
         if action in command_dict.keys():
             _editor_request_uuid = self._editor_request_uuid
             success  = command_dict[action](value, context)
             if success:
-                self.put_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid, context=context)
+                self.confirm_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid, context=context)
             
         else:
             raise ValueError(f'Command {action} not recognized')
         
+    def confirm_to_editor(self, type=None, action=None, request_uuid=None, value=None, context=None):
+        
+        return_message={
+            'type': type,
+            'value': value,
+            'action_uuid': request_uuid
+        }
+        self.reply_to_editor(return_message, context)
 
-    def msg_hwdiscovery(self, request: dict, context=None) -> None:
+    def error_to_editor(self, value, request_uuid = None, action = None, context=None):
+        if not action_uuid:
+            action_uuid = self.get_editor_request()
+        if not action:
+            action = 'error'
+        return_message={
+            'type': type,
+            'value': value,
+            'action_uuid': request_uuid
+        }
+        self.reply_to_editor(return_message, context)
+        
+    def reply_to_editor(self, message, context=None):
+        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.editor.responder_post_reply(message, context), self.communications_thread.event_loop)
         try:
-            
-            msg_destionation = {'destination': 'hw_discovery'}
-            dict_values = { 'value': request}
-            msg = msg_destionation | dict_values # merge dictionaries
-            Logger.debug(f"Putting msg to hw_discovery in message queue: {msg}")
-            self.msg_queue.put(msg)
-            
-        except Exception as e:
-            Logger.error(f"Error putting message to hw_discovery: {e}")
-            return self.error_to_editor(f"Error putting message to hw_discovery: {e}", request_uuid=self._editor_request_uuid, action='hw_discovery')
+            result = send_task.result(timeout=TIMEOUT)
+        except TimeoutError:
+            Logger.debug('The coroutine took too long, cancelling the task...')
+            send_task.cancel()
+        except Exception as exc:
+            Logger.debug(f'The coroutine raised an exception: {exc!r}')
+        else:
+            Logger.debug(f'The coroutine returned: {result!r}')
 
+    def hwdiscovery(self, message: dict, context=None) -> None:
+        Logger.debug(f'sending HW discovery request: {message}')
+        reply = self.request_to_hwdiscovery(message)
+        Logger.debug(f'Received HW discovery reply: {reply}')
+        if 'OK' in reply.values():
+            return True
+        else:
+            return False            
 
-    # OSCQuery functions
+    def request_to_hwdiscovery(self, message: dict) -> dict:
+        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.hw_discovery.send_request(message), self.communications_thread.event_loop)
+        try:
+            result = send_task.result(timeout=TIMEOUT)
+            
+        except TimeoutError:
+            Logger.debug('The coroutine took too long, cancelling the task...')
+            send_task.cancel()
+        except Exception as exc:
+            Logger.debug(f'The coroutine raised an exception: {exc!r}')
+        else:
+            Logger.debug(f'The coroutine returned: {result!r}')
+            return result
     def set_oscquery(self):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
@@ -260,33 +299,6 @@ class ControllerEngine(BaseEngine):
 
     def get_editor_request(self):
         return self._editor_request_uuid
-
-    def put_to_editor(self, type=None, action=None, request_uuid=None, value=None, context=None):
-        
-        return_message={
-            'type': type,
-            'value': value,
-            'action_uuid': request_uuid
-        }
-        Logger.debug(f'Putting to editor: {return_message}')
-        future = asyncio.run_coroutine_threadsafe(self.communications_thread.respond_to_editor(return_message, context), self.communications_thread.event_loop)
-        future.result()
-
-    def error_to_editor(self, value, request_uuid = None, action = None, context=None):
-        if not action_uuid:
-            action_uuid = self.get_editor_request()
-        if not action:
-            action = 'error'
-        return_message={
-            'type': type,
-            'value': value,
-            'action_uuid': request_uuid
-        }
-        Logger.error(f'Error to editor: {return_message}')
-        future = asyncio.run_coroutine_threadsafe(self.communications_thread.respond_to_editor(return_message, context), self.communications_thread.event_loop)
-        future.result()
-        #self.sync_msg_queue.put(return_message)
-        #https://tutorialedge.net/python/concurrency/asyncio-event-loops-tutorial/#the-run_forever-method
 
     def load_project(self, project_name, context=None):
         if self.get_status('load') == project_name:
