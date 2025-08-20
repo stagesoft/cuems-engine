@@ -1,6 +1,7 @@
 from threading import Thread
 from time import sleep
 import asyncio
+from functools import partial
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
@@ -36,7 +37,6 @@ class ControllerEngine(BaseEngine):
     '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.ws_server = None
         
         
 
@@ -96,17 +96,20 @@ class ControllerEngine(BaseEngine):
     def editor_command_callback(self, item, context):
         Logger.debug(f'Received editor command: {item}, with context: {context}')
         _item_keys = item.keys()
+        if 'value' not in _item_keys:
+            item['value'] = ''
         if 'action_uuid' not in _item_keys:
-            self.error_to_editor(self._editor_request_uuid, "No action uuid submitted")
+            self.error_to_editor(context, "No action uuid submitted")
         self._editor_request_uuid = item['action_uuid']
 
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
                 
                 self._editor_request_uuid = ''
-            self.error_to_editor(self._editor_request_uuid, "Response not recognized")
+            self.error_to_editor(context, "Response not recognized")
 
         try:
+            
             self.handle_editor_command(
                 action = item['action'],
                 value = item['value'], 
@@ -114,15 +117,16 @@ class ControllerEngine(BaseEngine):
             ) 
         except Exception as e:
             Logger.error(
-                f'Error handling editor command: {e}'
+                f'Error handling editor command: {e} {type(e)}'
             )
             
             self._editor_request_uuid = ''
-            self.error_to_editor(self._editor_request_uuid, f"Command error: {e}")
+            error_string = f"Command error: {e} {type(e)}"
+            self.error_to_editor(context,  error_string)
 
     def handle_editor_command(self, action, value, context=None):
         command_dict = {
-            'project_deploy': self.deploy_callback,
+            'project_deploy': partial(self.load_project, deploy_only=True),
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery
         }
@@ -130,12 +134,12 @@ class ControllerEngine(BaseEngine):
             _editor_request_uuid = self._editor_request_uuid
             success  = command_dict[action](value, context)
             if success:
-                self.confirm_to_editor(type=action, value='OK', request_uuid=_editor_request_uuid, context=context)
+                self.confirm_to_editor(context, type=action, value='OK', request_uuid=_editor_request_uuid)
             
         else:
             raise ValueError(f'Command {action} not recognized')
         
-    def confirm_to_editor(self, type=None, action=None, request_uuid=None, value=None, context=None):
+    def confirm_to_editor(self, context, type=None, action=None, request_uuid=None, value=None, ):
         
         return_message={
             'type': type,
@@ -144,52 +148,54 @@ class ControllerEngine(BaseEngine):
         }
         self.reply_to_editor(return_message, context)
 
-    def error_to_editor(self, value, request_uuid = None, action = None, context=None):
-        if not action_uuid:
-            action_uuid = self.get_editor_request()
+    def error_to_editor(self, context, value=None, request_uuid = None, action = None):
+        Logger.debug(f'Sending error to editor: {value}, request: {request_uuid}, action:{action}  ')
+        if not request_uuid:
+            request_uuid = self.get_editor_request()
         if not action:
             action = 'error'
         return_message={
-            'type': type,
+            'type': action,
             'value': value,
             'action_uuid': request_uuid
         }
+        Logger.debug(f'Sending error to editor: {return_message}')
         self.reply_to_editor(return_message, context)
         
-    def reply_to_editor(self, message, context=None):
+    def reply_to_editor(self, message, context):
         send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.editor.responder_post_reply(message, context), self.communications_thread.event_loop)
         try:
-            result = send_task.result(timeout=TIMEOUT)
+            _ = send_task.result(timeout=TIMEOUT)
         except TimeoutError:
             Logger.debug('The coroutine took too long, cancelling the task...')
+            self.error_to_editor(context, value="Timeout error")
             send_task.cancel()
         except Exception as exc:
             Logger.debug(f'The coroutine raised an exception: {exc!r}')
-        else:
-            Logger.debug(f'The coroutine returned: {result!r}')
 
     def hwdiscovery(self, message: dict, context=None) -> None:
         Logger.debug(f'sending HW discovery request: {message}')
-        reply = self.request_to_hwdiscovery(message)
+        reply = self.request_to_hwdiscovery(message, context)
         Logger.debug(f'Received HW discovery reply: {reply}')
         if 'OK' in reply.values():
             return True
         else:
             return False            
 
-    def request_to_hwdiscovery(self, message: dict) -> dict:
+    def request_to_hwdiscovery(self, message: dict, context) -> dict:
         send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.hw_discovery.send_request(message), self.communications_thread.event_loop)
         try:
             result = send_task.result(timeout=TIMEOUT)
-            
+            Logger.debug(f'The coroutine returned: {result!r}')
+            return result
         except TimeoutError:
             Logger.debug('The coroutine took too long, cancelling the task...')
+            self.error_to_editor(context, value="Timeout error")
             send_task.cancel()
         except Exception as exc:
             Logger.debug(f'The coroutine raised an exception: {exc!r}')
-        else:
-            Logger.debug(f'The coroutine returned: {result!r}')
-            return result
+            send_task.cancel()
+
     def set_oscquery(self):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
@@ -255,9 +261,9 @@ class ControllerEngine(BaseEngine):
             Logger.error(f'Error loading project config: {e}')
             
             self.set_editor_request('')
-            self.error_to_editor(
+            self.error_to_editor( context, 
                 f"Project config error: {e}",
-                'project_ready'
+                action='project_ready'
             )
 
         try:
@@ -266,9 +272,9 @@ class ControllerEngine(BaseEngine):
             Logger.error(f'Error loading project script: {e}')
             
             self.set_editor_request('')
-            self.error_to_editor(
+            self.error_to_editor(context, 
                 f"Project script error: {e}",
-                'project_ready'
+                action='project_ready'
             )
         
         Logger.info(f'Script from {project_name} loaded')

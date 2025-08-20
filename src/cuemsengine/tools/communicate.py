@@ -76,8 +76,10 @@ class AsyncCommsThread(threading.Thread):
         await self.editor.responder_connect()
         while not self.stop_requested:
             Logger.debug(f'waiting for editor message')
-            await self.editor.responder_get_request(self.editor_callback)
-
+            callback_task = asyncio.create_task(self.editor.responder_get_request(self.editor_callback))
+            done_tasks, pending_tasks = await asyncio.wait([callback_task], return_when=asyncio.FIRST_COMPLETED)
+            for task in pending_tasks:
+                task.cancel()
     async def respond_to_editor(self, message, context):
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())           
