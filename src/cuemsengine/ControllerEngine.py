@@ -215,7 +215,8 @@ class ControllerEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-            'load': self.load_project,
+           # 'load': self.load_project,
+           # disabled for now, as it triggers a doble load when calling from the editor
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
