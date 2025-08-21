@@ -128,7 +128,8 @@ class ControllerEngine(BaseEngine):
         command_dict = {
             'project_deploy': partial(self.load_project, deploy_only=True),
             'project_ready': self.load_project,
-            'hw_discovery': self.hwdiscovery
+            'hw_discovery': self.hwdiscovery,
+            'nodeconf': self.nodeconf
         }
         if action in command_dict.keys():
             _editor_request_uuid = self._editor_request_uuid
@@ -186,14 +187,37 @@ class ControllerEngine(BaseEngine):
         send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.hw_discovery.send_request(message), self.communications_thread.event_loop)
         try:
             result = send_task.result(timeout=TIMEOUT)
-            Logger.debug(f'The coroutine returned: {result!r}')
+            Logger.debug(f'Hwdiscovery request returned: {result!r}')
             return result
         except TimeoutError:
-            Logger.debug('The coroutine took too long, cancelling the task...')
+            Logger.debug('Hwdiscovery request took too long, cancelling the task...')
             self.error_to_editor(context, value="Timeout error")
             send_task.cancel()
         except Exception as exc:
-            Logger.debug(f'The coroutine raised an exception: {exc!r}')
+            Logger.debug(f'Hwdiscovery request raised an exception: {exc!r}')
+            send_task.cancel()
+
+    def nodeconf(self, message: dict, context=None) -> None:
+        Logger.debug(f'sending nodeconf request: {message}')
+        reply = self.request_to_nodeconf(message, context)
+        Logger.debug(f'Received nodeconf reply: {reply}')
+        if 'OK' in reply.values():
+            return True
+        else:
+            return False            
+
+    def request_to_nodeconf(self, message: dict, context) -> dict:
+        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.nodeconf.send_request(message), self.communications_thread.event_loop)
+        try:
+            result = send_task.result(timeout=TIMEOUT)
+            Logger.debug(f'Nodeconf request returned: {result!r}')
+            return result
+        except TimeoutError:
+            Logger.debug('Nodeconf request took too long, cancelling the task...')
+            self.error_to_editor(context, value="Timeout error")
+            send_task.cancel()
+        except Exception as exc:
+            Logger.debug(f'Nodeconf request raised an exception: {exc!r}')
             send_task.cancel()
 
     def set_oscquery(self):
