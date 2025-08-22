@@ -162,6 +162,9 @@ def test_server_iterate_on_devices(capfd, ossia_server_factory):
     assert "No children" in out
 
 def test_client_init(capfd, ossia_client_factory):
+    def test_string(n, v):
+        return f"Parameter changed at /test{n} to {v} [node value: {v}]"
+    
     test_endpoints = {
         "/test1": [ValueType.Int, print_callback],
         "/test2": [ValueType.Int, print_callback, 10],
@@ -178,8 +181,14 @@ def test_client_init(capfd, ossia_client_factory):
     assert len(out) > 0
     assert len(err) == 0
     out_lines = out.split("\n")
-    assert out_lines[-1] == ''
-    assert len(out_lines) == 5
+    assert len(out_lines) == 7
+    assert out_lines[0] == "Using remote device: <class 'pyossia.ossia_python.OSCDevice'>"
+    assert out_lines[1] == "Device bound"
+    assert "<pyossia.ossia_python.OSCDevice object at " in out_lines[2]
+    assert out_lines[3] == test_string(2, 10)
+    assert out_lines[4] == test_string(3, 20)
+    assert out_lines[5] == test_string(4, 30)
+    assert out_lines[6] == ''
 
 def test_client_iterate_on_devices(capfd, ossia_client_factory):
     test_endpoints = {
@@ -210,7 +219,7 @@ class store_response():
         def set(self, value):
             self.response = value
 
-def test_transmission_on_same_thread():
+def test_osc_client_to_server_transmission():
     # ARRANGE
     server_res = store_response()
     server_endpoints = {
@@ -231,8 +240,8 @@ def test_transmission_on_same_thread():
     )
     client = OssiaClient(
         endpoints = client_endpoints,
-        local_port = LOCAL + 1,
-        remote_port = REMOTE
+        local_port = REMOTE,
+        remote_port = LOCAL
     )
     
     # ASSERT
@@ -240,7 +249,7 @@ def test_transmission_on_same_thread():
     assert server.started == True
     assert server_res.response == 30
     assert client_res.response == 10
-    ## Check that client alter server values
+    ## Check that client alters server values
     client.set_value("/test", 20)
     assert client_res.response == 20
     assert server_res.response == 20

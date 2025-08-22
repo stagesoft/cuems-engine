@@ -23,6 +23,7 @@ class OssiaServer(OssiaNodes):
         super().__init__()
         if not name:
             name = self.__class__.__name__
+        self.name = name
         self.host = host
         self.device = LocalDevice(name)
         self.logging = log

@@ -67,11 +67,10 @@ class ControllerEngine(BaseEngine):
     def stop_comms(self):
         if self.with_mtc:
             self.stop_mtc()
-        if self.ws_server:
-            self.stop_ws_server()
         if self.oscquery_server:
             self.oscquery_server.remove_device()
-        self._loop.call_soon_threadsafe(self._loop.stop)
+        if hasattr(self, '_loop'):
+            self._loop.call_soon_threadsafe(self._loop.stop)
 
 
     @logged

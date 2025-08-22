@@ -32,19 +32,22 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.deploy_manager = CuemsDeploy(
-            library_path=self.cm.library_path,
-            tmp_path=self.cm.tmp_path
-        )
         self.cue_handler = CueHandler()
         self.port_handler = PortHandler()
-        self.port_handler.set_ports(cue=None, ports=self.get_config_ports())
-        
+        if hasattr(self, 'cm'):
+            self.port_handler.set_ports(
+                cue=None,
+                ports=self.get_config_ports()
+            )
+            self.deploy_manager = CuemsDeploy(
+                library_path=self.cm.library_path,
+                tmp_path=self.cm.tmp_path
+            )
 
-    #def start(self):
+    def start(self):
         self.set_oscquery()
         self.set_video_players()
-    #    super().start()
+        super().start()
         
     @logged
     def stop(self):
@@ -56,11 +59,11 @@ class NodeEngine(BaseEngine):
         self.cue_handler.disarm_all()
         try:
             self.quit_video_devs()
+            self.disconnect_video_devs()
+            self.unload_video_devs()
             Logger.info('Quitted video devs')
         except Exception as e:
             Logger.warning(f'Exception raised when quitting video devs: {e}')
-        self.disconnect_video_devs()
-        self.unload_video_devs()
 
     # OSCQuery functions
     def set_oscquery(self):
@@ -265,9 +268,10 @@ class NodeEngine(BaseEngine):
         self.next_cue_pointer = None
         self.go_offset = 0
         self.cue_handler.disarm_all()
-        self.cue_handler.arm(self.script.cuelist.contents[0], self.oscquery_client, True)
+        if self.script.cuelist.contents is not None:
+            self.cue_handler.arm(self.script.cuelist.contents[0], self.oscquery_client, True)
         
-        Logger.info(f'Script {self.script.unix_name} loaded and ready to be played')
+        Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def get_config_ports(self):
         """Create a dict of ports from the config"""
