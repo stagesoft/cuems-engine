@@ -128,7 +128,7 @@ class BaseEngine(SignalEngine):
                 step_callback = mtc_step,
                 reset_callback = mtc_reset
             )
-            self.mtc_listener.run()
+            self.mtc_listener.start()
         else:
             Logger.error('MTC port not set, cannot create MtcListener')
             self.stop()

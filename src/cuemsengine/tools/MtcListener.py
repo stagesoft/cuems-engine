@@ -21,7 +21,6 @@ class MtcListener(Thread):
         self.reset_callback = reset_callback
         super().__init__(name = 'mtclistener')
         self.daemon = True
-        self.start()
 
 
     def timecode(self):
@@ -49,6 +48,7 @@ class MtcListener(Thread):
             # print("hay port")
 
     def run(self):
+        Logger.debug('Starting MTC listener')
         self.port = mido.open_input( # type: ignore[attr-defined]
             self.port_name,
             callback = self.__handle_message
