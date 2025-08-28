@@ -14,6 +14,7 @@ class MtcListener(Thread):
         self.main_tc.set_fractional(True)
 
         self.__quarter_frames = [0,0,0,0,0,0,0,0]
+        self.port = None
         self.port_name = None
         self.__open_port(port)
 
@@ -53,15 +54,14 @@ class MtcListener(Thread):
             self.port_name,
             callback = self.__handle_message
         )
-
         Logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
 
     def stop(self):
-        self.port.close()
+        if self.port is not None:
+            self.port.close()
 
     def __handle_message(self, message):
-        if message.type == 'quarter_frame':
-            
+        if message.type == 'quarter_frame':        
             self.__quarter_frames[message.frame_type] = message.frame_value
             if (message.frame_type == 3) or (message.frame_type == 7):
                 self.__update_timecode(self.main_tc + 1)
@@ -71,14 +71,12 @@ class MtcListener(Thread):
             #    print('QFC:',tc)
                 self.__update_timecode(tc)
         elif message.type == 'sysex':
-        # check to see if this is a timecode frame
+            # check to see if this is a timecode frame
             if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
                 data = message.data[4:]
                 tc = self.__mtc_decode(data)
                 Logger.debug('FF:' + tc.__str__())
                 self.__update_timecode(tc)
-            
-
         else:
             Logger.debug(message)
             raise(NotImplementedError)

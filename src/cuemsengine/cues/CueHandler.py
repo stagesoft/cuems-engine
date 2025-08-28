@@ -35,7 +35,7 @@ class CueHandler():
         Returns true if the cue is armed, false otherwise
         """
         _found = cue in CueHandler._armed_cues
-        if cue.loaded:
+        if hasattr(cue, 'loaded') and cue.loaded:
             if not cue.enabled:
                 _ = CueHandler.disarm(cue)
                 return False
@@ -64,13 +64,13 @@ class CueHandler():
 
         Returns true if the cue is disarmed, false otherwise
         """
-        if cue._player:
+        if hasattr(cue, '_player'):
             cue._player.kill()
             cue._conf.players_port_index['used'].remove(cue._player.port)
             cue._player.join()
             cue._player = None
         
-        if cue.loaded and cue in CueHandler._armed_cues:
+        if hasattr(cue, 'loaded') and cue.loaded and cue in CueHandler._armed_cues:
             CueHandler._armed_cues.remove(cue)
             cue.loaded = False
             return True

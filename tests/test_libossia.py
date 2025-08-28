@@ -172,7 +172,8 @@ def test_client_init(capfd, ossia_client_factory):
         "/test4": [ValueType.Int, print_callback, 30]
     }
     with ossia_client_factory(
-        endpoints = test_endpoints
+        endpoints = test_endpoints,
+        local_port = 9095
     ) as client:
         assert len(client.device.root_node.children()) == 4
         out, err = capfd.readouterr()
@@ -198,7 +199,8 @@ def test_client_iterate_on_devices(capfd, ossia_client_factory):
         "/test4": [ValueType.Int, print_callback, 30]
     }
     with ossia_client_factory(
-        endpoints = test_endpoints
+        endpoints = test_endpoints,
+        local_port = 9996
     ) as client:
         _, _ = capfd.readouterr()
         iterate_on_devices(client.device.root_node)
@@ -221,6 +223,7 @@ class store_response():
 
 def test_osc_client_to_server_transmission():
     # ARRANGE
+    from time import sleep
     server_res = store_response()
     server_endpoints = {
         "/test": [ValueType.Int, server_res.set, 30],
@@ -230,7 +233,7 @@ def test_osc_client_to_server_transmission():
         "/test": [ValueType.Int, client_res.set, 10],
     }
     LOCAL = 9191
-    REMOTE = 9192
+    REMOTE = 9292
 
     # ACT
     server = OssiaServer(
@@ -252,6 +255,7 @@ def test_osc_client_to_server_transmission():
     ## Check that client alters server values
     client.set_value("/test", 20)
     assert client_res.response == 20
+    sleep(0.5)
     assert server_res.response == 20
     ## Check that server does not alter client values
     server.set_value("/test", 40)

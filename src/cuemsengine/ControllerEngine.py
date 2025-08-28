@@ -37,13 +37,10 @@ class ControllerEngine(BaseEngine):
     '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
-        
-
+        self.set_editor_request('')
 
     def start(self):
         self.set_comms()
-        self.set_editor_request('')
         super().start()
     
     @logged
@@ -51,13 +48,10 @@ class ControllerEngine(BaseEngine):
         self.set_oscquery()
         self.set_communicators()
 
-
     def set_communicators(self):
         Logger.info('Setting up Communicators')
         self.communications_thread = AsyncCommsThread(self.editor_command_callback)
         self.communications_thread.start()
-
-
 
     def stop(self):
         self.stop_comms()
@@ -71,7 +65,6 @@ class ControllerEngine(BaseEngine):
             self.oscquery_server.remove_device()
         if hasattr(self, '_loop'):
             self._loop.call_soon_threadsafe(self._loop.stop)
-
 
     @logged
     def stop_mtc(self):
@@ -90,7 +83,6 @@ class ControllerEngine(BaseEngine):
             self.set_oscquery_values({
                 '/engine/status/timecode': value
             })
-
 
     def editor_command_callback(self, item, context):
         Logger.debug(f'Received editor command: {item}, with context: {context}')

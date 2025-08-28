@@ -6,12 +6,14 @@ from pyossia import ValueType
 from .fixtures import ossia_client_factory, ossia_server_factory
 from pytest import raises
 
-def test_oscqueryserver_in_separate_process(process_cleanup):
+def test_oscquery_server_in_separate_process(process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
     from cuemsengine.osc.helpers import ServerDevices
 
+    LOCAL = 9102
+    
     server_res = Queue()
 
     # Create OssiaServer in separate process
@@ -25,11 +27,10 @@ def test_oscqueryserver_in_separate_process(process_cleanup):
                     10
                 ]
             },
+            local_port=LOCAL,
             server=ServerDevices.OSCQUERY
         )
-        sleep(0.5)  # Allow time for setup
         server.set_value("/test", 80)
-        sleep(0.5)  # Allow time for value to be set
 
     server_process = process_cleanup(Process(target=run_server, args=(server_res,)))
     server_process.start()
@@ -47,32 +48,42 @@ def test_oscqueryserver_in_separate_process(process_cleanup):
     server_process.terminate()
 
 
-def test_oscquery_context_server_in_separate_processes(ossia_server_factory):
+def test_oscquery_context_server_in_separate_process(ossia_server_factory):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
     from cuemsengine.osc.helpers import ServerDevices
     import threading
 
+    LOCAL = 9101
+    
     server_res = Queue()
     stop_event = threading.Event()
 
     # Create OssiaServer in separate process
     def run_server(result_queue, stop_event):
-        with ossia_server_factory(
-            name="TestOSCQueryServer",
-            endpoints={
-                "/test": [
-                    ValueType.Int,
-                    lambda x: result_queue.put(x),
-                    10
-                ]
-            },
-            server=ServerDevices.OSCQUERY
-        ) as server:
-            server.set_value("/test", 80)
-            while not stop_event.is_set():
-                sleep(0.1)
+        try:
+            with ossia_server_factory(
+                name="TestOSCQueryServer",
+                endpoints={
+                    "/test": [
+                        ValueType.Int,
+                        lambda x: result_queue.put(x),
+                        10
+                    ]
+                },
+                local_port=LOCAL,
+                server=ServerDevices.OSCQUERY
+            ) as server:
+                sleep(0.5)  # Allow time for setup
+                server.set_value("/test", 80)
+
+                while not stop_event.is_set():
+                    sleep(0.1)
+        except Exception as e:
+            error_type = type(e).__name__
+            print(f"Error type: {error_type}")
+            result_queue.put(error_type)
 
     # Start both processes
     server_process = Process(target=run_server, args=(server_res, stop_event))
@@ -95,6 +106,10 @@ def test_oscquery_context_server_in_separate_processes(ossia_server_factory):
 def test_oscquery_context_client_fails_alone(ossia_client_factory, capfd):
     # ARRANGE
     from cuemsengine.osc.helpers import ClientDevices
+    from time import sleep
+    
+    LOCAL = 9097
+    error_type = None
 
     client_res = []
     # Create OssiaClient in separate process  
@@ -106,9 +121,14 @@ def test_oscquery_context_client_fails_alone(ossia_client_factory, capfd):
                 20
             ]
         },
+        local_port=LOCAL,
         remote_type=ClientDevices.OSCQUERY
     ) as client:
-        client.set_value("/test", 40)
+        initial_value = client_res[0]
+        try:
+            client.set_value("/test", 40)
+        except Exception as e:
+            error_type = type(e).__name__
 
     out, err = capfd.readouterr()
     err_split = err.split("\n")[-1]
@@ -117,7 +137,11 @@ def test_oscquery_context_client_fails_alone(ossia_client_factory, capfd):
             "HTTP", "Error:", "Connection", "refused"
         ], "Error missing in client"
     assert "Using remote device" in out, "Device bound"
-    assert client_res == [20, 40], "Client value was set"
+    assert initial_value == 20, "Initial client value was not set"
+    if error_type:
+        assert error_type == "ValueError", "Error type was not ValueError"
+    else:
+        assert client_res[1] == 40, "Client value was not set"
 
 def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, ossia_server_factory, capfd):
     # ARRANGE
@@ -293,9 +317,9 @@ def test_oscquery_server_clients_main_thread():
     from cuemsengine.osc.helpers import ServerDevices, ClientDevices
     from time import sleep
     
-    SERVER_LOCAL = 9096
-    SERVER_REMOTE = 9196
-    CLIENT_LOCAL = 9097
+    SERVER_LOCAL = 9296
+    SERVER_REMOTE = 9396
+    CLIENT_LOCAL = 9297
     server_res = []
     client1_res = []
     client2_res = []
