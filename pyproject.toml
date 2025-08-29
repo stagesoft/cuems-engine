@@ -52,6 +52,7 @@ Source = "https://github.com/stagesoft/cuems-engine"
 [project.scripts]
 node-engine = "scripts.node_engine:main"
 controller-engine = "scripts.controller_engine:main"
+system-ports = "scripts.system_ports:main"
 
 [tool.hatch.version]
 path = "src/cuemsengine/__init__.py"

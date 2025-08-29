@@ -1,4 +1,5 @@
 from cuemsutils.helpers import CuemsDict
+from .system_ports import get_used_ports_with_pid
 
 INITIAL_PORT = 9090
 MAX_PORT = 9999
@@ -24,13 +25,13 @@ class PortHandler(object):
         """
         return cls.ports.get(cue, None)
     
-    def set_ports(cls, cue: CuemsDict, ports: list):
+    def set_ports(cls, cue: CuemsDict, ports: list, check_range: bool = True):
         """
         Set the ports for a cue
         """
         if cls.ports.get(cue) == ports:
             return
-        cls.check_ports(ports)
+        cls.check_ports(ports, check_range)
         cls.ports[cue] = ports
         cls.all_ports.extend([i for i in ports.values()])
 
@@ -46,7 +47,7 @@ class PortHandler(object):
     def get_all_ports(cls):
         return cls.all_ports
 
-    def check_ports(cls, ports: list | dict) -> None:
+    def check_ports(cls, ports: list | dict, check_range: bool = True) -> None:
         """
         Check the ports for a cue
         """
@@ -56,6 +57,13 @@ class PortHandler(object):
             raise ValueError(f"Duplicate ports found")
         if set(cls.all_ports) & set(ports):
             raise ValueError(f"Ports already in use: {set(cls.all_ports) & set(ports)}")
+        if check_range:
+            cls.check_port_range(ports)
+
+    def check_port_range(cls, ports: list) -> None:
+        """
+        Check the port range
+        """
         for port in ports:
             if port > MAX_PORT:
                 raise ValueError(f"Port {port} is too high")
@@ -70,3 +78,15 @@ class PortHandler(object):
             if not set([port]) & set(cls.all_ports):
                 return port
         raise ValueError(f"No free ports found")
+
+    def find_system_ports(cls) -> list:
+        """
+        Find all system ports used on the system
+        """
+        return get_used_ports_with_pid()
+
+    def add_system_ports(cls):
+        """
+        Add all system ports to the all_ports list
+        """
+        cls.set_ports(None, cls.find_system_ports(), check_range=False)
