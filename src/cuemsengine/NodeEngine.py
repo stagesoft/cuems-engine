@@ -36,15 +36,8 @@ class NodeEngine(BaseEngine):
         self.port_handler = PortHandler()
         self.port_handler.add_system_ports()
         if hasattr(self, 'cm'):
-            sys_ports = self.port_handler.get_ports(cue=None)
-            config_ports = self.get_config_ports()
-            self.port_handler.check_ports(config_ports)
-            self.port_handler.remove_ports(cue=None)
-            sys_ports.update(config_ports)
-            self.port_handler.set_ports(
-                cue=None,
-                ports=sys_ports,
-                check_range=False
+            self.port_handler.add_config_ports(
+                self.get_config_ports()
             )
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
