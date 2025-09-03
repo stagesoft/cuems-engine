@@ -1,6 +1,6 @@
+from unittest.mock import patch
 from logging import INFO
 from time import sleep
-
 from cuemsengine import ControllerEngine, NodeEngine
 
 from .conftest import engine_cleanup # type: ignore[import-untyped]
@@ -59,11 +59,13 @@ def test_complex_project_load_on_controller(mock_config_path, mock_avahi_resolve
     controller_engine.stop()
     engine_cleanup(controller_engine)
 
-def test_project_load_on_node(mock_config_path, mock_avahi_resolve, mock_library_path, engine_cleanup, caplog):
+@patch('cuemsengine.NodeEngine.NodeEngine.set_oscquery_values', print)
+def test_project_load_on_node(mock_config_path, mock_avahi_resolve, mock_library_path, engine_cleanup, caplog, capfd):
     """Test the project load on the node"""
     # ARRANGE
     caplog.set_level(INFO)
     node_engine = NodeEngine(with_mtc=False)
+    node_engine.set_oscquery()
 
     # ACT
     node_engine.load_project('empty_test')
@@ -73,12 +75,16 @@ def test_project_load_on_node(mock_config_path, mock_avahi_resolve, mock_library
     assert node_engine.script.unix_name == 'empty_test'
     assert 'Project empty_test loaded' in caplog.text
     assert 'No media files to deploy' in caplog.text
+    out, err = capfd.readouterr()
+    assert "/engine/status/running" in out
+    assert "/engine/command/go" in out
     assert node_engine.get_status('load') == 'empty_test'
 
     # CLEANUP - now handled automatically by engine_cleanup fixture
     engine_cleanup(node_engine)
 
-def test_project_load_on_node_from_oscquery(mock_config_path, mock_avahi_resolve, mock_library_path, engine_cleanup, caplog):
+@patch('cuemsengine.NodeEngine.NodeEngine.set_oscquery_values', print)
+def test_project_load_on_node_from_oscquery(mock_config_path, mock_avahi_resolve, mock_library_path, engine_cleanup, caplog, capfd):
     """Test the project load on the node from OSCQuery"""
     # ARRANGE
     caplog.set_level(INFO)
@@ -94,7 +100,9 @@ def test_project_load_on_node_from_oscquery(mock_config_path, mock_avahi_resolve
     assert 'Project empty_test loaded' in caplog.text
     assert 'No media files to deploy' in caplog.text
     assert node_engine.get_status('load') == 'empty_test'
-
+    out, err = capfd.readouterr()
+    assert "/engine/status/running" in out
+    assert "/engine/command/go" in out
     # CLEANUP - now handled automatically by engine_cleanup fixture
     engine_cleanup(node_engine)
 
@@ -104,8 +112,10 @@ def test_project_load_from_controller(mock_config_path, mock_avahi_resolve, mock
     caplog.set_level(INFO)
     controller_engine = ControllerEngine(with_mtc=False)
     controller_engine.set_oscquery()
+    sleep(0.5)
     node_engine = NodeEngine(with_mtc=False)
     node_engine.set_oscquery()
+    sleep(0.5)
     # ACT
     controller_engine.load_project('empty_test')
     sleep(1)

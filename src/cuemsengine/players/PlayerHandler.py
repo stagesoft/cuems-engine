@@ -70,7 +70,7 @@ class PlayerHandler:
     def set_audio_output_generator(self, path: str, args: str):
         """Sets the audio player generator"""
         Logger.info(f'Setting audio output generator to {path} {args}')
-        self._audio_output_generator = partial(start_audio_output, path, args)
+        self._audio_output_generator = partial(start_audio_output, path=path, args=args)
 
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
@@ -88,9 +88,9 @@ class PlayerHandler:
             raise ValueError("Audio output generator not set")
         ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
         player, client = self._audio_output_generator(
-            ports['audio_output'],
-            cue.media['file_name'],
-            str(cue.id)
+            port=ports['audio_output'],
+            media=cue.media['file_name'],
+            uuid=str(cue.id)
         )
         cue._osc = client
         self.store_cue_player(cue, player)

@@ -37,7 +37,7 @@ class Player(Thread):
             stdout_lines_iterator = iter(self.p.stdout.readline, b'')
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:
-                    Logger.log_info(line, {'caller': self.ident})
+                    Logger.info(line, {'caller': self.ident})
         except CalledProcessError as e:
             if self.p.returncode < 0:
                 raise CalledProcessError(self.p.returncode, self.p.args)

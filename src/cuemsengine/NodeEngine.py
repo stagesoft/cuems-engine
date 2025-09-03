@@ -72,7 +72,7 @@ class NodeEngine(BaseEngine):
     def set_oscquery(self):
         """Set the OSCQuery infrastructure"""
         Logger.info("Starting oscquery for Node")
-        self.set_oscquery_client()
+        self.set_oscquery_client(self.get_status_endpoints())
         self.apply_oscquery_commands()
 
     def set_oscquery_client(self, endpoints: dict = None):
@@ -120,7 +120,7 @@ class NodeEngine(BaseEngine):
         self.deploy_media(project)
         
 
-    def load_project(self, project, deploy_only=False):
+    def load_project(self, project):
         """Load the project files to the node"""
         if self.get_status('load') == project:
             Logger.info(f'Project {project} already loaded')
