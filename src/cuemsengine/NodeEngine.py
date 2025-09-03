@@ -260,10 +260,10 @@ class NodeEngine(BaseEngine):
                 self.script.cuelist.contents[0],
                 True
             )
-        self.set_oscquery_values({
-            '/engine/status/running': 0,
-            '/engine/command/go': ''
-        })
+        # self.set_oscquery_values({
+        #     '/engine/status/running': 0 #,
+        #     # '/engine/command/go': ''
+        # })
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def get_config_ports(self):
