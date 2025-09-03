@@ -1,3 +1,4 @@
+from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from functools import partial
@@ -68,6 +69,7 @@ class PlayerHandler:
 
     def set_audio_output_generator(self, path: str, args: str):
         """Sets the audio player generator"""
+        Logger.info(f'Setting audio output generator to {path} {args}')
         self._audio_output_generator = partial(start_audio_output, path, args)
 
     def new_audio_output(self, cue: AudioCue) -> None:
@@ -81,6 +83,7 @@ class PlayerHandler:
         Returns:
             None
         """
+        Logger.debug(f'Creating new audio output for cue {cue.id}')
         if self._audio_output_generator is None:
             raise ValueError("Audio output generator not set")
         ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
@@ -124,6 +127,7 @@ class PlayerHandler:
 
     def set_video_player(self, cue: VideoCue):
         """Sets the video player for the given cue"""
+        Logger.debug(f'Setting video player for cue {cue.id}')
         if not self._front_video_player:
             # Initialize the front video player
             player = self.get_active_videoplayer(get_cue_output_name(cue))
@@ -155,6 +159,7 @@ class PlayerHandler:
         video_player_args: str,
     ):
         """Starts the video players."""
+        Logger.info(f'Starting video outputs for {output_names} ')
         for index, output_name in enumerate(output_names):
             with self._lock:
                 if output_name in self._video_players:

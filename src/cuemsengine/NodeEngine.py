@@ -1,16 +1,16 @@
-from cuemsutils.cues import CueList
+from cuemsutils.cues import Cue, CueList, VideoCue
 from cuemsutils.log import Logger, logged
-from cuemsutils.helpers import as_cuemsdict
 
 from .ControllerEngine import CONTROLLER_HOST
 from .core.BaseEngine import BaseEngine
-from .cues.CueHandler import CueHandler
-from .osc import ClientDevices, ValueType, ENGINE_CMD_ENDPOINTS, AUDIO_ENDPOINTS, VIDEO_ENDPOINTS, DMX_ENDPOINTS
+from .cues.CueHandler import CUE_HANDLER
+from .osc import ClientDevices, ENGINE_CMD_ENDPOINTS
 from .osc.OssiaClient import OssiaClient
 from .osc.helpers import include_function_endpoints
 from .tools.CuemsDeploy import CuemsDeploy
-from .tools.PortHandler import PortHandler
-from .players import VideoPlayer, VideoClient
+from .tools.PortHandler import PORT_HANDLER
+from .players.PlayerHandler import PLAYER_HANDLER
+
 
 class NodeEngine(BaseEngine):
     """
@@ -32,11 +32,9 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.cue_handler = CueHandler()
-        self.port_handler = PortHandler()
-        self.port_handler.add_system_ports()
+        PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
-            self.port_handler.add_config_ports(
+            PORT_HANDLER.add_config_ports(
                 self.get_config_ports()
             )
             self.deploy_manager = CuemsDeploy(
@@ -47,6 +45,7 @@ class NodeEngine(BaseEngine):
     def start(self):
         self.set_oscquery()
         self.set_video_players()
+        self.set_audio_players()
         super().start()
         
     @logged
@@ -56,11 +55,15 @@ class NodeEngine(BaseEngine):
 
     def stop_node_engine(self):
         """Stop the NodeEngine elements"""
-        self.cue_handler.disarm_all()
+        CUE_HANDLER.disarm_all()
+        self.stop_video_devs()
+
+    def stop_video_devs(self):
         try:
+            self.unload_video_devs()
             self.quit_video_devs()
             self.disconnect_video_devs()
-            self.unload_video_devs()
+            PLAYER_HANDLER.reset_video_players()
             Logger.info('Quitted video devs')
         except Exception as e:
             Logger.warning(f'Exception raised when quitting video devs: {e}')
@@ -131,8 +134,8 @@ class NodeEngine(BaseEngine):
 
         # Start cue dependencies
         self.set_video_players()
+        self.set_audio_players()
         # self.set_dmx_players()
-        # self.set_audio_players()
 
         # Check local cues
         self.check_local_cues(self.script.cuelist)
@@ -170,77 +173,50 @@ class NodeEngine(BaseEngine):
             # ignore return value found in check_mappings
             _ = cue.check_mappings(self.cm)
             if cue._local and cue.autoload:
-                self.cue_handler.arm(cue, self.oscquery_client, True)
+                if isinstance(cue, VideoCue):
+                    continue
+                CUE_HANDLER.arm(cue, True)
             if isinstance(cue, CueList):
                 self.check_local_cues(cue)
 
     def check_audio_devs(self):
         pass
 
-    def check_video_devs(self):
-        if not self.cm.node_hw_outputs['video_outputs']:
-            Logger.info('No video outputs detected.')
-            return
-        
-        try:
-            for index, player_id in enumerate(self.cm.node_hw_outputs['video_outputs']):
-                if player_id in self._video_players:
-                    continue
-                
-                # Obtain new ports
-                new_ports = self.update_config_ports([
-                    f'video_player_{index}_in_port',
-                    f'video_player_{index}_out_port'
-                ])
-
-                # Create the player object
-                player = dict()
-                player['route'] = f'/players/videoplayer-{index}'
-                player['in_port'] = new_ports[f'video_player_{index}_in_port']
-                player['out_port'] = new_ports[f'video_player_{index}_out_port']
-
-                try:
-                    # Assign a videoplayer process object
-                    player['player'] = VideoPlayer(
-                        player['in_port'],
-                        player_id,
-                        self.cm.node_conf['videoplayer']['path'],
-                        self.cm.node_conf['videoplayer']['args'],
-                        ''
-                    )
-                except Exception as e:
-                    raise e
-
-                # Assign an osc client to the player
-                player['osc'] = VideoClient(player['in_port'], player['route'])
-                
-                # Store and start the player
-                self._video_players[player_id] = player
-                self._video_players[player_id]['player'].start()
-
-        except Exception as e:
-            Logger.exception(f'Exception raised when checking video outputs: {e}.')
-    
-    def get_player(self, cue):
-        """Find the player for a given cue"""
-        output_name = get_cue_output_name(cue)
-        if output_name in self._video_players:
-            return self._video_players[output_name]
-        # elif output_name in self._audio_players:
-        #     return self._audio_players[output_name]
-        # elif output_name in self._dmx_players:
-        #     return self._dmx_players[output_name]
-        return None
-
     def check_dmx_devs(self):
         pass
+
+    # Audio functions
+    def set_audio_players(self):
+        """Set the audio players"""
+        PLAYER_HANDLER.set_audio_output_generator(
+            self.cm.node_conf['audioplayer']['path'],
+            self.cm.node_conf['audioplayer']['args']
+        )
 
     # Video functions
     def set_video_players(self):
         """Set the video players"""
-        self._video_players = {}
+        if not self.cm.node_hw_outputs['video_outputs']:
+            Logger.info('No video outputs detected.')
+            return
+        
+        output_names = self.cm.node_hw_outputs['video_outputs']
+        output_ports = []
+        for index in range(len(output_names)):
+            ports = PORT_HANDLER.assign_ports([
+                f'video_player_{index}_0',
+                f'video_player_{index}_1'
+            ])
+            PORT_HANDLER.add_config_ports(ports)
+            output_ports.append(ports)
+
         try:
-            self.check_video_devs()
+            PLAYER_HANDLER.start_video_outputs(
+                output_names,
+                output_ports,
+                self.cm.node_conf['videoplayer']['path'],
+                self.cm.node_conf['videoplayer']['args']
+            )
         except Exception as e:
             Logger.error(f'Error checking & starting video devices...')
             Logger.error(e)
@@ -248,21 +224,21 @@ class NodeEngine(BaseEngine):
             exit(-1)
 
     def quit_video_devs(self):
-        for dev in self._video_players.values():
+        for dev in PLAYER_HANDLER.get_video_players():
             try:
                 dev['osc'].set_value('/jadeo/cmd', 'quit')
             except Exception as e:
                 Logger.exception(e)
 
     def disconnect_video_devs(self):
-        for dev in self._video_players.values():
+        for dev in PLAYER_HANDLER.get_video_players():
             try:
                 dev['osc'].set_value('/jadeo/cmd', 'midi disconnect')
             except Exception as e:
                 Logger.exception(e)
 
     def unload_video_devs(self):
-        for dev in self._video_players.values():
+        for dev in PLAYER_HANDLER.get_video_players():
             try:
                 dev['osc'].set_value('/jadeo/load', '')
             except Exception as e:
@@ -277,15 +253,22 @@ class NodeEngine(BaseEngine):
         self.ongoing_cue = None
         self.next_cue_pointer = None
         self.go_offset = 0
-        self.cue_handler.disarm_all()
+        self.unload_video_devs()
+        CUE_HANDLER.disarm_all()
         if self.script.cuelist.contents is not None:
-            self.cue_handler.arm(self.script.cuelist.contents[0], self.oscquery_client, True)
-        
+            CUE_HANDLER.arm(
+                self.script.cuelist.contents[0],
+                True
+            )
+        self.set_oscquery_values({
+            '/engine/status/running': 0,
+            '/engine/command/go': ''
+        })
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def get_config_ports(self):
         """Create a dict of ports from the config"""
-        k = [i for i in self.cm.node_conf.keys() if 'port' in i and is_int(self.cm.node_conf[i]) and self.cm.node_conf[i] >= 9090]
+        k = [i for i in self.cm.node_conf.keys() if 'port' in i and is_int(self.cm.node_conf[i])]
         v = [int(self.cm.node_conf[i]) for i in k]
         return dict(zip(k, v))
 
@@ -297,6 +280,11 @@ class NodeEngine(BaseEngine):
             Logger.warning('No script loaded, cannot process GO command.')
             return
 
+        # Signal go start
+        Logger.info(f'GO command received. Starting script {value}')
+        self.set_status('go', value)
+
+        # Get the cue to go
         if not self.ongoing_cue:
             cue_to_go = self.script.cuelist.contents[0]
         else:
@@ -311,13 +299,12 @@ class NodeEngine(BaseEngine):
             Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
             return
 
-        if cue_to_go not in self.cue_handler._armed_cues:
+        if CUE_HANDLER.get_armed_cue(cue_to_go) is None:
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
         else:
             self.ongoing_cue = cue_to_go
-            self.cue_handler.go(
+            CUE_HANDLER.go(
                 cue_to_go,
-                self.get_player(cue_to_go)['osc'],
                 self.mtc_listener
             )
             self.next_cue_pointer = self.ongoing_cue.get_next_cue()
@@ -331,18 +318,6 @@ class NodeEngine(BaseEngine):
             self.oscquery_client.set_value('/engine/status/currentcue', self.ongoing_cue.id)
             self.oscquery_client.set_value('/engine/status/nextcue', next_cue)
 
-        self.set_status('go', value)
-
-    def update_config_ports(self, names: list[str]):
-        """Update the config ports"""
-        new_ports = {}
-        for name in names:
-            new_ports[name] = self.port_handler.get_free_port()
-        conf_ports = self.port_handler.get_ports(cue=None)
-        conf_ports.update(new_ports)
-        self.port_handler.remove_ports(cue=None)
-        self.port_handler.set_ports(cue=None, ports=conf_ports)
-        return new_ports
 
 ## MISCELLANEOUS FUNCTIONS ##
 
@@ -354,8 +329,3 @@ def is_int(value: any) -> bool:
         return True
     except ValueError:
         return False
-
-def get_cue_output_name(cue):
-    """Get the output name for a given cue"""
-    outputs_key = cue.outputs.keys()[0]
-    return cue.outputs[outputs_key]['output_name']
