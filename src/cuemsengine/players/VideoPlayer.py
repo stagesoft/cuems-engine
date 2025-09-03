@@ -23,7 +23,11 @@ class VideoPlayer(Player):
         if self.args:
             for arg in self.args.split():
                 process_call_list.append(arg)
-        process_call_list.extend(['--osc', str(self._port), '--start-screen', self.output, self.media])
+        process_call_list.extend([
+            '--osc', str(self._port),
+            '--start-screen', self.output,
+            self.media
+        ])
 
         self.call_subprocess(process_call_list)
 
@@ -33,7 +37,7 @@ class VideoPlayer(Player):
 class VideoClient(PlayerClient):
     def __init__(self, player_port: int, name: str = "videoplayer"):
         super().__init__(
-            local_port = player_port,
+            player_port = player_port,
             name = name,
             endpoints = OSC_VIDEOPLAYER_CONF
         )

@@ -41,7 +41,8 @@ OSC_VIDEOPLAYER_CONF = {
     '/jadeo/offset' : [ValueType.String, None],
     '/jadeo/offset.1' : [ValueType.Int, None],
     '/jadeo/midi/connect' : [ValueType.String, None],
-    '/jadeo/midi/disconnect' : [ValueType.Int, None]
+    '/jadeo/midi/disconnect' : [ValueType.Int, None],
+    '/jadeo/ontop' : [ValueType.Bool, None]
 }
 
 OSC_ENGINE_CMD_CONF = {

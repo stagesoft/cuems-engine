@@ -20,6 +20,7 @@ class Player(Thread):
         """
         super().__init__(daemon = daemon)
         self.p = None
+        self.pid = None
         self.firstrun = True
         self.started = False
 
@@ -31,6 +32,8 @@ class Player(Thread):
         """Calls a subprocess with the given arguments."""
         try:
             self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT)
+            self.pid = self.p.pid
+            
             stdout_lines_iterator = iter(self.p.stdout.readline, b'')
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:

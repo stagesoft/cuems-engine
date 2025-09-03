@@ -1,17 +1,13 @@
 from cuemsutils.log import logged
+from time import sleep
 
 from .Player import Player
 from ..osc.OssiaClient import PlayerClient
 from ..osc.endpoints import OSC_DMXPLAYER_CONF
 
 class DmxPlayer(Player):
-    def __init__(self, port_index, path, args, media):
-        self.port = port_index['start']
-        while self.port in port_index['used']:
-            self.port += 2
-
-        port_index['used'].append(self.port)
-            
+    def __init__(self, port, path, args, media):
+        self.port = port
         self.stdout = None
         self.stderr = None
         # self.card_id = card_id
@@ -30,8 +26,10 @@ class DmxPlayer(Player):
         self.call_subprocess(process_call_list)
 
 class DmxClient(PlayerClient):
-    def __init__(self, player_port: int):
+    def __init__(self, player_port: int, name: str = "dmxplayer"):
         super().__init__(
-            local_port = player_port,
-            endpoints = OSC_DMXPLAYER_CONF
+            player_port = player_port,
+            endpoints = OSC_DMXPLAYER_CONF,
+            name = name
         )
+## TODO: Implment DmxPlayer as a server
