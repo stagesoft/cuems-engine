@@ -1,4 +1,4 @@
-from cuemsutils.log import logged
+from cuemsutils.log import logged, Logger
 from time import sleep
 
 from .Player import Player
@@ -19,6 +19,7 @@ class AudioPlayer(Player):
         # Calling audioplayer-cuems in a subprocess
         process_call_list = [self.path]
         if self.args:
+            Logger.debug(f"Running audio player with args: {self.args}")
             for arg in self.args.split():
                 process_call_list.append(arg)
         process_call_list.extend(['--port', str(self.port)])

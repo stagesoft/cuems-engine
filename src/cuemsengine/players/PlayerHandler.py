@@ -7,7 +7,6 @@ from time import sleep
 
 
 from .AudioPlayer import AudioPlayer, start_audio_output
-# from .DmxPlayer import start_dmx_output
 from .VideoPlayer import VideoPlayer, VideoClient
 
 from .Player import Player
@@ -44,7 +43,7 @@ class PlayerHandler:
     def store_cue_player(self, cue: Cue, player: Player):
         """Stores a cue player"""
         with self._lock:
-            self._cue_players[cue.id] = player
+            self._cue_players[str(cue.id)] = player
 
     def get_cue_player(self, cue: Cue) -> Player:
         """Gets a cue player"""
@@ -89,7 +88,7 @@ class PlayerHandler:
         ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
         player, client = self._audio_output_generator(
             port=ports['audio_output'],
-            media=cue.media['file_name'],
+            media='/opt/cuems_library/media/' + cue.media['file_name'], # TODO: get media folder path from config and decide where to actually expand the path
             uuid=str(cue.id)
         )
         cue._osc = client

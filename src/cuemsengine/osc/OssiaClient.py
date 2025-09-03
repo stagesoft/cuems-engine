@@ -45,7 +45,7 @@ class NodeClient(OssiaClient):
 class PlayerClient(OssiaClient):
     def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
         super().__init__(
-            local_port = player_port,
+            remote_port = player_port,
             remote_type = ClientDevices.OSC,
             endpoints = endpoints,
             name = name
