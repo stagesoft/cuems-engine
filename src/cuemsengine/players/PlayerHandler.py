@@ -7,8 +7,8 @@ from time import sleep
 
 
 from .AudioPlayer import AudioPlayer, start_audio_output
-from .DmxPlayer import start_dmx_output
-from .VideoPlayer import VideoPlayer, VideoClient, start_video_output
+# from .DmxPlayer import start_dmx_output
+from .VideoPlayer import VideoPlayer, VideoClient
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
@@ -22,7 +22,7 @@ class PlayerHandler:
 
     Holds a list of armed cues and provides methods to use them.
     """
-    _instace = None
+    _instance = None
 
     def __new__(cls, *args, **kwargs):
         """Singleton pattern: Ensure only one instance is created"""
@@ -57,8 +57,8 @@ class PlayerHandler:
             player = self._cue_players.pop(cue)
             cue._osc = None
         if isinstance(player, AudioPlayer):
+            PORT_HANDLER.remove_ports(cue)
             player.kill()
-            PORT_HANDLER.free_port(player.port)
             player.join()
             player = None
 

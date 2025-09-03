@@ -1,6 +1,6 @@
 from cuemsutils.helpers import CuemsDict
 from random import choice
-from threading import Lock
+from threading import RLock
 
 from .system_ports import get_used_ports_with_pid
 
@@ -19,7 +19,7 @@ class PortHandler(object):
         """
         if not hasattr(cls, '_instance'):
             cls._instance = super(PortHandler, cls).__new__(cls)
-            cls._instance._lock = Lock()
+            cls._instance._lock = RLock()
             cls._instance._ports = {None: {}}
             cls._instance._all_ports = []
             cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
@@ -48,14 +48,14 @@ class PortHandler(object):
         Get the last port
         """
         with self._lock:
-            return self.ports[-1]
+            return self._ports[-1]
     
     def get_ports(self, cue: CuemsDict) -> dict | None:
         """
         Get the ports for a cue
         """
         with self._lock:
-            return self.ports.get(cue, None)
+            return self._ports.get(cue, None)
     
     def set_ports(self, cue: CuemsDict, ports: list | dict, check_range: bool = True) -> None:
         """
@@ -65,10 +65,10 @@ class PortHandler(object):
         if previous_ports == ports:
             return
         ports_list = self.check_ports(ports, check_range)
-        self.all_ports.extend(ports_list)
+        self._all_ports.extend(ports_list)
         if previous_ports is not None:
             ports.update(previous_ports)
-        self.ports[cue] = ports
+        self._ports[cue] = ports
 
     def remove_ports(self, cue: CuemsDict):
         """
@@ -76,16 +76,16 @@ class PortHandler(object):
         """
         if self.get_ports(cue) is not None:
             with self._lock:
-                p = self.ports.pop(cue)
-                new_ports = set(self.all_ports) - set(p.values())
-                self.all_ports = list(new_ports)
+                p = self._ports.pop(cue)
+                new_ports = set(self._all_ports) - set(p.values())
+                self._all_ports = list(new_ports)
 
     def get_all_ports(self) -> list:
         """
         Get the list of all used ports
         """
         with self._lock:
-            return self.all_ports
+            return self._all_ports
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
         """

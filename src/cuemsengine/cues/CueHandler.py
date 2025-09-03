@@ -71,13 +71,13 @@ class CueHandler:
     def arm(self, cue: Cue, init=False) -> bool:
         """Arms a cue by appending it to the armed_cues list."""
         with self._lock:
-            _found = cue in self._armed_cues
+            found = cue in self._armed_cues
         if hasattr(cue, 'loaded') and cue.loaded:
             if not cue.enabled:
                 _ = self.disarm(cue)
             return False
         elif not init:
-            if not _found:
+            if not found:
                 self.add_armed_cue(cue)
             return True
         
@@ -85,7 +85,7 @@ class CueHandler:
             # Arm the cue
             arm_cue(cue)
             cue.loaded = True
-            if not _found:
+            if not found:
                 self.add_armed_cue(cue)
 
         if cue.post_go == 'go':
