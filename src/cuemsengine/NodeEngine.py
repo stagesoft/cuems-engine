@@ -84,18 +84,19 @@ class NodeEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
+            'deploy': self.ready_project,
+            # Not a node responsibility
+            # 'hwdiscovery': None, # self.hw_discovery_callback,
             'load': self.load_project,
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
             'pause': None, # self.pause_callback,
-            'stop': None, # self.stop_callback,
+            # 'preload': None, # self.load_cue_callback,
             'resetall': None, # self.reset_all_callback,
-            'preload': None, # self.load_cue_callback,
-            'unload': None, # self.unload_cue_callback,
-            'hwdiscovery': None, # self.hw_discovery_callback,
-            'deploy': None, # self.deploy_callback,
-            'test': None # self.test_callback
+            'stop': None, # self.stop_callback,
+            'test': None, # self.test_callback
+            'unload': None # self.unload_cue_callback,
         }
         endpoints = include_function_endpoints(
             ENGINE_CMD_ENDPOINTS,
@@ -108,17 +109,22 @@ class NodeEngine(BaseEngine):
             self.oscquery_client.set_value(key, value)
 
     # Project functions
-    def load_project(self, project):
+    def ready_project(self, project):
+        """Prepare the project to be played"""
+        self.deploy_project(project)
+        self.cm.load_project_config(project)
+        self.read_script(project)
+        self.deploy_media(project)
+        
+
+    def load_project(self, project, deploy_only=False):
         """Load the project files to the node"""
         if self.get_status('load') == project:
             Logger.info(f'Project {project} already loaded')
             return
 
         # Obtain the project files
-        self.deploy_project(project)
-        self.cm.load_project_config(project)
-        self.read_script(project)
-        self.deploy_media(project)
+        self.ready_project(project)
         
         # Prepare the script to be played
         self.ready_script()

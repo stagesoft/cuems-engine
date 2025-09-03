@@ -226,19 +226,19 @@ class ControllerEngine(BaseEngine):
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-            #'load': self.load_project,
+            'deploy': None, # self.deploy_callback,
             # disabled because it trigers a doble load when called from editor
+            #'load': self.load_project,
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
+            # 'hwdiscovery': None, # self.hw_discovery_callback,
             'pause': None, # self.pause_callback,
-            'stop': None, # self.stop_callback,
-            'resetall': None, # self.reset_all_callback,
             'preload': None, # self.load_cue_callback,
-            'unload': None, # self.unload_cue_callback,
-            'hwdiscovery': None, # self.hw_discovery_callback,
-            'deploy': None, # self.deploy_callback,
-            'test': None # self.test_callback
+            'resetall': None, # self.reset_all_callback,
+            'stop': None, # self.stop_callback,
+            'test': None, # self.test_callback
+            'unload': None # self.unload_cue_callback,
         }
         endpoints = include_function_endpoints(
             ENGINE_CMD_ENDPOINTS,
@@ -262,7 +262,7 @@ class ControllerEngine(BaseEngine):
     def get_editor_request(self):
         return self._editor_request_uuid
 
-    def load_project(self, project_name, context=None):
+    def load_project(self, project_name, context=None, deploy_only=False):
         if self.get_status('load') == project_name:
             Logger.info(f'Project {project_name} already loaded')
             return True
@@ -292,6 +292,10 @@ class ControllerEngine(BaseEngine):
                 action='project_ready'
             )
         
+        if deploy_only:
+            self.oscquery_server.set_value('/engine/command/deploy', project_name)
+            return True
+
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
         self.set_status('load', project_name)

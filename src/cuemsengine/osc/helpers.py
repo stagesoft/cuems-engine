@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Callable, Union
 from pyossia.ossia_python import OSCDevice, OSCQueryDevice # type: ignore[attr-defined]
-from cuemsutils.log import logged, Logger
+from cuemsutils.log import Logger
 from datetime import datetime
 
 # Type aliases for device setup functions
