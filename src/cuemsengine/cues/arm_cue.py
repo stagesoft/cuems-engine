@@ -21,6 +21,8 @@ def arm_audioCue(cue: AudioCue):
 
 @arm_cue.register
 def arm_dmxCue(cue: DmxCue):
+    pass
+
     # Assign its own audioplayer object
     # try:
     #     cue._player = DmxPlayer(
@@ -41,7 +43,7 @@ def arm_dmxCue(cue: DmxCue):
     # cue._player.start()
 
     # And dinamically attach it to the ossia for remote control it
-    cue._osc_route = f'/players/dmxplayer-{cue.uuid}'
+    cue._osc_route = f'/players/dmxplayer-{cue.id}'
 
     # ossia.add_player_nodes(
     #     PlayerOSCConfData( 

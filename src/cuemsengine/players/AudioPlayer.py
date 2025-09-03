@@ -23,7 +23,7 @@ class AudioPlayer(Player):
                 process_call_list.append(arg)
         process_call_list.extend(['--port', str(self.port)])
         if self.uuid != None:
-            uuid_slug = self.uuid[32:]
+            uuid_slug = ''.join(self.uuid.split('-'))
             process_call_list.extend(['--uuid', uuid_slug])
         process_call_list.append(self.media)
         

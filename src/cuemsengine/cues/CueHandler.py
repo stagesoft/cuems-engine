@@ -123,10 +123,10 @@ class CueHandler:
     def go(self, cue: Cue, mtc: MtcListener) -> Thread:
         """Starts a cue in a thread."""
         if not cue.loaded:
-            raise Exception(f'{cue.__class__.__name__} {cue.uuid} not loaded to go')
+            raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
 
         thread = Thread(
-            name=f'GO:{cue.__class__.__name__}:{cue.uuid}',
+            name=f'GO:{cue.__class__.__name__}:{cue.id}',
             target=self.go_threaded,
             args=[cue, mtc],
         )

@@ -26,7 +26,7 @@ def run_cueList(cue: CueList, mtc: MtcListener):
             cue.contents[0].go(mtc)
     except Exception as e:
         Logger.error(
-            f'GO failed for content {cue.contents[0].uuid}: {e}',
+            f'GO failed for content {cue.contents[0].id}: {e}',
             extra = {"caller": cue.__class__.__name__}
         )
 
@@ -114,7 +114,7 @@ def run_dmxCue(cue: DmxCue, ossia, mtc):
         key = f'{cue._osc_route}{cue._offset_route}'
         ossia.set_value(key, cue.review_offset(mtc))
         Logger.info(
-            f"DMX play {cue.uuid}: {key} {str(ossia.get_value(key))}",
+            f"DMX play {cue.id}: {key} {str(ossia.get_value(key))}",
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:

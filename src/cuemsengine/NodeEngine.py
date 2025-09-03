@@ -303,16 +303,16 @@ class NodeEngine(BaseEngine):
             if self.next_cue_pointer:
                 cue_to_go = self.next_cue_pointer
             else:
-                Logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.uuid}')
+                Logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.id}')
                 self.ready_script()
                 return
 
         if not cue_to_go._local:
-            Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.uuid}')
+            Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
             return
 
         if cue_to_go not in self.cue_handler._armed_cues:
-            Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.uuid}')
+            Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
         else:
             self.ongoing_cue = cue_to_go
             self.cue_handler.go(
@@ -325,10 +325,10 @@ class NodeEngine(BaseEngine):
 
             # OSCQuery status notification
             if self.next_cue_pointer:
-                next_cue = self.next_cue_pointer.uuid
+                next_cue = self.next_cue_pointer.id
             else:
                 next_cue = ""
-            self.oscquery_client.set_value('/engine/status/currentcue', self.ongoing_cue.uuid)
+            self.oscquery_client.set_value('/engine/status/currentcue', self.ongoing_cue.id)
             self.oscquery_client.set_value('/engine/status/nextcue', next_cue)
 
         self.set_status('go', value)
