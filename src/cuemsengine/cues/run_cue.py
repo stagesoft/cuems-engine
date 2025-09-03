@@ -1,19 +1,21 @@
 from functools import singledispatch
-
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
+from ..tools.MtcListener import MtcListener
+from .helpers import find_timing
+
 @singledispatch
-def run_cue(cue: Cue, ossia, mtc):
+def run_cue(cue: Cue, mtc: MtcListener):
     """
     Run a cue based on its type
     """
     pass
 
 @run_cue.register
-def run_cueList(cue: CueList, ossia, mtc):
+def run_cueList(cue: CueList, mtc: MtcListener):
     """
     Run a CueList
 
@@ -21,7 +23,7 @@ def run_cueList(cue: CueList, ossia, mtc):
     """
     try:
         if cue.contents:
-            cue.contents[0].go(ossia, mtc)
+            cue.contents[0].go(mtc)
     except Exception as e:
         Logger.error(
             f'GO failed for content {cue.contents[0].uuid}: {e}',
@@ -29,16 +31,20 @@ def run_cueList(cue: CueList, ossia, mtc):
         )
 
 @run_cue.register
-def run_actionCue(cue: ActionCue, ossia, mtc):
+def run_actionCue(cue: ActionCue, mtc: MtcListener):
     """
     Run an ActionCue
     """
+    pass
+
+
+    # TODO: Implement this
     if cue.action_type == 'load':
-        cue._action_target_object.arm(cue._conf, ossia, cue._armed_list)
+        cue._action_target_object.arm(cue._conf, cue._armed_list)
     elif cue.action_type == 'unload':
-        cue._action_target_object.disarm(ossia)
+        cue._action_target_object.disarm()
     elif cue.action_type == 'play':
-        cue._action_target_object.go(ossia, mtc)
+        cue._action_target_object.go(mtc)
     elif cue.action_type == 'pause':
         pass
     elif cue.action_type == 'stop':
@@ -66,41 +72,44 @@ def run_audioCue(cue: AudioCue, ossia, mtc):
     """
     Run an AudioCue
     """
-    if cue._local:
-        try:
-            key = f'{cue._osc_route}/offset'
-            #cue._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds + harcoded_go_offset)
-            
-            # cue._start_mtc = CTimecode(frames=harcoded_go_offset)
-            
-            cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
-            offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
-            ossia.set_value(key, offset_to_go)
-            Logger.info(
-                f"Sending offset {offset_to_go} to {key} {str(ossia.get_value(key))}",
-                extra = {"caller": cue.__class__.__name__}
-            )
-        except KeyError:
-            Logger.debug(
-                f'Key error 1 in go_callback {key}',
-                extra = {"caller": cue.__class__.__name__}
-            )
+    # Define the offset
+    try:
+        key = '/offset'
+        cue._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+        
+        cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
+        offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
+        
+        cue._osc.set_value(key, offset_to_go)
+        Logger.info(
+            f"offset {offset_to_go} to {key}: {str(cue._osc.get_value(key))}",
+            extra = {"caller": cue.__class__.__name__}
+        )
+    except KeyError:
+        Logger.debug(
+            f'Key error 1 in run_audioCue {key}',
+            extra = {"caller": cue.__class__.__name__}
+        )
 
-        # Connect to mtc signal
-        try:
-            key = f'{cue._osc_route}/mtcfollow'
-            ossia.set_value(key, 1)
-        except KeyError:
-            Logger.debug(
-                f'Key error 2 in go_callback {key}',
-                extra = {"caller": cue.__class__.__name__}
-            )
+    # Connect to mtc signal
+    try:
+        key = '/mtcfollow'
+        cue._osc.set_value(key, 1)
+    except KeyError:
+        Logger.debug(
+            f'Key error 2 in run_audioCue {key}',
+            extra = {"caller": cue.__class__.__name__}
+        )
 
 @run_cue.register
 def run_dmxCue(cue: DmxCue, ossia, mtc):
     """
     Run a DmxCue
     """
+    pass
+
+    # TODO: Implement this
+    # Define the offset
     try:
         key = f'{cue._osc_route}{cue._offset_route}'
         ossia.set_value(key, cue.review_offset(mtc))
@@ -110,15 +119,17 @@ def run_dmxCue(cue: DmxCue, ossia, mtc):
         )
     except KeyError:
         Logger.debug(
-            f'OSC Key error 1 in go_callback {key}',
+            f'OSC Key error 1 in run_dmxCue {key}',
             extra = {"caller": cue.__class__.__name__}
         )
+
+    # Connect to mtc signal
     try:
-        key = f'{cue._osc_route}/mtcfollow'
-        ossia.set_value(key, True)
+        key = '/mtcfollow'
+        cue._osc.set_value(key, 1)
     except KeyError:
         Logger.debug(
-            f'OSC Key error 2 in go_callback {key}',
+            f'OSC Key error 2 in run_dmxCue {key}',
             extra = {"caller": cue.__class__.__name__}
         )
 
@@ -127,53 +138,30 @@ def run_videoCue(cue: VideoCue, ossia, mtc):
     """
     Run a VideoCue
     """
-    ### harcoded for TODO: proto_fruta, need fixx
-    #try to make all cues start at sync at 10 second timecode!
-    harcoded_go_offset = 20000
-
-    if cue._local:
-        # PLAY : specific video cue stuff
-        try:
-            key = f'{cue._osc_route}/jadeo/offset'
-            #cue._start_mtc = mtc.main_tc
-
-            ### harcoded for TODO: proto_fruta, need fixx             
-            cue._start_mtc = CTimecode(frames=harcoded_go_offset)
-            
-            offset_to_go, _ = find_timing(cue, mtc)
-            ossia.set_value(key, offset_to_go)
-            Logger.info(
-                key + " " + str(ossia.get_value(key)),
-                extra = {"caller": cue.__class__.__name__}
-            )
-        except KeyError:
-            Logger.debug(
-                f'Key error 1 (offset) in go_callback {key}',
-                extra = {"caller": cue.__class__.__name__}
-            )
+    # Define the offset
+    try:
+        key = '/offset'
+        cue._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+        
+        cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
+        offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
+        
+        cue._osc.set_value(key, offset_to_go)
+        Logger.info(
+            f"offset {offset_to_go} result: {str(cue._osc.get_value(key))}",
+            extra = {"caller": cue.__class__.__name__}
+        )
+    except KeyError:
+        Logger.debug(
+            f'Key error 1 in run_videoCue {key}',
+            extra = {"caller": cue.__class__.__name__}
+        )
         
         try:
-            key = f'{cue._osc_route}/jadeo/cmd'
+            key = '/jadeo/cmd'
             ossia.set_value(key, "midi connect Midi Through")
         except KeyError:
             Logger.debug(
-                f'Key error 2 (connect) in go_callback {key}',
+                f'Key error 2 (connect) in run_videoCue {key}',
                 extra = {"caller": cue.__class__.__name__}
             )
-
-def find_timing(cue: Cue, mtc) -> tuple[int, CTimecode]:
-    """Find the duration and offset of a cue
-     
-    Args:
-        cue (Cue): The cue with _start_mtc defined to find the timing
-        mtc (Mtc): The main timecode object
-    """
-    # Calculate duration
-    duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
-    duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
-    # Set cue end timecode
-    cue._end_mtc = cue._start_mtc + duration
-    in_time_fr_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
-    # Calculate offset to go
-    offset_to_go = in_time_fr_adjusted.frame_number - cue._start_mtc.frame_number
-    return offset_to_go, duration
