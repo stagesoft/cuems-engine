@@ -1,67 +1,122 @@
 from cuemsutils.helpers import CuemsDict
+from random import choice
+from threading import Lock
+
 from .system_ports import get_used_ports_with_pid
 
 INITIAL_PORT = 9090
 MAX_PORT = 9999
 
 class PortHandler(object):
-    ports = {None: {}}
-    all_ports = []
-    
     def __new__(cls):
         """
-        Singleton pattern
+        Singleton class responsible for handling port objects.
+
+        Holds a list of used ports and manages the assignment of new ports.
+        The ports are assigned to a cue
+        Config ports are ports that are ports assigned with None as key
+        Thread-safe: internal state mutations are guarded by a Lock.
         """
         if not hasattr(cls, '_instance'):
             cls._instance = super(PortHandler, cls).__new__(cls)
+            cls._instance._lock = Lock()
+            cls._instance._ports = {None: {}}
+            cls._instance._all_ports = []
+            cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
         return cls._instance
     
-    def last_port(cls):
-        return cls.ports[-1]
+    def assign_ports(self, names: list[str], cue: CuemsDict = None) -> dict:
+        """Assign free ports to a list of names
+
+        This method is thread-safe and should be the preferred way to assign ports to a list of names for a cue or config.
+        
+        Args:
+            names: The names to assign ports to
+            cue: The cue to assign ports to
+        """
+        with self._lock:
+            new_ports = self.get_free_ports(len(names))
+        out = {k: new_ports[i] for i,k in enumerate(names)}
+        if cue is None:
+            self.add_config_ports(out)
+        else:
+            self.set_ports(cue, out)
+        return out
+
+    def last_port(self) -> int:
+        """
+        Get the last port
+        """
+        with self._lock:
+            return self.ports[-1]
     
-    def get_ports(cls, cue: CuemsDict):
+    def get_ports(self, cue: CuemsDict) -> dict | None:
         """
         Get the ports for a cue
         """
-        return cls.ports.get(cue, None)
+        with self._lock:
+            return self.ports.get(cue, None)
     
-    def set_ports(cls, cue: CuemsDict, ports: list | dict, check_range: bool = True):
+    def set_ports(self, cue: CuemsDict, ports: list | dict, check_range: bool = True) -> None:
         """
         Set the ports for a cue
         """
-        if cls.ports.get(cue) == ports:
+        previous_ports = self.get_ports(cue)
+        if previous_ports == ports:
             return
-        ports_list = cls.check_ports(ports, check_range)
-        cls.ports[cue] = ports
-        cls.all_ports.extend(ports_list)
+        ports_list = self.check_ports(ports, check_range)
+        self.all_ports.extend(ports_list)
+        if previous_ports is not None:
+            ports.update(previous_ports)
+        self.ports[cue] = ports
 
-    def remove_ports(cls, cue: CuemsDict):
+    def remove_ports(self, cue: CuemsDict):
         """
         Remove the ports for a cue
         """
-        if cls.ports.get(cue):
-            p = cls.ports.pop(cue)
-            new_ports = set(cls.all_ports) - set(p.values())
-            cls.all_ports = list(new_ports)
+        if self.get_ports(cue) is not None:
+            with self._lock:
+                p = self.ports.pop(cue)
+                new_ports = set(self.all_ports) - set(p.values())
+                self.all_ports = list(new_ports)
 
-    def get_all_ports(cls):
-        return cls.all_ports
-
-    def check_ports(cls, ports: list | dict, check_range: bool = True) -> list:
+    def get_all_ports(self) -> list:
         """
-        Check the ports for a cue
+        Get the list of all used ports
+        """
+        with self._lock:
+            return self.all_ports
+
+    def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
+        """
+        Check the ports for a cue and return the list of ports if they are valid
+
+        Args:
+            ports: The ports to check
+            check_range: Whether to check the port range
+
+        Returns:
+            The ports list if they are valid
+
+        Raises:
+            ValueError:
+            - If duplicate ports are found
+            - If ports are already in use
+            - If check_range is True and the port range is invalid
         """
         if isinstance(ports, dict):
             ports = [i for i in ports.values()]
         if len(ports) > len(set(ports)):
             raise ValueError(f"Duplicate ports found")
-        if set(cls.all_ports) & set(ports):
-            raise ValueError(f"Ports already in use: {set(cls.all_ports) & set(ports)}")
+        all_ports = set(self.get_all_ports())
+        if all_ports & set(ports):
+            raise ValueError(f"Ports already in use: {all_ports & set(ports)}")
         if check_range:
-            cls.check_port_range(ports)
+            self.check_port_range(ports)
         return ports
 
-    def check_port_range(cls, ports: list) -> None:
+    @staticmethod
+    def check_port_range(ports: list) -> None:
         """
         Check the port range
         """
@@ -71,31 +126,52 @@ class PortHandler(object):
             if port < INITIAL_PORT:
                 raise ValueError(f"Port {port} is too low")
 
-    def get_free_port(cls) -> int:
+    def get_free_port(self) -> int:
         """
         Get a free port
-        """
-        for port in range(INITIAL_PORT, MAX_PORT):
-            if not set([port]) & set(cls.all_ports):
-                return port
-        raise ValueError(f"No free ports found")
 
-    def find_system_ports(cls) -> list:
+        Thread-safe: internal state mutations are guarded by a Lock.
+        
+        Returns:
+            The free port
+        Raises:
+            ValueError: If no free ports are found
+        """
+        available_ports = self._all_available_ports - set(self.get_all_ports())
+        if not available_ports:
+            raise ValueError(f"No free ports found")
+        return choice(list(available_ports))
+
+    def get_free_ports(self, n: int) -> list:
+        """
+        Get n free ports
+        """
+        return [self.get_free_port() for _ in range(n)]
+
+    def find_system_ports(self) -> list:
         """
         Find all system ports used on the system
         """
         return get_used_ports_with_pid()
 
-    def add_system_ports(cls):
+    def add_system_ports(self):
         """
         Add all system ports to the configuration dictionary
         """
-        cls.add_config_ports(cls.find_system_ports())
+        self.add_config_ports(self.find_system_ports())
     
-    def add_config_ports(cls, ports: list | dict):
+    def add_config_ports(self, ports: list | dict):
         """
         Add new ports to the configuration dictionary
         """
-        config_ports = cls.get_ports(None)
-        config_ports.update(ports)
-        cls.set_ports(None, config_ports, check_range=False)
+        with self._lock:
+            config_ports = self.get_ports(None)
+            config_ports.update(ports)
+            self.set_ports(None, config_ports, check_range=False)
+
+
+# ---------------------------
+# Singleton
+# ---------------------------
+
+PORT_HANDLER = PortHandler()
