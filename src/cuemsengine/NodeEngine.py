@@ -41,6 +41,9 @@ class NodeEngine(BaseEngine):
                 library_path=self.cm.library_path,
                 tmp_path=self.cm.tmp_path
             )
+            PLAYER_HANDLER.add_media_folder(
+                self.cm.library_path
+            )
 
     def start(self):
         self.set_oscquery()

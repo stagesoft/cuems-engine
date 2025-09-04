@@ -74,7 +74,7 @@ def arm_videoCue(cue: VideoCue):
 
     try:
         key = '/jadeo/load'
-        value = str(path.join(cue._conf.library_path, 'media', cue.media.file_name))
+        value = PLAYER_HANDLER.media_path(cue.media['file_name'])
         cue._osc.set_value(key, value)
         Logger.info(
             key + " " + str(cue._osc.get_value(key)),

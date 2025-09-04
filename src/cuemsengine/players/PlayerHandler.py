@@ -12,6 +12,8 @@ from .VideoPlayer import VideoPlayer, VideoClient
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
 
+DEFAULT_MEDIA_FOLDER = '/opt/cuems_library/media/'
+
 class PlayerHandler:
     """
     This class is responsible for handling and generating player objects.
@@ -33,6 +35,7 @@ class PlayerHandler:
             cls._instance._front_video_player = None
             cls._instance._audio_output_generator = None
             cls._instance._dmx_output_generator = None
+            cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._lock = Lock()
         return cls._instance
 
@@ -43,7 +46,7 @@ class PlayerHandler:
     def store_cue_player(self, cue: Cue, player: Player):
         """Stores a cue player"""
         with self._lock:
-            self._cue_players[str(cue.id)] = player
+            self._cue_players[cue] = player
 
     def get_cue_player(self, cue: Cue) -> Player:
         """Gets a cue player"""
@@ -88,7 +91,7 @@ class PlayerHandler:
         ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
         player, client = self._audio_output_generator(
             port=ports['audio_output'],
-            media='/opt/cuems_library/media/' + cue.media['file_name'], # TODO: get media folder path from config and decide where to actually expand the path
+            media=self.media_path(cue.media['file_name']),
             uuid=str(cue.id)
         )
         cue._osc = client
@@ -129,10 +132,10 @@ class PlayerHandler:
         Logger.debug(f'Setting video player for cue {cue.id}')
         if not self._front_video_player:
             # Initialize the front video player
-            player = self.get_active_videoplayer(get_cue_output_name(cue))
+            player = self.get_active_videoplayer(self.get_cue_output_name(cue))
             self._front_video_player = 1
         else:
-            player = self.get_inactive_videoplayer(get_cue_output_name(cue))
+            player = self.get_inactive_videoplayer(self.get_cue_output_name(cue))
         
         cue._osc = player['osc']
         self.store_cue_player(cue, player['player'])
@@ -220,21 +223,29 @@ class PlayerHandler:
             if output_name in self._video_players:
                 self._video_players[output_name] = self._video_players[output_name][::-1]
 
+    # ---------------------------
+    # Helper functions
+    # ---------------------------
+
+    def get_cue_output_name(cue: Cue) -> str:
+        """Get the output name for a given cue."""
+        outputs_key = next(iter(cue.outputs.keys()))
+        return cue.outputs[outputs_key]['output_name']
+
+    def add_media_folder(self, path: str):
+        """Adds a media folder to the player handler"""
+        path = path.split('/')
+        if path[-1] != 'media':
+            path.append('media')
+        self._media_folder = '/' + '/'.join(path)
+
+    def media_path(self, file_name: str) -> str:
+        """Returns the media path for a given file name"""
+        return self._media_folder + '/' + file_name
+
 
 # ---------------------------
 # Singleton
 # ---------------------------
 
 PLAYER_HANDLER = PlayerHandler()
-
-
-
-
-# ---------------------------
-# Helper functions
-# ---------------------------
-
-def get_cue_output_name(cue: Cue) -> str:
-    """Get the output name for a given cue."""
-    outputs_key = next(iter(cue.outputs.keys()))
-    return cue.outputs[outputs_key]['output_name']
