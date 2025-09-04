@@ -5,7 +5,7 @@ from cuemsutils.daemon import run_daemon
 
 def main():
     # Create and run engine
-    engine = NodeEngine()
+    engine = NodeEngine(with_mtc=False)
     run_daemon(engine, 'node_engine')
 
 if __name__ == '__main__':

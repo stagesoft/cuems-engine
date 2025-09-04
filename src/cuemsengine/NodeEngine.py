@@ -114,10 +114,10 @@ class NodeEngine(BaseEngine):
     # Project functions
     def ready_project(self, project):
         """Prepare the project to be played"""
-        self.deploy_project(project)
+        #self.deploy_project(project)
         self.cm.load_project_config(project)
         self.read_script(project)
-        self.deploy_media(project)
+        #self.deploy_media(project)
         
 
     def load_project(self, project):
