@@ -23,6 +23,7 @@ class PortHandler(object):
             cls._instance._ports = {None: {}}
             cls._instance._all_ports = []
             cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
+            cls._instance._random_ports = []
         return cls._instance
     
     def assign_ports(self, names: list[str], cue: CuemsDict = None) -> dict:
@@ -85,7 +86,7 @@ class PortHandler(object):
         Get the list of all used ports
         """
         with self._lock:
-            return self._all_ports
+            return self._all_ports.extend(self._random_ports)
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
         """
@@ -169,6 +170,28 @@ class PortHandler(object):
             config_ports.update(ports)
             self.set_ports(None, config_ports, check_range=False)
 
+    def new_random_port(self) -> int:
+        """
+        Get a new random port and store it
+        """
+        port = self.get_free_port()
+        self.store_random_port(port)
+        return port
+
+    def store_random_port(self, port: int):
+        """
+        Store a random port to the random ports set
+        """
+        with self._lock:
+            self._random_ports.append(port)
+
+    def clean_random_ports(self):
+        """
+        Clean the random ports set by keeping only ports that are in use by the system
+        """
+        sys_ports = [i for i in self.find_system_ports().values() if i in self._random_ports]
+        with self._lock:
+            self._random_ports = [i for i in self._random_ports if i in sys_ports]
 
 # ---------------------------
 # Singleton

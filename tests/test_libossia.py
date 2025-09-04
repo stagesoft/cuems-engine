@@ -243,7 +243,7 @@ def test_osc_client_to_server_transmission():
     )
     client = OssiaClient(
         endpoints = client_endpoints,
-        local_port = REMOTE,
+        local_port = REMOTE + 1,
         remote_port = LOCAL
     )
     

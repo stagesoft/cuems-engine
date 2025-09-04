@@ -1,6 +1,7 @@
 from time import sleep
 from typing import Union
 
+from ..tools.PortHandler import PORT_HANDLER
 from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
 
@@ -45,6 +46,7 @@ class NodeClient(OssiaClient):
 class PlayerClient(OssiaClient):
     def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
         super().__init__(
+            local_port = PORT_HANDLER.new_random_port(),
             remote_port = player_port,
             remote_type = ClientDevices.OSC,
             endpoints = endpoints,

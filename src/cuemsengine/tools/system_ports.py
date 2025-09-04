@@ -2,7 +2,7 @@ import subprocess
 import re
 from typing import Dict, Optional
 
-def get_used_ports_with_pid(user: str = None) -> Dict[int, int]:
+def get_used_ports_with_pid(user: str = None) -> Dict[str, int]:
     """
     Recover all used ports using the 'ss' command.
     Returns a dictionary with PID as key and port as value.
@@ -12,12 +12,12 @@ def get_used_ports_with_pid(user: str = None) -> Dict[int, int]:
         If no user is provided, all used ports will be returned.
 
     Returns:
-        Dict[int, int]: Dictionary mapping PID to port
+        Dict[str, int]: Dictionary mapping PID to port
         
     Example:
         >>> ports = get_used_ports_with_pid()
         >>> print(ports)
-        {1234: 8080, 5678: 9090}
+        {'1234': 8080, '5678': 9090}
     """
     try:
         # Run 'ss -tulnp' to get all listening ports with process info
@@ -55,7 +55,7 @@ def get_used_ports_with_pid(user: str = None) -> Dict[int, int]:
                     else:
                         continue
                 if pid and port:
-                    pid_port_dict[pid] = port
+                    pid_port_dict[str(pid)] = port
                 pid = None
                 port = None
                             

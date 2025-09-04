@@ -121,6 +121,7 @@ class NodeEngine(BaseEngine):
         self.cm.load_project_config(project)
         self.read_script(project)
         self.deploy_media(project)
+        PORT_HANDLER.clean_random_ports()
         
 
     def load_project(self, project):
