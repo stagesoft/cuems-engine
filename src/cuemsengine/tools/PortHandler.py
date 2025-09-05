@@ -1,4 +1,5 @@
 from cuemsutils.helpers import CuemsDict
+from cuemsutils.log import Logger
 from random import choice
 from threading import RLock
 
@@ -21,7 +22,7 @@ class PortHandler(object):
             cls._instance = super(PortHandler, cls).__new__(cls)
             cls._instance._lock = RLock()
             cls._instance._ports = {None: {}}
-            cls._instance._all_ports = []
+            cls._instance._all_used_ports = []
             cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
             cls._instance._random_ports = []
         return cls._instance
@@ -66,7 +67,7 @@ class PortHandler(object):
         if previous_ports == ports:
             return
         ports_list = self.check_ports(ports, check_range)
-        self._all_ports.extend(ports_list)
+        self._all_used_ports.extend(ports_list)
         if previous_ports is not None:
             ports.update(previous_ports)
         self._ports[cue] = ports
@@ -78,15 +79,22 @@ class PortHandler(object):
         if self.get_ports(cue) is not None:
             with self._lock:
                 p = self._ports.pop(cue)
-                new_ports = set(self._all_ports) - set(p.values())
-                self._all_ports = list(new_ports)
+                new_ports = set(self._all_used_ports) - set(p.values())
+                self._all_used_ports = list(new_ports)
 
-    def get_all_ports(self) -> list:
+    def get_all_used_ports(self) -> list:
         """
         Get the list of all used ports
         """
         with self._lock:
-            return self._all_ports.extend(self._random_ports)
+            Logger.debug(f"All used ports: {self._all_used_ports}")
+            Logger.debug(f'Random ports: {self._random_ports}')
+            result = self._all_used_ports.extend(self._random_ports)
+            if result is None:
+                Logger.warning("get_all_used_ports is returning None")
+                return set()
+            else:
+                return result
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
         """
@@ -109,9 +117,9 @@ class PortHandler(object):
             ports = [i for i in ports.values()]
         if len(ports) > len(set(ports)):
             raise ValueError(f"Duplicate ports found")
-        all_ports = set(self.get_all_ports())
-        if all_ports & set(ports):
-            raise ValueError(f"Ports already in use: {all_ports & set(ports)}")
+        all_used_ports = set(self.get_all_used_ports())
+        if all_used_ports & set(ports):
+            raise ValueError(f"Ports already in use: {all_used_ports & set(ports)}")
         if check_range:
             self.check_port_range(ports)
         return ports
@@ -138,7 +146,7 @@ class PortHandler(object):
         Raises:
             ValueError: If no free ports are found
         """
-        available_ports = self._all_available_ports - set(self.get_all_ports())
+        available_ports = self._all_available_ports - set(self.get_all_used_ports())
         if not available_ports:
             raise ValueError(f"No free ports found")
         return choice(list(available_ports))
