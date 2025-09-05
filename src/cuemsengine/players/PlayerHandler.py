@@ -30,13 +30,14 @@ class PlayerHandler:
         if not cls._instance:
             cls._instance = super(PlayerHandler, cls).__new__(cls)
 
-            cls._instance._cue_players = {}
-            cls._instance._video_players = {}
-            cls._instance._front_video_player = None
             cls._instance._audio_output_generator = None
+            cls._instance._cue_players = {}
             cls._instance._dmx_output_generator = None
-            cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
+            cls._instance._front_video_player = None
             cls._instance._lock = Lock()
+            cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
+            cls._instance._node_uuid = None
+            cls._instance._video_players = {}
         return cls._instance
 
     # ---------------------------
@@ -187,7 +188,10 @@ class PlayerHandler:
                     while player['player'].pid is None:
                         sleep(0.001)
                     player['pid'] = player['player'].pid
-                    player['osc'] = VideoClient(player['port'], player['route'])
+                    player['osc'] = VideoClient(
+                        player['port'],
+                        player['route']
+                    )
                 except Exception as e:
                     raise e
 
@@ -242,6 +246,10 @@ class PlayerHandler:
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""
         return self._media_folder + '/' + file_name
+
+    def add_node_uuid(self, uuid: str):
+        """Adds a node uuid to the player handler"""
+        self._node_uuid = uuid
 
 
 # ---------------------------

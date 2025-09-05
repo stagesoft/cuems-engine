@@ -91,7 +91,7 @@ class ServerDevices(Enum):
     OSCQUERY = set_oscquery_server
     PYOSC = None
 
-def include_function_endpoints(endpoints: dict, cmd_dict: dict) -> dict:
+def add_callbacks_from_dict(endpoints: dict, cmd_dict: dict[str, Callable]) -> dict:
     """Include the function endpoints in the endpoints dictionary
 
     Args:
@@ -106,3 +106,21 @@ def include_function_endpoints(endpoints: dict, cmd_dict: dict) -> dict:
         if func:
             endpoints[key] = [value[0], func]
     return endpoints
+
+def add_callback_to_all(endpoints: dict, func: Callable) -> dict:
+    """Include the function to the endpoints dictionary
+
+    Args:
+        endpoints (dict): the endpoints dictionary
+        func (Callable): the function to include
+    """
+    return {key: [value[0], func] for key, value in endpoints.items()}
+
+def add_prefix_to_all(endpoints: dict, prefix: str) -> dict:
+    """Add a prefix to the endpoints dictionary
+
+    Args:
+        endpoints (dict): the endpoints dictionary
+        prefix (str): the prefix to add
+    """
+    return {prefix + key: value for key, value in endpoints.items()}

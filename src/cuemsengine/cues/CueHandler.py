@@ -3,7 +3,7 @@ from time import sleep
 
 from cuemsutils.cues import VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
-from cuemsutils.log import logged
+from cuemsutils.log import logged, Logger
 
 from .run_cue import run_cue
 from .arm_cue import arm_cue
@@ -29,6 +29,7 @@ class CueHandler:
             cls._instance = super().__new__(cls)
             # Initialize instance attributes
             cls._instance._armed_cues = []
+            cls._instance._armed_cues_set = set()
             cls._instance._video_players = {}
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
@@ -40,6 +41,7 @@ class CueHandler:
         """Adds an armed cue to the list."""
         with self._lock:
             self._armed_cues.append(cue)
+            self._armed_cues_set.add(cue.id)
 
     def get_armed_cues(self) -> list[Cue]:
         """Returns the list of armed cues."""
@@ -48,13 +50,22 @@ class CueHandler:
 
     def get_armed_cue(self, cue: Cue) -> Cue | None:
         """Returns the armed cue with the given uuid."""
-        return self.get_armed_cues().get(cue, None)
+        try:
+            return self.get_armed_cues().index(cue)
+        except ValueError:
+            return None
+
+    def find_armed_cue(self, cue: Cue) -> Cue | None:
+        """Finds an armed cue with the given uuid."""
+        with self._lock:
+            return cue.id in self._armed_cues_set
 
     def remove_armed_cue(self, cue: Cue) -> bool:
         """Removes an armed cue from the list."""
         with self._lock:
-            if cue in self._armed_cues:
+            if cue.id in self._armed_cues_set:
                 self._armed_cues.remove(cue)
+                self._armed_cues_set.remove(cue.id)
                 return True
         return False
 
@@ -122,6 +133,7 @@ class CueHandler:
     @logged
     def go(self, cue: Cue, mtc: MtcListener) -> Thread:
         """Starts a cue in a thread."""
+        Logger.info(f'GO command received. Starting cue {cue.id}')
         if not cue.loaded:
             raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
 

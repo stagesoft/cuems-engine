@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any
+from typing import Any, Callable
 from os import path, remove
 
 from cuemsutils.log import Logger, logged
@@ -7,13 +7,18 @@ from cuemsutils.xml import XmlReaderWriter
 from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.SignalEngine import SignalEngine
+from cuemsutils.cues import ActionCue, CueList, CuemsScript
 
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
-from ..osc import ValueType
+from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
+from ..cues.CueHandler import CUE_HANDLER
+from ..tools.PortHandler import PORT_HANDLER
 
 MTC_PORT = "Midi Through Port-0"
 SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
+CONTROLLER_HOST = "localhost" #"controller.local"
+NODE_ENGINE_PORT = 10000
 
 class BaseEngine(SignalEngine):
     def __init__(self, with_cm: bool = True, with_mtc: bool = True, with_signals: bool = True):
@@ -30,7 +35,7 @@ class BaseEngine(SignalEngine):
         self.with_mtc = with_mtc
         self.with_signals = with_signals
         self.go_offset = 0
-        self.script = None
+        self.script: CuemsScript = None
         self.stop_requested = False
         self.node_name = None
         self.node_host = None
@@ -81,7 +86,7 @@ class BaseEngine(SignalEngine):
         """
         if f"_{property}" in self.status.__dict__.keys():
             Logger.debug(f'Setting {property} to {value}')
-            self.status.__setattr__(property, value)
+            self.status.__setattr__(property, str(value))
         else:
             Logger.error(f'Property {property} not found in EngineStatus')
             if strict:
@@ -112,6 +117,59 @@ class BaseEngine(SignalEngine):
     
     def get_status_endpoints(self) -> dict[str, list[Any]]:
         return {f"/engine/status/{k[1:]}": [ValueType.String, self.status_callback, v] for k,v in vars(self.status).items()}
+             
+    def build_status_endpoints(self, host: str, func: Callable = None) -> dict:
+        """Build the endpoints for a NodeEngine"""
+        if func is None:
+            func = self.status_callback
+        keys = self.status.__dict__.keys()
+        endpoints = {}
+        for key in keys:
+            endpoints[f"/{host}/status/{key[1:]}"] = [
+                ValueType.String,
+                func
+            ]
+        return endpoints
+
+    ### OSCQUERY ###
+    def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
+        if port is None:
+            port = self.cm.node_conf['oscquery_ws_port']
+        if host is None:
+            host = self.node_host
+        # TODO: remove this hardcoded host
+        host = CONTROLLER_HOST
+        self.oscquery_server = OssiaServer(
+            host = host,
+            local_port = PORT_HANDLER.new_random_port(),
+            remote_port = port,
+            server = ServerDevices.OSCQUERY,
+            endpoints = endpoints
+        )
+
+    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None):
+        if port is None:
+            port = self.cm.node_conf['oscquery_ws_port']
+        if host is None:
+            host = self.node_host
+        # TODO: remove this hardcoded host
+        host = CONTROLLER_HOST
+        self.oscquery_client = OssiaClient(
+            host = host,
+            local_port = PORT_HANDLER.new_random_port(),
+            remote_port = port,
+            remote_type = ClientDevices.OSCQUERY,
+            endpoints = endpoints
+        )
+        Logger.debug(f"OscQueryClient created: {self.oscquery_client}")
+
+    def server_to_client_values(self, node: str, value: Any) -> None:
+        Logger.debug(f"Setting {node} to {value} in client")
+        self.oscquery_client.set_value(node, value)
+
+    def client_to_server_values(self, node: str, value: Any) -> None:
+        Logger.debug(f"Setting {node} to {value} in server")
+        self.oscquery_server.set_value(node, value)
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:
@@ -210,17 +268,6 @@ class BaseEngine(SignalEngine):
         '''
 
         Logger.info(f'MTC: {self.mtc_listener.timecode()}')
-            
-    def build_status_endpoints(self, host: str) -> dict:
-        """Build the endpoints for a NodeEngine"""
-        keys = self.status.__dict__.keys()
-        endpoints = {}
-        for key in keys:
-            endpoints[f"/{host}/status/{key[1:]}"] = [
-                ValueType.String,
-                self.status_callback
-            ]
-        return endpoints
 
     ### SHOW LOCK FILE ###
     def set_show_lock_file(self): # DEV: static
@@ -252,3 +299,74 @@ class BaseEngine(SignalEngine):
             xmlfile = xml_file
         )
         self.script = reader.read_to_objects()
+
+    @logged
+    def initial_cuelist_process(self, cuelist: CueList = None):
+        ''' 
+        Review all the items recursively to update target uuids and objects
+        and to load all the "loaded" flagged
+        '''
+        
+        if not self.script:
+            Logger.error('No script found, need to load a project first')
+            raise ValueError('Script is not loaded')
+        
+        if cuelist is None:
+            cuelist = self.script.cuelist
+            if not cuelist.contents or len(cuelist.contents) == 0:
+                Logger.warning('Script cuelist is empty, nothing to process')
+                return
+            # Skip the script cuelist and process the first cuelist
+            cuelist = cuelist.contents[0]
+
+        if not cuelist.contents or len(cuelist.contents) == 0:
+            Logger.warning('Cuelist contents is empty, nothing to process')
+            return
+        
+        CUE_HANDLER.arm(cuelist, True)
+
+        try:
+            for index, item in enumerate(cuelist.contents):
+                if item.check_mappings(self.cm):
+                    Logger.debug(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
+                    # if isinstance(item, VideoCue) and item._local:
+                    #     Logger.debug(f'{item.outputs}')
+                    #     try:
+                    #         for output in item.outputs:
+                    #             # TO DO : add support for multiple outputs
+                    #             video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
+                    #             Logger.debug(f'video player id: {video_player_id}')
+                    #             item._player = self._video_players[video_player_id]['player']
+                    #             item._osc_route = self._video_players[video_player_id]['route']
+                    #     except Exception as e:
+                    #         Logger.exception(e)
+                    #         raise e
+                else:
+                    raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
+
+                if isinstance(item, CueList):
+                    self.initial_cuelist_process(item)
+
+                if item.autoload and item._local and not item.loaded:
+                    CUE_HANDLER.arm(item, True)
+
+                if item.target is None or item.target == "":
+                    if (index + 1) == len(cuelist.contents):
+                        '''
+                        If the item is the last in the cuelist we leave the
+                        target fields as None
+                        '''
+                        item.target = None
+                        item._target_object = None
+                    else:
+                        item.target = cuelist.contents[index + 1].id
+                        item._target_object = cuelist.contents[index + 1]
+                else:
+                    item._target_object = self.script.find(item.target)
+
+                if isinstance(item, ActionCue):
+                    item._action_target_object = self.script.find(item.action_target)
+
+        except Exception as e:
+            Logger.error(f'Error arming cuelist : {cuelist.id} : {e}')
+            raise

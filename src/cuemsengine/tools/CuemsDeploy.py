@@ -3,7 +3,7 @@ import subprocess
 import sys
 import os
 from cuemsutils.log import Logger
-from ..ControllerEngine import CONTROLLER_HOST
+from ..core.BaseEngine import CONTROLLER_HOST
 
 class CuemsDeploy():
     def __init__(

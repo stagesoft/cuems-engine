@@ -73,7 +73,7 @@ class OssiaNodes(object):
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
-        _.repetition_filter = ossia.RepetitionFilter.On
+        _.repetition_filter = ossia.RepetitionFilter.Off
         if callback:
             l = len(signature(callback).parameters)
             if l == 1:
@@ -105,6 +105,7 @@ class OssiaNodes(object):
         if param_args and isinstance(param_args, list):
             self.set_parameter(self.nodes[path], *param_args)
 
+    @logged
     def create_endpoints(self, paths: dict[str, Any] | list[str]):
         """Create multiple endpoints
         """

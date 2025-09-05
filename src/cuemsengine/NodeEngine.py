@@ -1,12 +1,10 @@
 from cuemsutils.cues import Cue, CueList, VideoCue
 from cuemsutils.log import Logger, logged
 
-from .ControllerEngine import CONTROLLER_HOST
-from .core.BaseEngine import BaseEngine
+from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
-from .osc import ClientDevices, ENGINE_CMD_ENDPOINTS
-from .osc.OssiaClient import OssiaClient
-from .osc.helpers import include_function_endpoints
+from .osc import ENGINE_CMD_ENDPOINTS
+from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
 from .players.PlayerHandler import PLAYER_HANDLER
@@ -75,18 +73,17 @@ class NodeEngine(BaseEngine):
     def set_oscquery(self):
         """Set the OSCQuery infrastructure"""
         Logger.info("Starting oscquery for Node")
-        self.set_oscquery_client(self.get_status_endpoints())
+        self.set_oscquery_server(
+            add_prefix_to_all(
+                self.get_status_endpoints(), '/node'
+            ),
+            port = NODE_ENGINE_PORT
+        )
+        Logger.debug(f"OscQuery Node server set")
+        self.set_oscquery_client()
+        Logger.debug(f"OscQuery Node client set")
         self.apply_oscquery_commands()
 
-    def set_oscquery_client(self, endpoints: dict = None):
-        self.oscquery_client = OssiaClient(
-            host = CONTROLLER_HOST,
-            local_port = self.cm.node_conf['osc_in_port_base'],
-            remote_port = self.cm.node_conf['oscquery_ws_port'],
-            remote_type = ClientDevices.OSCQUERY,
-            endpoints = endpoints
-        )
-        Logger.debug(f"OscQueryClient created: {self.oscquery_client}")
 
     def apply_oscquery_commands(self):
         cmd_dict = {
@@ -104,11 +101,13 @@ class NodeEngine(BaseEngine):
             'test': None, # self.test_callback
             'unload': None # self.unload_cue_callback,
         }
-        endpoints = include_function_endpoints(
-            ENGINE_CMD_ENDPOINTS,
+        endpoints = add_callbacks_from_dict(
+            add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
             cmd_dict
         )
-        self.oscquery_client.create_endpoints(endpoints)
+        self.oscquery_server.create_endpoints(endpoints)
+        Logger.debug(f"OscQuery Node endpoints: {endpoints}")
+        self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
 
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
@@ -259,11 +258,7 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
-        if self.script.cuelist.contents is not None:
-            CUE_HANDLER.arm(
-                self.script.cuelist.contents[0],
-                True
-            )
+        self.initial_cuelist_process()
         # self.set_oscquery_values({
         #     '/engine/status/running': 0 #,
         #     # '/engine/command/go': ''
@@ -277,7 +272,7 @@ class NodeEngine(BaseEngine):
         return dict(zip(k, v))
 
     def go_script(self, value):
-        if self.get_status('go') == value:
+        if self.get_status('running') == 1:
             return
 
         if not self.script:
@@ -285,8 +280,8 @@ class NodeEngine(BaseEngine):
             return
 
         # Signal go start
-        Logger.info(f'GO command received. Starting script {value}')
-        self.set_status('go', value)
+        Logger.info(f'GO command received. Starting script {self.script.unix_name}')
+        self.set_status('running', 1)
 
         # Get the cue to go
         if not self.ongoing_cue:
@@ -303,7 +298,7 @@ class NodeEngine(BaseEngine):
             Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
             return
 
-        if CUE_HANDLER.get_armed_cue(cue_to_go) is None:
+        if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
         else:
             self.ongoing_cue = cue_to_go

@@ -4,7 +4,7 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/script.xsd">
     <CuemsScript>
-        <id>12345678-aaaa-4aaa-aaaa-123456789000</id>
+        <id>12345678-aaaa-4aaa-abcd-123456789000</id>
         <name>Test Main Script</name>
         <description>This is the description text of the project</description>
         <created>2020-01-01T00:00:00.000</created>

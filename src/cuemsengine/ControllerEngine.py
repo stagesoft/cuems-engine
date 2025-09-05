@@ -6,12 +6,10 @@ from functools import partial
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
 
-from .core.BaseEngine import BaseEngine
+from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .tools.communicate import AsyncCommsThread, TIMEOUT
-from .osc import OssiaServer, ServerDevices, ENGINE_CMD_ENDPOINTS
-from .osc.helpers import include_function_endpoints
-
-CONTROLLER_HOST = "localhost" #"controller.local"
+from .osc import ENGINE_CMD_ENDPOINTS
+from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 
 class ControllerEngine(BaseEngine):
     '''
@@ -83,6 +81,11 @@ class ControllerEngine(BaseEngine):
             self.set_oscquery_values({
                 '/engine/status/timecode': value
             })
+
+
+    #########################
+    # Editor commands
+    #########################
 
     def editor_command_callback(self, item, context):
         Logger.debug(f'Received editor command: {item}, with context: {context}')
@@ -165,6 +168,17 @@ class ControllerEngine(BaseEngine):
         except Exception as exc:
             Logger.debug(f'The coroutine raised an exception: {exc!r}')
 
+    def set_editor_request(self, value):
+        self._editor_request_uuid = value
+
+    def get_editor_request(self):
+        return self._editor_request_uuid
+
+
+    #########################
+    # External services
+    #########################
+
     def hwdiscovery(self, message: dict, context=None) -> None:
         Logger.debug(f'sending HW discovery request: {message}')
         reply = self.request_to_hwdiscovery(message, context)
@@ -211,24 +225,23 @@ class ControllerEngine(BaseEngine):
             Logger.debug(f'Nodeconf request raised an exception: {exc!r}')
             send_task.cancel()
 
+
+    #########################
+    # OSCQuery
+    #########################
+
     def set_oscquery(self):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
         self.apply_oscquery_commands()
+        sleep(5) # Wait for the NodeEngines to be ready
+        self.set_oscquery_bridge()
 
-    def set_oscquery_server(self, endpoints: dict = None):
-        self.oscquery_server = OssiaServer(
-            # host = CONTROLLER_HOST,
-            remote_port = self.cm.node_conf['oscquery_ws_port'],
-            server = ServerDevices.OSCQUERY,
-            endpoints = endpoints
-        )
-
-    def apply_oscquery_commands(self):
+    def apply_oscquery_commands(self, to = 'both'):
         cmd_dict = {
             'deploy': None, # self.deploy_callback,
             # disabled because it trigers a doble load when called from editor
-            #'load': self.load_project,
+            'load': self.deploy_project,
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
             'gocue': None, # self.go_cue_callback,
@@ -240,7 +253,7 @@ class ControllerEngine(BaseEngine):
             'test': None, # self.test_callback
             'unload': None # self.unload_cue_callback,
         }
-        endpoints = include_function_endpoints(
+        endpoints = add_callbacks_from_dict(
             ENGINE_CMD_ENDPOINTS,
             cmd_dict
         )
@@ -256,11 +269,40 @@ class ControllerEngine(BaseEngine):
             endpoints = self.build_status_endpoints(host)
             self.oscquery_server.create_endpoints(endpoints)
 
-    def set_editor_request(self, value):
-        self._editor_request_uuid = value
+    def set_oscquery_bridge(self, host = None):
+        Logger.info(
+            "Oscquery bridge for Controller starting"
+        )
+        # Start a client to the NodeEngine
+        self.set_oscquery_client(
+            add_prefix_to_all(
+                self.get_status_endpoints(),
+                '/node'
+            ),
+            port = NODE_ENGINE_PORT,
+            host = host
+        )
+        # Create the endpoints for the NodeEngine commands
+        self.oscquery_client.create_endpoints(
+            add_prefix_to_all(
+                ENGINE_CMD_ENDPOINTS, '/node'
+            )
+        )
 
-    def get_editor_request(self):
-        return self._editor_request_uuid
+        # Set the callback to reroute the commands from the NodeEngine to the Controller
+        self.oscquery_server.create_endpoints(
+            add_callback_to_all(
+                add_prefix_to_all(
+                    ENGINE_CMD_ENDPOINTS, '/node'
+                ),
+                self.server_to_client_values
+            )
+        )
+
+
+    #########################
+    # Project management
+    #########################
 
     def load_project(self, project_name, context=None, deploy_only=False):
         if self.get_status('load') == project_name:
@@ -269,6 +311,10 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
+        
+        if deploy_only:
+            self.oscquery_server.set_value('/node/engine/command/deploy', project_name)
+            return True
         
         try:
             self.cm.load_project_config(project_name)
@@ -291,17 +337,13 @@ class ControllerEngine(BaseEngine):
                 f"Project script error: {e}",
                 action='project_ready'
             )
-        
-        if deploy_only:
-            self.oscquery_server.set_value('/engine/command/deploy', project_name)
-            return True
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
         self.set_status('load', project_name)
 
         self.set_oscquery_values({
-            '/engine/command/load': project_name
+            '/node/engine/command/load': project_name
         })
 
         # Confirm the project is loaded
@@ -309,6 +351,9 @@ class ControllerEngine(BaseEngine):
         self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')
         return True
+
+    def deploy_project(self, project_name):
+        self.load_project(project_name)
 
     def go_script(self, value):
         if self.get_status('go') == value:
@@ -321,6 +366,6 @@ class ControllerEngine(BaseEngine):
         self.set_status('go', value)
         
         self.set_oscquery_values({
-            '/engine/status/running': 1,
+            '/node/engine/status/running': 1,
             '/engine/command/go': value
         })

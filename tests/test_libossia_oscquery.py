@@ -153,9 +153,9 @@ def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, 
     server_res = Queue()
     client_res = Queue()
     stop_event = threading.Event()
-    SERVER_LOCAL = 9096
-    SERVER_REMOTE = 9196
-    CLIENT_LOCAL = 9097
+    SERVER_LOCAL = 9296
+    SERVER_REMOTE = 9396
+    CLIENT_LOCAL = 9297
 
     # Create OssiaServer in separate process
     def run_server(result_queue, stop_event):
@@ -224,9 +224,9 @@ def test_oscquery_multiple_clients_in_separate_processes():
     from cuemsengine.osc.helpers import ServerDevices, ClientDevices
     from threading import Event
 
-    SERVER_LOCAL = 9098
-    SERVER_REMOTE = 9997
-    CLIENT_LOCAL = 9099
+    SERVER_LOCAL = 9798
+    SERVER_REMOTE = 9898
+    CLIENT_LOCAL = 9799
     server_res = Queue()
     client1_res = Queue()
     client2_res = Queue()
@@ -297,7 +297,7 @@ def test_oscquery_multiple_clients_in_separate_processes():
     assert 80 == server_res.get(), "Server value was not set to 80"
     assert 40 == server_res.get(), "Server did not receive client1's value 40"
     assert 50 == server_res.get(), "Server did not receive client2's value 50"
-    
+
     assert 20 == client1_res.get(), "Client1 initial value was not set to 20"
     assert 80 == client1_res.get(), "Client1 did not receive server's value 80"
     assert 40 == client1_res.get(), "Client1 value was not set to 40"
