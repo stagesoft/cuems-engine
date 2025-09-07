@@ -273,31 +273,27 @@ class ControllerEngine(BaseEngine):
         Logger.info(
             "Oscquery bridge for Controller starting"
         )
-        # Start a client to the NodeEngine
-        self.set_oscquery_client(
-            add_prefix_to_all(
-                self.get_status_endpoints(),
-                '/node'
-            ),
-            port = NODE_ENGINE_PORT,
-            host = host
-        )
-        # Create the endpoints for the NodeEngine commands
-        self.oscquery_client.create_endpoints(
-            add_prefix_to_all(
-                ENGINE_CMD_ENDPOINTS, '/node'
-            )
-        )
+        # Start a client to each NodeEngine
 
-        # Set the callback to reroute the commands from the NodeEngine to the Controller
-        self.oscquery_server.create_endpoints(
-            add_callback_to_all(
-                add_prefix_to_all(
-                    ENGINE_CMD_ENDPOINTS, '/node'
-                ),
-                self.server_to_client_values
-            )
+#        for host in self.find_hosts():
+#             self.set_oscquery_client(
+#                add_prefix_to_all(
+#                    self.get_status_endpoints(),
+#                    '/node'
+#                 ),
+#            port = NODE_PORT,
+#            host = host
+#        )
+
+
+        self.set_oscquery_client(
+            port = NODE_ENGINE_PORT,
+            host = 'localhost'
         )
+        
+        # Register the NodeEngines in the OSCQuery server
+        self.add_remote_nodes_to_local(self.oscquery_server)
+
 
 
     #########################

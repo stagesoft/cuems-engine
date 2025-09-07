@@ -42,6 +42,7 @@ class BaseEngine(SignalEngine):
         self.mtc_port = MTC_PORT
         self.timecode = None
         self.status = EngineStatus()
+        self.oscquery_client_list = []
 
         super().__init__(with_signals=with_signals)
     
@@ -130,6 +131,10 @@ class BaseEngine(SignalEngine):
                 func
             ]
         return endpoints
+    
+    def add_remote_nodes_to_local(self, server) -> None:
+         for client in self.oscquery_client_list:
+            server.add_endpoints(client.get_endpoints())
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
@@ -154,18 +159,19 @@ class BaseEngine(SignalEngine):
             host = self.node_host
         # TODO: remove this hardcoded host
         host = CONTROLLER_HOST
-        self.oscquery_client = OssiaClient(
+        oscquery_client = OssiaClient(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
             remote_port = port,
             remote_type = ClientDevices.OSCQUERY,
             endpoints = endpoints
         )
-        Logger.debug(f"OscQueryClient created: {self.oscquery_client}")
+        self.oscquery_client_list = self.oscquery_client_list.append(oscquery_client)
+        Logger.debug(f"OscQueryClient created: {oscquery_client}")
 
     def server_to_client_values(self, node: str, value: Any) -> None:
         Logger.debug(f"Setting {node} to {value} in client")
-        self.oscquery_client.set_value(node, value)
+        self.oscquery_client[0].set_value(node, value)
 
     def client_to_server_values(self, node: str, value: Any) -> None:
         Logger.debug(f"Setting {node} to {value} in server")
@@ -238,12 +244,12 @@ class BaseEngine(SignalEngine):
             exit(-1)
     
     def find_hosts(self) -> list:
+        Logger.info('Looking for hosts in network map: {self.cm.network_map}')
+        node_list = []
+        for  node in self.cm.network_map:
+            node_list.append(node)
         """Hardcoded for now, should be replaced by a discovery system"""
-        return [
-            'node1',
-            'node2',
-            'node3'
-        ]
+        return node_list
 
     def print_all_status(self) -> None:
         Logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')

@@ -116,6 +116,15 @@ class OssiaNodes(object):
             for path, params in paths.items():
                 self.create_endpoint(path, params)
 
+    def get_endpoints(self) -> dict[str, list[Any]]:
+        """Get all endpoints (nodes with parameters)
+        """
+        endpoints = {}
+        for path, node in self.nodes.items():
+            if node.parameter:
+                endpoints[path] = [ValueType.String, None, node.parameter.value]
+        return endpoints
+
     def __del__(self):
         self.remove_device()
         del self
