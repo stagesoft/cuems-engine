@@ -263,13 +263,23 @@ class OssiaServer(threading.Thread):
 
     def add_other_nodes(self, data):
         if isinstance(data, SlaveOSCQueryConfData):
-            self.oscquery_slave_devices[data.device_name] = ossia.OSCQueryDevice(
+            try:
+                new_device = ossia.OSCQueryDevice(
                 data.device_name,
                 f'ws://{data.host}:{data.ws_port}',
                 data.osc_port
-            )
+                )
+            except Exception as e:
+                Logger.exception(f'Failed to create OSCQueryDevice: {e}, type: {type(e)}')
+                return
+            Logger.info(f'Added OSCQueryDevice: {data.device_name}##############################################')
 
-            self.oscquery_slave_devices[data.device_name].update()
+            try:
+                self.oscquery_slave_devices[data.device_name].update()
+            except Exception as e:
+                Logger.exception(f'Failed to update OSCQueryDevice: {e}, type: {type(e)}')
+                return
+            Logger.debug(f'Updated OSCQueryDevice: {data.device_name}###########################################') 
             # node_vec = self.oscquery_slave_devices[data.device_name].root_node.get_nodes()
             param_vec = self.oscquery_slave_devices[data.device_name].root_node.get_parameters()
             self.oscquery_slave_messageqs[data.device_name] = ossia.GlobalMessageQueue(self.oscquery_slave_devices[data.device_name])
