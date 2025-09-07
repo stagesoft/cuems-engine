@@ -1,6 +1,8 @@
 from time import sleep
 from typing import Union
 
+from cuemsutils.log import Logger
+
 from ..tools.PortHandler import PORT_HANDLER
 from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
@@ -24,8 +26,8 @@ class OssiaClient(OssiaNodes):
         self.remote_port = remote_port
         self.local_port = local_port
         self.bind_device(remote_type)
-        if endpoints:
-            self.create_endpoints(endpoints)
+#        if endpoints:
+#            self.create_endpoints(endpoints)  ### DO NOT CREATE NODES IN REMOTE CLIENT, WHE READ THEM
 
     def bind_device(self, remote_type: ClientSetupFunction):
         print(f"Using remote device: {remote_type.__annotations__['return']}")
@@ -33,6 +35,11 @@ class OssiaClient(OssiaNodes):
         sleep(STARTUP_DELAY)
         print("Device bound")
         print(self.device)
+
+    def get_endpoints(self):
+        endpoints = super().get_endpoints()
+        Logger.debug(f"Endpoints: {endpoints}")
+        return endpoints
 
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):

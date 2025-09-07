@@ -286,9 +286,11 @@ class ControllerEngine(BaseEngine):
 #        )
 
 
-        self.set_oscquery_client(
-            port = NODE_ENGINE_PORT,
-            host = 'localhost'
+        self.oscquery_client_list.append(
+            self.set_oscquery_client(
+                port = NODE_ENGINE_PORT,
+                host = 'localhost'
+            )
         )
         
         # Register the NodeEngines in the OSCQuery server

@@ -107,11 +107,11 @@ class NodeEngine(BaseEngine):
         )
         self.oscquery_server.create_endpoints(endpoints)
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
-        self.oscquery_client_list[0].create_endpoints(ENGINE_CMD_ENDPOINTS)
+        #self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
 
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
-            self.oscquery_client_list[0].set_value(key, value)
+            self.oscquery_client.set_value(key, value)
 
     # Project functions
     def ready_project(self, project):
@@ -314,8 +314,8 @@ class NodeEngine(BaseEngine):
                 next_cue = self.next_cue_pointer.id
             else:
                 next_cue = ""
-            self.oscquery_client[0].set_value('/engine/status/currentcue', self.ongoing_cue.id)
-            self.oscquery_client[0].set_value('/engine/status/nextcue', next_cue)
+            self.oscquery_client.set_value('/engine/status/currentcue', self.ongoing_cue.id)
+            self.oscquery_client.set_value('/engine/status/nextcue', next_cue)
 
 
 ## MISCELLANEOUS FUNCTIONS ##

@@ -2,7 +2,7 @@ from inspect import signature
 from pyossia import Node, ValueType, ossia
 from typing import Union, Any
 from time import sleep
-from cuemsutils.log import logged
+from cuemsutils.log import logged, Logger
 
 CLEANUP_DELAY = 0.3
 STARTUP_DELAY = 0.3
@@ -32,6 +32,12 @@ class OssiaNodes(object):
     def __init__(self):
         self.device = None
         self.nodes = {}
+
+
+    def iterate_on_children(self, node):
+        for child in node.children():
+            print(str(child))
+            self.iterate_on_children(child)
 
     def set_node(self, path: str):
         """Add a new node to the device
@@ -118,7 +124,10 @@ class OssiaNodes(object):
 
     def get_endpoints(self) -> dict[str, list[Any]]:
         """Get all endpoints (nodes with parameters)
+        
         """
+        endpoints_raw = self.iterate_on_children(self.device.root_node)
+        Logger.debug(f"Getting endpoints from {self.nodes}, device: {self.device}")
         endpoints = {}
         for path, node in self.nodes.items():
             if node.parameter:

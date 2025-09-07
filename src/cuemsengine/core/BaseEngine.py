@@ -134,6 +134,7 @@ class BaseEngine(SignalEngine):
     
     def add_remote_nodes_to_local(self, server) -> None:
          for client in self.oscquery_client_list:
+            Logger.debug(f"procesing nodes from client: {client}")
             server.add_endpoints(client.get_endpoints())
 
     ### OSCQUERY ###
@@ -166,8 +167,9 @@ class BaseEngine(SignalEngine):
             remote_type = ClientDevices.OSCQUERY,
             endpoints = endpoints
         )
-        self.oscquery_client_list = self.oscquery_client_list.append(oscquery_client)
         Logger.debug(f"OscQueryClient created: {oscquery_client}")
+        self.oscquery_client = oscquery_client
+        return oscquery_client
 
     def server_to_client_values(self, node: str, value: Any) -> None:
         Logger.debug(f"Setting {node} to {value} in client")
