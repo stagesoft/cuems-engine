@@ -234,7 +234,6 @@ class ControllerEngine(BaseEngine):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
         self.apply_oscquery_commands()
-        sleep(5) # Wait for the NodeEngines to be ready
         self.set_oscquery_bridge()
 
     def apply_oscquery_commands(self, to = 'both'):
@@ -274,28 +273,13 @@ class ControllerEngine(BaseEngine):
             "Oscquery bridge for Controller starting"
         )
         # Start a client to each NodeEngine
-
-#        for host in self.find_hosts():
-#             self.set_oscquery_client(
-#                add_prefix_to_all(
-#                    self.get_status_endpoints(),
-#                    '/node'
-#                 ),
-#            port = NODE_PORT,
-#            host = host
-#        )
-
-
-        self.oscquery_client_list.append(
-            self.set_oscquery_client(
+        for host in self.find_hosts():
+            client = self.set_oscquery_client(
                 port = NODE_ENGINE_PORT,
-                host = 'localhost'
+                host = host
             )
-        )
-        
-        # Register the NodeEngines in the OSCQuery server
-        self.add_remote_nodes_to_local(self.oscquery_server)
-
+            # Register the NodeEngines in the OSCQuery server
+            self.add_remote_nodes_to_local(client)
 
 
     #########################

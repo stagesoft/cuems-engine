@@ -33,13 +33,11 @@ class OssiaClient(OssiaNodes):
         print(f"Using remote device: {remote_type.__annotations__['return']}")
         self.device = remote_type(self)
         sleep(STARTUP_DELAY)
-        print("Device bound")
-        print(self.device)
+        Logger.debug(f"OssiaClient device bound: {self.device}")
 
-    def get_endpoints(self):
-        endpoints = super().get_endpoints()
-        Logger.debug(f"Endpoints: {endpoints}")
-        return endpoints
+        Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")
+        self.nodes = self.nodes_from_device()
+        Logger.debug(f"OssiaClient new nodes: {self.nodes}")
 
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):

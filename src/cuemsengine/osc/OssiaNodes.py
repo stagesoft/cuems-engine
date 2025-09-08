@@ -100,8 +100,8 @@ class OssiaNodes(object):
                 node = self.nodes[node]
             except KeyError:
                 raise ValueError("Node not found")
-        node.parameter.push_value(value) # type: ignore[attr-defined]
-        if node.parameter.value != value: # type: ignore[attr-defined]
+        node.parameter.push_value(value)
+        if node.parameter.value != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
     def create_endpoint(self, path: str, param_args: list | None = None):
@@ -123,16 +123,27 @@ class OssiaNodes(object):
                 self.create_endpoint(path, params)
 
     def get_endpoints(self) -> dict[str, list[Any]]:
-        """Get all endpoints (nodes with parameters)
+        """Get all endpoints (node paths with their parameter arguments)
         
         """
-        endpoints_raw = self.iterate_on_children(self.device.root_node)
-        Logger.debug(f"Getting endpoints from {self.nodes}, device: {self.device}")
+        # endpoints_raw = self.iterate_on_children(self.device.root_node)
+        Logger.info(f"Getting endpoints from device: {self.device}")
         endpoints = {}
         for path, node in self.nodes.items():
             if node.parameter:
-                endpoints[path] = [ValueType.String, None, node.parameter.value]
+                endpoints[path] = [node.parameter.value_type, None, node.parameter.value]
         return endpoints
+
+    def nodes_from_device(self, node: Node = None) -> dict[str, Node]:
+        nodes = {}
+        if node is None:
+            node = self.device.root_node
+        if len(node.children()) == 0:
+            nodes[str(node)] = node
+            return nodes
+        for i in node.children():
+            nodes.update(self.nodes_from_device(i))
+        return nodes
 
     def __del__(self):
         self.remove_device()

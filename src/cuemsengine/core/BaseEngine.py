@@ -12,6 +12,7 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
 from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
+from ..osc.helpers import add_callback_to_all
 from ..cues.CueHandler import CUE_HANDLER
 from ..tools.PortHandler import PORT_HANDLER
 
@@ -132,10 +133,13 @@ class BaseEngine(SignalEngine):
             ]
         return endpoints
     
-    def add_remote_nodes_to_local(self, server) -> None:
-         for client in self.oscquery_client_list:
-            Logger.debug(f"procesing nodes from client: {client}")
-            server.add_endpoints(client.get_endpoints())
+    def add_remote_nodes_to_local(self, client: OssiaClient) -> None:
+        Logger.debug(f"Procesing nodes from client: {client}")
+        endpoints = client.get_endpoints()
+        set_client_values = partial(self.server_to_client_values, client)
+        endpoints = add_callback_to_all(endpoints, set_client_values)
+        Logger.debug(f"Endpoints: {endpoints}")
+        self.oscquery_server.add_endpoints(endpoints)
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
@@ -168,12 +172,16 @@ class BaseEngine(SignalEngine):
             endpoints = endpoints
         )
         Logger.debug(f"OscQueryClient created: {oscquery_client}")
-        self.oscquery_client = oscquery_client
+        self.oscquery_client_list.append(oscquery_client)
         return oscquery_client
 
-    def server_to_client_values(self, node: str, value: Any) -> None:
-        Logger.debug(f"Setting {node} to {value} in client")
-        self.oscquery_client[0].set_value(node, value)
+    def server_to_client_values(self, client: OssiaClient, node: str, value: Any) -> None:
+        node = str(node)
+        Logger.debug(f"Setting {node} to {value} in {client}")
+        try:
+            client.set_value(node, value)
+        except Exception as e:
+            Logger.error(f"Error setting {node} to {value} in {client}: {e}")
 
     def client_to_server_values(self, node: str, value: Any) -> None:
         Logger.debug(f"Setting {node} to {value} in server")
@@ -247,6 +255,8 @@ class BaseEngine(SignalEngine):
     
     def find_hosts(self) -> list:
         Logger.info('Looking for hosts in network map: {self.cm.network_map}')
+        ## DEV: Hardcoded for now, should be replaced by the discovery system
+        return [CONTROLLER_HOST]
         node_list = []
         for  node in self.cm.network_map:
             node_list.append(node)
