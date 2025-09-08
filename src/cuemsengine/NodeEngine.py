@@ -47,6 +47,7 @@ class NodeEngine(BaseEngine):
         self.set_oscquery()
         self.set_video_players()
         self.set_audio_players()
+        self.set_dmx_players()
         super().start()
         
     @logged
@@ -138,7 +139,7 @@ class NodeEngine(BaseEngine):
         # Start cue dependencies
         self.set_video_players()
         self.set_audio_players()
-        # self.set_dmx_players()
+        self.set_dmx_players()
 
         # Check local cues
         self.check_local_cues(self.script.cuelist)
@@ -244,6 +245,42 @@ class NodeEngine(BaseEngine):
         for dev in PLAYER_HANDLER.get_video_players():
             try:
                 dev['osc'].set_value('/jadeo/load', '')
+            except Exception as e:
+                Logger.exception(e)
+
+    def set_dmx_players(self):
+        """Set the dmx players"""
+        if not self.cm.node_hw_outputs['dmx_outputs']:
+            Logger.info('No dmx outputs detected.')
+            return
+        
+        output_names = self.cm.node_hw_outputs['dmx_outputs']
+        output_ports = []
+        for index in range(len(output_names)):
+            ports = PORT_HANDLER.assign_ports([
+                f'dmx_player_{index}'
+            ])
+            PORT_HANDLER.add_config_ports(ports)
+            output_ports.append(ports)
+
+        try:
+            PLAYER_HANDLER.start_dmx_outputs(
+                output_names,
+                output_ports,
+                self.cm.node_conf['dmxplayer']['path'],
+                self.cm.node_conf['dmxplayer']['args']
+            )
+        except Exception as e:
+            Logger.error(f'Error checking & starting dmx devices...')
+            Logger.error(e)
+            Logger.error(type(e))
+            Logger.error(f'Exiting...')
+            exit(-1)
+
+    def quit_dmx_devs(self):
+        for dev in PLAYER_HANDLER.get_dmx_players():
+            try:
+                dev['osc'].set_value('/quit', 1)
             except Exception as e:
                 Logger.exception(e)
 
