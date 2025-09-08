@@ -341,24 +341,16 @@ class BaseEngine(SignalEngine):
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
         
-        CUE_HANDLER.arm(cuelist, True)
+        if cuelist.check_mappings(self.cm):
+            CUE_HANDLER.arm(cuelist, True)
 
         try:
             for index, item in enumerate(cuelist.contents):
                 if item.check_mappings(self.cm):
-                    Logger.debug(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
-                    # if isinstance(item, VideoCue) and item._local:
-                    #     Logger.debug(f'{item.outputs}')
-                    #     try:
-                    #         for output in item.outputs:
-                    #             # TO DO : add support for multiple outputs
-                    #             video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
-                    #             Logger.debug(f'video player id: {video_player_id}')
-                    #             item._player = self._video_players[video_player_id]['player']
-                    #             item._osc_route = self._video_players[video_player_id]['route']
-                    #     except Exception as e:
-                    #         Logger.exception(e)
-                    #         raise e
+                    ## DEV: Hardcoded for now, should be replaced by the discovery system
+                    item._local = True
+
+                    Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
                 else:
                     raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
 

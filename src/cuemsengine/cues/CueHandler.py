@@ -28,8 +28,8 @@ class CueHandler:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             # Initialize instance attributes
-            cls._instance._armed_cues = []
-            cls._instance._armed_cues_set = set()
+            cls._instance._armed_cues: list[Cue] = []
+            cls._instance._armed_cues_set: set[str] = set()
             cls._instance._video_players = {}
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
@@ -93,6 +93,7 @@ class CueHandler:
             return True
         
         if cue._local and cue.enabled:
+            Logger.info(f"Arming {type(cue)} {cue.id}")
             # Arm the cue
             arm_cue(cue)
             cue.loaded = True
