@@ -16,8 +16,8 @@
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
             <mac>2cf05d21cca3</mac>
             <osc_dest_host>localhost</osc_dest_host>
-            <oscquery_ws_port>9090</oscquery_ws_port>
-            <oscquery_osc_port>9091</oscquery_osc_port>
+            <oscquery_ws_port>9190</oscquery_ws_port>
+            <oscquery_osc_port>9191</oscquery_osc_port>
             <websocket_port>9092</websocket_port>
             <load_timeout>15000</load_timeout>
             <nodeconf_timeout>5000</nodeconf_timeout>

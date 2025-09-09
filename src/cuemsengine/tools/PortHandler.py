@@ -4,8 +4,8 @@ from random import choice
 from threading import RLock
 
 from .system_ports import get_used_ports_with_pid
-
-INITIAL_PORT = 9090
+ # olad ports defaults to 9090 9010, raise de initial port to skip these ports
+INITIAL_PORT = 9190
 MAX_PORT = 9999
 
 class PortHandler(object):
