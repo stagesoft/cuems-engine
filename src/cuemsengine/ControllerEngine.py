@@ -250,7 +250,8 @@ class ControllerEngine(BaseEngine):
             'resetall': None, # self.reset_all_callback,
             'stop': None, # self.stop_callback,
             'test': None, # self.test_callback
-            'unload': None # self.unload_cue_callback,
+            'unload': None, # self.unload_cue_callback,
+            'update': self.set_oscquery_bridge # Rebuilds client connections
         }
         endpoints = add_callbacks_from_dict(
             ENGINE_CMD_ENDPOINTS,
@@ -349,5 +350,5 @@ class ControllerEngine(BaseEngine):
         
         self.set_oscquery_values({
             '/node/engine/status/running': 1,
-            '/engine/command/go': value
+            '/node/engine/command/go': value
         })

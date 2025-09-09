@@ -4,7 +4,7 @@ from cuemsutils.cues.Cue import Cue
 from functools import partial
 from threading import Lock
 from time import sleep
-
+from typing import Callable
 
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
@@ -33,6 +33,7 @@ class PlayerHandler:
             cls._instance._audio_output_generator = None
             cls._instance._cue_players = {}
             cls._instance._dmx_output_generator = None
+            cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
@@ -96,6 +97,7 @@ class PlayerHandler:
             uuid=str(cue.id)
         )
         cue._osc = client
+        self.set_player_endpoints(cue)
         self.store_cue_player(cue, player)
 
     # def set_dmx_output_generator(cls, path: str, args: str):
@@ -230,6 +232,20 @@ class PlayerHandler:
     # ---------------------------
     # Helper functions
     # ---------------------------
+
+    def set_player_endpoints_generator(self, func: Callable, *args, **kwargs):
+        """Sets the player endpoints generator"""
+        Logger.info(f'Setting player endpoints generator to {func}')
+        self._player_endpoints_generator = partial(func, *args, **kwargs)
+
+    def set_player_endpoints(self, cue: Cue) -> None:
+        """Sets the player endpoints for a given cue"""
+        if self._player_endpoints_generator is None:
+            raise ValueError("Player endpoints generator not set")
+        try:
+            self._player_endpoints_generator(cue)
+        except Exception as e:
+            Logger.error(f'Error setting player endpoints for cue {cue.id}: {e}')
 
     def get_cue_output_name(cue: Cue) -> str:
         """Get the output name for a given cue."""

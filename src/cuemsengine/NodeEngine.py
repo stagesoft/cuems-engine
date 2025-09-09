@@ -1,9 +1,11 @@
-from cuemsutils.cues import Cue, CueList, VideoCue
+from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
+from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
 from .osc import ENGINE_CMD_ENDPOINTS
+from .osc.OssiaClient import PlayerClient
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
@@ -41,6 +43,11 @@ class NodeEngine(BaseEngine):
             )
             PLAYER_HANDLER.add_media_folder(
                 self.cm.library_path
+            )
+            PLAYER_HANDLER.set_player_endpoints_generator(
+                self.add_player_endpoints,
+                # TODO: Use node host from config
+                prefix = '/node/players'
             )
 
     def start(self):
@@ -80,10 +87,9 @@ class NodeEngine(BaseEngine):
             port = NODE_ENGINE_PORT
         )
         Logger.debug(f"OscQuery Node server set")
-        self.set_oscquery_client()
+        self.oscquery_client = self.set_oscquery_client()
         Logger.debug(f"OscQuery Node client set")
         self.apply_oscquery_commands()
-
 
     def apply_oscquery_commands(self):
         cmd_dict = {
@@ -99,7 +105,9 @@ class NodeEngine(BaseEngine):
             'resetall': None, # self.reset_all_callback,
             'stop': None, # self.stop_callback,
             'test': None, # self.test_callback
-            'unload': None # self.unload_cue_callback,
+            'unload': None, # self.unload_cue_callback,
+            'add': self.add_player_endpoints,
+            'remove': self.remove_player_endpoints,
         }
         endpoints = add_callbacks_from_dict(
             add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
@@ -112,6 +120,39 @@ class NodeEngine(BaseEngine):
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
             self.oscquery_client.set_value(key, value)
+
+    def add_player_endpoints(self, cue: Cue, prefix: str):
+        if not hasattr(cue, '_osc') or not isinstance(cue._osc, PlayerClient):
+            Logger.error(f'Cue {cue.id} does not have a player client')
+            return
+
+        # Get the player client
+        client: PlayerClient = cue._osc
+
+        # Add the prefix to the endpoints
+        prefix = self.build_player_prefix(cue, prefix)
+
+        # Register the endpoints in the server
+        self.add_remote_nodes_to_local(client, prefix)
+        # Notify the client to update the endpoints
+        self.oscquery_client.set_value('/node/engine/command/update', 'localhost')
+
+    def remove_player_endpoints(self, cue_id: str):
+        if not CUE_HANDLER.find_cue(cue_id):
+            Logger.error(f'Cue {cue_id} not found')
+            return
+
+        ## DEV: Remove the player endpoints from the server
+        return
+
+    def build_player_prefix(self, cue: Cue, prefix: str = None) -> str:
+        """Build the player prefix for a given cue"""
+        if not cue.id:
+            Logger.error('Cue has no id for building player prefix')
+            return ''
+        if not prefix:
+            prefix = ''
+        return f'{prefix}/{cue.id}'
 
     # Project functions
     def ready_project(self, project):
@@ -279,6 +320,10 @@ class NodeEngine(BaseEngine):
             Logger.warning('No script loaded, cannot process GO command.')
             return
 
+        if not self.with_mtc:
+            Logger.warning('No MTC listener, cannot process GO command.')
+            return
+
         # Signal go start
         Logger.info(f'GO command received. Starting script {self.script.unix_name}')
         self.set_status('running', 1)
@@ -300,22 +345,22 @@ class NodeEngine(BaseEngine):
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
-        else:
-            self.ongoing_cue = cue_to_go
-            CUE_HANDLER.go(
-                cue_to_go,
-                self.mtc_listener
-            )
-            self.next_cue_pointer = self.ongoing_cue.get_next_cue()
-            self.go_offset = self.mtc_listener.main_tc.milliseconds
+            return
+        self.ongoing_cue = cue_to_go
+        self.oscquery_client_list[0].set_value('/engine/status/currentcue', self.ongoing_cue.id)
+        CUE_HANDLER.go(
+            cue_to_go,
+            self.mtc_listener
+        )
+        self.next_cue_pointer = self.ongoing_cue.get_next_cue()
+        self.go_offset = self.mtc_listener.main_tc.milliseconds
 
-            # OSCQuery status notification
-            if self.next_cue_pointer:
-                next_cue = self.next_cue_pointer.id
-            else:
-                next_cue = ""
-            self.oscquery_client.set_value('/engine/status/currentcue', self.ongoing_cue.id)
-            self.oscquery_client.set_value('/engine/status/nextcue', next_cue)
+        # OSCQuery status notification
+        if self.next_cue_pointer:
+            next_cue = self.next_cue_pointer.id
+        else:
+            next_cue = ""
+        self.oscquery_client_list[0].set_value('/engine/status/nextcue', next_cue)
 
 
 ## MISCELLANEOUS FUNCTIONS ##

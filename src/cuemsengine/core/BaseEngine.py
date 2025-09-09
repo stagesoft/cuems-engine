@@ -12,7 +12,8 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
 from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
-from ..osc.helpers import add_callback_to_all
+from ..osc.OssiaClient import PlayerClient
+from ..osc.helpers import add_callback_to_all, add_prefix_to_all
 from ..cues.CueHandler import CUE_HANDLER
 from ..tools.PortHandler import PORT_HANDLER
 
@@ -43,7 +44,7 @@ class BaseEngine(SignalEngine):
         self.mtc_port = MTC_PORT
         self.timecode = None
         self.status = EngineStatus()
-        self.oscquery_client_list = []
+        self.oscquery_client_list: list[OssiaClient] = []
 
         super().__init__(with_signals=with_signals)
     
@@ -132,14 +133,6 @@ class BaseEngine(SignalEngine):
                 func
             ]
         return endpoints
-    
-    def add_remote_nodes_to_local(self, client: OssiaClient) -> None:
-        Logger.debug(f"Procesing nodes from client: {client}")
-        endpoints = client.get_endpoints()
-        set_client_values = partial(self.server_to_client_values, client)
-        endpoints = add_callback_to_all(endpoints, set_client_values)
-        Logger.debug(f"Endpoints: {endpoints}")
-        self.oscquery_server.add_endpoints(endpoints)
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
@@ -157,7 +150,7 @@ class BaseEngine(SignalEngine):
             endpoints = endpoints
         )
 
-    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None):
+    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
@@ -175,8 +168,10 @@ class BaseEngine(SignalEngine):
         self.oscquery_client_list.append(oscquery_client)
         return oscquery_client
 
-    def server_to_client_values(self, client: OssiaClient, node: str, value: Any) -> None:
-        node = str(node)
+    def server_to_client_values(
+        self, client: OssiaClient, node: str, value: Any, strip: str = ""
+    ) -> None:
+        node = str(node).strip(strip)
         Logger.debug(f"Setting {node} to {value} in {client}")
         try:
             client.set_value(node, value)
@@ -186,6 +181,17 @@ class BaseEngine(SignalEngine):
     def client_to_server_values(self, node: str, value: Any) -> None:
         Logger.debug(f"Setting {node} to {value} in server")
         self.oscquery_server.set_value(node, value)
+
+    def add_remote_nodes_to_local(self, client: OssiaClient, prefix: str = "") -> None:
+        Logger.debug(f"Procesing nodes from client: {client}")
+        set_client_values = partial(
+            self.server_to_client_values, client, strip = prefix
+        )
+        endpoints = client.get_endpoints()
+        endpoints = add_callback_to_all(endpoints, set_client_values)
+        endpoints = add_prefix_to_all(endpoints, prefix)
+        Logger.debug(f"Endpoints: {endpoints}")
+        self.oscquery_server.add_endpoints(endpoints)
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:

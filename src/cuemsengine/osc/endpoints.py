@@ -57,7 +57,8 @@ OSC_ENGINE_CMD_CONF = {
     '/engine/command/unload' : [ValueType.String, None],
     '/engine/command/hwdiscovery' : [ValueType.Impulse, None],
     '/engine/command/deploy' : [ValueType.String, None],
-    '/engine/command/test' : [ValueType.String, None]
+    '/engine/command/test' : [ValueType.String, None],
+    '/engine/command/update' : [ValueType.Int, None]
 }
 
 """
