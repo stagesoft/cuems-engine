@@ -88,7 +88,7 @@ class BaseEngine(SignalEngine):
             strict (bool): If True, raise an AttributeError if the property is not found
         """
         if f"_{property}" in self.status.__dict__.keys():
-            Logger.debug(f'Setting {property} to {value}')
+            Logger.debug(f'Setting property {property} to {value}')
             self.status.__setattr__(property, str(value))
         else:
             Logger.error(f'Property {property} not found in EngineStatus')
@@ -172,20 +172,24 @@ class BaseEngine(SignalEngine):
         self, client: OssiaClient, node: str, value: Any, strip: str = ""
     ) -> None:
         node = str(node).strip(strip)
-        Logger.debug(f"Setting {node} to {value} in {client}")
+        Logger.debug(f"Setting node {node} to {value} in {client}")
         try:
             client.set_value(node, value)
         except Exception as e:
             Logger.error(f"Error setting {node} to {value} in {client}: {e}")
 
     def client_to_server_values(self, node: str, value: Any) -> None:
-        Logger.debug(f"Setting {node} to {value} in server")
+        node = str(node)
+        Logger.debug(f"Setting node {node} to {value} in server")
         self.oscquery_server.set_value(node, value)
 
-    def add_remote_nodes_to_local(self, client: OssiaClient, prefix: str = "") -> None:
+    def add_player_nodes_to_local(self, client: PlayerClient, prefix: str = "") -> None:
         Logger.debug(f"Procesing nodes from client: {client}")
-        set_client_values = partial(
-            self.server_to_client_values, client, strip = prefix
+        if not isinstance(client, PlayerClient):
+            Logger.error(f"Client {client} is not a PlayerClient")
+            return
+        def set_client_values(node: str, value: Any) -> None:
+            self.server_to_client_values(client, node, value, strip = prefix
         )
         endpoints = client.get_endpoints()
         endpoints = add_callback_to_all(endpoints, set_client_values)

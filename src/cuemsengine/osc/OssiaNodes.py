@@ -1,6 +1,6 @@
 from inspect import signature
 from pyossia import Node, ValueType, ossia
-from typing import Union, Any
+from typing import Union, Any, Callable
 from time import sleep
 from cuemsutils.log import logged, Logger
 
@@ -73,13 +73,14 @@ class OssiaNodes(object):
         self.device = None
 
     @staticmethod
-    def set_parameter(node: Node, value_type, callback = None, value = None):
+    def set_parameter(node: Node, value_type, callback: Callable = None, value = None):
         """Set a parameter to a node
         """
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
-        _.repetition_filter = ossia.RepetitionFilter.Off
+        _.repetition_filter = ossia.RepetitionFilter.On
+        _.access_mode = ossia.AccessMode.Bi
         if callback:
             l = len(signature(callback).parameters)
             if l == 1:
@@ -89,7 +90,18 @@ class OssiaNodes(object):
             else:
                 raise ValueError("callback must have 1 or 2 parameters")
         if value:
-            _.push_value(value)
+            _.value = value
+
+    def set_node_callback(self, node: Node, callback: Callable) -> None:
+        """Set a callback to a node
+        """
+        l = len(signature(callback).parameters)
+        if l == 1:
+            node.parameter.add_callback(callback)
+        elif l == 2:
+            node.parameter.add_callback_param(callback)
+        else:
+            raise ValueError(f"callback must have 1 or 2 parameters, not {l}")
 
     @logged
     def set_value(self, node: Union[Node, str], value):

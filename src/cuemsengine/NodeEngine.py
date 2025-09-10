@@ -1,3 +1,4 @@
+from functools import partial
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
@@ -109,21 +110,43 @@ class NodeEngine(BaseEngine):
             'unload': None, # self.unload_cue_callback,
             'update': None, # self.update_player_endpoints,
         }
+        # Add the node endpoints with callbacks
         endpoints = add_callbacks_from_dict(
+            # ENGINE_CMD_ENDPOINTS,
             add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
             cmd_dict
         )
+        # # Add the controller endpoints without callbacks
+        # endpoints.update(
+        #     add_prefix_to_all(
+        #         ENGINE_CMD_ENDPOINTS,
+        #         '/controller'
+        #     )
+        # )
         self.oscquery_server.create_endpoints(endpoints)
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
+        self.mirror_nodes_on_controller(self.oscquery_client)
         #self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
+
+    def mirror_nodes_on_controller(self, client):
+        """Mirror the nodes from the NodeEngines to the Controller"""
+        # Set the callbacks client for the nodes
+        Logger.debug(f'Mirroring nodes from {client} to the Controller')
+        endpoints = client.get_endpoints()
+        self.oscquery_server.add_endpoints(endpoints)
+        for node in client.nodes.values():
+            if "status" in str(node):
+                continue
+            client.set_node_callback(node, self.client_to_server_values)
+        Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
 
     def update_controller_endpoints(self):
         """Update the controller endpoints"""
         ## TODO: Set the host from the config
         host = 'localhost'
         
-        self.oscquery_client.set_value(
-            '/engine/command/update',
+        self.oscquery_server.set_value(
+            '/controller/engine/command/update',
             host
         )
 
@@ -143,7 +166,7 @@ class NodeEngine(BaseEngine):
         prefix = self.build_player_prefix(cue, prefix)
 
         # Register the endpoints in the server
-        self.add_remote_nodes_to_local(client, prefix)
+        self.add_player_nodes_to_local(client, prefix)
         # Notify the controller to update the endpoints
         self.update_controller_endpoints()
 
@@ -279,12 +302,13 @@ class NodeEngine(BaseEngine):
 
         # Set the video endpoints
         endpoints = {}
+        redirect_fn = partial(NodeEngine.redirect_video_cmd, self)
         for index in range(len(output_names)):
             x = add_prefix_to_all(
                 OSC_VIDEOPLAYER_CONF,
                 f'/node/players/video/{index}'
             )
-            x = add_callback_to_all(x, self.redirect_video_cmd)
+            x = add_callback_to_all(x, redirect_fn)
             endpoints.update(x)
         self.oscquery_server.create_endpoints(endpoints)
         self.update_controller_endpoints()
@@ -337,10 +361,6 @@ class NodeEngine(BaseEngine):
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
         self.initial_cuelist_process()
-        # self.set_oscquery_values({
-        #     '/engine/status/running': 0 #,
-        #     # '/engine/command/go': ''
-        # })
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def go_script(self, value):

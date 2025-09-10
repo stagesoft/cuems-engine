@@ -236,7 +236,7 @@ class ControllerEngine(BaseEngine):
         self.apply_oscquery_commands()
         self.set_oscquery_bridge()
 
-    def apply_oscquery_commands(self, to = 'both'):
+    def apply_oscquery_commands(self):
         cmd_dict = {
             'deploy': None, # self.deploy_callback,
             # disabled because it trigers a doble load when called from editor
@@ -263,12 +263,6 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             self.oscquery_server.set_value(key, value)
 
-    def register_node_engines(self) -> None:
-        """Register the NodeEngines in the OSCQuery server"""
-        for host in self.find_hosts():
-            endpoints = self.build_status_endpoints(host)
-            self.oscquery_server.create_endpoints(endpoints)
-
     def set_oscquery_bridge(self, host = None):
         Logger.info(
             "Oscquery bridge for Controller starting"
@@ -286,7 +280,19 @@ class ControllerEngine(BaseEngine):
                 host = host
             )
             # Register the NodeEngines in the OSCQuery server
-            self.add_remote_nodes_to_local(client)
+            self.mirror_nodes_on_controller(client)
+
+    def mirror_nodes_on_controller(self, client):
+        """Mirror the nodes from the NodeEngines to the Controller"""
+        # Set the callbacks client for the nodes
+        Logger.debug(f'Mirroring nodes from {client} to the Controller')
+        endpoints = client.get_endpoints()
+        self.oscquery_server.add_endpoints(endpoints)
+        for node in client.nodes.values():
+            if "status" in str(node):
+                continue
+            client.set_node_callback(node, self.client_to_server_values)
+        Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
 
 
     #########################
