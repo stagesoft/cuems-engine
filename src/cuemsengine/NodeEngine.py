@@ -6,6 +6,7 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.OssiaClient import PlayerClient
+from .osc.endpoints import OSC_VIDEOPLAYER_CONF
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
@@ -35,7 +36,7 @@ class NodeEngine(BaseEngine):
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
             PORT_HANDLER.add_config_ports(
-                self.get_config_ports()
+                get_config_ports(self.cm.node_conf)
             )
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
@@ -106,8 +107,7 @@ class NodeEngine(BaseEngine):
             'stop': None, # self.stop_callback,
             'test': None, # self.test_callback
             'unload': None, # self.unload_cue_callback,
-            'add': self.add_player_endpoints,
-            'remove': self.remove_player_endpoints,
+            'update': None, # self.update_player_endpoints,
         }
         endpoints = add_callbacks_from_dict(
             add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
@@ -116,6 +116,16 @@ class NodeEngine(BaseEngine):
         self.oscquery_server.create_endpoints(endpoints)
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
         #self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
+
+    def update_controller_endpoints(self):
+        """Update the controller endpoints"""
+        ## TODO: Set the host from the config
+        host = 'localhost'
+        
+        self.oscquery_client.set_value(
+            '/engine/command/update',
+            host
+        )
 
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
@@ -134,8 +144,8 @@ class NodeEngine(BaseEngine):
 
         # Register the endpoints in the server
         self.add_remote_nodes_to_local(client, prefix)
-        # Notify the client to update the endpoints
-        self.oscquery_client.set_value('/node/engine/command/update', 'localhost')
+        # Notify the controller to update the endpoints
+        self.update_controller_endpoints()
 
     def remove_player_endpoints(self, cue_id: str):
         if not CUE_HANDLER.find_cue(cue_id):
@@ -162,7 +172,6 @@ class NodeEngine(BaseEngine):
         self.read_script(project)
         self.deploy_media(project)
         PORT_HANDLER.clean_random_ports()
-        
 
     def load_project(self, project):
         """Load the project files to the node"""
@@ -240,6 +249,7 @@ class NodeEngine(BaseEngine):
     # Video functions
     def set_video_players(self):
         """Set the video players"""
+        Logger.info(f'Setting video players with: {self.cm.node_conf["videoplayer"]}')
         if not self.cm.node_hw_outputs['video_outputs']:
             Logger.info('No video outputs detected.')
             return
@@ -267,6 +277,18 @@ class NodeEngine(BaseEngine):
             Logger.error(f'Exiting...')
             exit(-1)
 
+        # Set the video endpoints
+        endpoints = {}
+        for index in range(len(output_names)):
+            x = add_prefix_to_all(
+                OSC_VIDEOPLAYER_CONF,
+                f'/node/players/video/{index}'
+            )
+            x = add_callback_to_all(x, self.redirect_video_cmd)
+            endpoints.update(x)
+        self.oscquery_server.create_endpoints(endpoints)
+        self.update_controller_endpoints()
+
     def quit_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
             try:
@@ -288,6 +310,21 @@ class NodeEngine(BaseEngine):
             except Exception as e:
                 Logger.exception(e)
 
+    def redirect_video_cmd(self, path: str, value: str) -> None:
+        """Redirect the video command to the video player at front"""
+        path_parts = str(path).split('/')
+        jadeo_index = path_parts.index('jadeo')
+        jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
+        output_index = path_parts[jadeo_index - 1]
+        output_name = PLAYER_HANDLER.get_video_output_names(output_index)
+        output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
+        if not output_player:
+            Logger.error(f'No active video player found for output {output_name} at index {output_index}')
+            return
+        client: PlayerClient = output_player['osc']
+        client.set_value(jadeo_cmd, value)
+
+    # Script functions
     def ready_script(self):
         """Check if the script is ready to be played"""
         if not self.script:
@@ -305,12 +342,6 @@ class NodeEngine(BaseEngine):
         #     # '/engine/command/go': ''
         # })
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
-
-    def get_config_ports(self):
-        """Create a dict of ports from the config"""
-        k = [i for i in self.cm.node_conf.keys() if 'port' in i and is_int(self.cm.node_conf[i])]
-        v = [int(self.cm.node_conf[i]) for i in k]
-        return dict(zip(k, v))
 
     def go_script(self, value):
         if self.get_status('running') == 1:
@@ -373,3 +404,9 @@ def is_int(value: any) -> bool:
         return True
     except ValueError:
         return False
+
+def get_config_ports(node_conf: dict) -> dict:
+    """Create a dict of ports from the config"""
+    k = [i for i in node_conf.keys() if 'port' in i and is_int(node_conf[i])]
+    v = [int(node_conf[i]) for i in k]
+    return dict(zip(k, v))

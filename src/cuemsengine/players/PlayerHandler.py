@@ -35,6 +35,7 @@ class PlayerHandler:
             cls._instance._dmx_output_generator = None
             cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
+            cls._instance._video_output_names = []
             cls._instance._lock = Lock()
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
@@ -199,6 +200,18 @@ class PlayerHandler:
 
                 with self._lock:
                     self._video_players[output_name].append(player)
+        with self._lock:
+            self._video_output_names = output_names
+
+    def get_video_output_names(self, index: int):
+        """Returns the video output names."""
+        with self._lock:
+            return self._video_output_names[index]
+
+    def get_video_output_index(self, output_name: str):
+        """Returns the index of a given output name."""
+        with self._lock:
+            return self._video_output_names.index(output_name)
 
     def get_active_videoplayer(self, output_name: str):
         """Find the active player for a given output."""

@@ -274,7 +274,13 @@ class ControllerEngine(BaseEngine):
             "Oscquery bridge for Controller starting"
         )
         # Start a client to each NodeEngine
-        for host in self.find_hosts():
+        if not host:
+            hosts = self.find_hosts()
+        if not isinstance(host, list):
+            hosts = [str(host)]
+        else:
+            hosts = [str(host) for host in host]
+        for host in hosts:
             client = self.set_oscquery_client(
                 port = NODE_ENGINE_PORT,
                 host = host
