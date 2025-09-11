@@ -52,6 +52,7 @@ def loop_audioCue(cue: AudioCue, mtc):
                 cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
                 offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
+                # offset_to_go = duration.milliseconds * (-1)
                 try:
                     key = '/offset'
                     cue._osc.set_value(key, offset_to_go)
@@ -111,7 +112,7 @@ def loop_videoCue(cue: VideoCue, mtc):
                     cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                     cue._end_mtc = cue._start_mtc + duration
                     # offset_to_go = in_time_adjusted.frame_number - cue._start_mtc.frame_number
-                    offset_to_go = cue._start_mtc.frame_number
+                    offset_to_go = duration.frame_number * (-1)
                     cue._osc.set_value(key, str(offset_to_go))
                     Logger.info(
                         key + " " + str(cue._osc.get_node(key).parameter.value),

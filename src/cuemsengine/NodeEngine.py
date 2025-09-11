@@ -454,6 +454,8 @@ class NodeEngine(BaseEngine):
             next_cue = self.next_cue_pointer.id
         else:
             next_cue = ""
+
+        Logger.info(f'go_script reached end of script')
     #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
 
 
