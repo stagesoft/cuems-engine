@@ -10,6 +10,8 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .tools.communicate import AsyncCommsThread, TIMEOUT
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
+from .tools.mtcmaster import libmtcmaster
+
 
 class ControllerEngine(BaseEngine):
     '''
@@ -36,6 +38,7 @@ class ControllerEngine(BaseEngine):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_editor_request('')
+        self.mtcmaster = libmtcmaster.MTCSender_create()
 
     def start(self):
         self.set_comms()
@@ -66,14 +69,15 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_mtc(self):
-        stop = self.mtc.send_request({'cmd':'stop'})
-        release = self.mtc.send_request({'cmd':'release'})
-        if stop['resp'] != 'ok' or release['resp'] != 'ok':
-            Logger.error('MTC master could not be stopped')
-            Logger.error(f"Stop: {stop['resp']}")
-            Logger.error(f"Release: {release['resp']}")
-        else:
-            Logger.info('MTC master stopped')
+        libmtcmaster.MTCSender_stop(self.mtcmaster)
+        # stop = self.mtc.send_request({'cmd':'stop'})
+        # release = self.mtc.send_request({'cmd':'release'})
+        # if stop['resp'] != 'ok' or release['resp'] != 'ok':
+        #     Logger.error('MTC master could not be stopped')
+        #     Logger.error(f"Stop: {stop['resp']}")
+        #     Logger.error(f"Release: {release['resp']}")
+        # else:
+        #     Logger.info('MTC master stopped')
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -366,10 +370,14 @@ class ControllerEngine(BaseEngine):
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
-        
+        self.start_timecode()
         self.set_oscquery_values({
             # '/engine/status/go': value,
             '/engine/status/running': "yes",
             '/engine/command/gocue': "yes"
             # '/engine/command/go': value
         })
+
+    def start_timecode(self):
+        libmtcmaster.MTCSender_play(self.mtcmaster)
+        print("MTC master started playing.")

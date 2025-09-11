@@ -99,7 +99,7 @@ class NodeEngine(BaseEngine):
             # 'hwdiscovery': None, # self.hw_discovery_callback,
             'load': self.load_project,
             'loadcue': None, # self.load_cue,
-            'go': self.go_script,
+            #'go': self.go_script,
             'gocue': self.go_script, # self.go_cue_callback,
             'pause': None, # self.pause_callback,
             # 'preload': None, # self.load_cue_callback,
@@ -115,7 +115,7 @@ class NodeEngine(BaseEngine):
         #    add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
             cmd_dict
         )
-        self.oscquery_server.create_endpoints(endpoints)
+        #self.oscquery_server.create_endpoints(endpoints)
         # # Add the controller endpoints without callbacks
         # endpoints.update(
         #     add_prefix_to_all(
@@ -441,7 +441,7 @@ class NodeEngine(BaseEngine):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
             return
         self.ongoing_cue = cue_to_go
-        self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
+    #    self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
         CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener
@@ -454,7 +454,7 @@ class NodeEngine(BaseEngine):
             next_cue = self.next_cue_pointer.id
         else:
             next_cue = ""
-        self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
+    #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
 
 
 ## MISCELLANEOUS FUNCTIONS ##

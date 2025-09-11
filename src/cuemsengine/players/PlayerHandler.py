@@ -308,10 +308,15 @@ class PlayerHandler:
         except Exception as e:
             Logger.error(f'Error setting player endpoints for cue {cue.id}: {e}')
 
-    def get_cue_output_name(cue: Cue) -> str:
+    def get_cue_output_name(self, cue: Cue) -> str:
         """Get the output name for a given cue."""
-        outputs_key = next(iter(cue.outputs.keys()))
-        return cue.outputs[outputs_key]['output_name']
+        outputs_key = next(iter(cue.outputs))
+        Logger.debug(f'Cue outputs: {outputs_key} ')
+        Logger.debug(f'video player keys: {self._video_players.keys()}')
+        Logger.debug(f"Output key is {outputs_key} and output name {outputs_key['output_name'][-1]}")
+        output_id = outputs_key['output_name'][-1]
+
+        return output_id
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""

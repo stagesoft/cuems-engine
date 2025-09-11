@@ -232,7 +232,7 @@ class BaseEngine(SignalEngine):
             self.next_cue_pointer = None
             self.go_offset = 0
             self.oscquery_server.set_value('/engine/status/running', "no")
-            self.oscquery_server.set_value('/engine/status/gocue', "yes")
+            self.oscquery_server.set_value('/engine/status/gocue', "no")
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset:
@@ -348,8 +348,8 @@ class BaseEngine(SignalEngine):
                 Logger.warning('Script cuelist is empty, nothing to process')
                 return
             # Skip the script cuelist and process the first cuelist
-            cuelist = cuelist.contents[0]
-
+            #cuelist = cuelist.contents[0]
+        Logger.debug(f'Processing cuelist: {type(cuelist)} {cuelist.id} #########################')
         if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return

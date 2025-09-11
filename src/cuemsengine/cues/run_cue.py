@@ -68,21 +68,22 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener):
         cue._action_target_object.enabled = False
 
 @run_cue.register
-def run_audioCue(cue: AudioCue, ossia, mtc):
+def run_audioCue(cue: AudioCue, mtc):
     """
     Run an AudioCue
     """
     # Define the offset
     try:
         key = '/offset'
-        cue._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
         
-        cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
-        offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
-        
+        #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
+        #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
+        offset_to_go = cue._start_mtc.milliseconds
+
         cue._osc.set_value(key, offset_to_go)
         Logger.info(
-            f"offset {offset_to_go} to {key}: {str(cue._osc.get_value(key))}",
+            f"offset {offset_to_go} to {key}: {str(cue._osc.get_node(key).parameter.value)}",
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:
@@ -102,7 +103,7 @@ def run_audioCue(cue: AudioCue, ossia, mtc):
         )
 
 @run_cue.register
-def run_dmxCue(cue: DmxCue, ossia, mtc):
+def run_dmxCue(cue: DmxCue, mtc):
     """
     Run a DmxCue
     """
@@ -134,21 +135,21 @@ def run_dmxCue(cue: DmxCue, ossia, mtc):
         )
 
 @run_cue.register
-def run_videoCue(cue: VideoCue, ossia, mtc):
+def run_videoCue(cue: VideoCue, mtc):
     """
     Run a VideoCue
     """
     # Define the offset
     try:
-        key = '/offset'
-        cue._start_mtc = CTimecode(frames=mtc.main_tc.milliseconds)
+        key = '/jadeo/offset'
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
         
-        cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
-        offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
-        
-        cue._osc.set_value(key, offset_to_go)
+        #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0]['Region']['in_time'])
+        #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
+        offset_to_go = cue._start_mtc.frame_number
+        cue._osc.set_value(key, str(offset_to_go))
         Logger.info(
-            f"offset {offset_to_go} result: {str(cue._osc.get_value(key))}",
+            f"offset {offset_to_go} result: {str(cue._osc.get_node(key).parameter.value)}",
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:
@@ -157,11 +158,11 @@ def run_videoCue(cue: VideoCue, ossia, mtc):
             extra = {"caller": cue.__class__.__name__}
         )
         
-        try:
-            key = '/jadeo/cmd'
-            ossia.set_value(key, "midi connect Midi Through")
-        except KeyError:
-            Logger.debug(
-                f'Key error 2 (connect) in run_videoCue {key}',
-                extra = {"caller": cue.__class__.__name__}
-            )
+    try:
+        key = '/jadeo/cmd'
+        cue._osc.set_value(key, "midi connect Midi Through")
+    except KeyError:
+        Logger.debug(
+            f'Key error 2 (connect) in run_videoCue {key}',
+            extra = {"caller": cue.__class__.__name__}
+        )
