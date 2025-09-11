@@ -232,6 +232,7 @@ class BaseEngine(SignalEngine):
             self.next_cue_pointer = None
             self.go_offset = 0
             self.oscquery_server.set_value('/engine/status/running', "no")
+            self.oscquery_server.set_value('/engine/status/gocue', "yes")
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset:

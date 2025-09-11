@@ -123,7 +123,8 @@ class ControllerEngine(BaseEngine):
             'project_deploy': partial(self.load_project, deploy_only=True),
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery,
-            'nodeconf': self.nodeconf
+            'nodeconf': self.nodeconf,
+            'go_script': self.go_script
         }
         if action in command_dict.keys():
             _editor_request_uuid = self._editor_request_uuid
@@ -369,5 +370,6 @@ class ControllerEngine(BaseEngine):
         self.set_oscquery_values({
             # '/engine/status/go': value,
             '/engine/status/running': "yes",
+            '/engine/command/gocue': "yes"
             # '/engine/command/go': value
         })

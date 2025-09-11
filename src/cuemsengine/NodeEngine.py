@@ -100,7 +100,7 @@ class NodeEngine(BaseEngine):
             'load': self.load_project,
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
-            'gocue': None, # self.go_cue_callback,
+            'gocue': self.go_script, # self.go_cue_callback,
             'pause': None, # self.pause_callback,
             # 'preload': None, # self.load_cue_callback,
             'resetall': None, # self.reset_all_callback,
