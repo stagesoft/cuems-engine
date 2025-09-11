@@ -59,15 +59,20 @@ class PlayerHandler:
             return self._cue_players[cue]
 
     def remove_cue_player(self, cue: Cue):
-        """Removes a cue player"""
-        with self._lock:
-            player = self._cue_players.pop(cue)
-            cue._osc = None
-        if isinstance(player, AudioPlayer):
-            PORT_HANDLER.remove_ports(cue)
-            player.kill()
-            player.join()
-            player = None
+            """Removes a cue player"""
+            with self._lock:
+                try:
+                    player = self._cue_players.pop(cue)
+                except KeyError:
+                    Logger.error(f'Cue player not found for cue {cue.id}')
+                    player = None
+                cue._osc = None
+            if isinstance(player, AudioPlayer):
+                PORT_HANDLER.remove_ports(cue)
+                if player is not None:
+                    player.kill()
+                    player.join()
+                    player = None
 
 
     # ---------------------------
