@@ -125,7 +125,7 @@ class NodeEngine(BaseEngine):
         # )
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
         #self.mirror_nodes_on_controller(self.oscquery_client)
-        # self.oscquery_client.create_endpoints(endpoints)
+        self.oscquery_client.create_endpoints(endpoints)
 
     def mirror_nodes_on_controller(self, client):
         """Mirror the nodes from the NodeEngines to the Controller"""

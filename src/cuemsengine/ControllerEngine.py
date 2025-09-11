@@ -314,7 +314,7 @@ class ControllerEngine(BaseEngine):
         self.reset_script()
         
         if deploy_only:
-            self.oscquery_server.set_value('/node/engine/command/deploy', project_name)
+            self.oscquery_server.set_value('/engine/command/deploy', project_name)
             return True
         
         try:
@@ -358,8 +358,8 @@ class ControllerEngine(BaseEngine):
         self.load_project(project_name)
 
     def go_script(self, value):
-        if self.get_status('go') == value:
-            Logger.info(f'Script {value} already running.')
+        if self.get_status('running') == "yes":
+            Logger.info(f'Script {type(value)} already running.')
             return
 
         if not self.script:
@@ -367,7 +367,7 @@ class ControllerEngine(BaseEngine):
             return
         
         self.set_oscquery_values({
-            '/engine/status/go': value,
+            # '/engine/status/go': value,
             '/engine/status/running': "yes",
             # '/engine/command/go': value
         })
