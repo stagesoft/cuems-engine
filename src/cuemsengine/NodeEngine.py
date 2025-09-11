@@ -110,6 +110,7 @@ class NodeEngine(BaseEngine):
             'update': None, # self.update_player_endpoints,
         }
         # Add the node endpoints with callbacks
+        self.oscquery_server.create_endpoints(ENGINE_CMD_ENDPOINTS)
         endpoints = add_callbacks_from_dict(
              ENGINE_CMD_ENDPOINTS,
         #    add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
@@ -122,10 +123,9 @@ class NodeEngine(BaseEngine):
         #         '/controller'
         #     )
         # )
-        self.oscquery_server.create_endpoints(endpoints)
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
         #self.mirror_nodes_on_controller(self.oscquery_client)
-        self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
+        self.oscquery_client.create_endpoints(endpoints)
 
     def mirror_nodes_on_controller(self, client):
         """Mirror the nodes from the NodeEngines to the Controller"""
@@ -214,7 +214,7 @@ class NodeEngine(BaseEngine):
         self.set_dmx_players()
 
         # Check local cues
-        self.check_local_cues(self.script.cuelist)
+        # self.check_local_cues(self.script.cuelist)
 
         # Confirm the project is loaded
         self.set_show_lock_file()
