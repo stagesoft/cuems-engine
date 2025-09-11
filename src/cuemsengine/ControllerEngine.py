@@ -38,9 +38,10 @@ class ControllerEngine(BaseEngine):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_editor_request('')
-        self.mtcmaster = libmtcmaster.MTCSender_create()
+        
 
     def start(self):
+        self.mtcmaster = libmtcmaster.MTCSender_create()
         self.set_comms()
         super().start()
     
