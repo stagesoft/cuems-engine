@@ -241,7 +241,7 @@ class NodeEngine(BaseEngine):
     # Check functions
     def check_local_cues(self, cuelist: CueList):
         """Check the local cues and ensure that the _local attribute is set to True"""
-        if not cuelist.contents:
+        if not hasattr(cuelist, 'contents') or not cuelist.contents:
             Logger.info('No cues to check')
             return
 

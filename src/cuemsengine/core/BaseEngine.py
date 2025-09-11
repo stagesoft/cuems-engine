@@ -1,3 +1,4 @@
+from dis import hasconst
 from functools import partial
 from typing import Any, Callable
 from os import path, remove
@@ -347,7 +348,7 @@ class BaseEngine(SignalEngine):
             # Skip the script cuelist and process the first cuelist
             cuelist = cuelist.contents[0]
 
-        if not cuelist.contents or len(cuelist.contents) == 0:
+        if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
         
