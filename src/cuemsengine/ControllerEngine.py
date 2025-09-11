@@ -317,6 +317,7 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
+        self.stop_timecode()
         
         if deploy_only:
             self.oscquery_server.set_value('/engine/command/deploy', project_name)
@@ -381,3 +382,7 @@ class ControllerEngine(BaseEngine):
     def start_timecode(self):
         libmtcmaster.MTCSender_play(self.mtcmaster)
         print("MTC master started playing.")
+
+    def stop_timecode(self):
+        libmtcmaster.MTCSender_stop(self.mtcmaster)
+        print("MTC master stopped playing.")
