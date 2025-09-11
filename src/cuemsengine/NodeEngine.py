@@ -406,7 +406,8 @@ class NodeEngine(BaseEngine):
         return dict(zip(k, v))
 
     def go_script(self, value):
-        if self.get_status('running') == 1:
+        if self.get_status('running') == "yes":
+            Logger.info(f'Script already running. Current cue: {self.ongoing_cue.id}')
             return
 
         if not self.script:
@@ -419,7 +420,7 @@ class NodeEngine(BaseEngine):
 
         # Signal go start
         Logger.info(f'GO command received. Starting script {self.script.unix_name}')
-        self.set_status('running', 1)
+        self.oscquery_server.set_value('/engine/status/running', "yes")
 
         # Get the cue to go
         if not self.ongoing_cue:
@@ -440,7 +441,7 @@ class NodeEngine(BaseEngine):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
             return
         self.ongoing_cue = cue_to_go
-        self.oscquery_client_list[0].set_value('/engine/status/currentcue', self.ongoing_cue.id)
+        self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
         CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener
@@ -453,7 +454,7 @@ class NodeEngine(BaseEngine):
             next_cue = self.next_cue_pointer.id
         else:
             next_cue = ""
-        self.oscquery_client_list[0].set_value('/engine/status/nextcue', next_cue)
+        self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
 
 
 ## MISCELLANEOUS FUNCTIONS ##

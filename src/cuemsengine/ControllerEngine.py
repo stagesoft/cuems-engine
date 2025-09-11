@@ -359,15 +359,15 @@ class ControllerEngine(BaseEngine):
 
     def go_script(self, value):
         if self.get_status('go') == value:
+            Logger.info(f'Script {value} already running.')
             return
 
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
         
-        self.set_status('go', value)
-        
         self.set_oscquery_values({
-            '/engine/status/running': 1,
+            '/engine/status/go': value,
+            '/engine/status/running': "yes",
             '/engine/command/go': value
         })

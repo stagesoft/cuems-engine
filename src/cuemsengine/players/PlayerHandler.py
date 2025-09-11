@@ -197,6 +197,7 @@ class PlayerHandler:
                         player['port'],
                         player['route']
                     )
+                    Logger.debug(f"Found videoplayer nodes: {player['osc'].nodes_from_device()}")
                 except Exception as e:
                     raise e
 
