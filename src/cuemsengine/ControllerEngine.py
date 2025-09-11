@@ -369,5 +369,5 @@ class ControllerEngine(BaseEngine):
         self.set_oscquery_values({
             '/engine/status/go': value,
             '/engine/status/running': "yes",
-            '/engine/command/go': value
+            # '/engine/command/go': value
         })

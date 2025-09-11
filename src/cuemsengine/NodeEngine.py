@@ -110,12 +110,12 @@ class NodeEngine(BaseEngine):
             'update': None, # self.update_player_endpoints,
         }
         # Add the node endpoints with callbacks
-        self.oscquery_server.create_endpoints(ENGINE_CMD_ENDPOINTS)
         endpoints = add_callbacks_from_dict(
              ENGINE_CMD_ENDPOINTS,
         #    add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
             cmd_dict
         )
+        self.oscquery_server.create_endpoints(endpoints)
         # # Add the controller endpoints without callbacks
         # endpoints.update(
         #     add_prefix_to_all(
@@ -125,7 +125,7 @@ class NodeEngine(BaseEngine):
         # )
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
         #self.mirror_nodes_on_controller(self.oscquery_client)
-        self.oscquery_client.create_endpoints(endpoints)
+        # self.oscquery_client.create_endpoints(endpoints)
 
     def mirror_nodes_on_controller(self, client):
         """Mirror the nodes from the NodeEngines to the Controller"""
