@@ -341,10 +341,11 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
-        self.set_status('load', project_name)
+        # self.set_status('load', project_name)
 
         self.set_oscquery_values({
-            '/node/engine/command/load': project_name
+            '/engine/status/load': project_name,
+            '/engine/command/load': project_name
         })
 
         # Confirm the project is loaded
@@ -367,6 +368,6 @@ class ControllerEngine(BaseEngine):
         self.set_status('go', value)
         
         self.set_oscquery_values({
-            '/node/engine/status/running': 1,
-            '/node/engine/command/go': value
+            '/engine/status/running': 1,
+            '/engine/command/go': value
         })
