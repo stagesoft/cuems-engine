@@ -357,18 +357,25 @@ class BaseEngine(SignalEngine):
 
         try:
             for index, item in enumerate(cuelist.contents):
-                if item.check_mappings(self.cm):
-                    ## DEV: Hardcoded for now, should be replaced by the discovery system
-                    item._local = True
+                ## TODO: remove this hardcoded local flag
+                Logger.info(f'Processing item: {type(item)} {item.id}')
+                item._local = True
+                item.loaded = False
+                item.enabled = True
+                # if item.check_mappings(self.cm):
+                #     ## DEV: Hardcoded for now, should be replaced by the discovery system
+                #     item._local = True
 
-                    Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
-                else:
-                    raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
+                #     Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
+                # else:
+                #     raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
 
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item)
 
-                if item.autoload and item._local and not item.loaded:
+                # if item.autoload and item._local and not item.loaded:
+                if item._local and not item.loaded:
+                    Logger.info(f'Arming item: {type(item)} {item.id}')
                     CUE_HANDLER.arm(item, True)
 
                 if item.target is None or item.target == "":
