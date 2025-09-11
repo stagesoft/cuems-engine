@@ -49,7 +49,7 @@ def loop_audioCue(cue: AudioCue, mtc):
 
             if cue._local:
                 # Recalculate offset and apply
-                cue._start_mtc = mtc.main_tc
+                cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
                 offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
                 try:
@@ -108,7 +108,7 @@ def loop_videoCue(cue: VideoCue, mtc):
             if cue._local:
                 try:
                     key = '/jadeo/offset'
-                    cue._start_mtc = mtc.main_tc
+                    cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                     cue._end_mtc = cue._start_mtc + duration
                     # offset_to_go = in_time_adjusted.frame_number - cue._start_mtc.frame_number
                     offset_to_go = cue._start_mtc.frame_number
