@@ -281,17 +281,23 @@ class ControllerEngine(BaseEngine):
             )
             # Register the NodeEngines in the OSCQuery server
             self.mirror_nodes_on_controller(client)
+            client.add_node_creation_callback(self.node_creation_callback)
+
+    def node_creation_callback(self, node):
+        Logger.debug(f'Node creation callback received with {str(node)}')
+        node_dict = {str(node): node}
+        self.oscquery_server.add_endpoints(add_prefix_to_all(node_dict, '/node'))
+
+        
+
+
 
     def mirror_nodes_on_controller(self, client):
         """Mirror the nodes from the NodeEngines to the Controller"""
         # Set the callbacks client for the nodes
         Logger.debug(f'Mirroring nodes from {client} to the Controller')
         endpoints = client.get_endpoints()
-        self.oscquery_server.add_endpoints(endpoints)
-        for node in client.nodes.values():
-            if "status" in str(node):
-                continue
-            client.set_node_callback(node, self.client_to_server_values)
+        self.oscquery_server.add_endpoints(add_prefix_to_all(endpoints, '/node'))
         Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
 
 

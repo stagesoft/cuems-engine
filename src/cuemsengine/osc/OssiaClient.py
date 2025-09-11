@@ -6,6 +6,7 @@ from cuemsutils.log import Logger
 from ..tools.PortHandler import PORT_HANDLER
 from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
+from pyossia import ossia
 
 OSCCLIENT_LOCAL_PORT = 9009
 OSCCLIENT_REMOTE_PORT = 9001
@@ -38,6 +39,11 @@ class OssiaClient(OssiaNodes):
         Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")
         self.nodes = self.nodes_from_device()
         Logger.debug(f"OssiaClient new nodes: {self.nodes}")
+
+    def add_node_creation_callback(self, callback: callable):
+        Logger.debug(f"Now adding callback to {self.device}")
+        _ = ossia.DeviceCallback(self.device, callback, callback, callback)
+
 
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):

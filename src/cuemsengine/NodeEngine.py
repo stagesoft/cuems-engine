@@ -49,13 +49,14 @@ class NodeEngine(BaseEngine):
             PLAYER_HANDLER.set_player_endpoints_generator(
                 self.add_player_endpoints,
                 # TODO: Use node host from config
-                prefix = '/node/players'
+                prefix = '/players'
             )
 
     def start(self):
         self.set_oscquery()
         self.set_video_players()
         self.set_audio_players()
+        self.set_dmx_players()
         super().start()
         
     @logged
@@ -83,9 +84,7 @@ class NodeEngine(BaseEngine):
         """Set the OSCQuery infrastructure"""
         Logger.info("Starting oscquery for Node")
         self.set_oscquery_server(
-            add_prefix_to_all(
-                self.get_status_endpoints(), '/node'
-            ),
+            self.get_status_endpoints(),
             port = NODE_ENGINE_PORT
         )
         Logger.debug(f"OscQuery Node server set")
@@ -112,8 +111,8 @@ class NodeEngine(BaseEngine):
         }
         # Add the node endpoints with callbacks
         endpoints = add_callbacks_from_dict(
-            # ENGINE_CMD_ENDPOINTS,
-            add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
+             ENGINE_CMD_ENDPOINTS,
+        #    add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
             cmd_dict
         )
         # # Add the controller endpoints without callbacks
@@ -125,8 +124,8 @@ class NodeEngine(BaseEngine):
         # )
         self.oscquery_server.create_endpoints(endpoints)
         Logger.debug(f"OscQuery Node endpoints: {endpoints}")
-        self.mirror_nodes_on_controller(self.oscquery_client)
-        #self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
+        #self.mirror_nodes_on_controller(self.oscquery_client)
+        self.oscquery_client.create_endpoints(ENGINE_CMD_ENDPOINTS)
 
     def mirror_nodes_on_controller(self, client):
         """Mirror the nodes from the NodeEngines to the Controller"""
@@ -136,6 +135,7 @@ class NodeEngine(BaseEngine):
         self.oscquery_server.add_endpoints(endpoints)
         for node in client.nodes.values():
             if "status" in str(node):
+                Logger.debug(f'ignoring node : {str(node)}')
                 continue
             client.set_node_callback(node, self.client_to_server_values)
         Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
@@ -168,7 +168,7 @@ class NodeEngine(BaseEngine):
         # Register the endpoints in the server
         self.add_player_nodes_to_local(client, prefix)
         # Notify the controller to update the endpoints
-        self.update_controller_endpoints()
+        #self.update_controller_endpoints()
 
     def remove_player_endpoints(self, cue_id: str):
         if not CUE_HANDLER.find_cue(cue_id):
@@ -211,7 +211,7 @@ class NodeEngine(BaseEngine):
         # Start cue dependencies
         self.set_video_players()
         self.set_audio_players()
-        # self.set_dmx_players()
+        self.set_dmx_players()
 
         # Check local cues
         self.check_local_cues(self.script.cuelist)
@@ -306,12 +306,12 @@ class NodeEngine(BaseEngine):
         for index in range(len(output_names)):
             x = add_prefix_to_all(
                 OSC_VIDEOPLAYER_CONF,
-                f'/node/players/video/{index}'
+                f'/players/video/{index}'
             )
             x = add_callback_to_all(x, redirect_fn)
             endpoints.update(x)
         self.oscquery_server.create_endpoints(endpoints)
-        self.update_controller_endpoints()
+        #self.update_controller_endpoints()
 
     def quit_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
@@ -331,6 +331,42 @@ class NodeEngine(BaseEngine):
         for dev in PLAYER_HANDLER.get_video_players():
             try:
                 dev['osc'].set_value('/jadeo/load', '')
+            except Exception as e:
+                Logger.exception(e)
+
+    def set_dmx_players(self):
+        """Set the dmx players"""
+        if not self.cm.node_hw_outputs['dmx_outputs']:
+            Logger.info('No dmx outputs detected.')
+            return
+        
+        output_names = self.cm.node_hw_outputs['dmx_outputs']
+        output_ports = []
+        for index in range(len(output_names)):
+            ports = PORT_HANDLER.assign_ports([
+                f'dmx_player_{index}'
+            ])
+            PORT_HANDLER.add_config_ports(ports)
+            output_ports.append(ports)
+
+        try:
+            PLAYER_HANDLER.start_dmx_outputs(
+                output_names,
+                output_ports,
+                self.cm.node_conf['dmxplayer']['path'],
+                self.cm.node_conf['dmxplayer']['args']
+            )
+        except Exception as e:
+            Logger.error(f'Error checking & starting dmx devices...')
+            Logger.error(e)
+            Logger.error(type(e))
+            Logger.error(f'Exiting...')
+            exit(-1)
+
+    def quit_dmx_devs(self):
+        for dev in PLAYER_HANDLER.get_dmx_players():
+            try:
+                dev['osc'].set_value('/quit', 1)
             except Exception as e:
                 Logger.exception(e)
 
@@ -362,6 +398,12 @@ class NodeEngine(BaseEngine):
         CUE_HANDLER.disarm_all()
         self.initial_cuelist_process()
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
+
+    def get_config_ports(self):
+        """Create a dict of ports from the config"""
+        k = [i for i in self.cm.node_conf.keys() if 'port' in i and is_int(self.cm.node_conf[i])]
+        v = [int(self.cm.node_conf[i]) for i in k]
+        return dict(zip(k, v))
 
     def go_script(self, value):
         if self.get_status('running') == 1:

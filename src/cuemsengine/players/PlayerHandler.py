@@ -8,6 +8,7 @@ from typing import Callable
 
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
+from .DmxPlayer import DmxPlayer, DmxClient
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
@@ -40,6 +41,7 @@ class PlayerHandler:
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
             cls._instance._video_players = {}
+            cls._instance._dmx_players = {}
         return cls._instance
 
     # ---------------------------
@@ -212,6 +214,51 @@ class PlayerHandler:
         """Returns the index of a given output name."""
         with self._lock:
             return self._video_output_names.index(output_name)
+
+
+    def start_dmx_outputs(
+        self,
+        output_names: list[str],
+        output_ports: list[dict[str, int]],
+        video_player_path: str,
+        video_player_args: str,
+    ):
+        """Starts the dmx players."""
+        Logger.info(f'Starting dmx outputs for {output_names} ')
+        for index, output_name in enumerate(output_names):
+            with self._lock:
+                if output_name in self._dmx_players:
+                    continue
+                self._dmx_players[output_name] = []
+
+            new_ports = output_ports[index]
+
+            player = dict()
+            player['route'] = f'/players/dmxplayer-{index}'
+            player['port'] = new_ports[f'dmx_player_{index}']
+
+            try:
+                player['player'] = DmxPlayer(
+                    player['port'],
+                    video_player_path,
+                    video_player_args
+                )
+                player['player'].start()
+                while player['player'].pid is None:
+                    sleep(0.001)
+                player['pid'] = player['player'].pid
+                player['osc'] = DmxClient(
+                    player['port'],
+                    player['route']
+                )
+            except Exception as e:
+                raise e
+
+            with self._lock:
+                self._dmx_players[output_name].append(player)
+
+
+
 
     def get_active_videoplayer(self, output_name: str):
         """Find the active player for a given output."""

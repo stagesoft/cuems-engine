@@ -95,6 +95,7 @@ class OssiaNodes(object):
     def set_node_callback(self, node: Node, callback: Callable) -> None:
         """Set a callback to a node
         """
+        Logger.debug(f"Setting callback for node {str(node)}")
         l = len(signature(callback).parameters)
         if l == 1:
             node.parameter.add_callback(callback)
