@@ -76,7 +76,7 @@ def run_audioCue(cue: AudioCue, mtc):
     try:
         key = '/offset'
         cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
-        cue._end_mtc = cue._start_mtc + cue.media.duration
+        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
         
         #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
         #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
@@ -144,7 +144,7 @@ def run_videoCue(cue: VideoCue, mtc):
     try:
         key = '/jadeo/offset'
         cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
-        cue._end_mtc = cue._start_mtc + cue.media.duration
+        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
         #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0]['Region']['in_time'])
         #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
         offset_to_go = cue._start_mtc.frame_number

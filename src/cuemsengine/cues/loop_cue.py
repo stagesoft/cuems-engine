@@ -41,7 +41,7 @@ def loop_audioCue(cue: AudioCue, mtc):
     try:
         loop_counter = 0
         # duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
-        duration = cue.media.duration
+        duration = CTimecode(cue.media.duration)
 
         while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
@@ -51,7 +51,7 @@ def loop_audioCue(cue: AudioCue, mtc):
                 # Recalculate offset and apply
                 cue._start_mtc = mtc.main_tc
                 cue._end_mtc = cue._start_mtc + duration
-                offset_to_go = float(-(cue._start_mtc.milliseconds) + duration)
+                offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
                 try:
                     key = '/offset'
                     cue._osc.set_value(key, offset_to_go)
@@ -96,7 +96,7 @@ def loop_videoCue(cue: VideoCue, mtc):
     """
     try:
         loop_counter = 0
-        duration = cue.media.duration
+        duration = CTimecode(cue.media.duration)
         # duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
         # duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
         #in_time_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
@@ -112,9 +112,9 @@ def loop_videoCue(cue: VideoCue, mtc):
                     cue._end_mtc = cue._start_mtc + duration
                     # offset_to_go = in_time_adjusted.frame_number - cue._start_mtc.frame_number
                     offset_to_go = cue._start_mtc.frame_number
-                    cue._osc.set_value(key, offset_to_go)
+                    cue._osc.set_value(key, str(offset_to_go))
                     Logger.info(
-                        key + " " + str(cue._osc.get_value(key)),
+                        key + " " + str(cue._osc.get_node(key).parameter.value),
                         extra = {"caller": cue.__class__.__name__}
                     )
                 except KeyError:

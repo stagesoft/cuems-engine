@@ -376,10 +376,7 @@ class BaseEngine(SignalEngine):
                     self.initial_cuelist_process(item)
 
                 # if item.autoload and item._local and not item.loaded:
-                if item._local and not item.loaded:
-                    Logger.info(f'Arming item: {type(item)} {item.id}')
-                    CUE_HANDLER.arm(item, True)
-
+                
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
                         '''
@@ -394,6 +391,11 @@ class BaseEngine(SignalEngine):
                 else:
                     item._target_object = self.script.find(item.target)
 
+                if item._local and not item.loaded:
+                    Logger.info(f'Arming item: {type(item)} {item.id}')
+                    CUE_HANDLER.arm(item, True)
+
+                Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')
                 if isinstance(item, ActionCue):
                     item._action_target_object = self.script.find(item.action_target)
 
