@@ -57,6 +57,7 @@ class NodeEngine(BaseEngine):
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
+        self.mtc_listener.start()
         super().start()
         
     @logged
