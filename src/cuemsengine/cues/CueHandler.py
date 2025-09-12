@@ -163,12 +163,14 @@ class CueHandler:
             sleep(cue.postwait.milliseconds / 1000)
 
         if cue.post_go == 'go':
+            Logger.info(f'Running post go for next cue:{cue.target}')
             post_go_thread = self.go(cue._target_object, mtc)
 
         Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)
 
         if cue.post_go == 'go_at_end' and cue._target_object:
+            Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
             go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
