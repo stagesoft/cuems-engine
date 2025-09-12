@@ -110,30 +110,30 @@ def run_dmxCue(cue: DmxCue, mtc):
     """
     pass
 
-    # TODO: Implement this
+    # TODO: Implement dmx case
     # Define the offset
-    try:
-        key = f'{cue._osc_route}{cue._offset_route}'
-        ossia.set_value(key, cue.review_offset(mtc))
-        Logger.info(
-            f"DMX play {cue.id}: {key} {str(ossia.get_value(key))}",
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'OSC Key error 1 in run_dmxCue {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    # try:
+    #     key = f'{cue._osc_route}{cue._offset_route}'
+    #     ossia.set_value(key, cue.review_offset(mtc))
+    #     Logger.info(
+    #         f"DMX play {cue.id}: {key} {str(ossia.get_value(key))}",
+    #         extra = {"caller": cue.__class__.__name__}
+    #     )
+    # except KeyError:
+    #     Logger.debug(
+    #         f'OSC Key error 1 in run_dmxCue {key}',
+    #         extra = {"caller": cue.__class__.__name__}
+    #     )
 
-    # Connect to mtc signal
-    try:
-        key = '/mtcfollow'
-        cue._osc.set_value(key, 1)
-    except KeyError:
-        Logger.debug(
-            f'OSC Key error 2 in run_dmxCue {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    # # Connect to mtc signal
+    # try:
+    #     key = '/mtcfollow'
+    #     cue._osc.set_value(key, 1)
+    # except KeyError:
+    #     Logger.debug(
+    #         f'OSC Key error 2 in run_dmxCue {key}',
+    #         extra = {"caller": cue.__class__.__name__}
+    #     )
 
 @run_cue.register
 def run_videoCue(cue: VideoCue, mtc):
@@ -141,10 +141,12 @@ def run_videoCue(cue: VideoCue, mtc):
     Run a VideoCue
     """
     # Define the offset
+    Logger.info(f'Running video cue loop {cue.id}')
     try:
         key = '/jadeo/offset'
-        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
-        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
+        cue._start_mtc = mtc.main_tc
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
+        cue._end_mtc = cue._start_mtc + duration
         #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0]['Region']['in_time'])
         #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
         offset_to_go = cue._start_mtc.frame_number
@@ -158,7 +160,8 @@ def run_videoCue(cue: VideoCue, mtc):
             f'Key error 1 in run_videoCue {key}',
             extra = {"caller": cue.__class__.__name__}
         )
-        
+
+    # Connect to mtc signal
     try:
         key = '/jadeo/cmd'
         cue._osc.set_value(key, "midi connect Midi Through")

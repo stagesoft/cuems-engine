@@ -163,14 +163,29 @@ class CueHandler:
             sleep(cue.postwait.milliseconds / 1000)
 
         if cue.post_go == 'go':
-            self.go(cue._target_object, mtc)
+            post_go_thread = self.go(cue._target_object, mtc)
 
+        Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)
 
         if cue.post_go == 'go_at_end' and cue._target_object:
-            self.go(cue._target_object, mtc)
+            go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
+
+        if cue.post_go == 'go_at_end':
+            self.wait_for_cue(go_at_end_thread)
+
+        if cue.post_go == 'go':
+            self.wait_for_cue(post_go_thread)
+
+    def wait_for_cue(self, thread: Thread) -> None:
+        """Waits for a cue to finish."""
+        Logger.info(f'Waiting for {thread.name} to finish')
+        while thread.is_alive():
+            sleep(1)
+        thread.join()
+        Logger.info(f'{thread.name} finished')
 
 # ---------------------------
 # Singleton

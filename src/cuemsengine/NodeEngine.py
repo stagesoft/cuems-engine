@@ -442,7 +442,7 @@ class NodeEngine(BaseEngine):
             return
         self.ongoing_cue = cue_to_go
     #    self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
-        CUE_HANDLER.go(
+        main_thread = CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener
         )
@@ -454,6 +454,8 @@ class NodeEngine(BaseEngine):
             next_cue = self.next_cue_pointer.id
         else:
             next_cue = ""
+
+        CUE_HANDLER.wait_for_cue(main_thread)
 
         Logger.info(f'go_script reached end of script')
     #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)

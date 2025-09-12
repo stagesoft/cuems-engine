@@ -97,6 +97,8 @@ def loop_videoCue(cue: VideoCue, mtc):
         ossia: The OSC communication interface.
         mtc: The MIDI Time Code interface.
     """
+    Logger.info(f'Running video cue loop {cue.id}')
+    
     try:
         loop_counter = 0
         duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
@@ -111,14 +113,11 @@ def loop_videoCue(cue: VideoCue, mtc):
 
             if cue._local:
                 try:
+                    key = '/jadeo/offset'
                     cue._start_mtc = mtc.main_tc
                     cue._end_mtc = cue._start_mtc + duration
                     offset_to_go = - (cue._start_mtc.frame_number)
-                    
 
-                    key = '/jadeo/offset'
-                    cue._start_mtc = mtc.main_tc
-                    # offset_to_go = in_time_adjusted.frame_number - cue._start_mtc.frame_number
                     cue._osc.set_value(key, str(offset_to_go))
                     Logger.info(
                         key + " " + str(cue._osc.get_node(key).parameter.value),
