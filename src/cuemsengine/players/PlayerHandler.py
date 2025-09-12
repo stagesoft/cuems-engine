@@ -181,7 +181,7 @@ class PlayerHandler:
 
             new_ports = output_ports[index]
 
-            for i in range(2):
+            for i in range(1):
                 player = dict()
                 player['route'] = f'/players/videoplayer-{index}_{i}'
                 player['port'] = new_ports[f'video_player_{index}_{i}']
