@@ -1,5 +1,6 @@
 from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 from threading import Thread
+import os
 
 from cuemsutils.log import logged, Logger
 
@@ -31,7 +32,9 @@ class Player(Thread):
     def call_subprocess(self, call_args):
         """Calls a subprocess with the given arguments."""
         try:
-            self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT)
+            my_env= os.environ.copy()
+            my_env["DISPLAY"] = ":0"
+            self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT, env=my_env)
             self.pid = self.p.pid
             
             stdout_lines_iterator = iter(self.p.stdout.readline, b'')
