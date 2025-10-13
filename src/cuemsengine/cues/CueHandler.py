@@ -141,7 +141,8 @@ class CueHandler:
         thread = Thread(
             name=f'GO:{cue.__class__.__name__}:{cue.id}',
             target=self.go_threaded,
-            args=[cue, mtc], daemon=True,
+            args=[cue, mtc],
+            daemon=True
         )
         thread.start()
 
