@@ -1,5 +1,5 @@
+import asyncio
 from functools import singledispatch
-from time import sleep
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -7,28 +7,28 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 @singledispatch
-def loop_cue(cue: Cue, mtc):
+async def loop_cue(cue: Cue, mtc):
     """
     Loop a cue based on its type
     """
     pass
 
 @loop_cue.register
-def loop_cueList(cue: CueList, mtc):
+async def loop_cueList(cue: CueList, mtc):
     """
     Loop a CueList
     """
     pass
 
 @loop_cue.register
-def loop_actionCue(cue: ActionCue, mtc):
+async def loop_actionCue(cue: ActionCue, mtc):
     """
     Loop an ActionCue
     """
     pass
 
 @loop_cue.register
-def loop_audioCue(cue: AudioCue, mtc):
+async def loop_audioCue(cue: AudioCue, mtc):
     """Handle the audio media playback loop.
         
     This method manages the playback loop for audio media, including handling
@@ -45,7 +45,7 @@ def loop_audioCue(cue: AudioCue, mtc):
 
         while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.005)
+                await asyncio.sleep(0.005)
 
             if cue._local:
                 # Recalculate offset and apply
@@ -80,14 +80,14 @@ def loop_audioCue(cue: AudioCue, mtc):
         pass
 
 @loop_cue.register
-def loop_dmxCue(cue: DmxCue, mtc):
+async def loop_dmxCue(cue: DmxCue, mtc):
     """
     Loop a DmxCue
     """
     pass
 
 @loop_cue.register
-def loop_videoCue(cue: VideoCue, mtc):
+async def loop_videoCue(cue: VideoCue, mtc):
     """Handle the video media playback loop.
         
     This method manages the playback loop for video media, including handling
@@ -109,7 +109,7 @@ def loop_videoCue(cue: VideoCue, mtc):
 
         while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.005)
+                await asyncio.sleep(0.005)
 
             if cue._local:
                 try:

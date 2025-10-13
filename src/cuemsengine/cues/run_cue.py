@@ -1,3 +1,4 @@
+import asyncio
 from functools import singledispatch
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -9,14 +10,14 @@ from .helpers import find_timing
 from .CueHandler import CUE_HANDLER
 
 @singledispatch
-def run_cue(cue: Cue, mtc: MtcListener):
+async def run_cue(cue: Cue, mtc: MtcListener):
     """
     Run a cue based on its type
     """
     pass
 
 @run_cue.register
-def run_cueList(cue: CueList, mtc: MtcListener):
+async def run_cueList(cue: CueList, mtc: MtcListener):
     """
     Run a CueList
 
@@ -32,7 +33,7 @@ def run_cueList(cue: CueList, mtc: MtcListener):
         )
 
 @run_cue.register
-def run_actionCue(cue: ActionCue, mtc: MtcListener):
+async def run_actionCue(cue: ActionCue, mtc: MtcListener):
     """
     Run an ActionCue
     """
@@ -69,7 +70,7 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener):
         cue._action_target_object.enabled = False
 
 @run_cue.register
-def run_audioCue(cue: AudioCue, mtc):
+async def run_audioCue(cue: AudioCue, mtc):
     """
     Run an AudioCue
     """
@@ -105,7 +106,7 @@ def run_audioCue(cue: AudioCue, mtc):
         )
 
 @run_cue.register
-def run_dmxCue(cue: DmxCue, mtc):
+async def run_dmxCue(cue: DmxCue, mtc):
     """
     Run a DmxCue
     """
@@ -137,7 +138,7 @@ def run_dmxCue(cue: DmxCue, mtc):
     #     )
 
 @run_cue.register
-def run_videoCue(cue: VideoCue, mtc):
+async def run_videoCue(cue: VideoCue, mtc):
     """
     Run a VideoCue
     """

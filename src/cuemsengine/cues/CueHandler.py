@@ -1,5 +1,5 @@
-from threading import Thread, Lock
-from time import sleep
+import asyncio
+from threading import Lock
 
 from cuemsutils.cues import VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
@@ -132,63 +132,65 @@ class CueHandler:
     # ---------------------------
 
     @logged
-    def go(self, cue: Cue, mtc: MtcListener) -> Thread:
-        """Starts a cue in a thread."""
+    def go(self, cue: Cue, mtc: MtcListener):
+        """Starts a cue in an async task."""
         Logger.info(f'GO command received. Starting cue {cue.id}')
         if not cue.loaded:
             raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
 
-        thread = Thread(
-            name=f'GO:{cue.__class__.__name__}:{cue.id}',
-            target=self.go_threaded,
-            args=[cue, mtc],
-            daemon=True
+        # Get or create event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        task = loop.create_task(
+            self._go_async(cue, mtc),
+            name=f'GO:{cue.__class__.__name__}:{cue.id}'
         )
-        thread.start()
 
         # Arm next target if needed
         if isinstance(cue._target_object, Cue):
             if hasattr(cue._target_object, 'loaded') and not cue._target_object.loaded:
                 self.arm(cue._target_object)
-        return thread
+        return task
 
-    def go_threaded(self, cue: Cue, mtc: MtcListener):
+    async def _go_async(self, cue: Cue, mtc: MtcListener):
         """Runs a cue based on its properties."""
         if cue.prewait > 0:
-            sleep(cue.prewait.milliseconds / 1000)
+            await asyncio.sleep(cue.prewait.milliseconds / 1000)
 
         if cue._local:
-            run_cue(cue, mtc)
+            await run_cue(cue, mtc)
 
         if cue.postwait > 0:
-            sleep(cue.postwait.milliseconds / 1000)
+            await asyncio.sleep(cue.postwait.milliseconds / 1000)
 
         if cue.post_go == 'go':
             Logger.info(f'Running post go for next cue:{cue.target}')
-            post_go_thread = self.go(cue._target_object, mtc)
+            post_go_task = self.go(cue._target_object, mtc)
 
         Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
-        loop_cue(cue, mtc)
+        await loop_cue(cue, mtc)
 
         if cue.post_go == 'go_at_end' and cue._target_object:
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
-            go_at_end_thread = self.go(cue._target_object, mtc)
+            go_at_end_task = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
 
         if cue.post_go == 'go_at_end':
-            self.wait_for_cue(go_at_end_thread)
+            await self._wait_for_task(go_at_end_task)
 
         if cue.post_go == 'go':
-            self.wait_for_cue(post_go_thread)
+            await self._wait_for_task(post_go_task)
 
-    def wait_for_cue(self, thread: Thread) -> None:
-        """Waits for a cue to finish."""
-        Logger.info(f'Waiting for {thread.name} to finish')
-        while thread.is_alive():
-            sleep(1)
-        thread.join()
-        Logger.info(f'{thread.name} finished')
+    async def _wait_for_task(self, task: asyncio.Task) -> None:
+        """Waits for a task to finish."""
+        Logger.info(f'Waiting for {task.get_name()} to finish')
+        await task
+        Logger.info(f'{task.get_name()} finished')
 
 # ---------------------------
 # Singleton
