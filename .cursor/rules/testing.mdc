@@ -1,0 +1,53 @@
+---
+globs: *.test.js,*.spec.js,*.test.ts,*.spec.ts,*.test.tsx,*.spec.tsx
+alwaysApply: false
+---
+
+# MANDATORY DIRECTIVE: Test Validity & Scope
+
+## CORE PRINCIPLE: Meaningful and Actionable Tests
+
+Ensure tests are meaningful, valid, and correctly scoped. Tests must strictly validate the real behavior of the code under test, avoiding irrelevant or misleading checks.
+
+---
+
+## NON-NEGOTIABLE RULES OF TESTING
+
+### 1. **General Principles**
+
+- **Reflect Actual Logic:** Tests must reflect actual business and functional logic. Do not test implementation details irrelevant to the intended behavior.
+- **Assert Real Behavior:** Assertions must target real outputs, side effects, or state changes, not mock setups or artificial constructs.
+- **Avoid Redundancy:** Avoid redundant tests that re-validate what has already been fully tested elsewhere.
+- **Clarity & Confidence:** Tests should be clear, self-contained, and provide confidence in code correctness.
+
+### 2. **Unit Tests**
+
+- **Isolation:** Focus on isolated components/functions.
+- **Critical Branches:** Validate **all critical branches** of the logic, but avoid over-testing trivial or obvious framework-level behavior.
+- **Coverage:** Ensure input/output correctness and error handling are properly covered.
+- **Mock Usage:** Mocks/stubs are allowed to isolate dependencies, but **never assert on mocked behavior itself**.
+- **Characteristics:** Unit tests must be **precise, atomic, deterministic, and fast**.
+
+### 3. **Integration Tests**
+
+- **Interaction Validation:** Validate the interaction between multiple real components, ensuring that contracts, data flows, and side effects behave as intended.
+- **No Internal Mocking:** Do not mock internal components that are part of the integration under test.
+- **End-to-End Focus:** Focus on **end-to-end behavior of combined units**, but still within controlled, testable boundaries (not full E2E).
+- **Characteristics:** Integration tests must be **realistic, comprehensive, reliable, and maintainable**.
+
+### 4. **Test Quality Enforcement**
+
+- **Good Tests:** Good tests are **relevant, rigorous, maintainable, meaningful, and trustworthy**.
+- **Avoid Bad Tests:** Bad tests (flaky, superficial, redundant, misleading) must be avoided.
+- **Safety Net:** The overall test suite should act as a safety net, not a burden: it must inspire confidence, not false security.
+
+---
+
+## ENFORCEMENT
+
+Ensure that new or modified tests follow these principles. Flag:
+
+- Tests asserting on mocked calls or behavior.
+- Tests duplicating coverage already provided elsewhere.
+- Tests failing to validate real logic or missing critical scenarios.
+- Unit or integration tests that are incomplete, irrelevant, or misleading.
