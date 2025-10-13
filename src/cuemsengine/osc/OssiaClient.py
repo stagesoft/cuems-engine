@@ -1,9 +1,12 @@
 from time import sleep
 from typing import Union
 
+from cuemsutils.log import Logger
+
 from ..tools.PortHandler import PORT_HANDLER
 from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
+from pyossia import ossia
 
 OSCCLIENT_LOCAL_PORT = 9009
 OSCCLIENT_REMOTE_PORT = 9001
@@ -24,15 +27,23 @@ class OssiaClient(OssiaNodes):
         self.remote_port = remote_port
         self.local_port = local_port
         self.bind_device(remote_type)
-        if endpoints:
-            self.create_endpoints(endpoints)
+        if endpoints and remote_type == ClientDevices.OSC:
+            self.create_endpoints(endpoints)  ### DO NOT CREATE NODES IN REMOTE CLIENT, WHE READ THEM
 
     def bind_device(self, remote_type: ClientSetupFunction):
         print(f"Using remote device: {remote_type.__annotations__['return']}")
         self.device = remote_type(self)
         sleep(STARTUP_DELAY)
-        print("Device bound")
-        print(self.device)
+        Logger.debug(f"OssiaClient device bound: {self.device}")
+
+        Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")
+        self.nodes = self.nodes_from_device()
+        Logger.debug(f"OssiaClient new nodes: {self.nodes}")
+
+    def add_node_creation_callback(self, callback: callable):
+        Logger.debug(f"Now adding callback to {self.device}")
+        _ = ossia.DeviceCallback(self.device, callback, callback, callback)
+
 
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):

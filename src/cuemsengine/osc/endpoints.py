@@ -48,7 +48,7 @@ OSC_VIDEOPLAYER_CONF = {
 OSC_ENGINE_CMD_CONF = {
     '/engine/command/load' : [ValueType.String, None],
     '/engine/command/loadcue' : [ValueType.String, None],
-    '/engine/command/go' : [ValueType.String, None],
+    '/engine/command/go' : [ValueType.Impulse, None],
     '/engine/command/gocue' : [ValueType.String, None],
     '/engine/command/pause' : [ValueType.Impulse, None],
     '/engine/command/stop' : [ValueType.Impulse, None],
@@ -57,7 +57,8 @@ OSC_ENGINE_CMD_CONF = {
     '/engine/command/unload' : [ValueType.String, None],
     '/engine/command/hwdiscovery' : [ValueType.Impulse, None],
     '/engine/command/deploy' : [ValueType.String, None],
-    '/engine/command/test' : [ValueType.String, None]
+    '/engine/command/test' : [ValueType.String, None],
+    '/engine/command/update' : [ValueType.String, None]
 }
 
 """

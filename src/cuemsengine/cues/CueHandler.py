@@ -28,8 +28,8 @@ class CueHandler:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             # Initialize instance attributes
-            cls._instance._armed_cues = []
-            cls._instance._armed_cues_set = set()
+            cls._instance._armed_cues: list[Cue] = []
+            cls._instance._armed_cues_set: set[str] = set()
             cls._instance._video_players = {}
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
@@ -93,6 +93,7 @@ class CueHandler:
             return True
         
         if cue._local and cue.enabled:
+            Logger.info(f"Arming {type(cue)} {cue.id}")
             # Arm the cue
             arm_cue(cue)
             cue.loaded = True
@@ -141,6 +142,7 @@ class CueHandler:
             name=f'GO:{cue.__class__.__name__}:{cue.id}',
             target=self.go_threaded,
             args=[cue, mtc],
+            daemon=True
         )
         thread.start()
 
@@ -162,14 +164,31 @@ class CueHandler:
             sleep(cue.postwait.milliseconds / 1000)
 
         if cue.post_go == 'go':
-            self.go(cue._target_object, mtc)
+            Logger.info(f'Running post go for next cue:{cue.target}')
+            post_go_thread = self.go(cue._target_object, mtc)
 
+        Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)
 
         if cue.post_go == 'go_at_end' and cue._target_object:
-            self.go(cue._target_object, mtc)
+            Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
+            go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
+
+        if cue.post_go == 'go_at_end':
+            self.wait_for_cue(go_at_end_thread)
+
+        if cue.post_go == 'go':
+            self.wait_for_cue(post_go_thread)
+
+    def wait_for_cue(self, thread: Thread) -> None:
+        """Waits for a cue to finish."""
+        Logger.info(f'Waiting for {thread.name} to finish')
+        while thread.is_alive():
+            sleep(1)
+        thread.join()
+        Logger.info(f'{thread.name} finished')
 
 # ---------------------------
 # Singleton

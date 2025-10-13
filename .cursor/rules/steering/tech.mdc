@@ -1,0 +1,167 @@
+---
+alwaysApply: false
+---
+
+# Technology Decision Framework
+
+## Executive Summary
+
+This framework provides systematic guidance for generating technology steering documents that support engineering and platform decisions. The framework ensures evidence-based technical recommendations aligned with project requirements and constraints.
+
+## Technical Analysis Methodology
+
+**Core Assessment Process:**
+
+- **Architecture Analysis**: Comprehensive examination of existing systems, frameworks, and technical patterns
+- **Context Extraction**: Systematic analysis of project files to understand current technical state
+- **Gap Identification**: Identification of technical limitations and improvement opportunities
+- **Solution Evaluation**: Assessment of technology options against project requirements and constraints
+
+**Technical Evaluation Framework:**
+
+```
+Project Context Analysis
+├── Current State Assessment
+│   ├── Architecture Review
+│   ├── Technology Stack Analysis
+│   └── Performance & Scalability Review
+├── Requirements Alignment
+│   ├── Functional Requirements Mapping
+│   ├── Non-Functional Requirements Analysis
+│   └── Constraint Identification
+├── Technology Evaluation
+│   ├── Alternative Assessment
+│   ├── Risk Analysis
+│   └── Trade-off Evaluation
+└── Decision Documentation
+    ├── Rationale Development
+    ├── Implementation Planning
+    └── Alignment Verification
+```
+
+## Framework Requirements
+
+**Essential Capabilities:**
+
+1. **Context Dependency**: Comprehensive project file analysis for informed technical decisions
+2. **Evidence-Based Decisions**: All technology recommendations grounded in actual project context
+3. **Alignment Verification**: Technical decisions aligned with business and product goals
+4. **Implementation Feasibility**: Technology choices realistic given project constraints
+5. **Risk Assessment**: Thorough evaluation of technical risks and mitigation strategies
+
+## Technology Decision Framework
+
+**Enhanced Technical Analysis Process:
+
+```
+AI Technology Decision Engine
+├── Context Analysis Module
+│   ├── Project File Scanning
+│   ├── Architecture Pattern Recognition
+│   └── Technical Debt Assessment
+├── Requirements Processing Module
+│   ├── Functional Requirement Analysis
+│   ├── Performance Requirement Evaluation
+│   └── Scalability Requirement Assessment
+├── Technology Evaluation Module
+│   ├── Alternative Technology Assessment
+│   ├── Risk-Benefit Analysis
+│   └── Implementation Complexity Evaluation
+└── Decision Documentation Module
+    ├── Rationale Generation
+    ├── Implementation Planning
+    └── Stakeholder Communication
+```
+
+**Technology Document Generation Standards:**
+
+1. **Executive Summary**: High-level technical direction in clear, accessible language
+2. **Current State Analysis**: Documentation of architecture, systems, and limitations from project context
+3. **Proposed Changes**: Technology, framework, or approach recommendations based on evidence
+4. **Rationale Development**: Clear explanation of why changes are needed, aligned with project context
+5. **Alternative Evaluation**: Documentation of considered and rejected options
+6. **Risk Assessment**: Analysis of cost, performance, scalability, and maintainability concerns
+7. **Implementation Planning**: Phased steps, dependencies, and responsibilities
+8. **Alignment Verification**: Links between technical direction and business/product goals
+
+## Benefits & Implementation Rationale
+
+**Framework Advantages:**
+
+- Analysis relies on comprehensive project file examination
+- Recommendations grounded in actual project context and constraints
+- Decision framework supports both technical excellence and business alignment
+
+**Technical Decision Improvements:**
+
+1. **Evidence-Based Analysis**: All technology decisions based on actual project file evidence
+2. **Comprehensive Evaluation**: Assessment of technical, business, and implementation factors
+3. **Clear Documentation**: Transparent rationale for all technology decisions
+4. **Stakeholder Alignment**: Technical decisions support stated business goals
+
+## Risk Management
+
+**Risk 1: Insufficient Context**
+
+- _Concern_: Technology decisions made without adequate project context
+- _Mitigation_: Explicitly identify context gaps rather than making assumptions
+
+**Risk 2: Technology Bias**
+
+- _Concern_: Favoring certain technologies without proper evaluation
+- _Mitigation_: Systematic evaluation of alternatives and documented trade-offs
+
+**Risk 3: Implementation Complexity**
+
+- _Concern_: Technology recommendations too complex for project constraints
+- _Mitigation_: Assessment of implementation feasibility against available resources and timeline
+
+## Implementation Plan
+
+**Phase 1 (Immediate):**
+
+- Apply framework to all technology decision requests
+- Ensure comprehensive project context analysis before recommendations
+- Document all technology decisions with clear rationale and evidence
+
+**Phase 2 (Short-term):**
+
+- Enhance technology evaluation criteria based on project outcomes
+- Improve alternative assessment methodology
+- Strengthen alignment verification process
+
+**Phase 3 (Long-term):**
+
+- Develop predictive technology assessment capabilities
+- Implement automated technology compatibility analysis
+- Create adaptive decision frameworks based on project types
+
+## Usage Guidelines
+
+**Framework Application:**
+
+- Implement technology decision framework for all technical steering requests
+- Maintain evidence-based approach for all technology recommendations
+- Ensure clear documentation of rationale and implementation plans
+
+**Required Context:**
+
+- Comprehensive project context for technology decisions
+- Review of technology recommendations for accuracy and feasibility
+- Confirmation of alignment between technical decisions and business objectives
+
+**Success Metrics:**
+
+- Technology decisions grounded in actual project evidence
+- Clear rationale linking technical choices to business goals
+- Successful technology implementation with minimal risk
+
+**Communication Standards:**
+
+- Present technology decisions with clear, pragmatic explanations
+- Document all alternatives considered and reasons for selection
+- Provide actionable implementation guidance based on project constraints
+
+---
+
+_This framework serves as my operational guide for generating technology steering documents that justify and align technical decisions using evidence from project files, ensuring pragmatic and well-reasoned technology choices._

@@ -10,6 +10,8 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .tools.communicate import AsyncCommsThread, TIMEOUT
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
+from .tools.mtcmaster import libmtcmaster
+
 
 class ControllerEngine(BaseEngine):
     '''
@@ -36,8 +38,10 @@ class ControllerEngine(BaseEngine):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_editor_request('')
+        
 
     def start(self):
+        self.mtcmaster = libmtcmaster.MTCSender_create()
         self.set_comms()
         super().start()
     
@@ -66,14 +70,15 @@ class ControllerEngine(BaseEngine):
 
     @logged
     def stop_mtc(self):
-        stop = self.mtc.send_request({'cmd':'stop'})
-        release = self.mtc.send_request({'cmd':'release'})
-        if stop['resp'] != 'ok' or release['resp'] != 'ok':
-            Logger.error('MTC master could not be stopped')
-            Logger.error(f"Stop: {stop['resp']}")
-            Logger.error(f"Release: {release['resp']}")
-        else:
-            Logger.info('MTC master stopped')
+        libmtcmaster.MTCSender_stop(self.mtcmaster)
+        # stop = self.mtc.send_request({'cmd':'stop'})
+        # release = self.mtc.send_request({'cmd':'release'})
+        # if stop['resp'] != 'ok' or release['resp'] != 'ok':
+        #     Logger.error('MTC master could not be stopped')
+        #     Logger.error(f"Stop: {stop['resp']}")
+        #     Logger.error(f"Release: {release['resp']}")
+        # else:
+        #     Logger.info('MTC master stopped')
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -123,7 +128,8 @@ class ControllerEngine(BaseEngine):
             'project_deploy': partial(self.load_project, deploy_only=True),
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery,
-            'nodeconf': self.nodeconf
+            'nodeconf': self.nodeconf,
+            'go_script': self.go_script
         }
         if action in command_dict.keys():
             _editor_request_uuid = self._editor_request_uuid
@@ -234,10 +240,9 @@ class ControllerEngine(BaseEngine):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
         self.apply_oscquery_commands()
-        sleep(5) # Wait for the NodeEngines to be ready
         self.set_oscquery_bridge()
 
-    def apply_oscquery_commands(self, to = 'both'):
+    def apply_oscquery_commands(self):
         cmd_dict = {
             'deploy': None, # self.deploy_callback,
             # disabled because it trigers a doble load when called from editor
@@ -251,7 +256,8 @@ class ControllerEngine(BaseEngine):
             'resetall': None, # self.reset_all_callback,
             'stop': None, # self.stop_callback,
             'test': None, # self.test_callback
-            'unload': None # self.unload_cue_callback,
+            'unload': None, # self.unload_cue_callback,
+            'update': self.set_oscquery_bridge # Rebuilds client connections
         }
         endpoints = add_callbacks_from_dict(
             ENGINE_CMD_ENDPOINTS,
@@ -263,41 +269,42 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             self.oscquery_server.set_value(key, value)
 
-    def register_node_engines(self) -> None:
-        """Register the NodeEngines in the OSCQuery server"""
-        for host in self.find_hosts():
-            endpoints = self.build_status_endpoints(host)
-            self.oscquery_server.create_endpoints(endpoints)
-
     def set_oscquery_bridge(self, host = None):
         Logger.info(
             "Oscquery bridge for Controller starting"
         )
-        # Start a client to the NodeEngine
-        self.set_oscquery_client(
-            add_prefix_to_all(
-                self.get_status_endpoints(),
-                '/node'
-            ),
-            port = NODE_ENGINE_PORT,
-            host = host
-        )
-        # Create the endpoints for the NodeEngine commands
-        self.oscquery_client.create_endpoints(
-            add_prefix_to_all(
-                ENGINE_CMD_ENDPOINTS, '/node'
+        # Start a client to each NodeEngine
+        if not host:
+            hosts = self.find_hosts()
+        if not isinstance(host, list):
+            hosts = [str(host)]
+        else:
+            hosts = [str(host) for host in host]
+        for host in hosts:
+            client = self.set_oscquery_client(
+                port = NODE_ENGINE_PORT,
+                host = host
             )
-        )
+            # Register the NodeEngines in the OSCQuery server
+            self.mirror_nodes_on_controller(client)
+            client.add_node_creation_callback(self.node_creation_callback)
 
-        # Set the callback to reroute the commands from the NodeEngine to the Controller
-        self.oscquery_server.create_endpoints(
-            add_callback_to_all(
-                add_prefix_to_all(
-                    ENGINE_CMD_ENDPOINTS, '/node'
-                ),
-                self.server_to_client_values
-            )
-        )
+    def node_creation_callback(self, node):
+        Logger.debug(f'Node creation callback received with {str(node)}')
+        node_dict = {str(node): node}
+        self.oscquery_server.add_endpoints(add_prefix_to_all(node_dict, '/node'))
+
+        
+
+
+
+    def mirror_nodes_on_controller(self, client):
+        """Mirror the nodes from the NodeEngines to the Controller"""
+        # Set the callbacks client for the nodes
+        Logger.debug(f'Mirroring nodes from {client} to the Controller')
+        endpoints = client.get_endpoints()
+        self.oscquery_server.add_endpoints(add_prefix_to_all(endpoints, '/node'))
+        Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
 
 
     #########################
@@ -311,9 +318,10 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
+        self.stop_timecode()
         
         if deploy_only:
-            self.oscquery_server.set_value('/node/engine/command/deploy', project_name)
+            self.oscquery_server.set_value('/engine/command/deploy', project_name)
             return True
         
         try:
@@ -340,10 +348,11 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
-        self.set_status('load', project_name)
+        # self.set_status('load', project_name)
 
         self.set_oscquery_values({
-            '/node/engine/command/load': project_name
+            '/engine/status/load': project_name,
+            '/engine/command/load': project_name
         })
 
         # Confirm the project is loaded
@@ -356,16 +365,25 @@ class ControllerEngine(BaseEngine):
         self.load_project(project_name)
 
     def go_script(self, value):
-        if self.get_status('go') == value:
+        if self.get_status('running') == "yes":
+            Logger.info(f'Script {type(value)} already running.')
             return
 
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
-        
-        self.set_status('go', value)
-        
+        self.start_timecode()
         self.set_oscquery_values({
-            '/node/engine/status/running': 1,
-            '/engine/command/go': value
+            # '/engine/status/go': value,
+            '/engine/status/running': "yes",
+            '/engine/command/gocue': "yes"
+            # '/engine/command/go': value
         })
+
+    def start_timecode(self):
+        libmtcmaster.MTCSender_play(self.mtcmaster)
+        print("MTC master started playing.")
+
+    def stop_timecode(self):
+        libmtcmaster.MTCSender_stop(self.mtcmaster)
+        print("MTC master stopped playing.")

@@ -40,16 +40,19 @@ def loop_audioCue(cue: AudioCue, mtc):
     """
     try:
         loop_counter = 0
-        duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
+        # duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
+        duration = CTimecode(cue.media.duration)
 
-        while not cue.media.regions[0].loop or loop_counter < cue.media.regions[0].loop:
+        while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.005)
 
             if cue._local:
                 # Recalculate offset and apply
-                cue._end_mtc = cue._start_mtc + (duration)
-                offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
+                cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
+                cue._end_mtc = cue._start_mtc + duration
+                offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
+                # offset_to_go = duration.milliseconds * (-1)
                 try:
                     key = '/offset'
                     cue._osc.set_value(key, offset_to_go)
@@ -70,6 +73,8 @@ def loop_audioCue(cue: AudioCue, mtc):
                     f'Key error 4 in go_callback {key}',
                     extra = {"caller": cue.__class__.__name__}
                 )
+
+        Logger.debug(f'loop finished with Loop counter: {loop_counter} and set loop {cue.loop}')
 
     except AttributeError:
         pass
@@ -92,13 +97,17 @@ def loop_videoCue(cue: VideoCue, mtc):
         ossia: The OSC communication interface.
         mtc: The MIDI Time Code interface.
     """
+    Logger.info(f'Running video cue loop {cue.id}')
+    
     try:
         loop_counter = 0
-        duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
-        duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
-        in_time_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
+        Logger.debug(f'Video duration: {duration}, duration in frames: {duration.frame_number} {duration.framerate}, ')
+        # duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
+        # duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
+        #in_time_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(mtc.main_tc.framerate)
 
-        while not cue.media.regions[0].loop or loop_counter < cue.media.regions[0].loop:
+        while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.005)
 
@@ -107,10 +116,11 @@ def loop_videoCue(cue: VideoCue, mtc):
                     key = '/jadeo/offset'
                     cue._start_mtc = mtc.main_tc
                     cue._end_mtc = cue._start_mtc + duration
-                    offset_to_go = in_time_adjusted.frame_number - cue._start_mtc.frame_number
-                    cue._osc.set_value(key, offset_to_go)
+                    offset_to_go = - (cue._start_mtc.frame_number)
+
+                    cue._osc.set_value(key, str(offset_to_go))
                     Logger.info(
-                        key + " " + str(cue._osc.get_value(key)),
+                        key + " " + str(cue._osc.get_node(key).parameter.value),
                         extra = {"caller": cue.__class__.__name__}
                     )
                 except KeyError:
@@ -121,6 +131,7 @@ def loop_videoCue(cue: VideoCue, mtc):
             
             loop_counter += 1
 
+        Logger.debug(f'loop finished with Loop counter: {loop_counter} and set loop {cue.loop}')
         if cue._local:
             try:
                 key = '/jadeo/cmd'
@@ -134,6 +145,6 @@ def loop_videoCue(cue: VideoCue, mtc):
                     f'Key error 1 (disconnect) in arm_callback {key}',
                     extra = {"caller": cue.__class__.__name__}
                 )
-
+        
     except AttributeError:
         pass

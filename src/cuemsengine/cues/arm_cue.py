@@ -63,7 +63,7 @@ def arm_videoCue(cue: VideoCue):
         key = '/jadeo/cmd'
         cue._osc.set_value(key, 'midi disconnect')
         Logger.info(
-            key + " " + str(cue._osc.get_value(key)),
+            key + " " + str(cue._osc.get_node(key).parameter.value),
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:
@@ -77,7 +77,7 @@ def arm_videoCue(cue: VideoCue):
         value = PLAYER_HANDLER.media_path(cue.media['file_name'])
         cue._osc.set_value(key, value)
         Logger.info(
-            key + " " + str(cue._osc.get_value(key)),
+            key + " " + str(cue._osc.get_node(key).parameter.value),
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:

@@ -6,15 +6,14 @@ from ..osc.OssiaClient import PlayerClient
 from ..osc.endpoints import OSC_DMXPLAYER_CONF
 
 class DmxPlayer(Player):
-    def __init__(self, port, path, args, media):
+    def __init__(self, port, path, args):
+        super().__init__()
         self.port = port
         self.stdout = None
         self.stderr = None
         # self.card_id = card_id
         self.path = path
         self.args = args
-        self.media = media
-
     @logged
     def run(self):
         """Call dmxplayer-cuems in a subprocess"""
@@ -22,7 +21,7 @@ class DmxPlayer(Player):
         if self.args is not None:
             for arg in self.args.split():
                 process_call_list.append(arg)
-        process_call_list.extend(['--port', str(self.port), self.media])
+        process_call_list.extend(['--port', str(self.port)])
         self.call_subprocess(process_call_list)
 
 class DmxClient(PlayerClient):

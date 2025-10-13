@@ -44,3 +44,6 @@ class OssiaServer(OssiaNodes):
         if not done:
             self.remove_device()
             raise Exception("Server setup failed")
+        
+    def add_endpoints(self, endpoints) -> None:
+        self.create_endpoints(endpoints)

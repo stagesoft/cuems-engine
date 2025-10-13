@@ -1,3 +1,4 @@
+from dis import hasconst
 from functools import partial
 from typing import Any, Callable
 from os import path, remove
@@ -12,6 +13,8 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
 from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
+from ..osc.OssiaClient import PlayerClient
+from ..osc.helpers import add_callback_to_all, add_prefix_to_all
 from ..cues.CueHandler import CUE_HANDLER
 from ..tools.PortHandler import PORT_HANDLER
 
@@ -42,6 +45,7 @@ class BaseEngine(SignalEngine):
         self.mtc_port = MTC_PORT
         self.timecode = None
         self.status = EngineStatus()
+        self.oscquery_client_list: list[OssiaClient] = []
 
         super().__init__(with_signals=with_signals)
     
@@ -85,7 +89,7 @@ class BaseEngine(SignalEngine):
             strict (bool): If True, raise an AttributeError if the property is not found
         """
         if f"_{property}" in self.status.__dict__.keys():
-            Logger.debug(f'Setting {property} to {value}')
+            Logger.debug(f'Setting property {property} to {value}')
             self.status.__setattr__(property, str(value))
         else:
             Logger.error(f'Property {property} not found in EngineStatus')
@@ -147,29 +151,52 @@ class BaseEngine(SignalEngine):
             endpoints = endpoints
         )
 
-    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None):
+    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
             host = self.node_host
         # TODO: remove this hardcoded host
         host = CONTROLLER_HOST
-        self.oscquery_client = OssiaClient(
+        oscquery_client = OssiaClient(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
             remote_port = port,
             remote_type = ClientDevices.OSCQUERY,
             endpoints = endpoints
         )
-        Logger.debug(f"OscQueryClient created: {self.oscquery_client}")
+        Logger.debug(f"OscQueryClient created: {oscquery_client}")
+        self.oscquery_client_list.append(oscquery_client)
+        return oscquery_client
 
-    def server_to_client_values(self, node: str, value: Any) -> None:
-        Logger.debug(f"Setting {node} to {value} in client")
-        self.oscquery_client.set_value(node, value)
+    def server_to_client_values(
+        self, client: OssiaClient, node: str, value: Any, strip: str = ""
+    ) -> None:
+        node = str(node).strip(strip)
+        Logger.debug(f"Setting node {node} to {value} in {client}")
+        try:
+            client.set_value(node, value)
+        except Exception as e:
+            Logger.error(f"Error setting {node} to {value} in {client}: {e}")
 
     def client_to_server_values(self, node: str, value: Any) -> None:
-        Logger.debug(f"Setting {node} to {value} in server")
+        node = str(node)
+        Logger.debug(f"Setting node {node} to {value} in server")
         self.oscquery_server.set_value(node, value)
+
+    def add_player_nodes_to_local(self, client: PlayerClient, prefix: str = "") -> None:
+        Logger.debug(f"Procesing nodes from client: {client}")
+        if not isinstance(client, PlayerClient):
+            Logger.error(f"Client {client} is not a PlayerClient")
+            return
+        def set_client_values(node: str, value: Any) -> None:
+            self.server_to_client_values(client, node, value, strip = prefix
+        )
+        endpoints = client.get_endpoints()
+        endpoints = add_callback_to_all(endpoints, set_client_values)
+        endpoints = add_prefix_to_all(endpoints, prefix)
+        Logger.debug(f"Endpoints: {endpoints}")
+        self.oscquery_server.add_endpoints(endpoints)
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:
@@ -204,6 +231,8 @@ class BaseEngine(SignalEngine):
             self.ongoing_cue = None
             self.next_cue_pointer = None
             self.go_offset = 0
+            self.oscquery_server.set_value('/engine/status/running', "no")
+            self.oscquery_server.set_value('/engine/status/gocue', "no")
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset:
@@ -238,12 +267,14 @@ class BaseEngine(SignalEngine):
             exit(-1)
     
     def find_hosts(self) -> list:
+        Logger.info('Looking for hosts in network map: {self.cm.network_map}')
+        ## DEV: Hardcoded for now, should be replaced by the discovery system
+        return [CONTROLLER_HOST]
+        node_list = []
+        for  node in self.cm.network_map:
+            node_list.append(node)
         """Hardcoded for now, should be replaced by a discovery system"""
-        return [
-            'node1',
-            'node2',
-            'node3'
-        ]
+        return node_list
 
     def print_all_status(self) -> None:
         Logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
@@ -317,39 +348,35 @@ class BaseEngine(SignalEngine):
                 Logger.warning('Script cuelist is empty, nothing to process')
                 return
             # Skip the script cuelist and process the first cuelist
-            cuelist = cuelist.contents[0]
-
-        if not cuelist.contents or len(cuelist.contents) == 0:
+            #cuelist = cuelist.contents[0]
+        Logger.debug(f'Processing cuelist: {type(cuelist)} {cuelist.id} #########################')
+        if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
         
-        CUE_HANDLER.arm(cuelist, True)
+        if cuelist.check_mappings(self.cm):
+            CUE_HANDLER.arm(cuelist, True)
 
         try:
             for index, item in enumerate(cuelist.contents):
-                if item.check_mappings(self.cm):
-                    Logger.debug(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
-                    # if isinstance(item, VideoCue) and item._local:
-                    #     Logger.debug(f'{item.outputs}')
-                    #     try:
-                    #         for output in item.outputs:
-                    #             # TO DO : add support for multiple outputs
-                    #             video_player_id = self.cm.get_video_player_id(output['output_name'][37:])
-                    #             Logger.debug(f'video player id: {video_player_id}')
-                    #             item._player = self._video_players[video_player_id]['player']
-                    #             item._osc_route = self._video_players[video_player_id]['route']
-                    #     except Exception as e:
-                    #         Logger.exception(e)
-                    #         raise e
-                else:
-                    raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
+                ## TODO: remove this hardcoded local flag
+                Logger.info(f'Processing item: {type(item)} {item.id}')
+                item._local = True
+                item.loaded = False
+                item.enabled = True
+                # if item.check_mappings(self.cm):
+                #     ## DEV: Hardcoded for now, should be replaced by the discovery system
+                #     item._local = True
+
+                #     Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
+                # else:
+                #     raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
 
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item)
 
-                if item.autoload and item._local and not item.loaded:
-                    CUE_HANDLER.arm(item, True)
-
+                # if item.autoload and item._local and not item.loaded:
+                
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
                         '''
@@ -364,6 +391,11 @@ class BaseEngine(SignalEngine):
                 else:
                     item._target_object = self.script.find(item.target)
 
+                if item._local and not item.loaded:
+                    Logger.info(f'Arming item: {type(item)} {item.id}')
+                    CUE_HANDLER.arm(item, True)
+
+                Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')
                 if isinstance(item, ActionCue):
                     item._action_target_object = self.script.find(item.action_target)
 

@@ -16,7 +16,7 @@ def find_timing(
         tuple[int, CTimecode]: The offset in frames and the duration
     """
     if not cue._start_mtc:
-        cue._start_mtc = mtc.main_tc
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
 
     if in_frames:
         time_attribute = "frame_number"

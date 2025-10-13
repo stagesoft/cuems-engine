@@ -3,6 +3,7 @@ from typing import Callable, Union
 from pyossia.ossia_python import OSCDevice, OSCQueryDevice # type: ignore[attr-defined]
 from cuemsutils.log import Logger
 from datetime import datetime
+from time import sleep
 
 # Type aliases for device setup functions
 ServerSetupFunction = Callable[..., bool]
@@ -30,12 +31,25 @@ def new_osc_device(cls) -> OSCDevice:
     return x
 
 def new_oscquery_device(cls) -> OSCQueryDevice:
-    x = OSCQueryDevice(
-        cls.name,
-        f"ws://{cls.host}:{cls.remote_port}",
-        cls.local_port
-    )
-    x.update()
+    try:
+        x = OSCQueryDevice(
+            cls.name,
+            f"ws://{cls.host}:{cls.remote_port}",
+            cls.local_port
+        )
+    except Exception as e:
+        Logger.exception(f'Failed to create OSCQueryDevice: {e}, type: {type(e)}')
+        return
+    Logger.info(f'Added OSCQueryDevice: {cls.name}')
+    try:
+        result = False
+        while not result:
+            result = x.update()
+            sleep(0.5)
+            Logger.debug(f'Waiting for remote deviece ws://{cls.host}:{cls.remote_port} to be ready...')
+    except Exception as e:
+        Logger.exception(f'Failed to update OSCQueryDevice: {e}, type: {type(e)}')
+        return
     Logger.debug(f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port} {datetime.now()}")
     return x
 
