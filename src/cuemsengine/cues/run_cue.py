@@ -6,6 +6,7 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..tools.MtcListener import MtcListener
 from .helpers import find_timing
+from .CueHandler import CUE_HANDLER
 
 @singledispatch
 def run_cue(cue: Cue, mtc: MtcListener):
@@ -23,7 +24,7 @@ def run_cueList(cue: CueList, mtc: MtcListener):
     """
     try:
         if cue.contents:
-            cue.contents[0].go(mtc)
+            CUE_HANDLER.go(cue.contents[0], mtc)
     except Exception as e:
         Logger.error(
             f'GO failed for content {cue.contents[0].id}: {e}',
@@ -40,11 +41,11 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener):
 
     # TODO: Implement this
     if cue.action_type == 'load':
-        cue._action_target_object.arm(cue._conf, cue._armed_list)
+        CUE_HANDLER.arm(cue._action_target_object)
     elif cue.action_type == 'unload':
-        cue._action_target_object.disarm()
+        CUE_HANDLER.disarm(cue._action_target_object)
     elif cue.action_type == 'play':
-        cue._action_target_object.go(mtc)
+        CUE_HANDLER.go(cue._action_target_object, mtc)
     elif cue.action_type == 'pause':
         pass
     elif cue.action_type == 'stop':
