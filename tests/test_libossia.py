@@ -46,7 +46,8 @@ def test_client_empty_init(ossia_client_factory):
 
 def test_client_endpoint_str(ossia_client_factory):
     with ossia_client_factory(endpoints = "No_endpoint") as client:
-        assert len(client.nodes) == 0
+        assert len(client.nodes) == 1
+        assert [i for i in client.nodes.keys()] == ["/"]
         assert len(client.device.root_node.children()) == 0
 
         try:
@@ -59,7 +60,7 @@ def test_client_failed_value(ossia_client_factory):
     with ossia_client_factory(
         endpoints = {"/test1": [ValueType.Int, None, None]}
     ) as client:
-        assert len(client.nodes) == 1
+        assert len(client.nodes) == 2
         assert "/test1" in client.nodes.keys()
         with raises(ValueError) as e:
             client.set_value("/test1", "no_int")
@@ -72,7 +73,8 @@ def test_client_failed_value(ossia_client_factory):
         assert str(e.value) == "Could not set /test1 to no_int"
 
         client.remove_node("/test1")
-        assert len(client.nodes) == 0
+        assert len(client.nodes) == 1
+        assert [i for i in client.nodes.keys()] == ["/"]
         with raises(KeyError) as e:
             client.get_node("/test1")
         assert str(e.value) == "'/test1'"
@@ -95,7 +97,8 @@ def test_client_list_endpoints(ossia_client_factory):
         endpoints = endpoints,
         local_port = 9002
     ) as client:
-        assert len(client.nodes) == 3
+        assert len(client.nodes) == 4
+        assert [i for i in client.nodes.keys()] == ["/", "/test1", "/test2", "/test3"]
         assert len(client.device.root_node.children()) == 3
 
 def test_server_empty_init(ossia_server_factory):
@@ -182,14 +185,11 @@ def test_client_init(capfd, ossia_client_factory):
     assert len(out) > 0
     assert len(err) == 0
     out_lines = out.split("\n")
-    assert len(out_lines) == 7
-    assert out_lines[0] == "Using remote device: <class 'pyossia.ossia_python.OSCDevice'>"
-    assert out_lines[1] == "Device bound"
-    assert "<pyossia.ossia_python.OSCDevice object at " in out_lines[2]
-    assert out_lines[3] == test_string(2, 10)
-    assert out_lines[4] == test_string(3, 20)
-    assert out_lines[5] == test_string(4, 30)
-    assert out_lines[6] == ''
+    assert len(out_lines) == 4
+    assert out_lines[0] == test_string(2, 10)
+    assert out_lines[1] == test_string(3, 20)
+    assert out_lines[2] == test_string(4, 30)
+    assert out_lines[3] == ''
 
 def test_client_iterate_on_devices(capfd, ossia_client_factory):
     test_endpoints = {
@@ -215,11 +215,11 @@ def test_client_iterate_on_devices(capfd, ossia_client_factory):
     assert len(out_lines) == 14
 
 class store_response():
-        def __init__(self, response = None):
-            self.response = response
+        def __init__(self):
+            self.response = []
         
         def set(self, value):
-            self.response = value
+            self.response.append(value)
 
 def test_osc_client_to_server_transmission():
     # ARRANGE
@@ -232,35 +232,36 @@ def test_osc_client_to_server_transmission():
     client_endpoints = {
         "/test": [ValueType.Int, client_res.set, 10],
     }
-    LOCAL = 9191
-    REMOTE = 9292
+    LOCAL_PORT = 9191
+    COMMON_PORT = 9292
 
     # ACT
     server = OssiaServer(
         endpoints=server_endpoints,
-        local_port = LOCAL,
-        remote_port = REMOTE
+        local_port = COMMON_PORT
     )
     client = OssiaClient(
         endpoints = client_endpoints,
-        local_port = REMOTE + 1,
-        remote_port = LOCAL
+        local_port = LOCAL_PORT,
+        remote_port = COMMON_PORT
     )
     
     # ASSERT
     ## Check that the server started with default values
     assert server.started == True
-    assert server_res.response == 30
-    assert client_res.response == 10
+    assert client_res.response[0] == 10
+    assert server_res.response[0] == 30
+    assert server_res.response[1] == 10
     ## Check that client alters server values
     client.set_value("/test", 20)
-    assert client_res.response == 20
+    assert client_res.response[1] == 20
     sleep(0.5)
-    assert server_res.response == 20
+    assert server_res.response[2] == 20
     ## Check that server does not alter client values
     server.set_value("/test", 40)
-    assert server_res.response == 40
-    assert client_res.response == 20
+    sleep(0.5)
+    assert server_res.response[3] == 40
+    assert len(client_res.response) == 2
 
 def test_oscclient_in_separate_process():
     # ARRANGE
