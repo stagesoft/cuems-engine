@@ -8,6 +8,7 @@ from time import sleep
 
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
+from .audiomixer import AudioMixer, MixerClient, start_audio_mixer
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
@@ -31,6 +32,8 @@ class PlayerHandler:
             cls._instance = super(PlayerHandler, cls).__new__(cls)
 
             cls._instance._audio_output_generator = None
+            cls._instance._audio_mixer = None
+            cls._instance._audio_mixer_client = None
             cls._instance._cue_players = {}
             cls._instance._dmx_output_generator = None
             cls._instance._front_video_player = None
@@ -75,10 +78,40 @@ class PlayerHandler:
         Logger.info(f'Setting audio output generator to {path} {args}')
         self._audio_output_generator = partial(start_audio_output, path=path, args=args)
 
+    def start_audio_mixer(self, audio_outputs: list, port: int, node_uuid: str, path: str = None) -> tuple[AudioMixer, MixerClient]:
+        """Starts the audio mixer for this node.
+        
+        Args:
+            audio_outputs: List of audio output configurations
+            port: OSC port for jack-volume communication
+            node_uuid: Unique identifier for this mixer node
+            path: Optional path to jack-volume binary
+            
+        Returns:
+            Tuple containing the AudioMixer and MixerClient instances
+        """
+        Logger.info(f'Starting audio mixer for node {node_uuid}')
+        self._audio_mixer, self._audio_mixer_client = start_audio_mixer(
+            audio_outputs=audio_outputs,
+            port=port,
+            node_uuid=node_uuid,
+            path=path
+        )
+        return self._audio_mixer, self._audio_mixer_client
+
+    def get_audio_mixer(self) -> AudioMixer:
+        """Returns the audio mixer instance."""
+        return self._audio_mixer
+
+    def get_audio_mixer_client(self) -> MixerClient:
+        """Returns the audio mixer client instance."""
+        return self._audio_mixer_client
+
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
 
         The player is stored in the player handler and the osc client is assigned to the cue.
+        After creating the player, it will be automatically connected to the audio mixer if one exists.
         
         Args:
             cue: The cue to create the audio output for
@@ -97,6 +130,22 @@ class PlayerHandler:
         )
         cue._osc = client
         self.store_cue_player(cue, player)
+        
+        # Connect the player to the audio mixer if available
+        if self._audio_mixer is not None:
+            # Wait for the player to register with JACK
+            sleep(0.5)
+            
+            # Use the cue ID as the player name (same as the client name format)
+            uuid_slug = ''.join(str(cue.id).split('-'))
+            player_name = f'audioplayer-{uuid_slug}'
+            Logger.info(f'Connecting player {player_name} to audio mixer')
+            # Connect to mixer channel 0 by default (can be made configurable later)
+            self._audio_mixer.connect_player_to_mixer(
+                player_name=player_name,
+                player_output_prefix='output',
+                mixer_channel=0
+            )
 
     # def set_dmx_output_generator(cls, path: str, args: str):
     #     """Sets the dmx player generator"""
