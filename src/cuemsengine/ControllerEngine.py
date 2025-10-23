@@ -6,11 +6,12 @@ from functools import partial
 from cuemsutils.log import Logger, logged
 from cuemsutils.helpers import new_uuid
 
-from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
+from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .tools.communicate import AsyncCommsThread, TIMEOUT
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.mtcmaster import libmtcmaster
+from .tools.PortHandler import PORT_HANDLER
 
 
 class ControllerEngine(BaseEngine):
@@ -52,8 +53,42 @@ class ControllerEngine(BaseEngine):
 
     def set_communicators(self):
         Logger.info('Setting up Communicators')
-        self.communications_thread = AsyncCommsThread(self.editor_command_callback)
+        
+        # Get OSC hub host from ConfigManager or use default
+        if hasattr(self, 'cm') and self.cm:
+            osc_hub_host = self.cm.controller_url
+        else:
+            osc_hub_host = CONTROLLER_HOST
+        
+        # Get dynamic port from PORT_HANDLER
+        osc_hub_port = PORT_HANDLER.new_random_port()
+        osc_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
+        
+        Logger.info(f'OSC Hub address: {osc_hub_address}')
+        
+        self.communications_thread = AsyncCommsThread(
+            osc_hub_address=osc_hub_address,
+            editor_callback=self.editor_command_callback,
+            osc_player_callback=self.osc_player_received_callback,
+            mode=AsyncCommsThread.Mode.CONTROLLER
+        )
         self.communications_thread.start()
+
+    def osc_player_received_callback(self, sender: str, player_id: str, node_data: dict, action):
+        """
+        Callback invoked when players are received from nodes.
+        
+        Parameters:
+        - sender: ID of the node sending the player
+        - player_id: Unique identifier for the player
+        - node_data: Dictionary containing OSC node structure (None for REMOVE)
+        - action: ActionType (ADD, UPDATE, or REMOVE)
+        """
+        Logger.info(f'Received player operation from {sender}: {action.value} {player_id}')
+        # TODO: Implement player management logic
+        # For now, just log the received player information
+        if node_data:
+            Logger.debug(f'Player {player_id} data: {node_data}')
 
     def stop(self):
         self.stop_comms()
