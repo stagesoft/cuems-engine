@@ -207,4 +207,96 @@ class AsyncCommsThread(threading.Thread):
             self.event_loop
         )
         Logger.debug(f'Queued player {player_id} for removal')
+    
+    def request_to_nodeconf(self, message: dict, timeout: Optional[float] = None) -> dict:
+        """
+        Send a request to nodeconf and get response (CONTROLLER mode only, thread-safe).
+        
+        Parameters:
+        - message: Dictionary containing the request message
+        - timeout: Optional timeout in seconds (defaults to TIMEOUT)
+        
+        Returns:
+        - dict: Response from nodeconf
+        
+        Raises:
+        - ValueError: If called in NODE mode or if nodeconf is not available
+        - TimeoutError: If request times out
+        - Exception: If request raises an exception
+        """
+        if self.mode != self.Mode.CONTROLLER:
+            raise ValueError('request_to_nodeconf can only be called in CONTROLLER mode')
+        
+        if not self.nodeconf:
+            raise ValueError('nodeconf communicator is not initialized')
+        
+        if timeout is None:
+            timeout = TIMEOUT
+        
+        Logger.debug(f'Sending nodeconf request: {message}')
+        
+        # Schedule the coroutine in the event loop (thread-safe)
+        send_task = asyncio.run_coroutine_threadsafe(
+            self.nodeconf.send_request(message),
+            self.event_loop
+        )
+        
+        try:
+            result = send_task.result(timeout=timeout)
+            Logger.debug(f'Nodeconf request returned: {result!r}')
+            return result
+        except TimeoutError:
+            Logger.error(f'Nodeconf request took too long (timeout: {timeout}s), cancelling...')
+            send_task.cancel()
+            raise
+        except Exception as exc:
+            Logger.error(f'Nodeconf request raised an exception: {exc!r}')
+            send_task.cancel()
+            raise
+    
+    def request_to_hwdiscovery(self, message: dict, timeout: Optional[float] = None) -> dict:
+        """
+        Send a request to hardware discovery and get response (CONTROLLER mode only, thread-safe).
+        
+        Parameters:
+        - message: Dictionary containing the request message
+        - timeout: Optional timeout in seconds (defaults to TIMEOUT)
+        
+        Returns:
+        - dict: Response from hwdiscovery
+        
+        Raises:
+        - ValueError: If called in NODE mode or if hwdiscovery is not available
+        - TimeoutError: If request times out
+        - Exception: If request raises an exception
+        """
+        if self.mode != self.Mode.CONTROLLER:
+            raise ValueError('request_to_hwdiscovery can only be called in CONTROLLER mode')
+        
+        if not self.hw_discovery:
+            raise ValueError('hw_discovery communicator is not initialized')
+        
+        if timeout is None:
+            timeout = TIMEOUT
+        
+        Logger.debug(f'Sending hwdiscovery request: {message}')
+        
+        # Schedule the coroutine in the event loop (thread-safe)
+        send_task = asyncio.run_coroutine_threadsafe(
+            self.hw_discovery.send_request(message),
+            self.event_loop
+        )
+        
+        try:
+            result = send_task.result(timeout=timeout)
+            Logger.debug(f'Hwdiscovery request returned: {result!r}')
+            return result
+        except TimeoutError:
+            Logger.error(f'Hwdiscovery request took too long (timeout: {timeout}s), cancelling...')
+            send_task.cancel()
+            raise
+        except Exception as exc:
+            Logger.error(f'Hwdiscovery request raised an exception: {exc!r}')
+            send_task.cancel()
+            raise
 

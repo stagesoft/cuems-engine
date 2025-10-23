@@ -220,51 +220,31 @@ class ControllerEngine(BaseEngine):
     # External services
     #########################
 
-    def hwdiscovery(self, message: dict, context=None) -> None:
+    def hwdiscovery(self, message: dict, context=None) -> bool:
         Logger.debug(f'sending HW discovery request: {message}')
-        reply = self.request_to_hwdiscovery(message, context)
+        reply = self.request_to_hwdiscovery(message)
         Logger.debug(f'Received HW discovery reply: {reply}')
         if 'OK' in reply.values():
             return True
         else:
             return False            
 
-    def request_to_hwdiscovery(self, message: dict, context) -> dict:
-        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.hw_discovery.send_request(message), self.communications_thread.event_loop)
-        try:
-            result = send_task.result(timeout=TIMEOUT)
-            Logger.debug(f'Hwdiscovery request returned: {result!r}')
-            return result
-        except TimeoutError:
-            Logger.debug('Hwdiscovery request took too long, cancelling the task...')
-            self.error_to_editor(context, value="Timeout error")
-            send_task.cancel()
-        except Exception as exc:
-            Logger.debug(f'Hwdiscovery request raised an exception: {exc!r}')
-            send_task.cancel()
+    def request_to_hwdiscovery(self, message: dict) -> dict:
+        result = self.communications_thread.request_to_hwdiscovery(message, timeout=TIMEOUT)
+        return result
 
-    def nodeconf(self, message: dict, context=None) -> None:
+    def nodeconf(self, message: dict, context=None) -> bool:
         Logger.debug(f'sending nodeconf request: {message}')
-        reply = self.request_to_nodeconf(message, context)
+        reply = self.request_to_nodeconf(message)
         Logger.debug(f'Received nodeconf reply: {reply}')
         if 'OK' in reply.values():
             return True
         else:
             return False            
 
-    def request_to_nodeconf(self, message: dict, context) -> dict:
-        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.nodeconf.send_request(message), self.communications_thread.event_loop)
-        try:
-            result = send_task.result(timeout=TIMEOUT)
-            Logger.debug(f'Nodeconf request returned: {result!r}')
-            return result
-        except TimeoutError:
-            Logger.debug('Nodeconf request took too long, cancelling the task...')
-            self.error_to_editor(context, value="Timeout error")
-            send_task.cancel()
-        except Exception as exc:
-            Logger.debug(f'Nodeconf request raised an exception: {exc!r}')
-            send_task.cancel()
+    def request_to_nodeconf(self, message: dict) -> dict:
+        result = self.communications_thread.request_to_nodeconf(message, timeout=TIMEOUT)
+        return result
 
 
     #########################
