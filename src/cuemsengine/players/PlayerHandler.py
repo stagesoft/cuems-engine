@@ -8,7 +8,7 @@ from time import sleep
 
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
-from .audiomixer import AudioMixer, MixerClient, start_audio_mixer
+from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER

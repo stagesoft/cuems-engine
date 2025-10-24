@@ -1,4 +1,4 @@
-from .conn_jack import JackConnectionManager
+from .JackConnectionManager import JackConnectionManager
 from .Player import Player
 from ..osc.OssiaClient import PlayerClient
 from ..osc.helpers import add_callback_to_all
@@ -304,3 +304,4 @@ def start_audio_mixer(
     
     Logger.info(f"Audio mixer started: {node_uuid}_mixer on port {port}")
     return mixer, client
+
