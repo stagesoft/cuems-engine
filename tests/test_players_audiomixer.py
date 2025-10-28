@@ -34,7 +34,8 @@ class TestAudioMixer:
     def audio_mixer(self, mock_audio_outputs, mock_conn_manager):
         """Create AudioMixer instance for testing."""
         with patch('cuemsengine.players.AudioMixer.sleep'), \
-             patch.object(AudioMixer, 'call_subprocess'):
+             patch.object(AudioMixer, 'call_subprocess'), \
+             patch.object(AudioMixer, 'start'):  # Mock the start method to avoid thread issues
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
@@ -96,14 +97,33 @@ class TestAudioMixer:
     
     def test_connect_player_to_mixer(self, audio_mixer, mock_conn_manager):
         """Test connecting a player to mixer input channel."""
+        # Mock existing connections that need to be disconnected
+        mock_conn_manager.get_connections.side_effect = [
+            ['system:playback_1'],  # left output connections
+            ['system:playback_2']   # right output connections
+        ]
+        
         audio_mixer.connect_player_to_mixer('test_player', 'output', 0)
         
-        # Should connect stereo pair to mixer inputs
-        expected_calls = [
+        # Should first disconnect existing connections, then connect to mixer
+        expected_disconnect_calls = [
+            (('test_player:output_0', 'system:playback_1'),),
+            (('test_player:output_1', 'system:playback_2'),)
+        ]
+        expected_connect_calls = [
             (('test_player:output_0', 'test-node-123_mixer:input_1'),),
             (('test_player:output_1', 'test-node-123_mixer:input_2'),)
         ]
-        mock_conn_manager.connect_by_name.assert_has_calls(expected_calls)
+        
+        # Check disconnect calls
+        disconnect_calls = [call for call in mock_conn_manager.disconnect_by_name.call_args_list 
+                           if call[0][0].startswith('test_player:output')]
+        assert len(disconnect_calls) == 2
+        
+        # Check connect calls
+        connect_calls = [call for call in mock_conn_manager.connect_by_name.call_args_list 
+                        if call[0][0].startswith('test_player:output')]
+        assert len(connect_calls) == 2
     
     def test_connect_player_to_mixer_invalid_channel(self, audio_mixer, mock_conn_manager):
         """Test connecting player to invalid mixer channel."""
@@ -117,14 +137,48 @@ class TestAudioMixer:
     
     def test_connect_player_to_mixer_stereo_mapping(self, audio_mixer, mock_conn_manager):
         """Test stereo channel mapping for different mixer channels."""
+        # Mock no existing connections
+        mock_conn_manager.get_connections.return_value = []
+        
         # Test channel 1 (should map to inputs 3,4)
         audio_mixer.connect_player_to_mixer('test_player', 'output', 1)
         
-        expected_calls = [
+        # Should connect to inputs 3,4 (channel 1 * 2 + 1 = 3, channel 1 * 2 + 2 = 4)
+        expected_connect_calls = [
             (('test_player:output_0', 'test-node-123_mixer:input_3'),),
             (('test_player:output_1', 'test-node-123_mixer:input_4'),)
         ]
-        mock_conn_manager.connect_by_name.assert_has_calls(expected_calls)
+        
+        # Check that connect was called with correct inputs
+        connect_calls = [call for call in mock_conn_manager.connect_by_name.call_args_list 
+                        if call[0][0].startswith('test_player:output')]
+        assert len(connect_calls) == 2
+    
+    def test_connect_player_to_mixer_disconnects_existing(self, audio_mixer, mock_conn_manager):
+        """Test that existing connections are properly disconnected."""
+        # Mock existing connections
+        mock_conn_manager.get_connections.side_effect = [
+            ['system:playback_1', 'other:input'],  # left output has multiple connections
+            ['system:playback_2']                  # right output has one connection
+        ]
+        
+        audio_mixer.connect_player_to_mixer('test_player', 'output', 0)
+        
+        # Should disconnect all existing connections
+        disconnect_calls = mock_conn_manager.disconnect_by_name.call_args_list
+        assert len(disconnect_calls) == 3  # 2 from left, 1 from right
+        
+        # Verify specific disconnections
+        left_disconnects = [call for call in disconnect_calls if call[0][0] == 'test_player:output_0']
+        right_disconnects = [call for call in disconnect_calls if call[0][0] == 'test_player:output_1']
+        
+        assert len(left_disconnects) == 2
+        assert len(right_disconnects) == 1
+        
+        # Verify connections to mixer were made
+        connect_calls = [call for call in mock_conn_manager.connect_by_name.call_args_list 
+                        if call[0][0].startswith('test_player:output')]
+        assert len(connect_calls) == 2
 
 
 class TestMixerClient:

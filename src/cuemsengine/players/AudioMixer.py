@@ -74,6 +74,9 @@ class AudioMixer(Player):
     def connect_player_to_mixer(self, player_name: str, player_output_prefix: str = 'output', mixer_channel: int = 0):
         """Connect a player's output to a specific mixer input channel.
         
+        First disconnects any existing connections from the player's outputs,
+        then connects them to the mixer inputs.
+        
         Args:
             player_name: Name of the player JACK client to connect
             player_output_prefix: Prefix for player's output ports (e.g., 'output')
@@ -83,17 +86,33 @@ class AudioMixer(Player):
             Logger.error(f"Invalid mixer channel: {mixer_channel}. Max: {self.channel_number - 1}")
             return
             
-        # Connect stereo pair (assuming stereo outputs)
-        left_output = f"{player_name}:{player_output_prefix}_0"
-        right_output = f"{player_name}:{player_output_prefix}_1"
-        left_input = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
-        right_input = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
+        # Define player output ports (assuming stereo outputs)
+        channel_0_output = f"{player_name}:{player_output_prefix}_0"
+        channel_1_output = f"{player_name}:{player_output_prefix}_1"
+        mixer_input_0 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
+        mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
         
-        Logger.debug(f"Connecting {left_output} to {left_input}")
-        Logger.debug(f"Connecting {right_output} to {right_input}")
+        # First, disconnect any existing connections from player outputs
+        Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+        Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
         
-        self.conn_man.connect_by_name(left_output, left_input)
-        self.conn_man.connect_by_name(right_output, right_input)
+        # Get existing connections and disconnect them
+        channel_0_connections = self.conn_man.get_connections(channel_0_output)
+        for connection in channel_0_connections:
+            Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
+            self.conn_man.disconnect_by_name(channel_0_output, connection)
+        
+        channel_1_connections = self.conn_man.get_connections(channel_1_output)
+        for connection in channel_1_connections:
+            Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
+            self.conn_man.disconnect_by_name(channel_1_output, connection)
+        
+        # Now connect to mixer inputs
+        Logger.debug(f"Connecting {channel_0_output} to {mixer_input_0}")
+        Logger.debug(f"Connecting {channel_1_output} to {mixer_input_1}")
+        
+        self.conn_man.connect_by_name(channel_0_output, mixer_input_0)
+        self.conn_man.connect_by_name(channel_1_output, mixer_input_1)
 
 
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
