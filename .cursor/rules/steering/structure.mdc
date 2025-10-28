@@ -1,0 +1,146 @@
+---
+alwaysApply: false
+---
+
+# Development Structure Framework
+
+## Executive Summary
+
+This framework defines a structured approach to organizing and executing development workflows. The structure optimizes autonomous capabilities while maintaining clear boundaries and responsibilities in spec-driven development.
+
+## Development Structure Overview
+
+**Core Operational Components:**
+
+- **Spec Management**: Requirements gathering, design creation, task planning
+- **Code Implementation**: Execution, testing, verification
+- **Rule Processing**: Guidance through steering documents
+- **Tool Integration**: External capability extension via MCP
+
+**Standard Workflow Process:**
+
+```
+User Request → Spec Creation → Task Execution → Verification → Completion
+```
+
+## Framework Requirements
+
+**Identified Challenges:**
+
+1. **Workflow Fragmentation**: Separation between spec creation and execution creates context loss
+2. **Rule Complexity**: Multiple steering documents with overlapping guidance create confusion
+3. **Autonomous Boundaries**: Need clearer limits on when to seek user input vs. proceed independently
+4. **Context Management**: Difficulty maintaining project state across different workflow phases
+
+## Enhanced Development Structure
+
+**Unified Development Architecture:**
+
+```
+Integrated Development Process
+├── Analysis Module
+│   ├── Project Analysis
+│   ├── Context Building
+│   └── Pattern Recognition
+├── Spec Management Module
+│   ├── Requirements Engineering
+│   ├── Design Architecture
+│   └── Task Planning
+├── Execution Module
+│   ├── Code Implementation
+│   ├── Testing & Verification
+│   └── Quality Assurance
+└── Steering Integration
+    ├── Rule Processing
+    ├── Context Application
+    └── Decision Framework
+```
+
+**Enhanced Workflow Implementation:**
+
+1. **Phase 0: Unified Analysis** - Complete project understanding before any action
+2. **Phase 1: Integrated Spec Development** - Create requirements, design, and tasks as cohesive unit
+3. **Phase 2: Autonomous Execution** - Implement tasks with continuous verification
+4. **Phase 3: Holistic Verification** - Perform system-wide validation and reporting
+
+## Benefits & Implementation Rationale
+
+**Current Operational Evidence:**
+
+- Core rules emphasize autonomous operation with minimal user interruption
+- Spec workflow requires iterative user approval at each phase
+- Current structure supports both guided and autonomous modes
+
+**Operational Improvements:**
+
+1. **Reduced Context Switching**: Maintain full project context throughout unified workflow
+2. **Faster Iteration**: Integrated spec development reduces approval cycles
+3. **Better Quality**: Continuous verification throughout execution
+4. **Enhanced Autonomy**: Clear decision framework for when to proceed vs. consult
+
+## Risk Management
+
+**Risk 1: Over-Autonomy**
+
+- _Concern_: Proceeding without necessary user input
+- _Mitigation_: Maintain explicit approval gates for critical decisions
+
+**Risk 2: Complexity Overload**
+
+- _Concern_: Unified structure becoming too complex
+- _Mitigation_: Use modular design with clear separation of concerns
+
+**Risk 3: Rule Conflicts**
+
+- _Concern_: Multiple steering documents creating contradictory guidance
+- _Mitigation_: Implement hierarchical rule processing with clear precedence
+
+## Implementation Plan
+
+**Phase 1 (Immediate):**
+
+- Integrate analysis capabilities into all workflows
+- Establish unified context management system
+- Implement decision framework for autonomy boundaries
+
+**Phase 2 (Short-term):**
+
+- Optimize spec creation workflow for reduced iteration cycles
+- Enhance verification capabilities across all modules
+- Streamline steering rule processing
+
+**Phase 3 (Long-term):**
+
+- Develop advanced pattern recognition for project types
+- Implement predictive task planning based on project context
+- Create adaptive autonomy levels based on user preferences
+
+## Usage Guidelines
+
+**Framework Application:**
+
+- Implement unified analysis approach in all workflows
+- Apply structure to current and future development tasks
+- Maintain consistency across all operational phases
+
+**Required Context:**
+
+- Feedback on proposed structure changes
+- Review of workflow execution for effectiveness
+- Adjustment of preferences for autonomy levels as needed
+
+**Success Metrics:**
+
+- Reduced user approval cycles in spec development
+- Faster task execution with improved quality
+- Higher project completion rates
+
+**Communication Standards:**
+
+- Demonstrate structure changes through practical workflow execution
+- Gather feedback through actual development performance
+- Iterate approach based on real-world operational data
+
+---
+
+_This framework serves as an operational guide for enhanced autonomous development, balancing efficiency with appropriate oversight._

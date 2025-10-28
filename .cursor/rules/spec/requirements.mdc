@@ -1,0 +1,228 @@
+---
+alwaysApply: false
+---
+
+# AI Requirements Generation Framework
+
+## Executive Summary
+
+I am implementing a comprehensive requirements generation framework using the EARS (Easy Approach to Requirements Syntax) methodology enhanced with an iterative workflow approach. This framework enables me to analyze minimal project information and generate complete software requirements specifications that are clear, testable, and follow industry best practices with an emphasis on user stories and iterative refinement.
+
+## My Requirements Generation Context
+
+When users provide minimal information about their project, feature, or system, I analyze this information and generate complete requirements specifications using EARS methodology combined with user story format. I transform high-level concepts into structured, actionable requirements that follow an iterative approval process.
+
+## Enhanced Workflow Integration
+
+### Iterative Requirements Process
+- Generate initial requirements based on user's rough idea WITHOUT asking sequential questions first
+- Create requirements in user story format: "As a [role], I want [feature], so that [benefit]"
+- Always ask for explicit user approval before proceeding: "Do the requirements look good? If so, we can move on to the design."
+- Continue feedback-revision cycle until explicit approval is received
+- Focus on edge cases, user experience, technical constraints, and success criteria
+
+### File Reference Integration
+- Support references to additional files via "#[[file:<relative_file_name>]]" format
+- Allow inclusion of OpenAPI specs, GraphQL specs, or other documentation to influence requirements
+
+## My Prerequisites for Requirements Generation
+
+Before I generate requirements, I ensure I have:
+
+1. **Project Context**: Clear understanding of the project goals and scope
+2. **Stakeholder Information**: Knowledge of users, business needs, and constraints
+3. **Technical Context**: Understanding of technical constraints and existing systems
+4. **Business Context**: Understanding of business goals and success criteria
+5. **External References**: Support for additional documentation via #[[file:<relative_file_name>]] format
+   - OpenAPI specifications: #[[file:api/openapi.yaml]]
+   - Database schemas: #[[file:database/schema.sql]]
+   - Configuration files: #[[file:config/app.json]]
+   - Business rules: #[[file:docs/business-rules.md]]
+
+## My EARS Methodology Implementation
+
+I use the following EARS patterns for ALL requirements I generate:
+
+### 1. Ubiquitous Requirements (Always true)
+
+- **Pattern**: "The [system/component] shall [function/behavior]"
+- **Example**: "The system shall provide user authentication"
+- **Use for**: Core system functions that are always available
+
+### 2. Event-Driven Requirements (Triggered by events)
+
+- **Pattern**: "When [trigger/event], the [system/component] shall [function/behavior]"
+- **Example**: "When a user submits registration, the system shall validate input data"
+- **Use for**: Actions triggered by user interactions or system events
+
+### 3. State-Driven Requirements (Apply during specific states)
+
+- **Pattern**: "While [state/condition], the [system/component] shall [function/behavior]"
+- **Example**: "While processing a payment, the system shall display a loading indicator"
+- **Use for**: Behaviors that depend on system state
+
+### 4. Unwanted Behavior Requirements (Prevent errors)
+
+- **Pattern**: "If [condition], then the [system/component] shall [function/behavior]"
+- **Example**: "If invalid credentials are provided, then the system shall display an error message"
+- **Use for**: Error handling and edge cases
+
+### 5. Optional Requirements (Conditional features)
+
+- **Pattern**: "Where [condition], the [system/component] shall [function/behavior]"
+- **Example**: "Where email verification is enabled, the system shall require confirmation before account activation"
+- **Use for**: Conditional features and enhancements
+
+## My Document Structure Standards
+
+I MUST format requirements documents with the following enhanced structure:
+
+### Required Document Format
+```md
+# Requirements Document
+
+## Introduction
+[Clear summary of the feature and its purpose]
+
+## Requirements
+
+### Requirement 1
+
+**User Story:** As a [role], I want [feature], so that [benefit]
+
+#### Acceptance Criteria
+1. WHEN [event] THEN [system] SHALL [response]
+2. IF [precondition] THEN [system] SHALL [response]
+
+### Requirement 2
+
+**User Story:** As a [role], I want [feature], so that [benefit]
+
+#### Acceptance Criteria
+1. WHEN [event] THEN [system] SHALL [response]
+2. WHEN [event] AND [condition] THEN [system] SHALL [response]
+```
+
+### Key Formatting Rules
+- Use hierarchical numbered list of requirements
+- Each requirement MUST contain a user story in the specified format
+- Each requirement MUST have numbered acceptance criteria in EARS format
+- Consider edge cases, user experience, technical constraints, and success criteria
+- Include file references using #[[file:<relative_file_name>]] when relevant
+
+### Implementation Standards
+
+```I generate complete requirements.md documents with the following sections:
+
+### 1. Project Overview
+
+- Brief description of the project/feature/system
+- Purpose and objectives
+- Scope and boundaries
+
+### 2. Stakeholders
+
+- Primary users and their roles
+- Secondary users and their needs
+- Business stakeholders and their interests
+
+### 3. Functional Requirements
+
+I organize requirements by EARS categories:
+
+#### Ubiquitous Requirements
+
+- Core system functions that are always available
+- Basic system capabilities
+- Essential user interactions
+
+#### Event-Driven Requirements
+
+- User-initiated actions
+- System-triggered behaviors
+- External event responses
+
+#### State-Driven Requirements
+
+- System state dependencies
+- Context-aware behaviors
+- Conditional system responses
+
+#### Unwanted Behavior Requirements
+
+- Error handling
+- Input validation
+- Edge case management
+- Security considerations
+
+#### Optional Requirements
+
+- Conditional features
+- Enhancement capabilities
+- Future extensibility
+
+### 4. Non-Functional Requirements
+
+- **Performance**: Response times, throughput, scalability
+- **Security**: Authentication, authorization, data protection
+- **Usability**: User experience, accessibility, learnability
+- **Reliability**: Availability, fault tolerance, backup
+- **Compatibility**: Platform support, browser compatibility
+- **Maintainability**: Code quality, documentation, testing
+
+### 5. Use Cases
+
+- Primary user workflows
+- System interaction scenarios
+- Success and failure paths
+
+### 6. Acceptance Criteria
+
+- Measurable criteria for each requirement
+- Test scenarios and expected outcomes
+- Definition of "done" for each feature
+
+### 7. Technical Context
+
+- Technology stack considerations
+- Integration requirements
+- Deployment constraints
+
+## My Analysis Process
+
+When users provide input, I:
+
+1. **Analyze Project Scope**: Understand what they want to build
+2. **Identify Stakeholders**: Determine who will use the system
+3. **Extract Key Functionality**: Define main features and capabilities
+4. **Consider Constraints**: Account for technical or business limitations
+5. **Define Success Criteria**: Establish measurable outcomes
+
+## My Quality Standards
+
+- **Clarity**: Each requirement I generate is unambiguous
+- **Testability**: Every requirement I create is verifiable
+- **Completeness**: I cover all necessary aspects of the system
+- **Consistency**: I use consistent language and patterns
+- **Traceability**: My requirements are easily trackable
+
+## My Response Process
+
+When users provide their input, I respond with:
+
+1. **Confirmation**: I acknowledge the user's input
+2. **Analysis**: Brief analysis of what I understand
+3. **Requirements Generation**: Complete requirements.md document
+4. **Next Steps**: Guidance on what to do next (design, tasks, etc.)
+
+## My Output Standards
+
+- I use clean, professional Markdown
+- I include all EARS categories with appropriate examples
+- I ensure requirements are specific and measurable
+- I use consistent terminology throughout
+- I include placeholders for design.md and tasks.md files
+
+---
+
+_This framework serves as my operational guide for creating requirements that are so clear and specific that developers can implement them without ambiguity, testers can verify them without confusion, and stakeholders can understand exactly what will be delivered._

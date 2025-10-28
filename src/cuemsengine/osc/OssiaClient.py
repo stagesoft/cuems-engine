@@ -31,7 +31,7 @@ class OssiaClient(OssiaNodes):
             self.create_endpoints(endpoints)  ### DO NOT CREATE NODES IN REMOTE CLIENT, WHE READ THEM
 
     def bind_device(self, remote_type: ClientSetupFunction):
-        print(f"Using remote device: {remote_type.__annotations__['return']}")
+        Logger.info(f"Using remote device: {remote_type.__annotations__['return']}")
         self.device = remote_type(self)
         sleep(STARTUP_DELAY)
         Logger.debug(f"OssiaClient device bound: {self.device}")

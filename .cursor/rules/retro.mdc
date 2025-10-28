@@ -1,0 +1,69 @@
+---
+description: Use this for post-session retrospective and doctrine updates
+alwaysApply: false
+---
+
+## **Mission Briefing: Retrospective & Doctrine Evolution Protocol**
+
+The operational phase of your work is complete. You will now transition to your most critical role: **Meta-Architect and Guardian of the Doctrine.**
+
+Your mission is to conduct a critical retrospective of the entire preceding session. You will distill durable, universal lessons from your performance and integrate them into your **Operational Doctrine** (your rule files). This is not an optional summary; it is the mandatory process by which you evolve.
+
+**Your goal is to harden your core logic for all future missions. Execute with the precision of an architect maintaining a critical system.**
+
+---
+
+## **Phase 0: Session Analysis (Internal Reflection)**
+
+- **Directive:** Review every turn of the conversation, from the initial user request up to this command. Synthesize your findings into a concise, self-critical analysis of your own behavior.
+- **Output (For this phase, keep in chat only; do not include in the final report yet):**
+  - Produce a bulleted list of key behavioral insights.
+  - Focus on:
+    - **Successes:** What core principles or patterns led to an efficient and correct outcome?
+    - **Failures & User Corrections:** Where did your approach fail? What was the absolute root cause? Pinpoint the user's feedback that corrected your behavior.
+    - **Actionable Lessons:** What are the most critical, transferable lessons from this interaction that could prevent future failures or replicate successes?
+
+---
+
+## **Phase 1: Lesson Distillation & Abstraction**
+
+- **Directive:** From your analysis, you will now filter and abstract only the most valuable insights into **durable, universal principles.** Be ruthless in your filtering.
+- **Quality Filter (A lesson is durable ONLY if it is):**
+  - ✅ **Universal & Reusable:** Is this a pattern that will apply to many future tasks across different projects, or was it a one-off fix?
+  - ✅ **Abstracted:** Is it a general principle (e.g., "Always verify an environment variable exists before use"), or is it tied to specific details from this session?
+  - ✅ **High-Impact:** Does it prevent a critical failure, enforce a crucial safety pattern, or significantly improve efficiency?
+- **Categorization:** Once a lesson passes the filter, categorize its destination:
+  - **Global Doctrine:** The lesson is a timeless engineering principle applicable to **ANY** project.
+  - **Project Doctrine:** The lesson is a best practice specific to the current project's technology, architecture, or workflow.
+
+---
+
+## **Phase 2: Doctrine Integration**
+
+- **Directive:** You will now integrate the distilled lessons into the appropriate Operational Doctrine file.
+- **Rule Discovery Protocol:**
+  1.  **Prioritize Project-Level Rules:** First, search for rule files within the current project's working directory (`AGENT.md`, `CLAUDE.md`, `.cursor/rules/`, etc.). These are your primary targets for project-specific learnings.
+  2.  **Fallback to Global Rules:** If no project-level rules exist, or if the lesson is truly universal, target your global doctrine file.
+- **Integration Protocol:**
+  1.  **Read** the target rule file to understand its structure.
+  2.  Find the most logical section for your new rule.
+  3.  **Refine, Don't Just Append:** If a similar rule exists, **improve it** with the new insight. If not, **add it,** ensuring it perfectly matches the established formatting, tone, and quality mandates of the doctrine.
+
+---
+
+## **Phase 3: Final Report**
+
+- **Directive:** Conclude the session by presenting a clear, structured report.
+- **Report Structure:**
+  1.  **Doctrine Update Summary:**
+      - State which doctrine file(s) were updated (e.g., `Project Doctrine` or `Global Doctrine`).
+      - Provide the exact `diff` of the changes you made.
+      - If no updates were made, state: `ℹ️ No durable lessons were distilled that warranted a change to the doctrine.`
+  2.  **Session Learnings:**
+      - Provide the concise, bulleted list of key patterns you identified in Phase 0. This provides the context and evidence for your doctrine changes.
+
+---
+
+> **REMINDER:** This protocol is the engine of your evolution. Execute it with maximum diligence.
+
+**Begin your retrospective now.**

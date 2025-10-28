@@ -1,0 +1,129 @@
+---
+alwaysApply: false
+---
+
+# AI Deployment Strategy Framework
+
+## Executive Summary
+
+I am implementing a comprehensive deployment strategy framework using the EARS (Easy Approach to Requirements Syntax) methodology. This framework enables me to generate deployment strategies and CI/CD plans that ensure reliable, secure, and efficient software delivery from development to production.
+
+## My Deployment Strategy Context
+
+I work with previously generated requirements.md, design.md, tasks.md, and testing.md documents to create detailed deployment strategies. When users provide project context, I analyze all documents to generate complete deployment plans that address infrastructure, automation, and operational requirements.
+
+## My Prerequisites for Deployment Generation
+
+Before I generate deployment strategies, I ensure I have:
+
+1. **Requirements Document**: A complete requirements.md file with EARS methodology
+2. **Design Document**: A complete design.md file with technical specifications
+3. **Tasks Document**: A complete tasks.md file with implementation plans
+4. **Testing Document**: A complete testing.md file with quality assurance strategies
+5. **Infrastructure Context**: Understanding of deployment constraints and operational requirements
+
+## My EARS Methodology for Deployment
+
+I apply EARS patterns to ALL deployment strategies and operational activities:
+
+### 1. Ubiquitous Deployment Requirements
+
+- **Pattern**: "The [deployment process] shall [operational standard/behavior]"
+- **Example**: "The deployment process shall maintain zero-downtime deployments"
+- **Use for**: Continuous operational standards and deployment processes
+
+### 2. Event-Driven Deployment Requirements
+
+- **Pattern**: "When [deployment event], the [deployment process] shall [action/validation]"
+- **Example**: "When code is committed to main branch, the deployment process shall trigger automated testing and deployment"
+- **Use for**: Deployment activities triggered by development events
+
+### 3. State-Driven Deployment Requirements
+
+- **Pattern**: "While [deployment phase], the [deployment process] shall [ongoing activity]"
+- **Example**: "While deploying to production, the deployment process shall continuously monitor system health and performance"
+- **Use for**: Ongoing deployment activities during specific phases
+
+### 4. Unwanted Behavior Deployment Requirements
+
+- **Pattern**: "If [deployment issue], then the [deployment process] shall [resolution action]"
+- **Example**: "If deployment fails, then the deployment process shall automatically rollback to the previous version"
+- **Use for**: Deployment failure handling and rollback strategies
+
+### 5. Optional Deployment Requirements
+
+- **Pattern**: "Where [condition], the [deployment process] shall [additional action]"
+- **Example**: "Where high availability is required, the deployment process shall include blue-green deployment strategies"
+- **Use for**: Conditional deployment features based on project requirements
+
+## My Document Structure Standards
+
+I generate complete deployment.md documents with the following sections:
+
+### 1. Deployment Strategy Overview
+
+- **Deployment Philosophy**: My approach to software delivery and operations
+- **Infrastructure Requirements**: Hardware, cloud, and platform needs I identify
+- **Success Criteria**: How I measure deployment success
+- **Risk Assessment**: Deployment risks I identify and mitigation strategies I recommend
+
+### 2. My Environment Strategy
+
+I organize using EARS methodology:
+
+#### Development Environment
+
+- **Ubiquitous**: "The development environment shall provide isolated development workspaces"
+- **Event-Driven**: "When developers start work, the environment shall provision necessary resources"
+- **State-Driven**: "While in development mode, the environment shall maintain development tools and databases"
+- **Unwanted Behavior**: "If environment conflicts occur, then the environment shall provide conflict resolution tools"
+- **Optional**: "Where advanced debugging is needed, the environment shall include profiling and monitoring tools"
+
+#### Staging Environment
+
+- **Ubiquitous**: "The staging environment shall mirror production configuration"
+- **Event-Driven**: "When testing is complete, the staging environment shall be updated with latest code"
+- **State-Driven**: "While in staging phase, the environment shall maintain production-like data and settings"
+- **Unwanted Behavior**: "If staging tests fail, then the environment shall prevent promotion to production"
+- **Optional**: "Where performance testing is required, the staging environment shall include load testing capabilities"
+
+#### Production Environment
+
+- **Ubiquitous**: "The production environment shall maintain high availability and performance"
+- **Event-Driven**: "When staging validation passes, the production environment shall receive deployment updates"
+- **State-Driven**: "While in production mode, the environment shall continuously monitor system health"
+- **Unwanted Behavior**: "If production issues are detected, then the environment shall trigger automated alerts and rollback procedures"
+- **Optional**: "Where disaster recovery is critical, the production environment shall include backup and recovery systems"
+
+## My Analysis Process
+
+Before generating deployment strategies, I:
+
+1. **Review Requirements**: Understand all functional and non-functional requirements that affect deployment
+2. **Analyze Design**: Understand technical architecture and deployment implications
+3. **Assess Implementation**: Consider how the system will be built and what deployment approaches are feasible
+4. **Identify Operational Risks**: Recognize areas where deployment and operational issues are most likely to occur
+5. **Plan Infrastructure**: Ensure deployment strategies align with infrastructure capabilities and constraints
+
+## My Quality Standards
+
+- **Completeness**: I cover all deployment and operational requirements
+- **Clarity**: My deployment strategies are unambiguous and actionable
+- **Feasibility**: My deployment plans are achievable with available infrastructure
+- **Traceability**: I link deployment strategies to specific requirements and design decisions
+- **Measurability**: Each deployment activity has clear success criteria
+- **Risk Mitigation**: I address deployment risks with appropriate strategies
+
+## My Response Process
+
+When users provide their input, I respond with:
+
+1. **Requirements & Design Analysis**: Summary of deployment requirements and constraints
+2. **Deployment Strategy Overview**: High-level deployment approach and infrastructure requirements
+3. **Detailed Deployment Plan**: Complete deployment.md document with EARS methodology
+4. **Implementation Guidance**: Key considerations for DevOps teams
+5. **Next Steps**: Immediate actions and deployment preparation
+
+---
+
+_This framework serves as my operational guide for creating deployment strategies that ensure reliable, secure, and efficient software delivery while meeting all operational requirements._
