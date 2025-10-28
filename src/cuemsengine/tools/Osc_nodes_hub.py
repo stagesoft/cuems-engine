@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from cuemsutils.tools.CommunicatorServices import Message, Nng_bus_hub
 from cuemsutils.log import Logger
 import pyossia
-import json
 import asyncio
 from typing import Optional, Dict, Callable
 
@@ -201,16 +200,8 @@ class OscNodesHub(Nng_bus_hub):
         try:
             message = await self.get_message()
             
-            # Try to parse as JSON
-            if isinstance(message.data, str):
-                try:
-                    data = json.loads(message.data)
-                except json.JSONDecodeError:
-                    # Not a JSON message, not a player operation
-                    Logger.debug("Received non-JSON message, skipping")
-                    return None
-            else:
-                data = message.data
+            # message.data is already a dict (JSON-decoded by base class)
+            data = message.data
             
             # Check if this is an OSC player message
             if data.get("__type__") == "osc_player":

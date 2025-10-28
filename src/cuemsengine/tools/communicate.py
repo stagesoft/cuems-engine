@@ -246,12 +246,10 @@ class AsyncCommsThread(threading.Thread):
             Logger.debug(f'Nodeconf request returned: {result!r}')
             return result
         except TimeoutError:
-            Logger.error(f'Nodeconf request took too long (timeout: {timeout}s), cancelling...')
-            send_task.cancel()
+            Logger.error(f'Nodeconf request timed out after {timeout}s')
             raise
         except Exception as exc:
             Logger.error(f'Nodeconf request raised an exception: {exc!r}')
-            send_task.cancel()
             raise
     
     def request_to_hwdiscovery(self, message: dict, timeout: Optional[float] = None) -> dict:
@@ -292,11 +290,9 @@ class AsyncCommsThread(threading.Thread):
             Logger.debug(f'Hwdiscovery request returned: {result!r}')
             return result
         except TimeoutError:
-            Logger.error(f'Hwdiscovery request took too long (timeout: {timeout}s), cancelling...')
-            send_task.cancel()
+            Logger.error(f'Hwdiscovery request timed out after {timeout}s')
             raise
         except Exception as exc:
             Logger.error(f'Hwdiscovery request raised an exception: {exc!r}')
-            send_task.cancel()
             raise
 
