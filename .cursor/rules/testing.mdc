@@ -1,5 +1,5 @@
 ---
-globs: *.test.js,*.spec.js,*.test.ts,*.spec.ts,*.test.tsx,*.spec.tsx
+globs: tests/test_*.py
 alwaysApply: false
 ---
 
