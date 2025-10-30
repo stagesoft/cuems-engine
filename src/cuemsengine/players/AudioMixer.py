@@ -21,7 +21,7 @@ class AudioMixer(Player):
     where channel can be 'master' or '0', '1', '2', etc.
     """
 
-    def __init__(self, audio_outputs, port, node_uuid, path=None):
+    def __init__(self, audio_outputs, port, node_uuid, path=None, args: str | None = None):
         """Initialize the AudioMixer.
         
         Args:
@@ -39,6 +39,7 @@ class AudioMixer(Player):
         self.channel_number = len(audio_outputs)
         self.audio_outputs = audio_outputs
         self.client_name = f'{self.node_uuid}_mixer'
+        self.extra_args = args
         
         # Build command line arguments for jack-volume
         self.args = [
@@ -58,6 +59,9 @@ class AudioMixer(Player):
     def run(self):
         """Start the jack-volume subprocess."""
         process_call_list = [self.path] + self.args
+        if self.extra_args:
+            for arg in self.extra_args.split():
+                process_call_list.append(arg)
         Logger.info(f"Starting jack-volume with: {process_call_list}")
         self.call_subprocess(process_call_list)
 
@@ -286,7 +290,8 @@ def start_audio_mixer(
     audio_outputs: list,
     port: int,
     node_uuid: str,
-    path: str = None
+    path: str = None,
+    args: str | None = None
 ) -> tuple[AudioMixer, MixerClient]:
     """Start an audio mixer and its OSC client.
     
@@ -307,7 +312,8 @@ def start_audio_mixer(
         audio_outputs=audio_outputs,
         port=port,
         node_uuid=node_uuid,
-        path=path
+        path=path,
+        args=args
     )
     
     # Wait for mixer process to start
