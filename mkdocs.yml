@@ -1,0 +1,12 @@
+site_name: CUEMS Engine - FormitGo
+repo_url: https://github.com/cuems/cuems-engine
+theme:
+  name: material
+
+plugins:
+- search
+- mkdocstrings:
+    default_handler: python
+    handlers:
+      python:
+        paths: [src]

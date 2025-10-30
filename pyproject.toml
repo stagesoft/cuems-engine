@@ -5,9 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "cuemsengine"
 dynamic = ["version"]
-description = "Reusable classes and methods for CueMS system"
+description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = "GPL-3.0"
 keywords = []
 authors = [
@@ -15,26 +15,33 @@ authors = [
   { name = "Adrià Masip", email = "adria.back@gmail.com" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: Players",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Display"
 ]
 dependencies = [
-    "cuemsutils==0.0.4-post1",
-    "lxml==5.3.0",
-    "xmlschema==3.4.3"
+    "cuemsutils==0.0.9rc9",
+    "mido==1.3.3",
+    "python-rtmidi",
+    "python-daemon==3.1.2",
+    "python-osc==1.9.3",
 ]
-
 [project.optional-dependencies]
-test = [
-  "pytest",
-  "pytest-cov",
+dev = [
+    "psutil",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
+    "black",
+    "isort",
+    "flake8",
 ]
 
 [project.urls]
@@ -42,35 +49,103 @@ Documentation = "https://github.com/stagesoft/cuems-engine#readme"
 Issues = "https://github.com/stagesoft/cuems-engine/issues"
 Source = "https://github.com/stagesoft/cuems-engine"
 
+[project.scripts]
+node-engine = "scripts.node_engine:main"
+controller-engine = "scripts.controller_engine:main"
+system-ports = "scripts.system_ports:main"
+
 [tool.hatch.version]
 path = "src/cuemsengine/__init__.py"
-
-[tool.hatch.build]
-include = ["src/cuemsengine/xml/schemas"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cuemsengine"]
 
-[tool.hatch.envs.types]
-extra-dependencies = [
-  "mypy>=1.0.0"
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.11"]
+
+[tool.hatch.envs.test]
+dependencies = [
+  "pytest",
+  "pytest-cov",
+  "pytest-mock",
+  "coverage[toml]"
 ]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/cuemsengine tests}"
+installer = "pip"
+
+# [tool.hatch.metadata]
+# allow-direct-references = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-v",
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "cuems: marks tests as using CUEMS engines (automatic cleanup)",
+]
+# Ensure proper cleanup on keyboard interrupt
+junit_duration_report = "call"
 
 [tool.coverage.run]
-source_pkgs = ["cuemsengine", "tests"]
+source = ["src"]
 branch = true
-parallel = true
-omit = []
-
-[tool.coverage.paths]
-cuemsengine = ["src/cuemsengine", "*/cuems-engine/src/cuemsengine"]
-tests = ["tests", "*/cuems-engine/tests"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
 
 [tool.coverage.report]
+show_missing = true
 exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88

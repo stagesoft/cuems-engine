@@ -5,3 +5,21 @@ __pycache__
 *.pyc
 *.ipynb
 .python-version
+.pytest_cache
+
+dist/
+
+## DEV files ##
+*.log
+*.log.*
+*.log-*
+nohup.out
+*.pid
+.coverage*
+
+dev/local/
+site/
+.venv/*
+!.venv/pyvenv.cfg
+
+dev/test_xml_files/media/

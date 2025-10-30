@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://stagelab.coop/cuems/ https://stagelab.coop/cuems/network_map.xsd">
+    <CuemsNodeDict>
+        <CuemsNode>
+            <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
+            <url>000000000001.local</url>
+            <mac>2cf05d21cca3</mac>
+            <name>2cf05d21cca3._cuems_nodeconf._tcp.local.</name>
+            <node_type>NodeType.master</node_type>
+            <ip>192.168.1.10</ip>
+            <port>9000</port>
+            <online>True</online>
+        </CuemsNode>
+        <CuemsNode>
+            <uuid>0367f391-ebf4-48b2-9f26-000000000003</uuid>
+            <url>000000000003.local</url>
+            <mac>0800276db133</mac>
+            <name>0800276db133._cuems_nodeconf._tcp.local.</name>
+            <node_type>NodeType.slave</node_type>
+            <ip>192.168.1.101</ip>
+            <port>9000</port>
+            <online>False</online>
+        </CuemsNode>
+    </CuemsNodeDict>
+</cms:CuemsNetworkMap>

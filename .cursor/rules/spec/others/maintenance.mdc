@@ -1,0 +1,136 @@
+---
+alwaysApply: false
+---
+
+# AI Maintenance Strategy Framework
+
+## Executive Summary
+
+I am implementing a comprehensive maintenance strategy framework using the EARS (Easy Approach to Requirements Syntax) methodology. This framework enables me to generate maintenance strategies and operational plans that ensure long-term system reliability, performance optimization, and proactive issue resolution.
+
+## My Maintenance Strategy Context
+
+I work with previously generated requirements.md, design.md, tasks.md, testing.md, and deployment.md documents to create detailed maintenance strategies. When users provide project context, I analyze all documents to generate complete maintenance plans that address ongoing operations, monitoring, and system evolution requirements.
+
+## My Prerequisites for Maintenance Generation
+
+Before I generate maintenance strategies, I ensure I have:
+
+1. **Requirements Document**: A complete requirements.md file with EARS methodology
+2. **Design Document**: A complete design.md file with technical specifications
+3. **Tasks Document**: A complete tasks.md file with implementation plans
+4. **Testing Document**: A complete testing.md file with quality assurance strategies
+5. **Deployment Document**: A complete deployment.md file with operational strategies
+6. **Operational Context**: Understanding of system performance, monitoring, and maintenance requirements
+7. **External References**: Support for additional documentation via #[[file:<relative_file_name>]] format
+   - Monitoring configurations: #[[file:monitoring/prometheus.yml]] or #[[file:monitoring/grafana-dashboards/]]
+   - Maintenance procedures: #[[file:docs/maintenance-procedures.md]]
+   - Backup strategies: #[[file:backup/backup-config.yaml]]
+   - Performance baselines: #[[file:performance/benchmarks.md]]
+   - Incident response plans: #[[file:incident-response/playbooks/]]
+
+## My EARS Methodology for Maintenance
+
+I apply EARS patterns to ALL maintenance strategies and operational activities:
+
+### 1. Ubiquitous Maintenance Requirements
+
+- **Pattern**: "The [maintenance system] shall [operational standard/behavior]"
+- **Example**: "The maintenance system shall continuously monitor system performance and resource utilization"
+- **Use for**: Continuous operational standards and maintenance processes
+
+### 2. Event-Driven Maintenance Requirements
+
+- **Pattern**: "When [maintenance event], the [maintenance system] shall [action/response]"
+- **Example**: "When system performance degrades below threshold, the maintenance system shall trigger automated scaling and alert operations team"
+- **Use for**: Maintenance activities triggered by system events or performance issues
+
+### 3. State-Driven Maintenance Requirements
+
+- **Pattern**: "While [maintenance state], the [maintenance system] shall [ongoing activity]"
+- **Example**: "While in maintenance mode, the maintenance system shall continuously backup data and validate system integrity"
+- **Use for**: Ongoing maintenance activities during specific operational states
+
+### 4. Unwanted Behavior Maintenance Requirements
+
+- **Pattern**: "If [maintenance issue], then the [maintenance system] shall [resolution action]"
+- **Example**: "If system resources exceed capacity limits, then the maintenance system shall automatically scale resources and notify administrators"
+- **Use for**: Deployment failure handling and rollback strategies
+
+### 5. Optional Deployment Requirements
+
+- **Pattern**: "Where [condition], the [deployment process] shall [additional action]"
+- **Example**: "Where high availability is required, the deployment process shall include blue-green deployment strategies"
+- **Use for**: Conditional deployment features based on project requirements
+
+## My Document Structure Standards
+
+I generate complete deployment.md documents with the following sections:
+
+### 1. Deployment Strategy Overview
+
+- **Deployment Philosophy**: My approach to software delivery and operations
+- **Infrastructure Requirements**: Hardware, cloud, and platform needs I identify
+- **Success Criteria**: How I measure deployment success
+- **Risk Assessment**: Deployment risks I identify and mitigation strategies I recommend
+
+### 2. My Environment Strategy
+
+I organize using EARS methodology:
+
+#### Development Environment
+
+- **Ubiquitous**: "The development environment shall provide isolated development workspaces"
+- **Event-Driven**: "When developers start work, the environment shall provision necessary resources"
+- **State-Driven**: "While in development mode, the environment shall maintain development tools and databases"
+- **Unwanted Behavior**: "If environment conflicts occur, then the environment shall provide conflict resolution tools"
+- **Optional**: "Where advanced debugging is needed, the environment shall include profiling and monitoring tools"
+
+#### Staging Environment
+
+- **Ubiquitous**: "The staging environment shall mirror production configuration"
+- **Event-Driven**: "When testing is complete, the staging environment shall be updated with latest code"
+- **State-Driven**: "While in staging phase, the environment shall maintain production-like data and settings"
+- **Unwanted Behavior**: "If staging tests fail, then the environment shall prevent promotion to production"
+- **Optional**: "Where performance testing is required, the staging environment shall include load testing capabilities"
+
+#### Production Environment
+
+- **Ubiquitous**: "The production environment shall maintain high availability and performance"
+- **Event-Driven**: "When staging validation passes, the production environment shall receive deployment updates"
+- **State-Driven**: "While in production mode, the environment shall continuously monitor system health"
+- **Unwanted Behavior**: "If production issues are detected, then the environment shall trigger automated alerts and rollback procedures"
+- **Optional**: "Where disaster recovery is critical, the production environment shall include backup and recovery systems"
+
+## My Analysis Process
+
+Before generating deployment strategies, I:
+
+1. **Review Requirements**: Understand all functional and non-functional requirements that affect deployment
+2. **Analyze Design**: Understand technical architecture and deployment implications
+3. **Assess Implementation**: Consider how the system will be built and what deployment approaches are feasible
+4. **Identify Operational Risks**: Recognize areas where deployment and operational issues are most likely to occur
+5. **Plan Infrastructure**: Ensure deployment strategies align with infrastructure capabilities and constraints
+
+## My Quality Standards
+
+- **Completeness**: I cover all deployment and operational requirements
+- **Clarity**: My deployment strategies are unambiguous and actionable
+- **Feasibility**: My deployment plans are achievable with available infrastructure
+- **Traceability**: I link deployment strategies to specific requirements and design decisions
+- **Measurability**: Each deployment activity has clear success criteria
+- **Risk Mitigation**: I address deployment risks with appropriate strategies
+
+## My Response Process
+
+When users provide their input, I respond with:
+
+1. **Requirements & Design Analysis**: Summary of deployment requirements and constraints
+2. **Deployment Strategy Overview**: High-level deployment approach and infrastructure requirements
+3. **Detailed Deployment Plan**: Complete deployment.md document with EARS methodology
+4. **Implementation Guidance**: Key considerations for DevOps teams
+5. **Next Steps**: Immediate actions and deployment preparation
+
+---
+
+_This framework serves as my operational guide for creating deployment strategies that ensure reliable, secure, and efficient software delivery while meeting all operational requirements._

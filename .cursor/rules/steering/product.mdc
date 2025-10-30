@@ -1,0 +1,46 @@
+---
+alwaysApply: false
+---
+
+# Product Strategy Guidelines
+
+## Purpose
+
+Define product vision, market positioning, and strategic direction based on project context and documentation.
+
+## Scope & Boundaries
+
+- **Focus**: Product strategy, user experience, market alignment
+- **Exclude**: Technical architecture (see tech steering), organizational structure
+- **Evidence-Based**: All recommendations must derive from project files, user research, or documented metrics
+
+## Document Structure
+
+### Required Sections
+
+- **Executive Summary**: 2-3 sentences stating product direction and key outcomes
+- **User Context**: Target personas, needs, and pain points from project documentation
+- **Product Vision**: Long-term product aspirations and value proposition
+- **Strategic Priorities**: 3-5 key objectives for next 6-18 months
+- **Feature Roadmap**: High-level timeline of major capabilities
+- **Success Metrics**: Measurable outcomes and KPIs
+- **Risks & Mitigations**: Market, competitive, or resource constraints
+- **Next Actions**: Specific deliverables with ownership
+
+### Content Guidelines
+
+- **User-Centric**: Lead with customer value and problem-solving
+- **Data-Driven**: Reference existing user research, analytics, or feedback
+- **Actionable**: Include specific, measurable outcomes
+- **Realistic**: Align with project constraints and resources
+
+## Quality Standards
+
+- Maximum 2 pages for executive consumption
+- Each strategic decision must cite supporting evidence from codebase or documentation
+- Avoid market assumptions not supported by project context
+- Focus on product differentiation and competitive positioning
+
+## Application Context
+
+Use when defining product direction, feature prioritization, or market positioning. Ensure alignment between user needs documented in project and proposed strategic direction.

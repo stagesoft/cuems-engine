@@ -1,0 +1,10 @@
+{"action" : "project_ready", "action_uuid": action_uuid, "value" : unix_name}
+{"action" : "hw_discovery", "action_uuid": action_uuid}
+{"action" : "project_deploy", "action_uuid": action_uuid, "value" : unix_name}
+
+engine responses:
+{'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK'}
+{'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_deploy_needed'}
+{'type':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'OK_missing_media'}
+{'type':'hw_discovery', 'action_uuid':self._editor_request_uuid, 'value':'OK'}
+{'type':'error', 'action':'project_ready', 'action_uuid':self._editor_request_uuid, 'value':'Wrong configuration on input/output mappings'}

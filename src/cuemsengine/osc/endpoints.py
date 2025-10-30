@@ -1,0 +1,73 @@
+from pyossia import ValueType
+
+OSC_AUDIOPLAYER_CONF = {
+    '/quit' : [ValueType.Impulse, None],
+    '/load' : [ValueType.String, None], 
+    '/vol0' : [ValueType.Float, None],
+    '/vol1' : [ValueType.Float, None],
+    '/volmaster' : [ValueType.Float, None],
+    '/play' : [ValueType.Impulse, None],
+    '/stop' : [ValueType.Impulse, None],
+    '/stoponlost' : [ValueType.Int, None],
+    '/mtcfollow' : [ValueType.Int, None],
+    '/offset' : [ValueType.Float, None],
+    '/check' : [ValueType.Impulse, None]
+}
+
+OSC_DMXPLAYER_CONF = { 
+    '/quit' : [ValueType.Impulse, None],
+    '/load' : [ValueType.String, None], 
+    '/wait' : [ValueType.Float, None],
+    '/play' : [ValueType.Impulse, None],
+    '/stop' : [ValueType.Impulse, None],
+    '/stoponlost' : [ValueType.Bool, None],
+    # TODO '/mtcfollow' : [ValueType.Bool, None],
+    '/offset': [ValueType.Float, None],
+    '/check' : [ValueType.Impulse, None]
+}
+
+OSC_VIDEOPLAYER_CONF = {
+    '/jadeo/xscale' : [ValueType.Float, None],
+    '/jadeo/yscale' : [ValueType.Float, None], 
+    '/jadeo/corners' : [ValueType.List, None],
+    '/jadeo/corner1' : [ValueType.List, None],
+    '/jadeo/corner2' : [ValueType.List, None],
+    '/jadeo/corner3' : [ValueType.List, None],
+    '/jadeo/corner4' : [ValueType.List, None],
+    '/jadeo/start' : [ValueType.Int, None],
+    '/jadeo/load' : [ValueType.String, None],
+    '/jadeo/cmd' : [ValueType.String, None],
+    '/jadeo/quit' : [ValueType.Int, None],
+    '/jadeo/offset' : [ValueType.String, None],
+    '/jadeo/offset.1' : [ValueType.Int, None],
+    '/jadeo/midi/connect' : [ValueType.String, None],
+    '/jadeo/midi/disconnect' : [ValueType.Int, None],
+    '/jadeo/ontop' : [ValueType.Bool, None]
+}
+
+OSC_ENGINE_CMD_CONF = {
+    '/engine/command/load' : [ValueType.String, None],
+    '/engine/command/loadcue' : [ValueType.String, None],
+    '/engine/command/go' : [ValueType.Impulse, None],
+    '/engine/command/gocue' : [ValueType.String, None],
+    '/engine/command/pause' : [ValueType.Impulse, None],
+    '/engine/command/stop' : [ValueType.Impulse, None],
+    '/engine/command/resetall' : [ValueType.String, None],
+    '/engine/command/preload' : [ValueType.String, None],
+    '/engine/command/unload' : [ValueType.String, None],
+    '/engine/command/hwdiscovery' : [ValueType.Impulse, None],
+    '/engine/command/deploy' : [ValueType.String, None],
+    '/engine/command/test' : [ValueType.String, None],
+    '/engine/command/update' : [ValueType.String, None]
+}
+
+"""
+OSC_ENGINE_COMMS_CONF = {
+    '/engine/comms/type' : [ValueType.String, self.comms_callback],
+    '/engine/comms/subtype' : [ValueType.String, None],
+    '/engine/comms/action' : [ValueType.String, None],
+    '/engine/comms/action_uuid' : [ValueType.String, self.action_uuid_callback],
+    '/engine/comms/value' : [ValueType.String, None],
+    '/engine/comms/data' : [ValueType.String, None]
+}
+"""

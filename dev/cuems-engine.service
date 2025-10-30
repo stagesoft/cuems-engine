@@ -1,0 +1,21 @@
+[Unit]
+Description=cuems-engine
+#PartOf=cuems-node.service
+Requires=avahi-daemon.service
+After=network-online.target avahi-daemon.service
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=33
+
+
+[Service]
+#Environment="PYTHONPATH=/usr/lib/cuems/site-packages"
+Type=simple
+#NotifyAccess=main
+#Restart=on-failure
+RestartSec=10
+ExecStart=/home/ion/.pyenv/versions/3.11.2/envs/cuems/bin/python3 /home/ion/src/cuems/cuems-engine/scripts/controller_engine.py
+TimeoutSec=900
+
+[Install]
+WantedBy=default.target
