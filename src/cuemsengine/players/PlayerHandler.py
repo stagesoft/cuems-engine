@@ -9,7 +9,7 @@ from typing import Callable
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
 from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
-from .DmxPlayer import DmxPlayer, DmxClient
+from .DmxPlayer import DmxPlayer, DmxClient, start_dmx_player
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
@@ -36,7 +36,8 @@ class PlayerHandler:
             cls._instance._audio_mixer = None
             cls._instance._audio_mixer_client = None
             cls._instance._cue_players = {}
-            cls._instance._dmx_output_generator = None
+            cls._instance._dmx_player = None
+            cls._instance._dmx_player_client = None
             cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
             cls._instance._video_output_names = []
@@ -44,7 +45,6 @@ class PlayerHandler:
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
             cls._instance._video_players = {}
-            cls._instance._dmx_players = {}
         return cls._instance
 
     # ---------------------------
@@ -115,6 +115,42 @@ class PlayerHandler:
     def get_audio_mixer_client(self) -> MixerClient:
         """Returns the audio mixer client instance."""
         return self._audio_mixer_client
+
+    # ---------------------------
+    # DMX Player Management
+    # ---------------------------
+
+    def start_dmx_player(self, port: int, node_uuid: str, path: str, args: str | None = None) -> tuple[DmxPlayer, DmxClient]:
+        """Starts the DMX player for this node.
+        
+        Args:
+            port: OSC port for dmxplayer communication
+            node_uuid: Unique identifier for this player node
+            path: Path to dmxplayer-cuems binary
+            
+        Returns:
+            Tuple containing the DmxPlayer and DmxClient instances
+        """
+        Logger.info(f'Starting DMX player for node {node_uuid}')
+        self._dmx_player, self._dmx_player_client = start_dmx_player(
+            port=port,
+            node_uuid=node_uuid,
+            path=path,
+            args=args
+        )
+        return self._dmx_player, self._dmx_player_client
+
+    def get_dmx_player(self) -> DmxPlayer:
+        """Returns the DMX player instance."""
+        return self._dmx_player
+
+    def get_dmx_player_client(self) -> DmxClient:
+        """Returns the DMX player client instance."""
+        return self._dmx_player_client
+
+    # ---------------------------
+    # Audio Cue Management
+    # ---------------------------
 
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
@@ -269,51 +305,6 @@ class PlayerHandler:
         """Returns the index of a given output name."""
         with self._lock:
             return self._video_output_names.index(output_name)
-
-
-    def start_dmx_outputs(
-        self,
-        output_names: list[str],
-        output_ports: list[dict[str, int]],
-        video_player_path: str,
-        video_player_args: str,
-    ):
-        """Starts the dmx players."""
-        Logger.info(f'Starting dmx outputs for {output_names} ')
-        for index, output_name in enumerate(output_names):
-            with self._lock:
-                if output_name in self._dmx_players:
-                    continue
-                self._dmx_players[output_name] = []
-
-            new_ports = output_ports[index]
-
-            player = dict()
-            player['route'] = f'/players/dmxplayer-{index}'
-            player['port'] = new_ports[f'dmx_player_{index}']
-
-            try:
-                player['player'] = DmxPlayer(
-                    player['port'],
-                    video_player_path,
-                    video_player_args
-                )
-                player['player'].start()
-                while player['player'].pid is None:
-                    sleep(0.001)
-                player['pid'] = player['player'].pid
-                player['osc'] = DmxClient(
-                    player['port'],
-                    player['route']
-                )
-            except Exception as e:
-                raise e
-
-            with self._lock:
-                self._dmx_players[output_name].append(player)
-
-
-
 
     def get_active_videoplayer(self, output_name: str):
         """Find the active player for a given output."""

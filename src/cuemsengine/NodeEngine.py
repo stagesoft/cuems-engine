@@ -363,38 +363,33 @@ class NodeEngine(BaseEngine):
                 Logger.exception(e)
 
     def set_dmx_players(self):
-        """Set the dmx players"""
-        if not self.cm.node_hw_outputs['dmx_outputs']:
-            Logger.info('No dmx outputs detected.')
-            return
-        
-        output_names = self.cm.node_hw_outputs['dmx_outputs']
-        output_ports = []
-        for index in range(len(output_names)):
-            ports = PORT_HANDLER.assign_ports([
-                f'dmx_player_{index}'
-            ])
-            PORT_HANDLER.add_config_ports(ports)
-            output_ports.append(ports)
+        """Set the DMX player for this node (single instance)."""
+        # Assign a port for the DMX player
+        dmx_ports = PORT_HANDLER.assign_ports(['dmx_player'])
+        PORT_HANDLER.add_config_ports(dmx_ports)
 
+        # Get node UUID for player naming
+        node_uuid = self.cm.node_conf.get('uuid', 'default_node')
+
+        # Start the DMX player
         try:
-            PLAYER_HANDLER.start_dmx_outputs(
-                output_names,
-                output_ports,
-                self.cm.node_conf['dmxplayer']['path'],
-                self.cm.node_conf['dmxplayer']['args']
+            PLAYER_HANDLER.start_dmx_player(
+                port=dmx_ports['dmx_player'],
+                node_uuid=node_uuid,
+                path=self.cm.node_conf['dmxplayer']['path'],
+                args=self.cm.node_conf['dmxplayer']['args']
             )
+            Logger.info(f'DMX player started successfully for node {node_uuid}')
         except Exception as e:
-            Logger.error(f'Error checking & starting dmx devices...')
-            Logger.error(e)
-            Logger.error(type(e))
-            Logger.error(f'Exiting...')
-            exit(-1)
+            Logger.error(f'Error starting DMX player: {e}')
+            Logger.exception(e)
 
     def quit_dmx_devs(self):
-        for dev in PLAYER_HANDLER.get_dmx_players():
+        """Quit the DMX player if it exists"""
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
             try:
-                dev['osc'].set_value('/quit', 1)
+                dmx_client.set_value('/quit', 1)
             except Exception as e:
                 Logger.exception(e)
 
