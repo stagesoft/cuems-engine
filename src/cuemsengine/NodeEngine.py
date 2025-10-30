@@ -264,7 +264,34 @@ class NodeEngine(BaseEngine):
 
     # Audio functions
     def set_audio_players(self):
-        """Set the audio players"""
+        """Set the audio players and audio mixer"""
+        # Initialize the audio mixer for this node
+        if self.cm.node_hw_outputs.get('audio_outputs'):
+            audio_outputs = self.cm.node_hw_outputs['audio_outputs']
+            Logger.info(f'Initializing audio mixer with {len(audio_outputs)} outputs')
+            
+            # Assign a port for the audio mixer
+            mixer_ports = PORT_HANDLER.assign_ports(['audio_mixer'])
+            PORT_HANDLER.add_config_ports(mixer_ports)
+            
+            # Get node UUID for mixer naming
+            node_uuid = self.cm.node_conf.get('uuid', 'default_node')
+            
+            # Start the audio mixer
+            try:
+                PLAYER_HANDLER.start_audio_mixer(
+                    audio_outputs=audio_outputs,
+                    port=mixer_ports['audio_mixer'],
+                    node_uuid=node_uuid
+                )
+                Logger.info(f'Audio mixer started successfully for node {node_uuid}')
+            except Exception as e:
+                Logger.error(f'Error starting audio mixer: {e}')
+                Logger.exception(e)
+        else:
+            Logger.info('No audio outputs detected, skipping audio mixer initialization')
+        
+        # Set the audio player generator
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
             self.cm.node_conf['audioplayer']['args']
