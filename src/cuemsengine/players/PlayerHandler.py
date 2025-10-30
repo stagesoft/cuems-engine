@@ -78,7 +78,7 @@ class PlayerHandler:
         Logger.info(f'Setting audio output generator to {path} {args}')
         self._audio_output_generator = partial(start_audio_output, path=path, args=args)
 
-    def start_audio_mixer(self, audio_outputs: list, port: int, node_uuid: str, path: str = None) -> tuple[AudioMixer, MixerClient]:
+    def start_audio_mixer(self, audio_outputs: list, port: int, node_uuid: str, path: str = None, args: str | None = None) -> tuple[AudioMixer, MixerClient]:
         """Starts the audio mixer for this node.
         
         Args:
@@ -95,7 +95,8 @@ class PlayerHandler:
             audio_outputs=audio_outputs,
             port=port,
             node_uuid=node_uuid,
-            path=path
+            path=path,
+            args=args
         )
         return self._audio_mixer, self._audio_mixer_client
 
