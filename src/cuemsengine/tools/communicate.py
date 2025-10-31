@@ -1,48 +1,22 @@
 """Utilites to call the hardware discovery tool."""
-from cuemsutils.log import logged, Logger
-from cuemsutils.tools.CommunicatorServices import Communicator
-from cuemsutils.tools.Osc_nodes_hub import OscNodesHub, ActionType
-import threading
 import asyncio
 import json
-from typing import Optional, Callable
 from enum import Enum
+from typing import Optional, Callable
+from threading import Thread
 
-HWDISCOVERY_IPC = '/tmp/hwdiscovery.ipc'
-NODECONF_IPC = '/tmp/nodeconf.ipc'
-EDITOR_IPC = '/tmp/editor.ipc'
+from cuemsutils.log import logged, Logger
+from cuemsutils.tools.CommunicatorServices import Communicator, IpcAdress as IpcAddress
+
+from .OscNodesHub import OscNodesHub, ActionType
+
 TIMEOUT = 15  # seconds
 
-
-
-@logged
-def get_hwdiscovery_comm():
-    """
-    Call the hardware discovery tool
-    """
-    return Communicator(HWDISCOVERY_IPC)
-
-@logged
-def get_nodeconf_comm():
-    """
-    Call the node configuration tool
-    """
-    return Communicator(NODECONF_IPC)
-
-@logged
-def get_editor_comm():
-    """
-    Call the editor tool
-    """
-    return Communicator(EDITOR_IPC)
-
-    
-
-class AsyncCommsThread(threading.Thread):
+class AsyncCommsThread(Thread):
     class Mode(Enum):
         """Operating mode for AsyncCommsThread."""
-        CONTROLLER = "controller"  # Full communicators + OSC hub as controller
-        NODE = "node"              # Only OSC hub as node
+        CONTROLLER = "listener"  # Full communicators + OSC hub as controller
+        NODE = "dialer"          # Only OSC hub as node
     
     def __init__(self, 
                  osc_hub_address: str,
@@ -52,13 +26,13 @@ class AsyncCommsThread(threading.Thread):
         """
         Initialize AsyncCommsThread in CONTROLLER or NODE mode.
         
-        CONTROLLER MODE:
+        CONTROLLER MODE (LISTENER):
         - Runs all communicators (editor, hwdiscovery, nodeconf)
         - Runs OscNodesHub in CONTROLLER mode
         - Receives players from nodes
         - Requires: editor_callback, osc_player_callback
         
-        NODE MODE:
+        NODE MODE (DIALER):
         - Only runs OscNodesHub in NODE mode
         - Sends players to controller
         - No communicators needed
@@ -75,7 +49,7 @@ class AsyncCommsThread(threading.Thread):
         self.timeout = TIMEOUT * 1000
         self.stop_requested = False
         self.send_contexts = []
-        threading.Thread.__init__(self, name=f'Communications-{mode.value}', daemon=True)
+        Thread.__init__(self, name=f'Communications-{mode.value}', daemon=True)
         
         # Initialize communicators only in CONTROLLER mode
         self.editor = None
@@ -89,12 +63,12 @@ class AsyncCommsThread(threading.Thread):
             
             Logger.debug('Initializing communicators (CONTROLLER mode)')
             self.editor_callback = editor_callback
-            self.editor = get_editor_comm()
-            self.hw_discovery = get_hwdiscovery_comm()
-            self.nodeconf = get_nodeconf_comm()
+            self.editor = Communicator(IpcAddress.EDITOR)
+            self.hw_discovery = Communicator(IpcAddress.HWDISCOVERY)
+            self.nodeconf = Communicator(IpcAddress.NODECONF)
         
         # Initialize OSC hub based on mode
-        osc_hub_mode = OscNodesHub.Mode.CONTROLLER if mode == self.Mode.CONTROLLER else OscNodesHub.Mode.NODE
+        osc_hub_mode = OscNodesHub.Mode.LISTENER if mode == self.Mode.CONTROLLER else OscNodesHub.Mode.DIALER
         Logger.info(f'Initializing OSC hub: {osc_hub_address} in {osc_hub_mode.value} mode')
         self.osc_hub = OscNodesHub(osc_hub_address, mode=osc_hub_mode)
         
@@ -105,23 +79,20 @@ class AsyncCommsThread(threading.Thread):
                 Logger.warning('No osc_player_callback provided in CONTROLLER mode')
             if osc_player_callback:
                 self.osc_hub.set_player_received_callback(osc_player_callback)
-        
-        
- 
 
     def run(self):
         Logger.debug('Comms thread run called')
         self.event_loop = asyncio.new_event_loop()
         self.event_loop.create_task(self.run_asyncio_comms())
         self.event_loop.run_forever()
+
     def stop(self):
-        stop_requested = True
+        self.stop_requested = True
         asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
-    
+
     async def stop_async(self):
         self.event_loop.call_soon_threadsafe(self.event_loop.stop)
         Logger.info('event loop stoped')
-                
 
     async def run_asyncio_comms(self):
         Logger.info(f'Starting asyncio communications in {self.mode.value} mode')
@@ -295,4 +266,3 @@ class AsyncCommsThread(threading.Thread):
         except Exception as exc:
             Logger.error(f'Hwdiscovery request raised an exception: {exc!r}')
             raise
-
