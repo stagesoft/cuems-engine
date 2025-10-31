@@ -1,16 +1,17 @@
 from enum import Enum
 from dataclasses import dataclass
-from cuemsutils.tools.CommunicatorServices import Message, Nng_bus_hub
+from cuemsutils.tools.HubServices import Message, Nng_bus_hub
 from cuemsutils.log import Logger
-import pyossia
 import asyncio
 from typing import Optional, Dict, Callable
+
+from ..osc.helpers import Node, serialize_node, deserialize_node
 
 class ActionType(Enum):
     ADD = "add"
     REMOVE = "remove"
     UPDATE = "update"
-    
+
 @dataclass
 class PlayerOperation:
     """Represents an operation to be performed on a player's OSC nodes."""
@@ -53,95 +54,7 @@ class OscNodesHub(Nng_bus_hub):
         """
         self._on_player_received = callback
     
-    @staticmethod
-    def serialize_node(node: pyossia.ossia.Node) -> dict:
-        """
-        Serialize a pyossia node and its children to a dictionary structure.
-        
-        Parameters:
-        - node: The pyossia node to serialize
-        
-        Returns:
-        - dict: Serialized node structure
-        """
-        node_dict = {
-            "name": node.name,
-            "children": [],
-            "parameter": None
-        }
-        
-        # Serialize parameter if exists
-        param = node.parameter
-        if param:
-            param_dict = {
-                "access": str(param.access_mode),
-                "bounding": str(param.bounding_mode),
-                "type": str(param.value_type) if hasattr(param, 'value_type') else None,
-            }
-            
-            # Try to get current value
-            try:
-                value = param.value
-                # Convert value to JSON-serializable format
-                if hasattr(value, '__iter__') and not isinstance(value, str):
-                    param_dict["value"] = list(value)
-                else:
-                    param_dict["value"] = value
-            except:
-                param_dict["value"] = None
-            
-            # Get other parameter properties
-            try:
-                param_dict["domain"] = str(param.domain) if hasattr(param, 'domain') else None
-                param_dict["unit"] = str(param.unit) if hasattr(param, 'unit') else None
-            except:
-                pass
-                
-            node_dict["parameter"] = param_dict
-        
-        # Recursively serialize children
-        for child in node.children():
-            node_dict["children"].append(OscNodesHub.serialize_node(child))
-        
-        return node_dict
-    
-    @staticmethod
-    def deserialize_node(node_data: dict, parent_node: Optional[pyossia.ossia.Node] = None) -> pyossia.ossia.Node:
-        """
-        Deserialize a dictionary structure into pyossia nodes.
-        
-        Parameters:
-        - node_data: The serialized node structure
-        - parent_node: Optional parent node to attach to
-        
-        Returns:
-        - pyossia.ossia.Node: The reconstructed node
-        """
-        if parent_node is None:
-            raise ValueError("Parent node required for deserialization")
-        
-        # Create the node
-        node = parent_node.add_node(node_data["name"])
-        
-        # Recreate parameter if it existed
-        if node_data.get("parameter"):
-            param_dict = node_data["parameter"]
-            param = node.create_parameter(pyossia.ossia.ValueType.Float)  # Default type
-            
-            # Set parameter properties
-            if param_dict.get("value") is not None:
-                try:
-                    param.value = param_dict["value"]
-                except:
-                    Logger.warning(f"Could not set value for parameter at {node.name}")
-        
-        # Recursively create children
-        for child_data in node_data.get("children", []):
-            OscNodesHub.deserialize_node(child_data, node)
-        
-        return node
-    
-    async def add_player(self, player_id: str, root_node: pyossia.ossia.Node, action: ActionType = ActionType.ADD):
+    async def add_player(self, player_id: str, root_node: Node, action: ActionType = ActionType.ADD):
         """
         Add a player to the send queue (node side).
         
@@ -158,7 +71,7 @@ class OscNodesHub(Nng_bus_hub):
             "__type__": "osc_player",
             "player_id": player_id,
             "action": action.value,
-            "node_data": self.serialize_node(root_node)
+            "node_data": serialize_node(root_node)
         }
         
         # Use base class send_message which adds to self.outgoing queue
@@ -188,7 +101,7 @@ class OscNodesHub(Nng_bus_hub):
     # The base class _send_handler() already processes self.outgoing queue
     # which we now use directly via send_message() in add_player() and remove_player()
     
-    async def get_player_operation(self) -> Optional[PlayerOperation]:
+    async def get_player_operation(self) -> PlayerOperation | None:
         """
         Get the next player operation from the queue (controller side).
         
