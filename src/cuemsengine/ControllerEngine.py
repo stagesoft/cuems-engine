@@ -391,9 +391,27 @@ class ControllerEngine(BaseEngine):
         self.set_oscquery_values({
             # '/engine/status/go': value,
             '/engine/status/running': "yes",
-            '/engine/command/gocue': "yes"
+            # '/engine/command/gocue': "yes"
             # '/engine/command/go': value
         })
+
+
+        # CUE LOGIC BETWEEN CONTROLLER AND NODES
+        # Send the go command to the nodes
+        self.communications_thread.send_go_command(value)
+
+        # Wait for the nodes to confirm the end of the script
+        self.communications_thread.wait_for_nodes_to_finish()
+        # Stop the timecode
+        self.stop_timecode()
+        # Set the oscquery values
+        self.set_oscquery_values({
+            '/engine/status/running': "no",
+            # '/engine/command/gocue': "no"
+        })
+
+        # Confirm the script is stopped
+        return True
 
     def start_timecode(self):
         libmtcmaster.MTCSender_play(self.mtcmaster)
