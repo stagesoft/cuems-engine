@@ -222,29 +222,29 @@ class ControllerEngine(BaseEngine):
 
     def hwdiscovery(self, message: dict, context=None) -> bool:
         Logger.debug(f'sending HW discovery request: {message}')
-        reply = self.request_to_hwdiscovery(message)
-        Logger.debug(f'Received HW discovery reply: {reply}')
-        if 'OK' in reply.values():
-            return True
-        else:
-            return False            
-
-    def request_to_hwdiscovery(self, message: dict) -> dict:
-        result = self.communications_thread.request_to_hwdiscovery(message, timeout=TIMEOUT)
-        return result
+        try:
+            reply = self.communications_thread.request_to_hwdiscovery(message)
+            Logger.debug(f'Received HW discovery reply: {reply}')
+            if 'OK' in reply.values():
+                return True
+            else:
+                return False            
+        except Exception as e:
+            Logger.error(f'{type(e)} sending HW discovery request: {e}')
+            return False
 
     def nodeconf(self, message: dict, context=None) -> bool:
         Logger.debug(f'sending nodeconf request: {message}')
-        reply = self.request_to_nodeconf(message)
-        Logger.debug(f'Received nodeconf reply: {reply}')
-        if 'OK' in reply.values():
-            return True
-        else:
-            return False            
-
-    def request_to_nodeconf(self, message: dict) -> dict:
-        result = self.communications_thread.request_to_nodeconf(message, timeout=TIMEOUT)
-        return result
+        try:
+            reply = self.communications_thread.request_to_nodeconf(message)
+            Logger.debug(f'Received nodeconf reply: {reply}')
+            if 'OK' in reply.values():
+                return True
+            else:
+                return False            
+        except Exception as e:
+            Logger.error(f'{type(e)} sending nodeconf request: {e}')
+            return False
 
 
     #########################

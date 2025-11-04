@@ -72,6 +72,10 @@ class ControllerCommunications(AsyncCommsThread):
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
     
+
+    #########################
+    # Nodeconf messages
+    #########################
     def request_to_nodeconf(self, message: dict, timeout: Optional[float] = None) -> dict:
         """
         Send a request to nodeconf and get response (thread-safe).
@@ -91,6 +95,9 @@ class ControllerCommunications(AsyncCommsThread):
         
         return self.run_coroutine(self.nodeconf.send_request, message, timeout)
     
+    #########################
+    # HWDiscovery messages
+    #########################
     def request_to_hwdiscovery(self, message: dict, timeout: Optional[float] = None) -> dict:
         """
         Send a request to hardware discovery and get response (thread-safe).
