@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Any
+
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
@@ -7,7 +9,7 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.OssiaClient import PlayerClient
-from .osc.endpoints import OSC_VIDEOPLAYER_CONF
+from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
@@ -365,7 +367,7 @@ class NodeEngine(BaseEngine):
                 Logger.exception(e)
 
     def set_dmx_players(self):
-        """Set the DMX player for this node (single instance)."""
+        """Set the DMX player for this node and register its endpoints."""
         # Assign a port for the DMX player
         dmx_ports = PORT_HANDLER.assign_ports(['dmx_player'])
         PORT_HANDLER.add_config_ports(dmx_ports)
@@ -384,6 +386,23 @@ class NodeEngine(BaseEngine):
             Logger.info(f'DMX player started successfully for node {node_uuid}')
         except Exception as e:
             Logger.error(f'Error starting DMX player: {e}')
+            Logger.exception(e)
+            return
+        
+        # Register DMX player endpoints on OSCQuery server
+        # This allows other nodes to send DMX commands to this node's DMX player
+        try:
+            # Get the DMX player client
+            dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+            if dmx_client:
+                # Register DMX player endpoints using the same mechanism as Audio
+                # This creates callbacks that forward OSCQuery server values to the DMX player client
+                prefix = f'/dmxplayer/{node_uuid}'
+                self.add_player_nodes_to_local(dmx_client, prefix)
+                Logger.info(f'DMX player endpoints registered on OSCQuery server: {prefix}')
+                
+        except Exception as e:
+            Logger.error(f'Error registering DMX player endpoints: {e}')
             Logger.exception(e)
 
     def quit_dmx_devs(self):

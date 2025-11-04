@@ -81,10 +81,30 @@ def loop_audioCue(cue: AudioCue, mtc):
 
 @loop_cue.register
 def loop_dmxCue(cue: DmxCue, mtc):
+    """Handle the DMX cue duration wait.
+    
+    DMX scenes are fire-and-forget (sent once in run_dmxCue), so we only wait 
+    for the cue duration to elapse to maintain proper script timing.
+    The cue._local guard is maintained for potential future looping implementation.
+    
+    Args:
+        cue: The DmxCue
+        mtc: The MIDI Time Code interface
     """
-    Loop a DmxCue
-    """
-    pass
+    try:
+        # Wait for the cue duration to elapse
+        while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
+            sleep(0.005)
+
+        if cue._local:
+            # Reserved for future looping implementation
+            # Currently DMX scenes are sent once in run_dmxCue
+            pass
+
+        Logger.debug(f'DMX cue {cue.id} duration elapsed')
+
+    except AttributeError:
+        pass
 
 @loop_cue.register
 def loop_videoCue(cue: VideoCue, mtc):
