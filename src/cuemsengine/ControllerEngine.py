@@ -1,13 +1,10 @@
-from threading import Thread
-from time import sleep
 import asyncio
 from functools import partial
 
 from cuemsutils.log import Logger, logged
-from cuemsutils.helpers import new_uuid
 
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
-from .tools.communicate import AsyncCommsThread, TIMEOUT
+from .tools.communicate import ControllerCommunications
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.mtcmaster import libmtcmaster
@@ -66,11 +63,10 @@ class ControllerEngine(BaseEngine):
         
         Logger.info(f'OSC Hub address: {osc_hub_address}')
         
-        self.communications_thread = AsyncCommsThread(
+        self.communications_thread = ControllerCommunications(
             osc_hub_address=osc_hub_address,
             editor_callback=self.editor_command_callback,
-            osc_player_callback=self.osc_player_received_callback,
-            mode=AsyncCommsThread.Mode.CONTROLLER
+            osc_player_callback=self.osc_player_received_callback
         )
         self.communications_thread.start()
 
@@ -127,36 +123,32 @@ class ControllerEngine(BaseEngine):
     # Editor commands
     #########################
 
-    def editor_command_callback(self, item, context):
+    def editor_command_callback(self, item: dict, context):
         Logger.debug(f'Received editor command: {item}, with context: {context}')
         _item_keys = item.keys()
         if 'value' not in _item_keys:
             item['value'] = ''
         if 'action_uuid' not in _item_keys:
             self.error_to_editor(context, "No action uuid submitted")
-        self._editor_request_uuid = item['action_uuid']
+        self.set_editor_request(item['action_uuid'])
 
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
                 
-                self._editor_request_uuid = ''
+                self.set_editor_request('')
             self.error_to_editor(context, "Response not recognized")
 
         try:
-            
             self.handle_editor_command(
                 action = item['action'],
                 value = item['value'], 
                 context = context
             ) 
         except Exception as e:
-            Logger.error(
-                f'Error handling editor command: {e} {type(e)}'
-            )
+            Logger.error(f'{type(e)} handling editor command: {e}')
             
-            self._editor_request_uuid = ''
-            error_string = f"Command error: {e} {type(e)}"
-            self.error_to_editor(context,  error_string)
+            self.set_editor_request('')
+            self.error_to_editor(context, value=f"Command {type(e)}: {e}")
 
     def handle_editor_command(self, action, value, context=None):
         command_dict = {
@@ -167,25 +159,29 @@ class ControllerEngine(BaseEngine):
             'go_script': self.go_script
         }
         if action in command_dict.keys():
-            _editor_request_uuid = self._editor_request_uuid
             success  = command_dict[action](value, context)
             if success:
-                self.confirm_to_editor(context, type=action, value='OK', request_uuid=_editor_request_uuid)
+                self.confirm_to_editor(
+                    context, type=action, value='OK'
+                )
             
         else:
             raise ValueError(f'Command {action} not recognized')
         
-    def confirm_to_editor(self, context, type=None, action=None, request_uuid=None, value=None, ):
-        
+    def confirm_to_editor(self, context, type=None, value=None):
         return_message={
             'type': type,
             'value': value,
-            'action_uuid': request_uuid
+            'action_uuid': self.get_editor_request()
         }
-        self.reply_to_editor(return_message, context)
+        Logger.debug(f'Sending confirm to editor: {return_message}')
+
+        try:
+            self.communications_thread.reply_to_editor(return_message, context)
+        except Exception as e:
+            Logger.error(f'{type(e)} confirming to editor: {e}')
 
     def error_to_editor(self, context, value=None, request_uuid = None, action = None):
-        Logger.debug(f'Sending error to editor: {value}, request: {request_uuid}, action:{action}  ')
         if not request_uuid:
             request_uuid = self.get_editor_request()
         if not action:
@@ -196,19 +192,12 @@ class ControllerEngine(BaseEngine):
             'action_uuid': request_uuid
         }
         Logger.debug(f'Sending error to editor: {return_message}')
-        self.reply_to_editor(return_message, context)
-        
-    def reply_to_editor(self, message, context):
-        send_task = asyncio.run_coroutine_threadsafe(self.communications_thread.editor.responder_post_reply(message, context), self.communications_thread.event_loop)
         try:
-            _ = send_task.result(timeout=TIMEOUT)
-        except TimeoutError:
-            Logger.debug('The coroutine took too long, cancelling the task...')
-            self.error_to_editor(context, value="Timeout error")
-            send_task.cancel()
-        except Exception as exc:
-            Logger.debug(f'The coroutine raised an exception: {exc!r}')
-
+            self.communications_thread.reply_to_editor(return_message, context)
+        except Exception as e:
+            Logger.error(f'{type(e)} sending error to editor: {e}')
+        
+    
     def set_editor_request(self, value):
         self._editor_request_uuid = value
 

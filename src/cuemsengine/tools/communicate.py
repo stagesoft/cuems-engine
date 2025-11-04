@@ -59,6 +59,10 @@ class ControllerCommunications(AsyncCommsThread):
             asyncio.create_task(self.osc_hub.start_player_receiver())
         ]
 
+
+    #########################
+    # Editor messages
+    #########################
     async def editor_listener(self):
         """Editor listener (thread-safe)."""
         Logger.info('Editor listener started')
@@ -72,6 +76,22 @@ class ControllerCommunications(AsyncCommsThread):
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
     
+    def reply_to_editor(self, message, context):
+        send_task = asyncio.run_coroutine_threadsafe(
+            self.editor.responder_post_reply(message, context),
+            self.event_loop
+        )
+        try:
+            _ = send_task.result(timeout=self.timeout)
+        except TimeoutError:
+            Logger.debug('The coroutine took too long, cancelling the task...')
+            send_task.cancel()
+            raise
+        except Exception as exc:
+            Logger.debug(f'The coroutine raised an exception: {exc!r}')
+            send_task.cancel()
+            raise
+
 
     #########################
     # Nodeconf messages

@@ -206,7 +206,9 @@ class AsyncCommsThread(Thread):
             return result
         except TimeoutError:
             Logger.error(f'{self.name} {function_name} timed out after {timeout}s')
+            send_task.cancel()
             raise
         except Exception as exc:
             Logger.error(f'{self.name} {function_name} raised an exception: {exc!r}')
+            send_task.cancel()
             raise
