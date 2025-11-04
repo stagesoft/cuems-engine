@@ -1,131 +1,66 @@
-"""Utilites to call the hardware discovery tool."""
+"""Utilites for communications from ControllerEngine and NodeEngine."""
 import asyncio
 import json
-from enum import Enum
 from typing import Optional, Callable
-from threading import Thread
 
-from cuemsutils.log import logged, Logger
+from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAdress as IpcAddress
-
+from .AsyncCommsThread import AsyncCommsThread
 from .OscNodesHub import OscNodesHub, ActionType
 
-TIMEOUT = 15  # seconds
 
-class AsyncCommsThread(Thread):
-    class Mode(Enum):
-        """Operating mode for AsyncCommsThread."""
-        CONTROLLER = "listener"  # Full communicators + OSC hub as controller
-        NODE = "dialer"          # Only OSC hub as node
+class ControllerCommunications(AsyncCommsThread):
+    """
+    Communications class for ControllerEngine.
     
+    Handles:
+    - Editor messages
+    - OSC player messages
+    - Nodeconf messages
+    - HWDiscovery messages
+    """
     def __init__(self, 
                  osc_hub_address: str,
-                 editor_callback: Optional[Callable] = None,
-                 osc_player_callback: Optional[Callable] = None,
-                 mode: Mode = Mode.CONTROLLER):
+                 editor_callback: Callable,
+                 osc_player_callback: Optional[Callable] = None):
         """
-        Initialize AsyncCommsThread in CONTROLLER or NODE mode.
-        
-        CONTROLLER MODE (LISTENER):
-        - Runs all communicators (editor, hwdiscovery, nodeconf)
-        - Runs OscNodesHub in CONTROLLER mode
-        - Receives players from nodes
-        - Requires: editor_callback, osc_player_callback
-        
-        NODE MODE (DIALER):
-        - Only runs OscNodesHub in NODE mode
-        - Sends players to controller
-        - No communicators needed
-        - Requires: None (callbacks ignored)
+        Initialize AsyncCommsThread for ControllerEngine.
         
         Parameters:
         - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
-        - editor_callback: Callback for editor messages (CONTROLLER mode only)
-        - osc_player_callback: Callback for received players (CONTROLLER mode only)
-        - mode: AsyncCommsThread.Mode.CONTROLLER (default) or AsyncCommsThread.Mode.NODE
+        - editor_callback: Callback for editor messages
+        - osc_player_callback: Callback for received players
         """
-        Logger.info(f'Initializing communications thread in {mode.value} mode')
-        self.mode = mode
-        self.timeout = TIMEOUT * 1000
-        self.stop_requested = False
-        self.send_contexts = []
-        Thread.__init__(self, name=f'Communications-{mode.value}', daemon=True)
+        super().__init__()
         
-        # Initialize communicators only in CONTROLLER mode
-        self.editor = None
-        self.hw_discovery = None
-        self.nodeconf = None
-        self.editor_callback = None
-        
-        if self.mode == self.Mode.CONTROLLER:
-            if not editor_callback:
-                raise ValueError("editor_callback is required in CONTROLLER mode")
-            
-            Logger.debug('Initializing communicators (CONTROLLER mode)')
-            self.editor_callback = editor_callback
-            self.editor = Communicator(IpcAddress.EDITOR)
-            self.hw_discovery = Communicator(IpcAddress.HWDISCOVERY)
-            self.nodeconf = Communicator(IpcAddress.NODECONF)
+        # Initialize communicators
+        Logger.debug('Initializing ControllerCommunications')
+        self.editor_callback = editor_callback
+        self.editor = Communicator(IpcAddress.EDITOR)
+        self.hw_discovery = Communicator(IpcAddress.HWDISCOVERY)
+        self.nodeconf = Communicator(IpcAddress.NODECONF)
         
         # Initialize OSC hub based on mode
-        osc_hub_mode = OscNodesHub.Mode.LISTENER if mode == self.Mode.CONTROLLER else OscNodesHub.Mode.DIALER
-        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {osc_hub_mode.value} mode')
-        self.osc_hub = OscNodesHub(osc_hub_address, mode=osc_hub_mode)
+        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {OscNodesHub.Mode.LISTENER.value} mode')
+        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.LISTENER)
         
-        # Set player callback only in CONTROLLER mode
+        # Set player callback
         self.osc_player_callback = osc_player_callback
-        if self.mode == self.Mode.CONTROLLER:
-            if not osc_player_callback:
-                Logger.warning('No osc_player_callback provided in CONTROLLER mode')
-            if osc_player_callback:
-                self.osc_hub.set_player_received_callback(osc_player_callback)
+        if not osc_player_callback:
+            Logger.warning('No osc_player_callback provided in CONTROLLER mode')
+        if osc_player_callback:
+            self.osc_hub.set_player_received_callback(osc_player_callback)
 
-    def run(self):
-        Logger.debug('Comms thread run called')
-        self.event_loop = asyncio.new_event_loop()
-        self.event_loop.create_task(self.run_asyncio_comms())
-        self.event_loop.run_forever()
+    async def create_all_tasks(self):
+        Logger.info('Starting all tasks in ControllerCommunications')
+        return [
+            asyncio.create_task(self.editor_listener()),
+            asyncio.create_task(self.osc_hub.start()),
+            asyncio.create_task(self.osc_hub.start_player_receiver())
+        ]
 
-    def stop(self):
-        self.stop_requested = True
-        asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
-
-    async def stop_async(self):
-        self.event_loop.call_soon_threadsafe(self.event_loop.stop)
-        Logger.info('event loop stoped')
-
-    async def run_asyncio_comms(self):
-        Logger.info(f'Starting asyncio communications in {self.mode.value} mode')
-        tasks = []
-        
-        # Start communicators only in CONTROLLER mode
-        if self.mode == self.Mode.CONTROLLER:
-            Logger.info('Starting communicators (editor, hwdiscovery, nodeconf)')
-            editor_task = asyncio.create_task(self.editor_listener())
-            tasks.append(editor_task)
-        
-        # Start OSC hub (always)
-        Logger.info('Starting OSC nodes hub')
-        osc_hub_task = asyncio.create_task(self.osc_hub.start())
-        tasks.append(osc_hub_task)
-        
-        # Start player receiver only in CONTROLLER mode
-        if self.mode == self.Mode.CONTROLLER:
-            Logger.info('Starting OSC player receiver')
-            player_receiver_task = asyncio.create_task(self.osc_hub.start_player_receiver())
-            tasks.append(player_receiver_task)
-        
-        # Wait for all tasks
-        await asyncio.gather(*tasks, return_exceptions=True)
-        
-        Logger.debug('asyncio comms finished')
-        #
     async def editor_listener(self):
-        """Editor listener (CONTROLLER mode only)."""
-        if self.mode != self.Mode.CONTROLLER:
-            Logger.warning('editor_listener called in NODE mode, exiting')
-            return
-        
+        """Editor listener (thread-safe)."""
         Logger.info('Editor listener started')
         await self.editor.responder_connect()
         while not self.stop_requested:
@@ -133,136 +68,89 @@ class AsyncCommsThread(Thread):
             await self.editor.responder_get_request(self.editor_callback)
 
     async def respond_to_editor(self, message, context):
-        """Respond to editor (CONTROLLER mode only)."""
-        if self.mode != self.Mode.CONTROLLER:
-            Logger.warning('respond_to_editor called in NODE mode')
-            return
-        
+        """Respond to editor (thread-safe)."""
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
     
-    def add_player(self, player_id: str, root_node, action: ActionType = ActionType.ADD):
+    def request_to_nodeconf(self, message: dict, timeout: Optional[float] = None) -> dict:
         """
-        Add a player to the OSC hub (NODE mode only, thread-safe).
+        Send a request to nodeconf and get response (thread-safe).
+        
+        Parameters:
+        - message: Dictionary containing the request message
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        
+        Returns:
+        - dict: Response from `nodeconf.send_request` via `run_coroutine` method
+        
+        Raises:
+        - AttributeError: If `nodeconf` is not initialized
+        """
+        if not self.nodeconf:
+            raise AttributeError('nodeconf communicator is not initialized')
+        
+        return self.run_coroutine(self.nodeconf.send_request, message, timeout)
+    
+    def request_to_hwdiscovery(self, message: dict, timeout: Optional[float] = None) -> dict:
+        """
+        Send a request to hardware discovery and get response (thread-safe).
+        
+        Parameters:
+        - message: Dictionary containing the request message
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        
+        Returns:
+        - dict: Response from `hwdiscovery.send_request` via `run_coroutine` method
+        
+        Raises:
+        - AttributeError: If `hwdiscovery` is not initialized
+        """
+        if not self.hw_discovery:
+            raise AttributeError('hw_discovery communicator is not initialized')
+        
+        return self.run_coroutine(self.hw_discovery.send_request, message, timeout)
+
+
+class NodeCommunications(AsyncCommsThread):
+    def __init__(self, osc_hub_address: str):
+        """
+        Initialize AsyncCommsThread for NodeEngine.
+        
+        - Runs `OscNodesHub` in `DIALER` mode
+        - Sends players to `ControllerEngine`
+        
+        Parameters:
+        - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
+        """
+        super().__init__()
+        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.DIALER)
+    
+    def add_player(self, player_id: str, root_node, timeout: Optional[float] = None) -> dict:
+        """
+        Add a player to the OSC hub (thread-safe).
         
         Parameters:
         - player_id: Unique identifier for the player
         - root_node: pyossia Node object (the player's device root)
-        - action: ActionType (ADD or UPDATE)
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        if self.mode != self.Mode.NODE:
-            Logger.warning('add_player should only be called in NODE mode')
-            return
-        
-        # Schedule the coroutine in the event loop (thread-safe)
-        asyncio.run_coroutine_threadsafe(
-            self.osc_hub.add_player(player_id, root_node, action),
-            self.event_loop
-        )
-        Logger.debug(f'Queued player {player_id} for sending')
+        message = {
+            "player_id": player_id,
+            "root_node": root_node,
+            "action": ActionType.ADD
+        }
+        return self.run_coroutine(self.osc_hub.add_player, message, timeout)
     
-    def remove_player(self, player_id: str):
+    def remove_player(self, player_id: str, timeout: Optional[float] = None) -> dict:
         """
-        Remove a player from the OSC hub (NODE mode only, thread-safe).
+        Remove a player from the OSC hub (thread-safe).
         
         Parameters:
         - player_id: Unique identifier of the player to remove
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        if self.mode != self.Mode.NODE:
-            Logger.warning('remove_player should only be called in NODE mode')
-            return
-        
-        # Schedule the coroutine in the event loop (thread-safe)
-        asyncio.run_coroutine_threadsafe(
-            self.osc_hub.remove_player(player_id),
-            self.event_loop
-        )
-        Logger.debug(f'Queued player {player_id} for removal')
-    
-    def request_to_nodeconf(self, message: dict, timeout: Optional[float] = None) -> dict:
-        """
-        Send a request to nodeconf and get response (CONTROLLER mode only, thread-safe).
-        
-        Parameters:
-        - message: Dictionary containing the request message
-        - timeout: Optional timeout in seconds (defaults to TIMEOUT)
-        
-        Returns:
-        - dict: Response from nodeconf
-        
-        Raises:
-        - ValueError: If called in NODE mode or if nodeconf is not available
-        - TimeoutError: If request times out
-        - Exception: If request raises an exception
-        """
-        if self.mode != self.Mode.CONTROLLER:
-            raise ValueError('request_to_nodeconf can only be called in CONTROLLER mode')
-        
-        if not self.nodeconf:
-            raise ValueError('nodeconf communicator is not initialized')
-        
-        if timeout is None:
-            timeout = TIMEOUT
-        
-        Logger.debug(f'Sending nodeconf request: {message}')
-        
-        # Schedule the coroutine in the event loop (thread-safe)
-        send_task = asyncio.run_coroutine_threadsafe(
-            self.nodeconf.send_request(message),
-            self.event_loop
-        )
-        
-        try:
-            result = send_task.result(timeout=timeout)
-            Logger.debug(f'Nodeconf request returned: {result!r}')
-            return result
-        except TimeoutError:
-            Logger.error(f'Nodeconf request timed out after {timeout}s')
-            raise
-        except Exception as exc:
-            Logger.error(f'Nodeconf request raised an exception: {exc!r}')
-            raise
-    
-    def request_to_hwdiscovery(self, message: dict, timeout: Optional[float] = None) -> dict:
-        """
-        Send a request to hardware discovery and get response (CONTROLLER mode only, thread-safe).
-        
-        Parameters:
-        - message: Dictionary containing the request message
-        - timeout: Optional timeout in seconds (defaults to TIMEOUT)
-        
-        Returns:
-        - dict: Response from hwdiscovery
-        
-        Raises:
-        - ValueError: If called in NODE mode or if hwdiscovery is not available
-        - TimeoutError: If request times out
-        - Exception: If request raises an exception
-        """
-        if self.mode != self.Mode.CONTROLLER:
-            raise ValueError('request_to_hwdiscovery can only be called in CONTROLLER mode')
-        
-        if not self.hw_discovery:
-            raise ValueError('hw_discovery communicator is not initialized')
-        
-        if timeout is None:
-            timeout = TIMEOUT
-        
-        Logger.debug(f'Sending hwdiscovery request: {message}')
-        
-        # Schedule the coroutine in the event loop (thread-safe)
-        send_task = asyncio.run_coroutine_threadsafe(
-            self.hw_discovery.send_request(message),
-            self.event_loop
-        )
-        
-        try:
-            result = send_task.result(timeout=timeout)
-            Logger.debug(f'Hwdiscovery request returned: {result!r}')
-            return result
-        except TimeoutError:
-            Logger.error(f'Hwdiscovery request timed out after {timeout}s')
-            raise
-        except Exception as exc:
-            Logger.error(f'Hwdiscovery request raised an exception: {exc!r}')
-            raise
+        message = {
+            "player_id": player_id,
+            "action": ActionType.REMOVE
+        }
+        return self.run_coroutine(self.osc_hub.remove_player, message, timeout)
