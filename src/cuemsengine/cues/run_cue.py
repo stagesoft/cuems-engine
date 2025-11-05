@@ -107,33 +107,56 @@ def run_audioCue(cue: AudioCue, mtc):
 def run_dmxCue(cue: DmxCue, mtc):
     """
     Run a DmxCue
+    
+    Sends DMX scene bundle directly to the local DMX player.
+    Synchronized with MTC. The scene contains frame data, timing, and fade info.
     """
-    pass
-
-    # TODO: Implement dmx case
-    # Define the offset
-    # try:
-    #     key = f'{cue._osc_route}{cue._offset_route}'
-    #     ossia.set_value(key, cue.review_offset(mtc))
-    #     Logger.info(
-    #         f"DMX play {cue.id}: {key} {str(ossia.get_value(key))}",
-    #         extra = {"caller": cue.__class__.__name__}
-    #     )
-    # except KeyError:
-    #     Logger.debug(
-    #         f'OSC Key error 1 in run_dmxCue {key}',
-    #         extra = {"caller": cue.__class__.__name__}
-    #     )
-
-    # # Connect to mtc signal
-    # try:
-    #     key = '/mtcfollow'
-    #     cue._osc.set_value(key, 1)
-    # except KeyError:
-    #     Logger.debug(
-    #         f'OSC Key error 2 in run_dmxCue {key}',
-    #         extra = {"caller": cue.__class__.__name__}
-    #     )
+    try:
+        # Calculate MTC timing
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
+        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
+        offset_milliseconds = cue._start_mtc.milliseconds
+        
+        # Get DMX frame data from the cue
+        universe_frames = getattr(cue, '_dmx_frames', {})
+        
+        if not universe_frames:
+            Logger.warning(
+                f"DMX cue {cue.id} has no frame data to send",
+                extra = {"caller": cue.__class__.__name__}
+            )
+            return
+        
+        # Get fade times from cue properties
+        fade_time = getattr(cue, 'fadein_time', 0) / 1000.0  # Convert ms to seconds
+        
+        # Check if we have an OSC client
+        if cue._osc is None:
+            Logger.error(
+                f"DMX cue {cue.id} has no OSC client available",
+                extra = {"caller": cue.__class__.__name__}
+            )
+            return
+        
+        # Send DMX scene bundle to local player
+        cue._osc.send_dmx_scene(
+            universe_frames=universe_frames,
+            mtc_time=offset_milliseconds,
+            fade_time=fade_time
+        )
+        
+        Logger.info(
+            f"DMX scene sent to local player for cue {cue.id}: "
+            f"offset={offset_milliseconds}ms, universes={len(universe_frames)}, fade={fade_time}s",
+            extra = {"caller": cue.__class__.__name__}
+        )
+        
+    except Exception as e:
+        Logger.error(
+            f'Error running DMX cue {cue.id}: {e}',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        Logger.exception(e)
 
 @run_cue.register
 def run_videoCue(cue: VideoCue, mtc):

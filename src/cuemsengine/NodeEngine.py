@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Any
+
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
@@ -7,7 +9,7 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.OssiaClient import PlayerClient
-from .osc.endpoints import OSC_VIDEOPLAYER_CONF
+from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
@@ -264,7 +266,36 @@ class NodeEngine(BaseEngine):
 
     # Audio functions
     def set_audio_players(self):
-        """Set the audio players"""
+        """Set the audio players and audio mixer"""
+        # Initialize the audio mixer for this node
+        if self.cm.node_hw_outputs.get('audio_outputs'):
+            audio_outputs = self.cm.node_hw_outputs['audio_outputs']
+            Logger.info(f'Initializing audio mixer with {len(audio_outputs)} outputs')
+            
+            # Assign a port for the audio mixer
+            mixer_ports = PORT_HANDLER.assign_ports(['audio_mixer'])
+            PORT_HANDLER.add_config_ports(mixer_ports)
+            
+            # Get node UUID for mixer naming
+            node_uuid = self.cm.node_conf.get('uuid', 'default_node')
+            
+            # Start the audio mixer
+            try:
+                PLAYER_HANDLER.start_audio_mixer(
+                    audio_outputs=audio_outputs,
+                    port=mixer_ports['audio_mixer'],
+                    node_uuid=node_uuid,
+                    path=self.cm.node_conf.get('audiomixer', {}).get('path') if isinstance(self.cm.node_conf.get('audiomixer'), dict) else None,
+                    args=self.cm.node_conf.get('audiomixer', {}).get('args') if isinstance(self.cm.node_conf.get('audiomixer'), dict) else None
+                )
+                Logger.info(f'Audio mixer started successfully for node {node_uuid}')
+            except Exception as e:
+                Logger.error(f'Error starting audio mixer: {e}')
+                Logger.exception(e)
+        else:
+            Logger.info('No audio outputs detected, skipping audio mixer initialization')
+        
+        # Set the audio player generator
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
             self.cm.node_conf['audioplayer']['args']
@@ -336,38 +367,50 @@ class NodeEngine(BaseEngine):
                 Logger.exception(e)
 
     def set_dmx_players(self):
-        """Set the dmx players"""
-        if not self.cm.node_hw_outputs['dmx_outputs']:
-            Logger.info('No dmx outputs detected.')
+        """Set the DMX player for this node and register its endpoints."""
+        # Assign a port for the DMX player
+        dmx_ports = PORT_HANDLER.assign_ports(['dmx_player'])
+        PORT_HANDLER.add_config_ports(dmx_ports)
+
+        # Get node UUID for player naming
+        node_uuid = self.cm.node_conf.get('uuid', 'default_node')
+
+        # Start the DMX player
+        try:
+            PLAYER_HANDLER.start_dmx_player(
+                port=dmx_ports['dmx_player'],
+                node_uuid=node_uuid,
+                path=self.cm.node_conf['dmxplayer']['path'],
+                args=self.cm.node_conf['dmxplayer']['args']
+            )
+            Logger.info(f'DMX player started successfully for node {node_uuid}')
+        except Exception as e:
+            Logger.error(f'Error starting DMX player: {e}')
+            Logger.exception(e)
             return
         
-        output_names = self.cm.node_hw_outputs['dmx_outputs']
-        output_ports = []
-        for index in range(len(output_names)):
-            ports = PORT_HANDLER.assign_ports([
-                f'dmx_player_{index}'
-            ])
-            PORT_HANDLER.add_config_ports(ports)
-            output_ports.append(ports)
-
+        # Register DMX player endpoints on OSCQuery server
+        # This allows other nodes to send DMX commands to this node's DMX player
         try:
-            PLAYER_HANDLER.start_dmx_outputs(
-                output_names,
-                output_ports,
-                self.cm.node_conf['dmxplayer']['path'],
-                self.cm.node_conf['dmxplayer']['args']
-            )
+            # Get the DMX player client
+            dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+            if dmx_client:
+                # Register DMX player endpoints using the same mechanism as Audio
+                # This creates callbacks that forward OSCQuery server values to the DMX player client
+                prefix = f'/dmxplayer/{node_uuid}'
+                self.add_player_nodes_to_local(dmx_client, prefix)
+                Logger.info(f'DMX player endpoints registered on OSCQuery server: {prefix}')
+                
         except Exception as e:
-            Logger.error(f'Error checking & starting dmx devices...')
-            Logger.error(e)
-            Logger.error(type(e))
-            Logger.error(f'Exiting...')
-            exit(-1)
+            Logger.error(f'Error registering DMX player endpoints: {e}')
+            Logger.exception(e)
 
     def quit_dmx_devs(self):
-        for dev in PLAYER_HANDLER.get_dmx_players():
+        """Quit the DMX player if it exists"""
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
             try:
-                dev['osc'].set_value('/quit', 1)
+                dmx_client.set_value('/quit', 1)
             except Exception as e:
                 Logger.exception(e)
 

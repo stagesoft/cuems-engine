@@ -32,6 +32,7 @@ dependencies = [
     "python-rtmidi",
     "python-daemon==3.1.2",
     "python-osc==1.9.3",
+    "JACK-Client>=0.5.4",
 ]
 [project.optional-dependencies]
 dev = [
