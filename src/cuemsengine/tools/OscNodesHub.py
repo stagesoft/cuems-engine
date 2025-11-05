@@ -29,7 +29,7 @@ class OscNodesHub(Nng_bus_hub):
     This class handles transmission only - storage is left to the user.
     """
     
-    def __init__(self, hub_address: str, mode=Nng_bus_hub.Mode.CONTROLLER):
+    def __init__(self, hub_address: str, mode=Nng_bus_hub.Mode.LISTENER):
         """
         Initialize OscNodesHub.
         
