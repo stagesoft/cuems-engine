@@ -263,7 +263,7 @@ def test_osc_client_to_server_transmission():
     assert server_res.response[3] == 40
     assert len(client_res.response) == 2
 
-def test_oscclient_in_separate_process():
+def test_oscclient_in_separate_process(process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
@@ -285,7 +285,7 @@ def test_oscclient_in_separate_process():
         client.set_value("/test", 80)
         sleep(0.5)  # Allow time for value to be set
 
-    client_process = Process(target=run_client, args=(client_res,))
+    client_process = process_cleanup(Process(target=run_client, args=(client_res,)))
     client_process.start()
 
     # ASSERT
@@ -297,5 +297,6 @@ def test_oscclient_in_separate_process():
     assert client_res.get() == 10, "Initial value was not set to 10"
     assert client_res.get() == 80, "Modified value was not set to 80"
 
-    # Cleanup
-    client_process.terminate()
+    # Cleanup (handled by process_cleanup, but ensure it's terminated)
+    if client_process.is_alive():
+        client_process.terminate()
