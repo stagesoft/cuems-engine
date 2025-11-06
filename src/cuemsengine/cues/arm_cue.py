@@ -26,7 +26,24 @@ def arm_dmxCue(cue: DmxCue):
     The DMX scene data is already loaded in the cue object from the script XML.
     We extract the universe and channel data from cue.DmxScene and store it
     in a format suitable for sending as OSC bundles to the local DMX player.
+    
+    Note: cue._local should be set by check_mappings() based on the output_name.
+    For DMX cues, the output_name format is "{node_uuid}" (just the node UUID).
+    A DMX cue can have multiple outputs (one per target node). check_mappings()
+    should iterate through all outputs and set _local=True if ANY output_name
+    matches the current node UUID. Other outputs are ignored.
+    This function is only called for local cues (checked in CueHandler.arm()).
     """
+    # Verify that _local is set (should be set by check_mappings() from output_name)
+    is_local = getattr(cue, '_local', True)
+    if not is_local:
+        Logger.warning(
+            f'DMX cue {cue.id} is not local but arm_dmxCue was called. '
+            f'This should not happen - check_mappings() should set _local from output_name.',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        return
+    
     # Get the local DMX player client
     dmx_client = PLAYER_HANDLER.get_dmx_player_client()
     
@@ -40,7 +57,7 @@ def arm_dmxCue(cue: DmxCue):
     # Assign the local DMX player client to the cue
     cue._osc = dmx_client
     Logger.debug(
-        f"DMX cue {cue.id} will use local DMX player",
+        f"DMX cue {cue.id} will use local DMX player (output_name inferred _local={is_local})",
         extra = {"caller": cue.__class__.__name__}
     )
     

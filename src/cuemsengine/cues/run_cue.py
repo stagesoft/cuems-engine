@@ -110,11 +110,24 @@ def run_dmxCue(cue: DmxCue, mtc):
     
     Sends DMX scene bundle directly to the local DMX player.
     Synchronized with MTC. The scene contains frame data, timing, and fade info.
+    DMX cues have no media duration - duration is inferred from fade times.
+    Only fadein_time is used for now. fade_out defaults to 0
     """
     try:
-        # Calculate MTC timing
+        # Calculate MTC timing (same as AudioCue)
         cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
-        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
+        
+        # DMX cues have no media - duration is inferred from fade times
+        # Duration = fadein_time + fadeout_time (both in milliseconds)
+        fadein_ms = getattr(cue, 'fadein_time', 0)
+        fadeout_ms = getattr(cue, 'fadeout_time', 0)
+        duration_ms = fadein_ms + fadeout_ms
+        
+        # Convert duration to timecode format (HH:MM:SS.mmm)
+        duration_seconds = duration_ms / 1000.0
+        cue._end_mtc = cue._start_mtc + CTimecode(start_seconds=duration_seconds)
+        
+        # Calculate offset (same calculation as AudioCue)
         offset_milliseconds = cue._start_mtc.milliseconds
         
         # Get DMX frame data from the cue
@@ -127,8 +140,8 @@ def run_dmxCue(cue: DmxCue, mtc):
             )
             return
         
-        # Get fade times from cue properties
-        fade_time = getattr(cue, 'fadein_time', 0) / 1000.0  # Convert ms to seconds
+        # Convert fadein_time to seconds for the DMX player (only fadein is used for now)
+        fade_time = fadein_ms / 1000.0
         
         # Check if we have an OSC client
         if cue._osc is None:
