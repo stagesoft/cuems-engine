@@ -4,7 +4,7 @@ import json
 from typing import Optional, Callable
 
 from cuemsutils.log import Logger
-from cuemsutils.tools.CommunicatorServices import Communicator, IpcAdress as IpcAddress
+from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
 from .AsyncCommsThread import AsyncCommsThread
 from .OscNodesHub import OscNodesHub, ActionType
 

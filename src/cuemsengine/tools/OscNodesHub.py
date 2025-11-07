@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from cuemsutils.tools.HubServices import Message, Nng_bus_hub
+from cuemsutils.tools.HubServices import Message, NngBusHub
 from cuemsutils.log import Logger
 import asyncio
 from typing import Optional, Dict, Callable
@@ -20,16 +20,16 @@ class PlayerOperation:
     node_data: Optional[dict]  # None for REMOVE operations
     sender: str  # Node that sent this player
 
-class OscNodesHub(Nng_bus_hub):
+class OscNodesHub(NngBusHub):
     """
-    Extension of Nng_bus_hub for transmitting pyossia player node structures.
+    Extension of NngBusHub for transmitting pyossia player node structures.
     
     Nodes send player structures (player_id + root_node) to the controller.
     Players are transmitted one by one as they become available.
     This class handles transmission only - storage is left to the user.
     """
     
-    def __init__(self, hub_address: str, mode=Nng_bus_hub.Mode.LISTENER):
+    def __init__(self, hub_address: str, mode=NngBusHub.Mode.LISTENER):
         """
         Initialize OscNodesHub.
         
