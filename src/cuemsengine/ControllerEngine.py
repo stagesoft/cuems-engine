@@ -141,7 +141,8 @@ class ControllerEngine(BaseEngine):
         try:
             self.handle_editor_command(
                 action = item['action'],
-                value = item['value'], 
+                value = item.get('value', ''),
+                modify_action = item.get('modify_action'),
                 context = context
             ) 
         except Exception as e:
@@ -150,7 +151,19 @@ class ControllerEngine(BaseEngine):
             self.set_editor_request('')
             self.error_to_editor(context, value=f"Command {type(e)}: {e}")
 
-    def handle_editor_command(self, action, value, context=None):
+    def handle_editor_command(self, action, value, modify_action=None, context=None):
+        if action == 'nodelist_modify':
+            message = {
+                'action': action,
+                'value': value,
+                'modify_action': modify_action
+            }
+            success = self.nodelist_modify(message, context)
+            if success:
+                self.confirm_to_editor(
+                    context, type=action, value='OK'
+                )
+            return
         command_dict = {
             'project_deploy': partial(self.load_project, deploy_only=True),
             'project_ready': self.load_project,
@@ -233,6 +246,23 @@ class ControllerEngine(BaseEngine):
                 return False            
         except Exception as e:
             Logger.error(f'{type(e)} sending nodeconf request: {e}')
+            return False
+
+    def nodelist_modify(self, message: dict, context=None) -> bool:
+        Logger.debug(f'sending nodelist_modify request: {message}')
+        try:
+            reply = self.communications_thread.request_to_nodeconf(message)
+            Logger.debug(f'Received nodelist_modify reply: {reply}')
+            if reply.get('OK', False):
+                return True
+            else:
+                error_msg = reply.get('error', 'Unknown error')
+                Logger.error(f'nodelist_modify failed: {error_msg}')
+                self.error_to_editor(context, value=error_msg, action='nodelist_modify')
+                return False            
+        except Exception as e:
+            Logger.error(f'{type(e)} sending nodelist_modify request: {e}')
+            self.error_to_editor(context, value=str(e), action='nodelist_modify')
             return False
 
 
