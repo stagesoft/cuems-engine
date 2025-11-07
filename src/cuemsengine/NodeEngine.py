@@ -285,8 +285,8 @@ class NodeEngine(BaseEngine):
                     audio_outputs=audio_outputs,
                     port=mixer_ports['audio_mixer'],
                     node_uuid=node_uuid,
-                    path=self.cm.node_conf.get('audiomixer', {}).get('path') if isinstance(self.cm.node_conf.get('audiomixer'), dict) else None,
-                    args=self.cm.node_conf.get('audiomixer', {}).get('args') if isinstance(self.cm.node_conf.get('audiomixer'), dict) else None
+                    path=self.cm.node_conf['audiomixer']['path'],
+                    args=self.cm.node_conf['audiomixer']['args']
                 )
                 Logger.info(f'Audio mixer started successfully for node {node_uuid}')
             except Exception as e:
