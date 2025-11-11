@@ -273,22 +273,19 @@ class NodeEngine(BaseEngine):
             Logger.info(f'Initializing audio mixer with {len(audio_outputs)} outputs')
             
             # Assign a port for the audio mixer
+            mixer_id = '0' # TODO: make this a unique identifier for the mixer
             mixer_ports = PORT_HANDLER.assign_ports(['audio_mixer'])
             PORT_HANDLER.add_config_ports(mixer_ports)
-            
-            # Get node UUID for mixer naming
-            node_uuid = self.cm.node_conf.get('uuid', 'default_node')
-            
             # Start the audio mixer
             try:
                 PLAYER_HANDLER.start_audio_mixer(
                     audio_outputs=audio_outputs,
                     port=mixer_ports['audio_mixer'],
-                    node_uuid=node_uuid,
+                    mixer_id=mixer_id,
                     path=self.cm.node_conf['audiomixer']['path'],
                     args=self.cm.node_conf['audiomixer']['args']
                 )
-                Logger.info(f'Audio mixer started successfully for node {node_uuid}')
+                Logger.info(f'Audio mixer started successfully for mixer {mixer_id}')
             except Exception as e:
                 Logger.error(f'Error starting audio mixer: {e}')
                 Logger.exception(e)
