@@ -161,7 +161,7 @@ class AsyncCommsThread(Thread):
             coroutine: A coroutine function to execute. Must be a coroutine
                 function (not a regular function).
             message: Dictionary to pass as argument to the coroutine.
-            timeout: Optional timeout in seconds (defaults to self.timeout).
+            timeout: Optional timeout in seconds (defaults to self.timeout). -1 means no timeout.
         
         Returns:
             Any: The return value from the coroutine.
@@ -196,6 +196,9 @@ class AsyncCommsThread(Thread):
 
         if timeout is None:
             timeout = self.timeout
+        
+        if timeout == -1:
+            timeout = None
 
         send_task = asyncio.run_coroutine_threadsafe(
             coroutine(message), self.event_loop
