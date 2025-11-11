@@ -6,7 +6,7 @@ from typing import Optional, Callable
 from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
 from .AsyncCommsThread import AsyncCommsThread
-from .OscNodesHub import OscNodesHub, ActionType
+from .NodesHub import NodesHub, ActionType
 
 
 class ControllerCommunications(AsyncCommsThread):
@@ -41,8 +41,8 @@ class ControllerCommunications(AsyncCommsThread):
         self.nodeconf = Communicator(IpcAddress.NODECONF)
         
         # Initialize OSC hub based on mode
-        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {OscNodesHub.Mode.LISTENER.value} mode')
-        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.LISTENER)
+        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {NodesHub.Mode.LISTENER.value} mode')
+        self.osc_hub = NodesHub(osc_hub_address, mode=NodesHub.Mode.LISTENER)
         
         # Set player callback
         self.osc_player_callback = osc_player_callback
@@ -150,8 +150,9 @@ class NodeCommunications(AsyncCommsThread):
         - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
         """
         super().__init__()
-        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.DIALER)
-    
+        self.osc_hub = NodesHub(
+            osc_hub_address, mode=NodesHub.Mode.DIALER
+        )
     def add_player(self, player_id: str, root_node, timeout: Optional[float] = None) -> dict:
         """
         Add a player to the OSC hub (thread-safe).

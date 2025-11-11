@@ -20,7 +20,7 @@ class PlayerOperation:
     node_data: Optional[dict]  # None for REMOVE operations
     sender: str  # Node that sent this player
 
-class OscNodesHub(NngBusHub):
+class NodesHub(NngBusHub):
     """
     Extension of NngBusHub for transmitting pyossia player node structures.
     
@@ -44,6 +44,60 @@ class OscNodesHub(NngBusHub):
         
         # Note: We use the base class queues (self.outgoing and self.incoming)
     
+    #########################
+    # Nodes communication
+    #########################
+    def set_recieve_callbacks(self, callback_dict: dict[str, Callable]):
+        """
+        Set the callbacks to be invoked when nodes send messages are received.
+        
+        The keys of the dictionary are the action names to perform, and the values are the callbacks.
+        The callbacks must take the following arguments: (sender, message)
+        """
+        self._on_message_received = callback_dict
+
+    async def start_message_receiver(self):
+        """
+        Continuously receive messages and invoke callback (controller side).
+        
+        This runs in a loop, receiving messages and invoking the callback
+        if set. Should be run as a background task.
+        
+        The callback receives: (sender, message)
+        """
+        if not self._on_message_received:
+            Logger.warning("No message callbacks set")
+            return
+        
+        while True:
+            try:
+                message = await self.get_message()
+                
+                if message:
+                    sender_key = str(message.sender)
+                    
+                    Logger.info(
+                        f"Received {message.action} message from {sender_key}"
+                        f"from {sender_key}"
+                    )
+                    
+                    # Invoke callback if set
+                    message_function = self._on_message_received.get(message.action)
+                    if message_function:
+                        if asyncio.iscoroutinefunction(message_function):
+                            await message_function(sender_key, message.data)
+                        else:
+                            message_function(sender_key, message.data)
+                
+                await asyncio.sleep(0.01)  # Small delay to prevent tight loop
+                
+            except Exception as e:
+                Logger.error(f"{type(e)} handling {message}: {e}")
+                await asyncio.sleep(1)  # Back off on error
+
+    #########################
+    # Player communication
+    #########################
     def set_player_received_callback(self, callback: Callable[[str, str, Optional[dict], ActionType], None]):
         """
         Set a callback to be invoked when player operations are received (controller side).

@@ -3,6 +3,6 @@
 ::: cuemsengine.tools.communicate
 ::: cuemsengine.tools.CuemsDeploy
 ::: cuemsengine.tools.MtcListener
-::: cuemsengine.tools.OscNodesHub
+::: cuemsengine.tools.NodesHub
 ::: cuemsengine.tools.PortHandler
 ::: cuemsengine.tools.system_ports
