@@ -244,12 +244,10 @@ class ControllerEngine(BaseEngine):
         Logger.info("Starting oscquery for Controller")
         self.set_oscquery_server(self.get_status_endpoints())
         self.apply_oscquery_commands()
-        self.set_oscquery_bridge()
 
     def apply_oscquery_commands(self):
         cmd_dict = {
-            'deploy': None, # self.deploy_callback,
-            # disabled because it trigers a doble load when called from editor
+            'deploy': None, # works via Editor NNG ReqRep
             'load': self.deploy_project,
             'loadcue': None, # self.load_cue,
             'go': self.go_script,
@@ -261,7 +259,7 @@ class ControllerEngine(BaseEngine):
             'stop': None, # self.stop_callback,
             'test': None, # self.test_callback
             'unload': None, # self.unload_cue_callback,
-            'update': self.set_oscquery_bridge # Rebuilds client connections
+            'update': None, # works via NNG Hub
         }
         endpoints = add_callbacks_from_dict(
             ENGINE_CMD_ENDPOINTS,
@@ -272,44 +270,6 @@ class ControllerEngine(BaseEngine):
     def set_oscquery_values(self, values: dict):
         for key, value in values.items():
             self.oscquery_server.set_value(key, value)
-
-    def set_oscquery_bridge(self, host = None):
-        Logger.info(
-            "Oscquery bridge for Controller starting"
-        )
-        # Start a client to each NodeEngine
-        if not host:
-            hosts = self.find_hosts()
-        if not isinstance(host, list):
-            hosts = [str(host)]
-        else:
-            hosts = [str(host) for host in host]
-        for host in hosts:
-            client = self.set_oscquery_client(
-                port = NODE_ENGINE_PORT,
-                host = host
-            )
-            # Register the NodeEngines in the OSCQuery server
-            self.mirror_nodes_on_controller(client)
-            client.add_node_creation_callback(self.node_creation_callback)
-
-    def node_creation_callback(self, node):
-        Logger.debug(f'Node creation callback received with {str(node)}')
-        node_dict = {str(node): node}
-        self.oscquery_server.add_endpoints(add_prefix_to_all(node_dict, '/node'))
-
-        
-
-
-
-    def mirror_nodes_on_controller(self, client):
-        """Mirror the nodes from the NodeEngines to the Controller"""
-        # Set the callbacks client for the nodes
-        Logger.debug(f'Mirroring nodes from {client} to the Controller')
-        endpoints = client.get_endpoints()
-        self.oscquery_server.add_endpoints(add_prefix_to_all(endpoints, '/node'))
-        Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
-
 
     #########################
     # Project management

@@ -38,8 +38,8 @@ class NodeCommunications(AsyncCommsThread):
         self.commands_dict = commands_dict
         self.node_id = node_id
 
-    def start(self):
-        self.start_oscquery()
+    def start(self, oscquery_client: OssiaClient):
+        self.start_oscquery_queue(oscquery_client)
         self.ocsquery_queue_loop.start()
         super().start()
 
@@ -50,18 +50,11 @@ class NodeCommunications(AsyncCommsThread):
     #########################
     # OSCQuery logic
     #########################
-    def start_oscquery(self, host: str = None, port: int = None):
+    def start_oscquery_queue(self, client: OssiaClient):
         """
         Add OSCQuery client to listen to Controller OSCQueryServer through GlobalMessageQueue
         """
-        self.oscquery_client = OssiaClient(
-            host = host,
-            local_port = PORT_HANDLER.new_random_port(),
-            remote_port = port,
-            remote_type = ClientDevices.OSCQUERY
-        )
-
-        self.oscquery_queue = GlobalMessageQueue(self.oscquery_client.device)
+        self.oscquery_queue = GlobalMessageQueue(client.device)
     
     def oscquery_loop(self):
         while not self.stop_requested:

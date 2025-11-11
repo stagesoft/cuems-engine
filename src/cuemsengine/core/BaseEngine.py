@@ -121,7 +121,7 @@ class BaseEngine(SignalEngine):
     
     def get_status_endpoints(self) -> dict[str, list[Any]]:
         return {f"/engine/status/{k[1:]}": [ValueType.String, self.status_callback, v] for k,v in vars(self.status).items()}
-             
+    
     def build_status_endpoints(self, host: str, func: Callable = None) -> dict:
         """Build the endpoints for a NodeEngine"""
         if func is None:
@@ -140,9 +140,7 @@ class BaseEngine(SignalEngine):
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
-            host = self.node_host
-        # TODO: remove this hardcoded host
-        host = CONTROLLER_HOST
+            host = self.controller_ip
         self.oscquery_server = OssiaServer(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
@@ -151,19 +149,16 @@ class BaseEngine(SignalEngine):
             endpoints = endpoints
         )
 
-    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None) -> OssiaClient:
+    def set_oscquery_client(self, host: str = None, port: int = None) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
-            host = self.node_host
-        # TODO: remove this hardcoded host
-        host = CONTROLLER_HOST
+            host = self.controller_ip
         oscquery_client = OssiaClient(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
             remote_port = port,
-            remote_type = ClientDevices.OSCQUERY,
-            endpoints = endpoints
+            remote_type = ClientDevices.OSCQUERY
         )
         Logger.debug(f"OscQueryClient created: {oscquery_client}")
         self.oscquery_client_list.append(oscquery_client)
@@ -264,16 +259,52 @@ class BaseEngine(SignalEngine):
         except KeyError:
             Logger.error('Tmp path not found in config. Exiting !!!!!')
             exit(-1)
-    
-    def find_hosts(self) -> list:
-        Logger.info('Looking for hosts in network map: {self.cm.network_map}')
-        ## DEV: Hardcoded for now, should be replaced by the discovery system
-        return [CONTROLLER_HOST]
-        node_list = []
-        for  node in self.cm.network_map:
-            node_list.append(node)
-        """Hardcoded for now, should be replaced by a discovery system"""
-        return node_list
+
+        # Get controller IP from network map
+        try:
+            self.controller_ip = self.get_controller_ip()
+            Logger.info(f'Controller IP: {self.controller_ip}')
+        except Exception as e:
+            Logger.error(f'{type(e)} while getting controller IP: {e}')
+            exit(-1)
+
+    def get_controller_ip(self) -> str:
+        """Set the controller IP address"""
+        if not hasattr(self, 'cm') or not self.cm.network_map:
+            raise AttributeError('No network map found')
+        nodes = self.cm.network_map.get('CuemsNodeDict', [])
+        if not nodes:
+            raise ValueError('No nodes found in network map')
+        for node in nodes:
+            if node.get('node_type') == 'NodeType.master':
+                return node.get('ip')
+        raise ValueError('No master node found in network map')
+
+    def find_hosts(self) -> list[dict[str, str | bool]]:
+        """
+        Extract the list of adopted online hosts in the network map
+
+        Returns:
+        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and controller flag
+
+        Exceptions:
+        - ValueError: No nodes found in network map
+        - AttributeError: No controller found in network map
+        """
+        Logger.info(f'Looking for hosts in network map')
+        nodes, _ = self.cm.network_map.get_nodes_by_adoption()
+        if not nodes:
+            raise ValueError('No nodes found in network map')
+        hosts = [
+            {'ip': node.get('ip'), 'uuid': node.get('uuid'), 'controller': node.get('node_type') == 'NodeType.master'}
+            for node in nodes
+            if node.get('online') == 'True'
+        ]
+        if not any(host.get('controller') for host in hosts):
+            raise AttributeError('No controller found in network map')
+        if len([host for host in hosts if host.get('controller')]) > 1:
+            raise AttributeError('Multiple controllers found in network map')
+        return hosts
 
     def print_all_status(self) -> None:
         Logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
