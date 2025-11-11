@@ -4,10 +4,10 @@ from functools import partial
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
-from .tools.communicate import ControllerCommunications
+from .core.libmtc import libmtcmaster
+from .comms.ControllerCommunications import ControllerCommunications
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
-from .tools.mtcmaster import libmtcmaster
 from .tools.PortHandler import PORT_HANDLER
 
 

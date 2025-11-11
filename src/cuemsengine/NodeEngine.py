@@ -5,6 +5,7 @@ from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
+from .comms.NodeCommunications import NodeCommunications
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
 from .cues.CueHandler import CUE_HANDLER
 from .osc import ENGINE_CMD_ENDPOINTS
@@ -12,7 +13,6 @@ from .osc.OssiaClient import PlayerClient
 from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
-from .tools.communicate import NodeCommunications
 from .tools.PortHandler import PORT_HANDLER
 from .players.PlayerHandler import PLAYER_HANDLER
 
