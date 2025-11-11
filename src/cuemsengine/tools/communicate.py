@@ -1,12 +1,22 @@
 """Utilites for communications from ControllerEngine and NodeEngine."""
 import asyncio
 import json
+from pynng import Context
+from pyossia import GlobalMessageQueue
+from threading import Thread
+from time import sleep
 from typing import Optional, Callable
 
 from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
+
+from ..cues.CueHandler import CUE_HANDLER
+from ..osc.helpers import ClientDevices
+from ..osc.OssiaClient import OssiaClient
+
 from .AsyncCommsThread import AsyncCommsThread
 from .NodesHub import NodesHub, ActionType
+from .PortHandler import PORT_HANDLER
 
 
 class ControllerCommunications(AsyncCommsThread):
@@ -71,12 +81,12 @@ class ControllerCommunications(AsyncCommsThread):
             Logger.debug(f'waiting for editor message')
             await self.editor.responder_get_request(self.editor_callback)
 
-    async def respond_to_editor(self, message, context):
+    async def respond_to_editor(self, message, context: Context):
         """Respond to editor (thread-safe)."""
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
     
-    def reply_to_editor(self, message, context):
+    def reply_to_editor(self, message, context: Context):
         send_task = asyncio.run_coroutine_threadsafe(
             self.editor.responder_post_reply(message, context),
             self.event_loop
@@ -137,22 +147,108 @@ class ControllerCommunications(AsyncCommsThread):
         
         return self.run_coroutine(self.hw_discovery.send_request, message, timeout)
 
+    
+    #########################
+    # Nodes communication
+    #########################
+    def send_go_command(self, value: str) -> dict:
+        """
+        Send a GO command to the nodes (thread-safe).
+        
+        Parameters:
+        - value: Value to send to the nodes
+        """
+        if not self.osc_hub:
+            raise AttributeError('osc_hub is not initialized')
+        return self.run_coroutine(self.osc_hub.send_go_command, value, -1)
+
 
 class NodeCommunications(AsyncCommsThread):
-    def __init__(self, osc_hub_address: str):
+    def __init__(self, osc_hub_address: str, commands_dict: dict, node_id: str):
         """
         Initialize AsyncCommsThread for NodeEngine.
         
         - Runs `OscNodesHub` in `DIALER` mode
         - Sends players to `ControllerEngine`
+        - Listens to Controller OSCQueryServer using a GlobalMessageQueue
+        - Filters and redirects OSCQuery signals to local endpoints
         
         Parameters:
         - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
+        - commands_dict: Dictionary of engine commands to run on the node
         """
         super().__init__()
         self.osc_hub = NodesHub(
             osc_hub_address, mode=NodesHub.Mode.DIALER
         )
+        self.ocsquery_queue_loop = Thread(
+            target=self.oscquery_loop, name='OSCQueryQueueLoop'
+        )
+        self.commands_dict = commands_dict
+        self.node_id = node_id
+
+    def start(self):
+        self.start_oscquery()
+        self.ocsquery_queue_loop.start()
+        super().start()
+
+    def stop(self):
+        self.ocsquery_queue_loop.join()
+        super().stop()
+
+    #########################
+    # OSCQuery logic
+    #########################
+    def start_oscquery(self, host: str = None, port: int = None):
+        """
+        Add OSCQuery client to listen to Controller OSCQueryServer through GlobalMessageQueue
+        """
+        self.oscquery_client = OssiaClient(
+            host = host,
+            local_port = PORT_HANDLER.new_random_port(),
+            remote_port = port,
+            remote_type = ClientDevices.OSCQUERY
+        )
+
+        self.oscquery_queue = GlobalMessageQueue(self.oscquery_client.device)
+    
+    def oscquery_loop(self):
+        while not self.stop_requested:
+            message = self.oscquery_queue.pop()
+            if message is not None:
+                parameter, value = message
+                self.route_message(parameter, value)
+            else:
+                sleep(0.001)
+
+    def route_message(self, parameter, value):
+        path_elements = str(parameter.node).split('/')[1:]
+        if path_elements[0] == 'command':
+            self.run_command(path_elements[1], value)
+        if path_elements[0] == 'players':
+            if path_elements[1] != self.node_id:
+                return
+            if path_elements[2] == 'video':
+                PLAYER_HANDLER.route_video_message('/'.join(path_elements[3:]), value)
+            if path_elements[2] == 'audio':
+                PLAYER_HANDLER.route_audio_message('/'.join(path_elements[3:]), value)
+            if path_elements[2] == 'dmx':
+                PLAYER_HANDLER.route_dmx_message('/'.join(path_elements[3:]), value)
+        else:
+            Logger.debug(f'Recieved unused OSCQuery path: {str(parameter.node)}')
+            return
+
+    def run_command(self, command, value):
+        if command in self.commands_dict.keys():
+            self.commands_dict[command](value)
+            return True
+        else:
+            Logger.error(f'Command {command} not found')
+            return False
+
+    #########################
+    # Nng comms to Controller
+    #########################
     def add_player(self, player_id: str, root_node, timeout: Optional[float] = None) -> dict:
         """
         Add a player to the OSC hub (thread-safe).

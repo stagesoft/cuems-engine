@@ -12,6 +12,7 @@ from .osc.OssiaClient import PlayerClient
 from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
+from .tools.communicate import NodeCommunications
 from .tools.PortHandler import PORT_HANDLER
 from .players.PlayerHandler import PLAYER_HANDLER
 
@@ -55,7 +56,7 @@ class NodeEngine(BaseEngine):
             )
 
     def start(self):
-        self.set_oscquery()
+        self.set_communications()
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
@@ -83,17 +84,19 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Exception raised when quitting video devs: {e}')
 
     # OSCQuery functions
-    def set_oscquery(self):
-        """Set the OSCQuery infrastructure"""
-        Logger.info("Starting oscquery for Node")
-        self.set_oscquery_server(
-            self.get_status_endpoints(),
-            port = NODE_ENGINE_PORT
+    def set_communications(self):
+        """Set the communications infrastructure"""
+        Logger.info("Starting communications for Node")
+        if hasattr(self, 'cm') and self.cm:
+            node_host = self.cm.node_conf['host']
+        else:
+            node_host = CONTROLLER_HOST
+        osc_hub_address = f"tcp://{self.node_host}:{NODE_ENGINE_PORT}"
+        self.communications_thread = NodeCommunications(
+            osc_hub_address=osc_hub_address,
+            commands_dict=self.commands_dict
         )
-        Logger.debug(f"OscQuery Node server set")
-        self.oscquery_client = self.set_oscquery_client()
-        Logger.debug(f"OscQuery Node client set")
-        self.apply_oscquery_commands()
+        self.communications_thread.start()
 
     def apply_oscquery_commands(self):
         cmd_dict = {
