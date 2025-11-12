@@ -22,7 +22,6 @@
             <xs:element name="name" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="node_type" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="ip" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
-            <xs:element name="port" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
         </xs:sequence>
     </xs:complexType>
 

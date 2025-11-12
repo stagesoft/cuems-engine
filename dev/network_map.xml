@@ -7,7 +7,6 @@
             <name>jump._cuems_nodeconf._tcp.local.</name>
             <node_type>NodeType.master</node_type>
             <ip>172.17.0.1</ip>
-            <port>9000</port>
         </CuemsNode>
     </CuemsNodeDict>
 </cms:CuemsNetworkMap>
