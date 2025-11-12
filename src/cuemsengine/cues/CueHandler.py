@@ -190,6 +190,16 @@ class CueHandler:
         thread.join()
         Logger.info(f'{thread.name} finished')
 
+    def route_player_message(self, parameter: str, value):
+        """Routes a player message to the cue."""
+        path_elements = parameter.split('/')
+        cue_osc = self.get_armed_cue(path_elements[0])
+        if cue_osc is None:
+            Logger.error(f'Cue {path_elements[0]} not found')
+            return
+        cue_osc._osc.set_value('/' + '/'.join(path_elements[1:]), value)
+
+
 # ---------------------------
 # Singleton
 # ---------------------------

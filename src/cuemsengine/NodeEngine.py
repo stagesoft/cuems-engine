@@ -1,16 +1,15 @@
 from functools import partial
-from typing import Any
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
-from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT
+from .comms.NodeCommunications import NodeCommunications
+from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.OssiaClient import PlayerClient
 from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
-from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
+from .osc.helpers import add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
 from .players.PlayerHandler import PLAYER_HANDLER
@@ -55,7 +54,7 @@ class NodeEngine(BaseEngine):
             )
 
     def start(self):
-        self.set_oscquery()
+        self.set_communications()
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
@@ -83,20 +82,25 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Exception raised when quitting video devs: {e}')
 
     # OSCQuery functions
-    def set_oscquery(self):
-        """Set the OSCQuery infrastructure"""
-        Logger.info("Starting oscquery for Node")
-        self.set_oscquery_server(
-            self.get_status_endpoints(),
-            port = NODE_ENGINE_PORT
+    def set_communications(self):
+        """Set the communications infrastructure"""
+        Logger.info("Starting communications for Node")
+        self.set_oscquery_commands()
+        hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
+        Logger.info(f"NNG Hub address: {hub_address}")
+        oscquery_client = self.set_oscquery_client(
+            port = self.cm.node_conf['oscquery_ws_port'],
+            host = self.controller_ip
         )
-        Logger.debug(f"OscQuery Node server set")
-        self.oscquery_client = self.set_oscquery_client()
-        Logger.debug(f"OscQuery Node client set")
-        self.apply_oscquery_commands()
+        self.communications_thread = NodeCommunications(
+            hub_address=hub_address,
+            commands_dict=self.commands_dict
+        )
+        self.communications_thread.start(oscquery_client)
 
-    def apply_oscquery_commands(self):
-        cmd_dict = {
+    def set_oscquery_commands(self):
+        """Set the OSCQuery commands for the NodeEngine"""
+        self.commands_dict = {
             'deploy': self.ready_project,
             # Not a node responsibility
             # 'hwdiscovery': None, # self.hw_discovery_callback,
@@ -112,50 +116,6 @@ class NodeEngine(BaseEngine):
             'unload': None, # self.unload_cue_callback,
             'update': None, # self.update_player_endpoints,
         }
-        # Add the node endpoints with callbacks
-        endpoints = add_callbacks_from_dict(
-             ENGINE_CMD_ENDPOINTS,
-        #    add_prefix_to_all(ENGINE_CMD_ENDPOINTS, '/node'),
-            cmd_dict
-        )
-        #self.oscquery_server.create_endpoints(endpoints)
-        # # Add the controller endpoints without callbacks
-        # endpoints.update(
-        #     add_prefix_to_all(
-        #         ENGINE_CMD_ENDPOINTS,
-        #         '/controller'
-        #     )
-        # )
-        Logger.debug(f"OscQuery Node endpoints: {endpoints}")
-        #self.mirror_nodes_on_controller(self.oscquery_client)
-        self.oscquery_client.create_endpoints(endpoints)
-
-    def mirror_nodes_on_controller(self, client):
-        """Mirror the nodes from the NodeEngines to the Controller"""
-        # Set the callbacks client for the nodes
-        Logger.debug(f'Mirroring nodes from {client} to the Controller')
-        endpoints = client.get_endpoints()
-        self.oscquery_server.add_endpoints(endpoints)
-        for node in client.nodes.values():
-            if "status" in str(node):
-                Logger.debug(f'ignoring node : {str(node)}')
-                continue
-            client.set_node_callback(node, self.client_to_server_values)
-        Logger.debug(f'Altered endpoints: {client.get_endpoints()}')
-
-    def update_controller_endpoints(self):
-        """Update the controller endpoints"""
-        ## TODO: Set the host from the config
-        host = 'localhost'
-        
-        self.oscquery_server.set_value(
-            '/controller/engine/command/update',
-            host
-        )
-
-    def set_oscquery_values(self, values: dict):
-        for key, value in values.items():
-            self.oscquery_client.set_value(key, value)
 
     def add_player_endpoints(self, cue: Cue, prefix: str):
         if not hasattr(cue, '_osc') or not isinstance(cue._osc, PlayerClient):
@@ -273,22 +233,19 @@ class NodeEngine(BaseEngine):
             Logger.info(f'Initializing audio mixer with {len(audio_outputs)} outputs')
             
             # Assign a port for the audio mixer
+            mixer_id = '0' # TODO: make this a unique identifier for the mixer
             mixer_ports = PORT_HANDLER.assign_ports(['audio_mixer'])
             PORT_HANDLER.add_config_ports(mixer_ports)
-            
-            # Get node UUID for mixer naming
-            node_uuid = self.cm.node_conf.get('uuid', 'default_node')
-            
             # Start the audio mixer
             try:
                 PLAYER_HANDLER.start_audio_mixer(
                     audio_outputs=audio_outputs,
                     port=mixer_ports['audio_mixer'],
-                    node_uuid=node_uuid,
+                    mixer_id=mixer_id,
                     path=self.cm.node_conf['audiomixer']['path'],
                     args=self.cm.node_conf['audiomixer']['args']
                 )
-                Logger.info(f'Audio mixer started successfully for node {node_uuid}')
+                Logger.info(f'Audio mixer started successfully for mixer {mixer_id}')
             except Exception as e:
                 Logger.error(f'Error starting audio mixer: {e}')
                 Logger.exception(e)

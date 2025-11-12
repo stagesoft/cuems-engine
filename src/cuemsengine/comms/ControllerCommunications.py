@@ -1,12 +1,14 @@
 """Utilites for communications from ControllerEngine and NodeEngine."""
 import asyncio
 import json
+from pynng import Context
 from typing import Optional, Callable
 
 from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
+
 from .AsyncCommsThread import AsyncCommsThread
-from .OscNodesHub import OscNodesHub, ActionType
+from .NodesHub import NodesHub
 
 
 class ControllerCommunications(AsyncCommsThread):
@@ -41,8 +43,8 @@ class ControllerCommunications(AsyncCommsThread):
         self.nodeconf = Communicator(IpcAddress.NODECONF)
         
         # Initialize OSC hub based on mode
-        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {OscNodesHub.Mode.LISTENER.value} mode')
-        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.LISTENER)
+        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {NodesHub.Mode.LISTENER.value} mode')
+        self.osc_hub = NodesHub(osc_hub_address, mode=NodesHub.Mode.LISTENER)
         
         # Set player callback
         self.osc_player_callback = osc_player_callback
@@ -71,12 +73,12 @@ class ControllerCommunications(AsyncCommsThread):
             Logger.debug(f'waiting for editor message')
             await self.editor.responder_get_request(self.editor_callback)
 
-    async def respond_to_editor(self, message, context):
+    async def respond_to_editor(self, message, context: Context):
         """Respond to editor (thread-safe)."""
         Logger.debug(f'Sending to editor: {message}, with context ')
         await context.asend(json.dumps(message).encode())
     
-    def reply_to_editor(self, message, context):
+    def reply_to_editor(self, message, context: Context):
         send_task = asyncio.run_coroutine_threadsafe(
             self.editor.responder_post_reply(message, context),
             self.event_loop
@@ -137,47 +139,17 @@ class ControllerCommunications(AsyncCommsThread):
         
         return self.run_coroutine(self.hw_discovery.send_request, message, timeout)
 
-
-class NodeCommunications(AsyncCommsThread):
-    def __init__(self, osc_hub_address: str):
-        """
-        Initialize AsyncCommsThread for NodeEngine.
-        
-        - Runs `OscNodesHub` in `DIALER` mode
-        - Sends players to `ControllerEngine`
-        
-        Parameters:
-        - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
-        """
-        super().__init__()
-        self.osc_hub = OscNodesHub(osc_hub_address, mode=OscNodesHub.Mode.DIALER)
     
-    def add_player(self, player_id: str, root_node, timeout: Optional[float] = None) -> dict:
+    #########################
+    # Nodes communication
+    #########################
+    def send_go_command(self, value: str) -> dict:
         """
-        Add a player to the OSC hub (thread-safe).
+        Send a GO command to the nodes (thread-safe).
         
         Parameters:
-        - player_id: Unique identifier for the player
-        - root_node: pyossia Node object (the player's device root)
-        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        - value: Value to send to the nodes
         """
-        message = {
-            "player_id": player_id,
-            "root_node": root_node,
-            "action": ActionType.ADD
-        }
-        return self.run_coroutine(self.osc_hub.add_player, message, timeout)
-    
-    def remove_player(self, player_id: str, timeout: Optional[float] = None) -> dict:
-        """
-        Remove a player from the OSC hub (thread-safe).
-        
-        Parameters:
-        - player_id: Unique identifier of the player to remove
-        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
-        """
-        message = {
-            "player_id": player_id,
-            "action": ActionType.REMOVE
-        }
-        return self.run_coroutine(self.osc_hub.remove_player, message, timeout)
+        if not self.osc_hub:
+            raise AttributeError('osc_hub is not initialized')
+        return self.run_coroutine(self.osc_hub.send_go_command, value, -1)

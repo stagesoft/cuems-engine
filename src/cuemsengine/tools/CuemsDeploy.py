@@ -1,4 +1,3 @@
-from os import pipe
 import subprocess
 import sys
 import os
