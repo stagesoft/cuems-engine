@@ -4,7 +4,7 @@ from typing import Any, Callable
 from os import path, remove
 
 from cuemsutils.log import Logger, logged
-from cuemsutils.xml import XmlReaderWriter
+from cuemsutils.xml import XmlReaderWriter, NetworkMap
 from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.SignalEngine import SignalEngine
@@ -272,10 +272,11 @@ class BaseEngine(SignalEngine):
         """Set the controller IP address"""
         if not hasattr(self, 'cm') or not self.cm.network_map:
             raise AttributeError('No network map found')
-        nodes = self.cm.network_map.get('CuemsNodeDict', [])
+        nodes = self.cm.network_map if isinstance(self.cm.network_map, list) else []
         if not nodes:
             raise ValueError('No nodes found in network map')
-        for node in nodes:
+        for node_item in nodes:
+            node = node_item.get('node', {}) if isinstance(node_item, dict) else {}
             if node.get('node_type') == 'NodeType.master':
                 return node.get('ip')
         raise ValueError('No master node found in network map')
@@ -292,7 +293,8 @@ class BaseEngine(SignalEngine):
         - AttributeError: No controller found in network map
         """
         Logger.info(f'Looking for hosts in network map')
-        nodes, _ = self.cm.network_map.get_nodes_by_adoption()
+        nodes_list = self.cm.network_map if isinstance(self.cm.network_map, list) else []
+        nodes, _ = NetworkMap.get_nodes_by_adoption(nodes_list)
         if not nodes:
             raise ValueError('No nodes found in network map')
         hosts = [
