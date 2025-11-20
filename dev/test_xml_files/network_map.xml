@@ -2,7 +2,7 @@
 <cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="https://stagelab.coop/cuems/ https://stagelab.coop/cuems/network_map.xsd">
-    <CuemsNodeDict>
+    <node_list>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
             <mac>2cf05d21cca3</mac>
@@ -21,5 +21,5 @@
             <adopted>False</adopted>
             <online>False</online>
         </node>
-    </CuemsNodeDict>
+    </node_list>
 </cms:CuemsNetworkMap>

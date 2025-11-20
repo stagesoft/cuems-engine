@@ -4,7 +4,7 @@ from typing import Any, Callable
 from os import path, remove
 
 from cuemsutils.log import Logger, logged
-from cuemsutils.xml import XmlReaderWriter, NetworkMap
+from cuemsutils.xml import XmlReaderWriter
 from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.SignalEngine import SignalEngine
@@ -19,6 +19,7 @@ from ..cues.CueHandler import CUE_HANDLER
 from ..tools.PortHandler import PORT_HANDLER
 
 MTC_PORT = "Midi Through Port-0"
+CONTROLLER_NETWORK_FLAG = "NodeType.master"
 SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
 CONTROLLER_HOST = "localhost" #"controller.local"
 NODE_ENGINE_PORT = 10000
@@ -272,14 +273,14 @@ class BaseEngine(SignalEngine):
         """Set the controller IP address"""
         if not hasattr(self, 'cm') or not self.cm.network_map:
             raise AttributeError('No network map found')
-        nodes = self.cm.network_map if isinstance(self.cm.network_map, list) else []
+        nodes = self.cm.network_map['node_list']
         if not nodes:
             raise ValueError('No nodes found in network map')
         for node_item in nodes:
             node = node_item.get('node', {}) if isinstance(node_item, dict) else {}
-            if node.get('node_type') == 'NodeType.master':
+            if node.get('node_type') == CONTROLLER_NETWORK_FLAG:
                 return node.get('ip')
-        raise ValueError('No master node found in network map')
+        raise ValueError('No controller node found in network map')
 
     def find_hosts(self) -> list[dict[str, str | bool]]:
         """
@@ -293,12 +294,14 @@ class BaseEngine(SignalEngine):
         - AttributeError: No controller found in network map
         """
         Logger.info(f'Looking for hosts in network map')
-        nodes_list = self.cm.network_map if isinstance(self.cm.network_map, list) else []
-        nodes, _ = NetworkMap.get_nodes_by_adoption(nodes_list)
+        network_dict = self.cm.network_map
+        if not network_dict:
+            raise ValueError('No network map not found')
+        nodes, _ = self.cm.network_map.get_nodes_by_adoption(network_dict)
         if not nodes:
-            raise ValueError('No nodes found in network map')
+            raise ValueError('No adopted nodes found in network map')
         hosts = [
-            {'ip': node.get('ip'), 'uuid': node.get('uuid'), 'controller': node.get('node_type') == 'NodeType.master'}
+            {'ip': node.get('ip'), 'uuid': node.get('uuid'), 'controller': node.get('node_type') == CONTROLLER_NETWORK_FLAG}
             for node in nodes
             if node.get('online') == 'True'
         ]
