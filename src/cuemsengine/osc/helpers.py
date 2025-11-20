@@ -48,7 +48,7 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
         while not result:
             result = x.update()
             sleep(0.5)
-            Logger.debug(f'Waiting for remote deviece ws://{cls.host}:{cls.remote_port} to be ready...')
+            Logger.debug(f'Waiting for remote device ws://{cls.host}:{cls.remote_port} to be ready...')
     except Exception as e:
         Logger.exception(f'Failed to update OSCQueryDevice: {e}, type: {type(e)}')
         return

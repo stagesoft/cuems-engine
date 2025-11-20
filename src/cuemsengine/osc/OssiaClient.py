@@ -27,8 +27,9 @@ class OssiaClient(OssiaNodes):
         self.remote_port = remote_port
         self.local_port = local_port
         self.bind_device(remote_type)
+        # In OSCQuery clients do not create nodes, just read them
         if endpoints and remote_type == ClientDevices.OSC:
-            self.create_endpoints(endpoints)  ### DO NOT CREATE NODES IN REMOTE CLIENT, WHE READ THEM
+            self.create_endpoints(endpoints)
 
     def bind_device(self, remote_type: ClientSetupFunction):
         Logger.info(f"Using remote device: {remote_type.__annotations__['return']}")
