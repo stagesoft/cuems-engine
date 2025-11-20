@@ -62,6 +62,7 @@ class BaseEngine(SignalEngine):
         
         self.ongoing_cue = None
         self.next_cue_pointer = None
+        self.show_locked = False
 
         Logger.info(f"{self.__class__.__name__}@{self.node_name} initialized, waiting start signal")
 
@@ -77,8 +78,16 @@ class BaseEngine(SignalEngine):
 
     def stop_all(self) -> None:
         if self.with_mtc:
-            self.stop_mtc_listener()
-        self.remove_show_lock_file()
+            try:
+                self.stop_mtc_listener()
+            except Exception as e:
+                Logger.error(f'Error stopping MTC listener: {e}')
+                raise e
+        try:
+            self.remove_show_lock_file()
+        except Exception as e:
+            Logger.error(f'Error removing show lock file: {e}')
+            raise e
 
     ### STATUS ###
     def set_status(self, property: str, value: str, strict: bool = False) -> None:
@@ -215,10 +224,14 @@ class BaseEngine(SignalEngine):
             exit(-1)
 
     def stop_mtc_listener(self) -> None:
-        if self.mtc_listener is not None:
-            self.mtc_listener.stop()
-            self.mtc_listener.join()
-            self.mtc_listener = None
+        if self.mtc_listener is not None and self.mtc_listener.is_alive():
+            try:
+                self.mtc_listener.stop()
+                self.mtc_listener.join()
+                self.mtc_listener = None
+            except Exception as e:
+                Logger.error(f'Error stopping MTC listener: {e}')
+                raise e
 
     def reset_script(self) -> None:
         if self.script:
@@ -345,6 +358,9 @@ class BaseEngine(SignalEngine):
                 self.show_locked = True
             except:
                 Logger.warning("Could not write show lock file")
+        else:
+            Logger.info(f'Show lock file {SHOW_LOCK_PATH} already exists')
+            self.show_locked = True
 
     def remove_show_lock_file(self): # DEV: static
         if path.isfile(SHOW_LOCK_PATH):
@@ -354,6 +370,9 @@ class BaseEngine(SignalEngine):
                 self.show_locked = False
             except OSError:
                 Logger.warning("Could not delete master lock file")
+        else:
+            Logger.info(f'Show lock file {SHOW_LOCK_PATH} does not exist')
+            self.show_locked = False
 
     @logged
     def read_script(self, project_name: str) -> None:
