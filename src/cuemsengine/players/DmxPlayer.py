@@ -28,9 +28,6 @@ class DmxPlayer(Player):
         self.args = args
         self.stdout = None
         self.stderr = None
-        
-        # Start the player process
-        self.start()
 
     @logged
     def run(self):
@@ -157,7 +154,8 @@ def start_dmx_player(
     port: int,
     node_uuid: str,
     path: str,
-    args: str | None = None
+    args: str | None = None,
+    timeout: float = 5.0
 ) -> tuple[DmxPlayer, DmxClient]:
     """Start a DMX player and its OSC client.
     
@@ -168,21 +166,23 @@ def start_dmx_player(
         port: OSC port for dmxplayer communication
         node_uuid: Unique identifier for this player node
         path: Path to dmxplayer-cuems binary
+        args: Additional arguments for dmxplayer-cuems
+        timeout: Maximum time to wait for player to start (seconds)
     
     Returns:
         Tuple containing the DmxPlayer and DmxClient instances
+        
+    Raises:
+        RuntimeError: If player fails to start within timeout or thread dies
     """
-    # Create and start the player
+    # Create and start the player with timeout handling
     player = DmxPlayer(
         port=port,
         node_uuid=node_uuid,
         path=path,
         args=args
     )
-    
-    # Wait for player process to start
-    while player.pid is None:
-        sleep(0.001)
+    player.start(timeout=timeout)
     
     # Create OSC client for controlling the player
     client = DmxClient(

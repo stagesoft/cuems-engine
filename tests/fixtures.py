@@ -80,9 +80,16 @@ def mock_config_path():
 def mock_avahi_resolve():
     """Mock avahi-resolve-host-name to return a fixed IP address"""
     def mock_avahi_resolve(hostname):
-        return '192.168.1.1'
+        return 'localhost'
     with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy._avahi_resolve', 
                side_effect=mock_avahi_resolve):
+        yield
+
+@fixture
+def mock_controller_ip():
+    """Mock BaseEngine.get_controller_ip to return localhost"""
+    with patch('cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip', 
+               return_value='localhost'):
         yield
 
 # @fixture

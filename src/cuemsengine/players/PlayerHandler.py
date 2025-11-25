@@ -280,9 +280,9 @@ class PlayerHandler:
                         video_player_args,
                         '',
                     )
-                    player['player'].start()
-                    while player['player'].pid is None:
-                        sleep(0.001)
+                    # Start with timeout handling (now done in Player.start())
+                    player['player'].start(timeout=5.0)
+                    
                     player['pid'] = player['player'].pid
                     player['osc'] = VideoClient(
                         player['port'],
