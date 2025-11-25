@@ -6,12 +6,12 @@ import platform
 import subprocess
 from pathlib import Path
 
-def get_hatch_info():
+def get_poetry_info():
     try:
-        result = subprocess.run(['hatch', '--version'], capture_output=True, text=True)
+        result = subprocess.run(['poetry', '--version'], capture_output=True, text=True)
         return result.stdout.strip()
     except:
-        return "Hatch not found"
+        return "Poetry not found"
 
 def get_python_info():
     return {
@@ -31,17 +31,17 @@ def get_path_info():
         'src_cuemsengine_exists': Path('src/cuemsengine').exists()
     }
 
-def get_hatch_env_info():
+def get_poetry_env_info():
     try:
-        result = subprocess.run(['hatch', 'run', 'env'], capture_output=True, text=True)
+        result = subprocess.run(['poetry', 'env', 'info'], capture_output=True, text=True)
         return result.stdout
     except:
-        return "Failed to get Hatch environment"
+        return "Failed to get Poetry environment"
 
 def main():
     print("=== Environment Diagnostic Information ===")
-    print("\n=== Hatch Version ===")
-    print(get_hatch_info())
+    print("\n=== Poetry Version ===")
+    print(get_poetry_info())
     
     print("\n=== Python Information ===")
     python_info = get_python_info()
@@ -58,8 +58,8 @@ def main():
         else:
             print(f"{key}: {value}")
     
-    print("\n=== Hatch Environment Variables ===")
-    print(get_hatch_env_info())
+    print("\n=== Poetry Environment Information ===")
+    print(get_poetry_env_info())
 
 if __name__ == '__main__':
     main() 
