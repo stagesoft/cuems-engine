@@ -363,9 +363,15 @@ class ControllerEngine(BaseEngine):
         return True
 
     def start_timecode(self):
-        libmtcmaster.MTCSender_play(self.mtcmaster)
-        print("MTC master started playing.")
+        if self.with_mtc:
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+            Logger.info("Midi TimeCode started.")
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")
 
     def stop_timecode(self):
-        libmtcmaster.MTCSender_stop(self.mtcmaster)
-        print("MTC master stopped playing.")
+        if self.with_mtc:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            Logger.info("Midi TimeCode stopped.")
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")

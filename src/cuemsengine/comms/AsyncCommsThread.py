@@ -56,12 +56,12 @@ class AsyncCommsThread(Thread):
         """
         self.thread_name = kwargs.get('thread_name', type(self).__name__)
         Logger.info(f'Initializing AsyncCommsThread: {self.thread_name}')
+        super().__init__(name=self.thread_name, daemon=True)
         self.name = f'AsyncComms-{self.thread_name}'
         self.timeout = kwargs.get('timeout', TIMEOUT)
         self.stop_requested = False
         self.send_contexts: List[Any] = []
         self.event_loop: asyncio.AbstractEventLoop | None = None
-        Thread.__init__(self, name=self.thread_name, daemon=True)
 
     def run(self) -> None:
         """Thread entry point.

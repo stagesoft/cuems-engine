@@ -94,7 +94,8 @@ class NodeEngine(BaseEngine):
         )
         self.communications_thread = NodeCommunications(
             hub_address=hub_address,
-            commands_dict=self.commands_dict
+            commands_dict=self.commands_dict,
+            node_id=self.cm.node_uuid
         )
         self.communications_thread.start(oscquery_client)
 
@@ -289,19 +290,6 @@ class NodeEngine(BaseEngine):
             Logger.error(f'Exiting...')
             exit(-1)
 
-        # Set the video endpoints
-        endpoints = {}
-        redirect_fn = partial(NodeEngine.redirect_video_cmd, self)
-        for index in range(len(output_names)):
-            x = add_prefix_to_all(
-                OSC_VIDEOPLAYER_CONF,
-                f'/players/video/{index}'
-            )
-            x = add_callback_to_all(x, redirect_fn)
-            endpoints.update(x)
-        self.oscquery_server.create_endpoints(endpoints)
-        #self.update_controller_endpoints()
-
     def quit_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
             try:
@@ -346,22 +334,6 @@ class NodeEngine(BaseEngine):
             Logger.exception(e)
             return
         
-        # Register DMX player endpoints on OSCQuery server
-        # This allows other nodes to send DMX commands to this node's DMX player
-        try:
-            # Get the DMX player client
-            dmx_client = PLAYER_HANDLER.get_dmx_player_client()
-            if dmx_client:
-                # Register DMX player endpoints using the same mechanism as Audio
-                # This creates callbacks that forward OSCQuery server values to the DMX player client
-                prefix = f'/dmxplayer/{node_uuid}'
-                self.add_player_nodes_to_local(dmx_client, prefix)
-                Logger.info(f'DMX player endpoints registered on OSCQuery server: {prefix}')
-                
-        except Exception as e:
-            Logger.error(f'Error registering DMX player endpoints: {e}')
-            Logger.exception(e)
-
     def quit_dmx_devs(self):
         """Quit the DMX player if it exists"""
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()

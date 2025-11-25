@@ -92,6 +92,25 @@ def mock_controller_ip():
                return_value='localhost'):
         yield
 
+@fixture
+def suppress_logging(level:str ='info'):
+    """Suppress all logging output to stdout/stderr"""
+    import logging
+    from os import environ
+    level = level.upper()
+    level_value = getattr(logging, level)
+    
+    # Set environment variable to CRITICAL level
+    environ['CUEMS_LOG_LEVEL'] = level
+    
+    # Disable all logging below CRITICAL level
+    logging.disable(level_value - 1)
+    
+    yield
+    
+    # Re-enable logging
+    logging.disable(logging.NOTSET)
+
 # @fixture
 # def mock_library_path():
 #     """Mock library path to use test XML files"""

@@ -15,7 +15,7 @@ from .NodesHub import NodesHub, ActionType
 
 
 class NodeCommunications(AsyncCommsThread):
-    def __init__(self, osc_hub_address: str, commands_dict: dict, node_id: str):
+    def __init__(self, hub_address: str, commands_dict: dict, node_id: str):
         """
         Initialize AsyncCommsThread for NodeEngine.
         
@@ -25,12 +25,12 @@ class NodeCommunications(AsyncCommsThread):
         - Filters and redirects OSCQuery signals to local endpoints
         
         Parameters:
-        - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
+        - hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
         - commands_dict: Dictionary of engine commands to run on the node
         """
         super().__init__()
         self.osc_hub = NodesHub(
-            osc_hub_address, mode=NodesHub.Mode.DIALER
+            hub_address, mode=NodesHub.Mode.DIALER
         )
         self.ocsquery_queue_loop = Thread(
             target=self.oscquery_loop, name='OSCQueryQueueLoop'
@@ -66,18 +66,22 @@ class NodeCommunications(AsyncCommsThread):
                 sleep(0.001)
 
     def route_message(self, parameter, value):
-        path_elements = str(parameter.node).split('/')[1:]
+        # Exclude 'engine' common node
+        path_elements = str(parameter.node).split('/')[2:]
+        Logger.debug(f'Routing message: {path_elements}')
         if path_elements[0] == 'command':
             self.run_command(path_elements[1], value)
         if path_elements[0] == 'players':
+            # Exclude other nodes' players
             if path_elements[1] != self.node_id:
                 return
+            # Route the message to the appropriate player handler
             if path_elements[2] == 'video':
-                PLAYER_HANDLER.route_video_message('/'.join(path_elements[3:]), value)
+                PLAYER_HANDLER.route_video_message(path_elements[3:], value)
             if path_elements[2] == 'audio':
-                PLAYER_HANDLER.route_audio_message('/'.join(path_elements[3:]), value)
+                PLAYER_HANDLER.route_audio_message(path_elements[3:], value)
             if path_elements[2] == 'dmx':
-                PLAYER_HANDLER.route_dmx_message('/'.join(path_elements[3:]), value)
+                PLAYER_HANDLER.route_dmx_message(path_elements[3:], value)
         else:
             Logger.debug(f'Recieved unused OSCQuery path: {str(parameter.node)}')
             return
