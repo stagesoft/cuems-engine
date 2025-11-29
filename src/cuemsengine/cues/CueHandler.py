@@ -93,7 +93,7 @@ class CueHandler:
             return True
         
         if cue._local and cue.enabled:
-            Logger.info(f"Arming {type(cue)} {cue.id}")
+            Logger.info(f"Arming {type(cue).__name__} {cue.id}")
             # Arm the cue
             arm_cue(cue)
             cue.loaded = True

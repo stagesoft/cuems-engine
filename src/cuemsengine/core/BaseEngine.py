@@ -374,7 +374,7 @@ class BaseEngine(SignalEngine):
                 return
             # Skip the script cuelist and process the first cuelist
             #cuelist = cuelist.contents[0]
-        Logger.debug(f'Processing cuelist: {type(cuelist)} {cuelist.id} #########################')
+        Logger.info(f'Processing {type(cuelist).__name__}: {cuelist.id}')
         if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
@@ -385,7 +385,7 @@ class BaseEngine(SignalEngine):
         try:
             for index, item in enumerate(cuelist.contents):
                 ## TODO: remove this hardcoded local flag
-                Logger.info(f'Processing item: {type(item)} {item.id}')
+                Logger.info(f'Processing item: {type(item).__name__} {item.id}')
                 item._local = True
                 item.loaded = False
                 item.enabled = True
@@ -417,7 +417,7 @@ class BaseEngine(SignalEngine):
                     item._target_object = self.script.find(item.target)
 
                 if item._local and not item.loaded:
-                    Logger.info(f'Arming item: {type(item)} {item.id}')
+                    Logger.info(f'Arming item: {type(item).__name__} {item.id}')
                     CUE_HANDLER.arm(item, True)
 
                 Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')
