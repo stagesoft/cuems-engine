@@ -174,35 +174,6 @@ class BaseEngine(SignalEngine):
         self.oscquery_client_list.append(oscquery_client)
         return oscquery_client
 
-    def server_to_client_values(
-        self, client: OssiaClient, node: str, value: Any, strip: str = ""
-    ) -> None:
-        node = str(node).strip(strip)
-        Logger.debug(f"Setting node {node} to {value} in {client}")
-        try:
-            client.set_value(node, value)
-        except Exception as e:
-            Logger.error(f"Error setting {node} to {value} in {client}: {e}")
-
-    def client_to_server_values(self, node: str, value: Any) -> None:
-        node = str(node)
-        Logger.debug(f"Setting node {node} to {value} in server")
-        self.oscquery_server.set_value(node, value)
-
-    def add_player_nodes_to_local(self, client: PlayerClient, prefix: str = "") -> None:
-        Logger.debug(f"Procesing nodes from client: {client}")
-        if not isinstance(client, PlayerClient):
-            Logger.error(f"Client {client} is not a PlayerClient")
-            return
-        def set_client_values(node: str, value: Any) -> None:
-            self.server_to_client_values(client, node, value, strip = prefix
-        )
-        endpoints = client.get_endpoints()
-        endpoints = add_callback_to_all(endpoints, set_client_values)
-        endpoints = add_prefix_to_all(endpoints, prefix)
-        Logger.debug(f"Endpoints: {endpoints}")
-        self.oscquery_server.add_endpoints(endpoints)
-
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:
         """Set the MTC listener"""
