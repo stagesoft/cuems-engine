@@ -35,6 +35,8 @@ class OssiaClient(OssiaNodes):
         Logger.info(f"Using remote device: {remote_type.__annotations__['return']}")
         self.device = remote_type(self)
         sleep(STARTUP_DELAY)
+        if not self.device:
+            raise RuntimeError("OssiaClient device not bound")
         Logger.debug(f"OssiaClient device bound: {self.device}")
 
         Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")

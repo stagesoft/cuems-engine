@@ -96,11 +96,16 @@ def set_oscquery_server(cls) -> bool:
         bool: True if the server has been created successfully
     """
     Logger.debug(f'creating oscquery server on {cls.host}:{cls.remote_port} -> {cls.local_port}')
-    return cls.device.create_oscquery_server(
-        cls.local_port,
-        cls.remote_port,
-        cls.logging
-    )
+    
+    try:
+        return cls.device.create_oscquery_server(
+            cls.local_port,
+            cls.remote_port,
+            cls.logging
+        )
+    except Exception as e:
+        Logger.error(f"{type(e).__name__} creating oscquery server: {e}")
+        raise e
 
 class ServerDevices(Enum):
     OSC = set_osc_server
