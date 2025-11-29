@@ -111,6 +111,32 @@ def suppress_logging(level:str ='info'):
     # Re-enable logging
     logging.disable(logging.NOTSET)
 
+@fixture
+def mock_player_subprocess():
+    """Mock player subprocess calls to prevent actual player process startup"""
+    from unittest.mock import MagicMock
+    
+    # Create a mock that records calls
+    call_records = []
+    
+    def mock_call_subprocess(self, call_args):
+        """Mock implementation that records the call without starting process"""
+        call_records.append({
+            'player': self.__class__.__name__,
+            'args': call_args,
+            'pid': id(self)  # Use object id as fake PID
+        })
+        # Set up mock process
+        self.p = MagicMock()
+        self.p.pid = id(self)
+        self.p.poll = MagicMock(return_value=None)
+        self.pid = id(self)
+        self.status = 'running'
+        self.error = None
+    
+    with patch('cuemsengine.players.Player.Player.call_subprocess', mock_call_subprocess):
+        yield call_records
+
 # @fixture
 # def mock_library_path():
 #     """Mock library path to use test XML files"""

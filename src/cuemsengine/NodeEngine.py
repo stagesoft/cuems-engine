@@ -55,9 +55,7 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         self.set_communications()
-        self.set_video_players()
-        self.set_audio_players()
-        self.set_dmx_players()
+        self.set_players()
         self.mtc_listener.start()
         super().start()
         
@@ -118,6 +116,11 @@ class NodeEngine(BaseEngine):
             'update': None, # self.update_player_endpoints,
         }
 
+    def set_players(self):
+        self.set_video_players()
+        self.set_audio_players()
+        self.set_dmx_players()
+
     def add_player_endpoints(self, cue: Cue, prefix: str):
         if not hasattr(cue, '_osc') or not isinstance(cue._osc, PlayerClient):
             Logger.error(f'Cue {cue.id} does not have a player client')
@@ -173,9 +176,7 @@ class NodeEngine(BaseEngine):
         self.ready_script()
 
         # Start cue dependencies
-        self.set_video_players()
-        self.set_audio_players()
-        self.set_dmx_players()
+        # self.set_players()
 
         # Check local cues
         # self.check_local_cues(self.script.cuelist)
