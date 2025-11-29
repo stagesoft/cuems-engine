@@ -39,7 +39,7 @@ class ControllerEngine(BaseEngine):
         
 
     def start(self):
-        self.mtcmaster = libmtcmaster.MTCSender_create()
+        self.create_timecode()
         self.set_comms()
         super().start()
     
@@ -93,23 +93,11 @@ class ControllerEngine(BaseEngine):
     @logged
     def stop_comms(self):
         if self.with_mtc:
-            self.stop_mtc()
+            self.stop_timecode()
         if self.oscquery_server:
             self.oscquery_server.remove_device()
         if hasattr(self, '_loop'):
             self._loop.call_soon_threadsafe(self._loop.stop)
-
-    @logged
-    def stop_mtc(self):
-        libmtcmaster.MTCSender_stop(self.mtcmaster)
-        # stop = self.mtc.send_request({'cmd':'stop'})
-        # release = self.mtc.send_request({'cmd':'release'})
-        # if stop['resp'] != 'ok' or release['resp'] != 'ok':
-        #     Logger.error('MTC master could not be stopped')
-        #     Logger.error(f"Stop: {stop['resp']}")
-        #     Logger.error(f"Release: {release['resp']}")
-        # else:
-        #     Logger.info('MTC master stopped')
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -361,6 +349,12 @@ class ControllerEngine(BaseEngine):
 
         # Confirm the script is stopped
         return True
+
+    def create_timecode(self):
+        if self.with_mtc:
+            self.mtcmaster = libmtcmaster.MTCSender_create()
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")
 
     def start_timecode(self):
         if self.with_mtc:
