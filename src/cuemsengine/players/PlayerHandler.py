@@ -234,6 +234,10 @@ class PlayerHandler:
         else:
             player = self.get_inactive_videoplayer(self.get_cue_output_name(cue))
         
+        if not player:
+            Logger.error(f'No video player found for cue {cue.id}')
+            raise ValueError(f'No video player found for cue {cue.id}')
+
         cue._osc = player['osc']
         self.store_cue_player(cue, player['player'])
 

@@ -116,7 +116,12 @@ def arm_dmxCue(cue: DmxCue):
 
 @arm_cue.register
 def arm_videoCue(cue: VideoCue):
-    PLAYER_HANDLER.set_video_player(cue)
+    try:
+        PLAYER_HANDLER.set_video_player(cue)
+    except ValueError as e:
+        Logger.error(f'Error arming video player for cue {cue.id}: {e}')
+        Logger.exception(e)
+        return
                 
     try:
         key = '/jadeo/cmd'
