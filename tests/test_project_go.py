@@ -1,13 +1,13 @@
 from unittest.mock import patch
-from logging import INFO
 from time import sleep
 from cuemsengine import ControllerEngine, NodeEngine
+from .helpers import timeout
 
 from .conftest import engine_cleanup # type: ignore[import-untyped]
-from .fixtures import mock_config_path, mock_avahi_resolve, mock_library_path, mock_controller_ip, suppress_logging, mock_player_subprocess
+from .fixtures import mock_config_path, mock_avahi_resolve, mock_library_path, mock_controller_ip, suppress_logging, mock_player_clients, mock_player_subprocess
 
 
-def test_project_go_from_controller(mock_config_path, mock_avahi_resolve, mock_library_path, mock_controller_ip, mock_player_subprocess, suppress_logging, engine_cleanup):
+def test_project_go_from_controller(mock_config_path, mock_avahi_resolve, mock_library_path, mock_controller_ip, mock_player_clients, mock_player_subprocess, suppress_logging, engine_cleanup):
     # ARRANGE
     caplog.set_level(INFO)
     controller_engine = ControllerEngine(with_mtc=False)

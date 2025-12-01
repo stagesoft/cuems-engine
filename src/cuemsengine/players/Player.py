@@ -77,7 +77,7 @@ class Player(Thread):
         if self.firstrun:
             super().start()
             self.firstrun = False
-        if not self.is_alive():
+        elif not self.is_alive():
             super().start()
         self.started = True
         

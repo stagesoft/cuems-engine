@@ -20,6 +20,9 @@ class PlayerOperation:
     node_data: Optional[dict]  # None for REMOVE operations
     sender: str  # Node that sent this player
 
+    def __str__(self):
+        return f"PlayerOperation by {self.sender}: {self.action.value} {self.player_id} (with{'out' if not self.node_data else ''} node data)"
+
 class NodesHub(NngBusHub):
     """
     Extension of NngBusHub for transmitting pyossia player node structures.
@@ -108,17 +111,14 @@ class NodesHub(NngBusHub):
         """
         self._on_player_received = callback
     
-    async def add_player(self, player_id: str, root_node: Node, action: ActionType = ActionType.ADD):
+    async def send_player_operation(self, action: ActionType, player_id: str, root_node: Optional[Node | None] = None):
         """
-        Add a player to the send queue (node side).
-        
-        This queues the player to be transmitted to the controller.
-        The base class sender will automatically transmit it.
+        Send a player operation to the send queue (node side).
         
         Parameters:
+        - action: The type of operation (ADD, UPDATE or REMOVE)
         - player_id: Unique identifier for the player
-        - root_node: The root node of the player's OSC structure
-        - action: The type of action (ADD or UPDATE)
+        - root_node: The root node of the player's OSC structure (optional for REMOVE operations)
         """
         # Serialize immediately and create message
         message = {
@@ -130,31 +130,8 @@ class NodesHub(NngBusHub):
         
         # Use base class send_message which adds to self.outgoing queue
         await self.send_message(message)
-        Logger.debug(f"Queued player {player_id} for sending with action {action.value}")
-    
-    async def remove_player(self, player_id: str):
-        """
-        Queue a player removal (node side).
-        
-        Parameters:
-        - player_id: Unique identifier of the player to remove
-        """
-        # Create REMOVE message (no node_data needed)
-        message = {
-            "__type__": "osc_player",
-            "player_id": player_id,
-            "action": ActionType.REMOVE.value,
-            "node_data": None
-        }
-        
-        # Use base class send_message which adds to self.outgoing queue
-        await self.send_message(message)
-        Logger.debug(f"Queued player {player_id} for removal")
-    
-    # Note: start_player_sender() is no longer needed!
-    # The base class _send_handler() already processes self.outgoing queue
-    # which we now use directly via send_message() in add_player() and remove_player()
-    
+        Logger.debug(f"Queued {action.value} operation for player {player_id}")
+
     async def get_player_operation(self) -> PlayerOperation | None:
         """
         Get the next player operation from the queue (controller side).

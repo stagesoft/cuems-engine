@@ -8,7 +8,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
 
 from .AsyncCommsThread import AsyncCommsThread
-from .NodesHub import NodesHub
+from .NodesHub import NodesHub, PlayerOperation
 
 
 class ControllerCommunications(AsyncCommsThread):
@@ -17,21 +17,21 @@ class ControllerCommunications(AsyncCommsThread):
     
     Handles:
     - Editor messages
-    - OSC player messages
+    - Player operation messages
     - Nodeconf messages
     - HWDiscovery messages
     """
     def __init__(self, 
                  osc_hub_address: str,
                  editor_callback: Callable,
-                 osc_player_callback: Optional[Callable] = None):
+                 player_operation_callback: Optional[Callable] = None):
         """
         Initialize AsyncCommsThread for ControllerEngine.
         
         Parameters:
         - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
         - editor_callback: Callback for editor messages
-        - osc_player_callback: Callback for received players
+        - player_operation_callback: Callback for received player operations
         """
         super().__init__()
         
@@ -47,11 +47,11 @@ class ControllerCommunications(AsyncCommsThread):
         self.osc_hub = NodesHub(osc_hub_address, mode=NodesHub.Mode.LISTENER)
         
         # Set player callback
-        self.osc_player_callback = osc_player_callback
-        if not osc_player_callback:
-            Logger.warning('No osc_player_callback provided in CONTROLLER mode')
-        if osc_player_callback:
-            self.osc_hub.set_player_received_callback(osc_player_callback)
+        self.player_operation_callback = player_operation_callback
+        if not player_operation_callback:
+            Logger.warning('No player_operation_callback provided in CONTROLLER mode')
+        if player_operation_callback:
+            self.osc_hub.set_player_received_callback(player_operation_callback)
 
     async def create_all_tasks(self):
         Logger.info('Starting all tasks in ControllerCommunications')

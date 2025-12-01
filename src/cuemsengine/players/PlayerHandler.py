@@ -2,7 +2,7 @@ from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from functools import partial
-from threading import Lock
+from threading import RLock
 from time import sleep
 from typing import Callable
 
@@ -41,7 +41,7 @@ class PlayerHandler:
             cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
             cls._instance._video_output_names = []
-            cls._instance._lock = Lock()
+            cls._instance._lock = RLock()  # Use RLock to allow reentrant locking
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
             cls._instance._video_players = {}
@@ -250,9 +250,44 @@ class PlayerHandler:
             return out
 
     def reset_video_players(self):
-        """Resets the video players."""
+        """Resets the video players and kills their processes."""
         with self._lock:
+            # Kill all video player processes before resetting
+            for output_name, players in list(self._video_players.items()):
+                for player_dict in players:
+                    try:
+                        if 'player' in player_dict:
+                            player = player_dict['player']
+                            player.kill()
+                            # Wait for thread to die
+                            if player.is_alive():
+                                player.join(timeout=0.5)
+                    except Exception as e:
+                        Logger.debug(f'Error killing video player: {e}')
             self._video_players = {}
+            self._video_output_names = []
+    
+    def reset_all(self):
+        """Complete reset of PlayerHandler for testing"""
+        Logger.debug('Performing complete PlayerHandler reset')
+        with self._lock:
+            # Kill and clear all video players
+            for output_name, players in list(self._video_players.items()):
+                for player_dict in players:
+                    try:
+                        if 'player' in player_dict:
+                            player = player_dict['player']
+                            player.kill()
+                            if player.is_alive():
+                                player.join(timeout=0.5)
+                    except Exception:
+                        pass
+            
+            # Reset all state
+            self._video_players = {}
+            self._video_output_names = []
+            self._cue_players = {}
+            self._front_video_player = None
 
     def start_video_outputs(
         self,
@@ -266,7 +301,13 @@ class PlayerHandler:
         for index, output_name in enumerate(output_names):
             with self._lock:
                 if output_name in self._video_players:
-                    continue
+                    # Clean up existing players for this output before recreating
+                    for player_dict in self._video_players[output_name]:
+                        try:
+                            if 'player' in player_dict:
+                                player_dict['player'].kill()
+                        except Exception as e:
+                            Logger.debug(f'Error killing existing video player: {e}')
                 self._video_players[output_name] = []
 
             new_ports = output_ports[index]

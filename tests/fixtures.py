@@ -115,6 +115,10 @@ def suppress_logging(level:str ='info'):
 def mock_player_subprocess():
     """Mock player subprocess calls to prevent actual player process startup"""
     from unittest.mock import MagicMock
+    from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+    
+    # Complete reset of PLAYER_HANDLER state before test
+    PLAYER_HANDLER.reset_all()
     
     # Create a mock that records calls
     call_records = []
@@ -136,6 +140,116 @@ def mock_player_subprocess():
     
     with patch('cuemsengine.players.Player.Player.call_subprocess', mock_call_subprocess):
         yield call_records
+    
+    # Complete cleanup after test
+    PLAYER_HANDLER.reset_all()
+
+@fixture
+def mock_player_clients():
+    """Mock PlayerClient creation to record commands without OSC communication"""
+    from unittest.mock import MagicMock, Mock
+    from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+    
+    # Complete reset before test
+    PLAYER_HANDLER.reset_all()
+    
+    # Storage for all client instances and their commands
+    client_records = {
+        'clients': [],
+        'commands': []
+    }
+    
+    class MockPlayerClientBase:
+        """Base mock for player clients that records set_value calls"""
+        def __init__(self, player_port: int, name: str):
+            self.player_port = player_port
+            self.name = name
+            self.nodes = {}
+            self.endpoints = {}
+            
+            # Record this client creation
+            client_records['clients'].append({
+                'name': name,
+                'port': player_port,
+                'endpoints': list(self.endpoints.keys()) if self.endpoints else []
+            })
+            
+            # Create mock device and nodes
+            self.device = Mock()
+            self.device.root_node = Mock()
+        
+        def set_value(self, node, value):
+            """Record set_value calls"""
+            # Get node path
+            if isinstance(node, str):
+                node_path = node
+            else:
+                node_path = str(node)
+            
+            # Record the command
+            client_records['commands'].append({
+                'client': self.name,
+                'port': self.player_port,
+                'node': node_path,
+                'value': value
+            })
+            
+            # Update mock node value if it exists
+            if node_path in self.nodes:
+                self.nodes[node_path].parameter.value = value
+        
+        def get_node(self, path: str):
+            """Return mock node"""
+            return self.nodes.get(path)
+        
+        def remove_device(self):
+            """Mock cleanup"""
+            pass
+    
+    class MockVideoClient(MockPlayerClientBase):
+        """Mock VideoClient matching its signature"""
+        def __init__(self, player_port: int, name: str = "videoplayer"):
+            super().__init__(player_port, name)
+    
+    class MockAudioClient(MockPlayerClientBase):
+        """Mock AudioClient matching its signature"""
+        def __init__(self, player_port: int, name: str = "audioplayer"):
+            super().__init__(player_port, name)
+    
+    class MockDmxClient(MockPlayerClientBase):
+        """Mock DmxClient matching its signature"""
+        def __init__(self, player_port: int, client_name: str, host: str = "127.0.0.1"):
+            super().__init__(player_port, client_name)
+            self.host = host
+    
+    class MockMixerClient(MockPlayerClientBase):
+        """Mock MixerClient matching its signature"""
+        def __init__(self, player_port: int, channel_number: int, mixer_id: str):
+            super().__init__(player_port, f'mixer-{mixer_id}')
+            self.channel_number = channel_number
+            self.client_name = f'audiomixer-{mixer_id}'
+    
+    # Mock function to prevent Player subprocess from starting
+    def mock_call_subprocess(self, call_args):
+        """Mock implementation that prevents subprocess startup"""
+        # Set up mock process
+        self.p = MagicMock()
+        self.p.pid = id(self)
+        self.p.poll = MagicMock(return_value=None)
+        self.pid = id(self)
+        self.status = 'running'
+        self.error = None
+    
+    # Patch all PlayerClient subclasses AND Player.call_subprocess
+    with patch('cuemsengine.players.VideoPlayer.VideoClient', MockVideoClient), \
+         patch('cuemsengine.players.AudioPlayer.AudioClient', MockAudioClient), \
+         patch('cuemsengine.players.DmxPlayer.DmxClient', MockDmxClient), \
+         patch('cuemsengine.players.AudioMixer.MixerClient', MockMixerClient), \
+         patch('cuemsengine.players.Player.Player.call_subprocess', mock_call_subprocess):
+        yield client_records
+    
+    # Cleanup
+    PLAYER_HANDLER.reset_all()
 
 # @fixture
 # def mock_library_path():
