@@ -67,7 +67,7 @@ class ControllerEngine(BaseEngine):
         self.communications_thread = ControllerCommunications(
             osc_hub_address=osc_hub_address,
             editor_callback=self.editor_command_callback,
-            osc_player_callback=self.osc_player_received_callback
+            player_operation_callback=self.osc_player_received_callback
         )
         self.communications_thread.start()
 
@@ -81,11 +81,8 @@ class ControllerEngine(BaseEngine):
         - node_data: Dictionary containing OSC node structure (None for REMOVE)
         - action: ActionType (ADD, UPDATE, or REMOVE)
         """
-        Logger.info(f'Received player operation from {sender}: {action.value} {player_id}')
-        # TODO: Implement player management logic
-        # For now, just log the received player information
-        if node_data:
-            Logger.debug(f'Player {player_id} data: {node_data}')
+        Logger.info(f'Received {operation}')
+        
 
     def stop(self):
         self.stop_comms()
@@ -325,30 +322,20 @@ class ControllerEngine(BaseEngine):
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
+        
         self.start_timecode()
+        
+        # Send GO command via OSCQuery - nodes listen to this
         self.set_oscquery_values({
-            # '/engine/status/go': value,
             '/engine/status/running': "yes",
-            # '/engine/command/gocue': "yes"
-            # '/engine/command/go': value
+            '/engine/command/go': value
         })
-
-
-        # CUE LOGIC BETWEEN CONTROLLER AND NODES
-        # Send the go command to the nodes
-        self.communications_thread.send_go_command(value)
-
-        # Wait for the nodes to confirm the end of the script
-        self.communications_thread.wait_for_nodes_to_finish()
-        # Stop the timecode
-        self.stop_timecode()
-        # Set the oscquery values
-        self.set_oscquery_values({
-            '/engine/status/running': "no",
-            # '/engine/command/gocue': "no"
-        })
-
-        # Confirm the script is stopped
+        
+        Logger.info(f'GO command sent via OSCQuery: {value}')
+        
+        # Note: In a full implementation, we would wait for nodes to signal completion
+        # For now, this is a fire-and-forget command
+        
         return True
 
     def create_timecode(self):

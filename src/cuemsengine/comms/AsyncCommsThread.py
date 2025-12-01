@@ -90,7 +90,11 @@ class AsyncCommsThread(Thread):
             the thread to fully terminate.
         """
         self.stop_requested = True
-        asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
+        if self.event_loop and self.is_alive():
+            try:
+                asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
+            except Exception as e:
+                Logger.debug(f'Error stopping {self.name}: {e}')
 
     async def stop_async(self) -> None:
         """Async stop handler.

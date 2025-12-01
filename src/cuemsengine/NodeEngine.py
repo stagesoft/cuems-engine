@@ -86,10 +86,7 @@ class NodeEngine(BaseEngine):
         self.set_oscquery_commands()
         hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         Logger.info(f"NNG Hub address: {hub_address}")
-        oscquery_client = self.set_oscquery_client(
-            port = self.cm.node_conf['oscquery_ws_port'],
-            host = self.controller_ip
-        )
+        oscquery_client = self.set_oscquery_client()
         self.communications_thread = NodeCommunications(
             hub_address=hub_address,
             commands_dict=self.commands_dict,
@@ -105,7 +102,7 @@ class NodeEngine(BaseEngine):
             # 'hwdiscovery': None, # self.hw_discovery_callback,
             'load': self.load_project,
             'loadcue': None, # self.load_cue,
-            #'go': self.go_script,
+            'go': self.go_script,
             'gocue': self.go_script, # self.go_cue_callback,
             'pause': None, # self.pause_callback,
             # 'preload': None, # self.load_cue_callback,
@@ -186,6 +183,7 @@ class NodeEngine(BaseEngine):
         self.script.unix_name = project
         self.set_status('load', project)
         Logger.info(f'Project {project} loaded')
+        return True
 
     def deploy_project(self, project):
         """Deploy the project files to the node"""
@@ -393,8 +391,8 @@ class NodeEngine(BaseEngine):
             return
 
         # Signal go start
-        Logger.info(f'GO command received. Starting script {self.script.unix_name}')
-        self.oscquery_server.set_value('/engine/status/running', "yes")
+        Logger.info(f'GO command received. Starting script {self.script.name}')
+        self.set_status('running', "yes")
 
         # Get the cue to go
         if not self.ongoing_cue:

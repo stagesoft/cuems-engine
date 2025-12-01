@@ -38,9 +38,9 @@ class ControllerCommunications(AsyncCommsThread):
         # Initialize communicators
         Logger.debug('Initializing ControllerCommunications')
         self.editor_callback = editor_callback
-        self.editor = Communicator(IpcAddress.EDITOR)
-        self.hw_discovery = Communicator(IpcAddress.HWDISCOVERY)
-        self.nodeconf = Communicator(IpcAddress.NODECONF)
+        self.editor = Communicator(IpcAddress.EDITOR.value)
+        self.hw_discovery = Communicator(IpcAddress.HWDISCOVERY.value)
+        self.nodeconf = Communicator(IpcAddress.NODECONF.value)
         
         # Initialize OSC hub based on mode
         Logger.info(f'Initializing OSC hub: {osc_hub_address} in {NodesHub.Mode.LISTENER.value} mode')
@@ -53,7 +53,7 @@ class ControllerCommunications(AsyncCommsThread):
         if player_operation_callback:
             self.osc_hub.set_player_received_callback(player_operation_callback)
 
-    async def create_all_tasks(self):
+    def create_all_tasks(self):
         Logger.info('Starting all tasks in ControllerCommunications')
         return [
             asyncio.create_task(self.editor_listener()),
@@ -138,18 +138,3 @@ class ControllerCommunications(AsyncCommsThread):
             raise AttributeError('hw_discovery communicator is not initialized')
         
         return self.run_coroutine(self.hw_discovery.send_request, message, timeout)
-
-    
-    #########################
-    # Nodes communication
-    #########################
-    def send_go_command(self, value: str) -> dict:
-        """
-        Send a GO command to the nodes (thread-safe).
-        
-        Parameters:
-        - value: Value to send to the nodes
-        """
-        if not self.osc_hub:
-            raise AttributeError('osc_hub is not initialized')
-        return self.run_coroutine(self.osc_hub.send_go_command, value, -1)

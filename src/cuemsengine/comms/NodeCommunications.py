@@ -44,8 +44,13 @@ class NodeCommunications(AsyncCommsThread):
         super().start()
 
     def stop(self):
-        self.ocsquery_queue_loop.join()
+        self.stop_requested = True
+        # Stop the async communication thread first
         super().stop()
+        # Wait for OSCQuery loop to finish
+        if hasattr(self, 'ocsquery_queue_loop') and self.ocsquery_queue_loop.is_alive():
+            self.ocsquery_queue_loop.join(timeout=1)
+    
 
     #########################
     # OSCQuery logic
