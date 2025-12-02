@@ -210,7 +210,7 @@ class NodeEngine(BaseEngine):
 
         for cue in cuelist.contents:
             # ignore return value found in check_mappings
-            _ = cue.check_mappings(self.cm)
+            _ = cue.localize_cue(self.cm.node_uuid)
             if cue._local and cue.autoload:
                 if isinstance(cue, VideoCue):
                     continue

@@ -369,38 +369,20 @@ class BaseEngine(SignalEngine):
         
         if cuelist is None:
             cuelist = self.script.cuelist
-            if not cuelist.contents or len(cuelist.contents) == 0:
-                Logger.warning('Script cuelist is empty, nothing to process')
-                return
-            # Skip the script cuelist and process the first cuelist
-            #cuelist = cuelist.contents[0]
         Logger.info(f'Processing {type(cuelist).__name__}: {cuelist.id}')
         if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
         
-        if cuelist.check_mappings(self.cm):
-            CUE_HANDLER.arm(cuelist, True)
+        cuelist.localize_cue(self.cm.node_uuid)
+        CUE_HANDLER.arm(cuelist, True)
 
         try:
             for index, item in enumerate(cuelist.contents):
-                ## TODO: remove this hardcoded local flag
-                Logger.info(f'Processing item: {type(item).__name__} {item.id}')
-                item._local = True
-                item.loaded = False
-                item.enabled = True
-                # if item.check_mappings(self.cm):
-                #     ## DEV: Hardcoded for now, should be replaced by the discovery system
-                #     item._local = True
-
-                #     Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
-                # else:
-                #     raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
-
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item)
 
-                # if item.autoload and item._local and not item.loaded:
+                item.localize_cue(self.cm.node_uuid)
                 
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
