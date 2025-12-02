@@ -1,21 +1,14 @@
-from pyossia import GlobalMessageQueue
-from threading import Thread
-from time import sleep
+import asyncio
 from typing import Optional
 
 from cuemsutils.log import Logger
-
-from ..tools.PortHandler import PORT_HANDLER
-from ..players.PlayerHandler import PLAYER_HANDLER
-from ..osc.helpers import ClientDevices
-from ..osc.OssiaClient import OssiaClient
 
 from .AsyncCommsThread import AsyncCommsThread
 from .NodesHub import NodesHub, ActionType
 
 
 class NodeCommunications(AsyncCommsThread):
-    def __init__(self, hub_address: str, commands_dict: dict, node_id: str):
+    def __init__(self, hub_address: str, node_id: str):
         """
         Initialize AsyncCommsThread for NodeEngine.
         
@@ -29,75 +22,14 @@ class NodeCommunications(AsyncCommsThread):
         - commands_dict: Dictionary of engine commands to run on the node
         """
         super().__init__()
-        self.osc_hub = NodesHub(
+        self.nng_hub = NodesHub(
             hub_address, mode=NodesHub.Mode.DIALER
         )
-        self.ocsquery_queue_loop = Thread(
-            target=self.oscquery_loop, name='OSCQueryQueueLoop'
-        )
-        self.commands_dict = commands_dict
         self.node_id = node_id
 
-    def start(self, oscquery_client: OssiaClient):
-        self.start_oscquery_queue(oscquery_client)
-        self.ocsquery_queue_loop.start()
-        super().start()
-
-    def stop(self):
-        self.stop_requested = True
-        # Stop the async communication thread first
-        super().stop()
-        # Wait for OSCQuery loop to finish
-        if hasattr(self, 'ocsquery_queue_loop') and self.ocsquery_queue_loop.is_alive():
-            self.ocsquery_queue_loop.join(timeout=1)
-    
-
-    #########################
-    # OSCQuery logic
-    #########################
-    def start_oscquery_queue(self, client: OssiaClient):
-        """
-        Add OSCQuery client to listen to Controller OSCQueryServer through GlobalMessageQueue
-        """
-        self.oscquery_queue = GlobalMessageQueue(client.device)
-    
-    def oscquery_loop(self):
+    def create_all_tasks(self):
         while not self.stop_requested:
-            message = self.oscquery_queue.pop()
-            if message is not None:
-                parameter, value = message
-                self.route_message(parameter, value)
-            else:
-                sleep(0.001)
-
-    def route_message(self, parameter, value):
-        # Exclude 'engine' common node
-        path_elements = str(parameter.node).split('/')[2:]
-        Logger.debug(f'Routing message: {path_elements}')
-        if path_elements[0] == 'command':
-            self.run_command(path_elements[1], value)
-        if path_elements[0] == 'players':
-            # Exclude other nodes' players
-            if path_elements[1] != self.node_id:
-                return
-            # Route the message to the appropriate player handler
-            if path_elements[2] == 'video':
-                PLAYER_HANDLER.route_video_message(path_elements[3:], value)
-            if path_elements[2] == 'audio':
-                PLAYER_HANDLER.route_audio_message(path_elements[3:], value)
-            if path_elements[2] == 'dmx':
-                PLAYER_HANDLER.route_dmx_message(path_elements[3:], value)
-        else:
-            Logger.debug(f'Recieved unused OSCQuery path: {str(parameter.node)}')
-            return
-
-    def run_command(self, command, value):
-        if command in self.commands_dict.keys():
-            self.commands_dict[command](value)
-            return True
-        else:
-            Logger.error(f'Command {command} not found')
-            return False
+            try:
 
     #########################
     # Nng comms to Controller
@@ -116,7 +48,7 @@ class NodeCommunications(AsyncCommsThread):
             "root_node": root_node,
             "action": ActionType.ADD
         }
-        return self.run_coroutine(self.osc_hub.add_player, message, timeout)
+        return self.run_coroutine(self.nng_hub.add_player, message, timeout)
     
     def remove_player(self, player_id: str, timeout: Optional[float] = None) -> dict:
         """
@@ -130,4 +62,4 @@ class NodeCommunications(AsyncCommsThread):
             "player_id": player_id,
             "action": ActionType.REMOVE
         }
-        return self.run_coroutine(self.osc_hub.remove_player, message, timeout)
+        return self.run_coroutine(self.nng_hub.remove_player, message, timeout)

@@ -1,10 +1,12 @@
 from functools import partial
+from pyossia import GlobalMessageQueue
+from threading import Thread
+from time import sleep
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue, MediaCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
-from .comms.NodeCommunications import NodeCommunications
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
 from .osc.OssiaClient import PlayerClient
@@ -35,6 +37,11 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.ocsquery_queue_loop = Thread(
+            target=self.oscquery_loop, name='OSCQueryQueueLoop'
+        )
+
+        self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
             PORT_HANDLER.add_config_ports(
@@ -54,14 +61,18 @@ class NodeEngine(BaseEngine):
             )
 
     def start(self):
-        self.set_communications()
+        CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
+        self.set_oscquery_comms()
         self.set_players()
         self.mtc_listener.start()
         super().start()
         
     @logged
     def stop(self):
+        self.stop_requested = True
         self.stop_node_engine()
+        if self.ocsquery_queue_loop.is_alive():
+            self.ocsquery_queue_loop.join(timeout=1)
         super().stop()
 
     def stop_node_engine(self):
@@ -79,22 +90,10 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f'Exception raised when quitting video devs: {e}')
 
-    # OSCQuery functions
-    def set_communications(self):
-        """Set the communications infrastructure"""
-        Logger.info("Starting communications for Node")
-        self.set_oscquery_commands()
-        hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
-        Logger.info(f"NNG Hub address: {hub_address}")
-        oscquery_client = self.set_oscquery_client()
-        self.communications_thread = NodeCommunications(
-            hub_address=hub_address,
-            commands_dict=self.commands_dict,
-            node_id=self.cm.node_uuid
-        )
-        self.communications_thread.start(oscquery_client)
-
-    def set_oscquery_commands(self):
+    #########################
+    # OSCQuery logic
+    #########################
+    def set_oscquery_comms(self):
         """Set the OSCQuery commands for the NodeEngine"""
         self.commands_dict = {
             'deploy': self.ready_project,
@@ -112,109 +111,55 @@ class NodeEngine(BaseEngine):
             'unload': None, # self.unload_cue_callback,
             'update': None, # self.update_player_endpoints,
         }
+        self.oscquery_client = self.set_oscquery_client()
+        self.oscquery_queue = GlobalMessageQueue(self.oscquery_client.device)
+        self.ocsquery_queue_loop.start()
+    
+    def oscquery_loop(self):
+        while not self.stop_requested:
+            message = self.oscquery_queue.pop()
+            if message is not None:
+                parameter, value = message
+                self.route_message(parameter, value)
+            else:
+                sleep(0.001)
 
+    def route_message(self, parameter, value):
+        # Exclude 'engine' common node
+        path_elements = str(parameter.node).split('/')[2:]
+        Logger.debug(f'Routing message: {path_elements}')
+        if path_elements[0] == 'command':
+            self.run_command(path_elements[1], value)
+        if path_elements[0] == 'players':
+            # Exclude other nodes' players
+            if path_elements[1] != self.cm.node_uuid:
+                return
+            # Route the message to the appropriate player handler
+            if path_elements[2] == 'video':
+                redirect_video_cmd(path_elements[3:], value)
+            if path_elements[2] == 'audio':
+                CUE_HANDLER.route_audio_message(path_elements[3:], value)
+            if path_elements[2] == 'dmx':
+                CUE_HANDLER.route_dmx_message(path_elements[3:], value)
+        else:
+            Logger.debug(f'Recieved unused OSCQuery path: {str(parameter.node)}')
+            return
+
+    def run_command(self, command, value):
+        if command in self.commands_dict.keys():
+            self.commands_dict[command](value)
+            return True
+        else:
+            Logger.error(f'Command {command} not found')
+            return False
+
+    #########################
+    # Player logic
+    #########################
     def set_players(self):
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
-
-    def add_player_endpoints(self, cue: Cue, prefix: str):
-        if not hasattr(cue, '_osc') or not isinstance(cue._osc, PlayerClient):
-            Logger.error(f'Cue {cue.id} does not have a player client')
-            return
-
-        # Get the player client
-        client: PlayerClient = cue._osc
-
-        # Add the prefix to the endpoints
-        prefix = self.build_player_prefix(cue, prefix)
-
-        # Register the endpoints in the server
-        self.add_player_nodes_to_local(client, prefix)
-        # Notify the controller to update the endpoints
-        #self.update_controller_endpoints()
-
-    def remove_player_endpoints(self, cue_id: str):
-        if not CUE_HANDLER.find_cue(cue_id):
-            Logger.error(f'Cue {cue_id} not found')
-            return
-
-        ## DEV: Remove the player endpoints from the server
-        return
-
-    def build_player_prefix(self, cue: Cue, prefix: str = None) -> str:
-        """Build the player prefix for a given cue"""
-        if not cue.id:
-            Logger.error('Cue has no id for building player prefix')
-            return ''
-        if not prefix:
-            prefix = ''
-        return f'{prefix}/{cue.id}'
-
-    # Project functions
-    def ready_project(self, project):
-        """Prepare the project to be played"""
-        self.deploy_project(project)
-        self.cm.load_project_config(project)
-        self.read_script(project)
-        self.deploy_media(project)
-        self.outputs_map = self.map_cue_outputs()
-        PLAYER_HANDLER.set_outputs_map(self.outputs_map)
-        PORT_HANDLER.clean_random_ports()
-
-    def map_cue_outputs(self, cuelist: CueList = None):
-        """Load the output mappings for the project"""
-        outputs_map = {}
-        if cuelist is None:
-            cuelist = self.script.cuelist
-        for cue in cuelist.contents:
-            if isinstance(cue, CueList):
-                outputs_map.update(self.map_cue_outputs(cue))
-            elif not isinstance(cue, MediaCue):
-                continue
-
-            outputs = [x[1] for x in cue.get_all_output_names() if x[0] == self.cm.node_uuid]
-            if outputs:
-                outputs_map[cue.id] = outputs
-        Logger.debug(f'Outputs map: {outputs_map}')
-        return outputs_map
-
-    def load_project(self, project):
-        """Load the project files to the node"""
-        if self.get_status('load') == project:
-            Logger.info(f'Project {project} already loaded')
-            return
-
-        # Obtain the project files
-        self.ready_project(project)
-        
-        # Prepare the script to be played
-        self.ready_script()
-
-        # Start cue dependencies
-        # self.set_players()
-
-        # Confirm the project is loaded
-        self.set_show_lock_file()
-        self.script.unix_name = project
-        self.set_status('load', project)
-        Logger.info(f'Project {project} loaded')
-        return True
-
-    def deploy_project(self, project):
-        """Deploy the project files to the node"""
-        self.deploy_manager.sync_files(project, 'project')
-
-    def deploy_media(self, project):
-        """Deploy the media files to the node"""
-        if not self.script:
-            Logger.error('No script loaded')
-            return
-        file_names = self.script.get_own_media_filenames(config=self.cm)
-        if len(file_names) == 0:
-            Logger.info('No media files to deploy')
-            return
-        self.deploy_manager.sync_files(project, 'media', file_names)
 
     # Audio functions
     def set_audio_players(self):
@@ -302,6 +247,7 @@ class NodeEngine(BaseEngine):
             except Exception as e:
                 Logger.exception(e)
 
+    # DMX functions
     def set_dmx_players(self):
         """Set the DMX player for this node and register its endpoints."""
         # Assign a port for the DMX player
@@ -334,21 +280,77 @@ class NodeEngine(BaseEngine):
             except Exception as e:
                 Logger.exception(e)
 
-    def redirect_video_cmd(self, path: str, value: str) -> None:
-        """Redirect the video command to the video player at front"""
-        path_parts = str(path).split('/')
-        jadeo_index = path_parts.index('jadeo')
-        jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
-        output_index = path_parts[jadeo_index - 1]
-        output_name = PLAYER_HANDLER.get_video_output_names(output_index)
-        output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
-        if not output_player:
-            Logger.error(f'No active video player found for output {output_name} at index {output_index}')
-            return
-        client: PlayerClient = output_player['osc']
-        client.set_value(jadeo_cmd, value)
 
-    # Script functions
+    #########################
+    # Project logic
+    #########################
+    def ready_project(self, project):
+        """Prepare the project to be played"""
+        self.deploy_project(project)
+        self.cm.load_project_config(project)
+        self.read_script(project)
+        self.deploy_media(project)
+        self.outputs_map = self.map_cue_outputs()
+        PLAYER_HANDLER.set_outputs_map(self.outputs_map)
+        PORT_HANDLER.clean_random_ports()
+
+    def map_cue_outputs(self, cuelist: CueList = None):
+        """Load the output mappings for the project"""
+        outputs_map = {}
+        if cuelist is None:
+            cuelist = self.script.cuelist
+        for cue in cuelist.contents:
+            if isinstance(cue, CueList):
+                outputs_map.update(self.map_cue_outputs(cue))
+            elif not isinstance(cue, MediaCue):
+                continue
+
+            outputs = [x[1] for x in cue.get_all_output_names() if x[0] == self.cm.node_uuid]
+            if outputs:
+                outputs_map[cue.id] = outputs
+        Logger.debug(f'Outputs map: {outputs_map}')
+        return outputs_map
+
+    def load_project(self, project):
+        """Load the project files to the node"""
+        if self.get_status('load') == project:
+            Logger.info(f'Project {project} already loaded')
+            return
+
+        # Obtain the project files
+        self.ready_project(project)
+        
+        # Prepare the script to be played
+        self.ready_script()
+
+        # Start cue dependencies
+        # self.set_players()
+
+        # Confirm the project is loaded
+        self.set_show_lock_file()
+        self.script.unix_name = project
+        self.set_status('load', project)
+        Logger.info(f'Project {project} loaded')
+        return True
+
+    def deploy_project(self, project):
+        """Deploy the project files to the node"""
+        self.deploy_manager.sync_files(project, 'project')
+
+    def deploy_media(self, project):
+        """Deploy the media files to the node"""
+        if not self.script:
+            Logger.error('No script loaded')
+            return
+        file_names = self.script.get_own_media_filenames(config=self.cm)
+        if len(file_names) == 0:
+            Logger.info('No media files to deploy')
+            return
+        self.deploy_manager.sync_files(project, 'media', file_names)
+
+    #########################
+    # Script logic
+    #########################
     def ready_script(self):
         """Check if the script is ready to be played"""
         if not self.script:
@@ -362,12 +364,6 @@ class NodeEngine(BaseEngine):
         CUE_HANDLER.disarm_all()
         self.initial_cuelist_process()
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
-
-    def get_config_ports(self):
-        """Create a dict of ports from the config"""
-        k = [i for i in self.cm.node_conf.keys() if 'port' in i and is_int(self.cm.node_conf[i])]
-        v = [int(self.cm.node_conf[i]) for i in k]
-        return dict(zip(k, v))
 
     def go_script(self, value):
         if self.get_status('running') == "yes":
@@ -441,3 +437,69 @@ def get_config_ports(node_conf: dict) -> dict:
     k = [i for i in node_conf.keys() if 'port' in i and is_int(node_conf[i])]
     v = [int(node_conf[i]) for i in k]
     return dict(zip(k, v))
+
+
+def redirect_audio_cmd(path_parts: list[str], value: str) -> None:
+    """Redirect the audio command to the audio player"""
+    if path_parts[0] == 'mixer':
+        redirect_audio_mixer_cmd(path_parts[1:], value)
+    elif path_parts[0] == 'cue':
+        redirect_audio_player_cmd(path_parts[1:], value)
+    else:
+        Logger.error(f'Invalid audio command: {path_parts}')
+        return
+
+def redirect_audio_mixer_cmd(path_parts: list[str], value: str) -> None:
+    """Redirect the audio mixer command to the audio mixer
+     Follows the logic:
+     <output_index>/master/volume -> /audiomixer/0_mixer/master
+     <output_index>/0/volume -> /audiomixer/0_mixer/0
+     <output_index>/1/volume -> /audiomixer/0_mixer/1
+     ...
+    Args:
+        path_parts: List of path parts
+        value: Value to set
+    """
+    output_index, channel, _ = path_parts
+    mixer_cmd = f'/audiomixer/0_mixer/{channel}'
+    PLAYER_HANDLER.get_audio_mixer_client().set_value(mixer_cmd, value)
+
+def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
+    """Redirect the audio mixer command to the audio mixer
+     Follows the logic:
+     <cue_uuid>/master/volume -> /volmaster
+     <cue_uuid>/0/volume -> /vol0
+     <cue_uuid>/1/volume -> /vol1
+     ...
+    
+    Args:
+        path_parts: List of path parts
+        value: Value to set
+    """
+    cue_uuid, channel, _ = path_parts
+    audio_cmd = f'/vol{channel}'
+    cue = CUE_HANDLER.get_armed_cue(cue_uuid)
+    if not cue:
+        Logger.error(f'Cue {cue_uuid} not found')
+        return
+    client: PlayerClient = cue._osc
+    client.set_value(audio_cmd, value)
+
+def redirect_dmx_cmd(path_parts: list[str], value: str) -> None:
+    """Redirect the DMX command to the DMX player"""
+    dmx_index = path_parts.index('mixer') + 1 # +1 to skip the 'mixer' keyword
+    dmx_cmd = '/' + '/'.join(path_parts[dmx_index:])
+    PLAYER_HANDLER.get_dmx_player_client().set_value(dmx_cmd, value)
+
+def redirect_video_cmd(path_parts: list[str], value: str) -> None:
+    """Redirect the video command to the video player at front"""
+    jadeo_index = path_parts.index('jadeo')
+    jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
+    output_index = path_parts[jadeo_index - 1]
+    output_name = PLAYER_HANDLER.get_video_output_names(int(output_index))
+    output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
+    if not output_player:
+        Logger.error(f'No active video player found for output {output_name} at index {output_index}')
+        return None
+    client: PlayerClient = output_player['osc']
+    client.set_value(jadeo_cmd, value)
