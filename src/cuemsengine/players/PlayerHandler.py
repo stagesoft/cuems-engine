@@ -41,10 +41,11 @@ class PlayerHandler:
             cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
             cls._instance._video_output_names = []
+            cls._instance._video_players = {}
+            cls._instance._outputs_map = None
             cls._instance._lock = RLock()  # Use RLock to allow reentrant locking
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
-            cls._instance._video_players = {}
         return cls._instance
 
     # ---------------------------
@@ -227,16 +228,17 @@ class PlayerHandler:
     def set_video_player(self, cue: VideoCue):
         """Sets the video player for the given cue"""
         Logger.debug(f'Setting video player for cue {cue.id}')
-        if not self._front_video_player:
-            # Initialize the front video player
-            player = self.get_active_videoplayer(self.get_cue_output_name(cue))
-            self._front_video_player = 1
-        else:
-            player = self.get_inactive_videoplayer(self.get_cue_output_name(cue))
-        
-        if not player:
+        output_name = self.get_cue_output_name(cue)
+        if not output_name:
             Logger.error(f'No video player found for cue {cue.id}')
             raise ValueError(f'No video player found for cue {cue.id}')
+        
+        if not self._front_video_player:
+            # Initialize the front video player
+            player = self.get_active_videoplayer(output_name)
+            self._front_video_player = 1
+        else:
+            player = self.get_inactive_videoplayer(output_name)
 
         cue._osc = player['osc']
         self.store_cue_player(cue, player['player'])
@@ -251,6 +253,7 @@ class PlayerHandler:
 
     def reset_video_players(self):
         """Resets the video players and kills their processes."""
+        Logger.debug('Resetting video players')
         with self._lock:
             # Kill all video player processes before resetting
             for output_name, players in list(self._video_players.items()):
@@ -270,24 +273,10 @@ class PlayerHandler:
     def reset_all(self):
         """Complete reset of PlayerHandler for testing"""
         Logger.debug('Performing complete PlayerHandler reset')
-        with self._lock:
-            # Kill and clear all video players
-            for output_name, players in list(self._video_players.items()):
-                for player_dict in players:
-                    try:
-                        if 'player' in player_dict:
-                            player = player_dict['player']
-                            player.kill()
-                            if player.is_alive():
-                                player.join(timeout=0.5)
-                    except Exception:
-                        pass
-            
-            # Reset all state
-            self._video_players = {}
-            self._video_output_names = []
-            self._cue_players = {}
-            self._front_video_player = None
+        self.reset_video_players()
+        self._cue_players = {}
+        self._front_video_player = None
+        self._outputs_map = None
 
     def start_video_outputs(
         self,
@@ -398,16 +387,27 @@ class PlayerHandler:
             self._player_endpoints_generator(cue)
         except Exception as e:
             Logger.error(f'Error setting player endpoints for cue {cue.id}: {e}')
+    
+    def set_outputs_map(self, outputs_map: dict):
+        """Set the outputs map for the player handler"""
+        self._outputs_map = outputs_map
 
-    def get_cue_output_name(self, cue: Cue) -> str:
-        """Get the output name for a given cue."""
-        outputs_key = next(iter(cue.outputs))
-        Logger.debug(f'Cue outputs: {outputs_key} ')
-        Logger.debug(f'video player keys: {self._video_players.keys()}')
-        Logger.debug(f"Output key is {outputs_key} and output name {outputs_key['output_name'][-1]}")
-        output_id = outputs_key['output_name'][-1]
+    def get_cue_output_name(self, cue: Cue) -> str | None:
+        """Get the output name for a given cue from the outputs map.
+        
+        Args:
+            cue: The cue to get the output name for
 
-        return output_id
+        Returns:
+            The output name for the given cue or None if the cue is not found in the outputs map
+        
+        Raises:
+            AttributeError: If the outputs map is not set
+        """
+        if self._outputs_map is None:
+            Logger.error('Outputs map not set')
+            raise AttributeError('Outputs map not set')
+        return self._outputs_map.get(cue.id, None)
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""
@@ -415,6 +415,8 @@ class PlayerHandler:
         if path[-1] != 'media':
             path.append('media')
         self._media_folder = '/' + '/'.join(path)
+        if self._media_folder[0:2] == "//":
+            self._media_folder = self._media_folder[1:]
 
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""

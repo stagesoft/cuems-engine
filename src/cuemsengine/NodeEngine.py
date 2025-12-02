@@ -1,6 +1,6 @@
 from functools import partial
 
-from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
+from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue, MediaCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
@@ -158,7 +158,26 @@ class NodeEngine(BaseEngine):
         self.cm.load_project_config(project)
         self.read_script(project)
         self.deploy_media(project)
+        self.outputs_map = self.map_cue_outputs()
+        PLAYER_HANDLER.set_outputs_map(self.outputs_map)
         PORT_HANDLER.clean_random_ports()
+
+    def map_cue_outputs(self, cuelist: CueList = None):
+        """Load the output mappings for the project"""
+        outputs_map = {}
+        if cuelist is None:
+            cuelist = self.script.cuelist
+        for cue in cuelist.contents:
+            if isinstance(cue, CueList):
+                outputs_map.update(self.map_cue_outputs(cue))
+            elif not isinstance(cue, MediaCue):
+                continue
+
+            outputs = [x[1] for x in cue.get_all_output_names() if x[0] == self.cm.node_uuid]
+            if outputs:
+                outputs_map[cue.id] = outputs
+        Logger.debug(f'Outputs map: {outputs_map}')
+        return outputs_map
 
     def load_project(self, project):
         """Load the project files to the node"""
@@ -174,9 +193,6 @@ class NodeEngine(BaseEngine):
 
         # Start cue dependencies
         # self.set_players()
-
-        # Check local cues
-        # self.check_local_cues(self.script.cuelist)
 
         # Confirm the project is loaded
         self.set_show_lock_file()
@@ -198,31 +214,7 @@ class NodeEngine(BaseEngine):
         if len(file_names) == 0:
             Logger.info('No media files to deploy')
             return
-
         self.deploy_manager.sync_files(project, 'media', file_names)
-
-    # Check functions
-    def check_local_cues(self, cuelist: CueList):
-        """Check the local cues and ensure that the _local attribute is set to True"""
-        if not hasattr(cuelist, 'contents') or not cuelist.contents:
-            Logger.info('No cues to check')
-            return
-
-        for cue in cuelist.contents:
-            # ignore return value found in check_mappings
-            _ = cue.localize_cue(self.cm.node_uuid)
-            if cue._local and cue.autoload:
-                if isinstance(cue, VideoCue):
-                    continue
-                CUE_HANDLER.arm(cue, True)
-            if isinstance(cue, CueList):
-                self.check_local_cues(cue)
-
-    def check_audio_devs(self):
-        pass
-
-    def check_dmx_devs(self):
-        pass
 
     # Audio functions
     def set_audio_players(self):
