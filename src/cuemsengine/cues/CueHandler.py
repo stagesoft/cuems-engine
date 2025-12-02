@@ -5,6 +5,7 @@ from cuemsutils.cues import VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import logged, Logger
 
+from ..comms.NodeCommunications import NodeCommunications
 from .run_cue import run_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
@@ -35,7 +36,23 @@ class CueHandler:
             cls._instance._lock = Lock()
         return cls._instance
 
-    ## Armed Cues List Methods
+
+    # ---------------------------
+    # Communications To Controller
+    # ---------------------------
+    def set_nng_comms(self, hub_address: str, node_id: str):
+        """Set the communications infrastructure"""
+        Logger.info(f"Starting communications for Node {node_id}")
+        Logger.info(f"NNG Hub address: {hub_address}")
+        self.communications_thread = NodeCommunications(
+            hub_address=hub_address,
+            node_id=node_id
+        )
+        self.communications_thread.start()
+
+    # ---------------------------
+    # Armed Cues List Methods
+    # ---------------------------
 
     def add_armed_cue(self, cue: Cue) -> None:
         """Adds an armed cue to the list."""
