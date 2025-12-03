@@ -8,20 +8,59 @@ from typing import Optional, Dict, Callable
 from ..osc.helpers import Node, serialize_node, deserialize_node
 
 class ActionType(Enum):
+    """The type of action to be performed."""
     ADD = "add"
     REMOVE = "remove"
     UPDATE = "update"
 
-@dataclass
-class PlayerOperation:
-    """Represents an operation to be performed on a player's OSC nodes."""
-    action: ActionType
-    player_id: str  # Unique player identifier
-    node_data: Optional[dict]  # None for REMOVE operations
-    sender: str  # Node that sent this player
+class OperationType(Enum):
+    """The type of operation to be performed."""
+    CUE = "cue"
+    PLAYER = "player"
 
+@dataclass
+class NodeOperation:
+    """Represents an operation to be performed from/to a node."""
+    type: OperationType
+    action: ActionType
+    sender: str
+    target: str
+    data: dict
+
+    def duplicate(self):
+        return self.__class__(
+            type=self.type,
+            action=self.action,
+            sender=self.sender,
+            target=self.target,
+            data=self.data if self.data else {}
+        )
+
+    @staticmethod
+    def from_message(message: Message):
+        """
+        Create a NodeOperation from a message.
+        Uses sender from message data (node_id) rather than NNG address.
+        """
+        return NodeOperation(
+            type=OperationType(message.data["type"]),
+            action=ActionType(message.data["action"]),
+            sender=message.data["sender"],
+            target=message.data["target"],
+            data=message.data["data"]
+        )
+
+    def __dict__(self):
+        return {
+            "type": self.type.value,
+            "action": self.action.value,
+            "sender": self.sender,
+            "target": self.target,
+            "data": self.data
+        }
+    
     def __str__(self):
-        return f"PlayerOperation by {self.sender}: {self.action.value} {self.player_id} (with{'out' if not self.node_data else ''} node data)"
+        return f"{type(self).__name__} by {self.sender}: {self.action.value} on {self.type.value} {self.target} (with{'out' if not self.data else ''} data)"
 
 class NodesHub(NngBusHub):
     """
@@ -34,30 +73,47 @@ class NodesHub(NngBusHub):
     
     def __init__(self, hub_address: str, mode=NngBusHub.Mode.LISTENER):
         """
-        Initialize OscNodesHub.
+        Initialize NodesHub.
         
         Parameters:
         - hub_address: The address for the bus communication
-        - mode: CONTROLLER or NODE mode
+        - mode: LISTENER or DIALER mode
+
+        Note: We use the base class queues (self.outgoing and self.incoming) to send and receive Message objects that are translated into NodeOperations.
         """
         super().__init__(hub_address, mode)
         
-        # Callback for when player operations are received (controller side)
-        self._on_player_received: Optional[Callable] = None
+        # Callback for when operations are received
+        self._on_operation_received: Optional[dict[OperationType, Callable]] = None
         
-        # Note: We use the base class queues (self.outgoing and self.incoming)
-    
     #########################
     # Nodes communication
     #########################
-    def set_recieve_callbacks(self, callback_dict: dict[str, Callable]):
+    async def get_operation(self) -> NodeOperation | None:
         """
-        Set the callbacks to be invoked when nodes send messages are received.
+        Get the next operation from the queue and return it as a NodeOperation object.
+        """
+        message = await self.get_message()
+        if not message:
+            return None
+        return NodeOperation.from_message(message)
+
+    async def send_operation(self, operation: NodeOperation):
+        """
+        Send an operation to the send queue.
+        """
+        message = Message(sender=operation.sender, data=operation.__dict__())
+        await self.send_message(message)
+        Logger.debug(f"Queued {operation.action.value} operation for {operation.type.value} {operation.target}")
+
+    def set_receive_callbacks(self, callback_dict: dict[OperationType, Callable]):
+        """
+        Set the callbacks to be invoked when nodes send operations.
         
-        The keys of the dictionary are the action names to perform, and the values are the callbacks.
-        The callbacks must take the following arguments: (sender, message)
+        The keys of the dictionary are the operation types to perform, and the values are the callbacks.
+        The callbacks must take the following argument: (operation: NodeOperation)
         """
-        self._on_message_received = callback_dict
+        self._on_operation_received = callback_dict
 
     async def start_message_receiver(self):
         """
@@ -68,147 +124,26 @@ class NodesHub(NngBusHub):
         
         The callback receives: (sender, message)
         """
-        if not self._on_message_received:
-            Logger.warning("No message callbacks set")
+        if not self._on_operation_received:
+            Logger.warning("No operation callbacks set")
             return
         
         while True:
             try:
-                message = await self.get_message()
-                
-                if message:
-                    sender_key = str(message.sender)
-                    
-                    Logger.info(
-                        f"Received {message.action} message from {sender_key}"
-                        f"from {sender_key}"
-                    )
-                    
-                    # Invoke callback if set
-                    message_function = self._on_message_received.get(message.action)
-                    if message_function:
-                        if asyncio.iscoroutinefunction(message_function):
-                            await message_function(sender_key, message.data)
-                        else:
-                            message_function(sender_key, message.data)
-                
-                await asyncio.sleep(0.01)  # Small delay to prevent tight loop
-                
-            except Exception as e:
-                Logger.error(f"{type(e)} handling {message}: {e}")
-                await asyncio.sleep(1)  # Back off on error
-
-    #########################
-    # Player communication
-    #########################
-    def set_player_received_callback(self, callback: Callable[[str, str, Optional[dict], ActionType], None]):
-        """
-        Set a callback to be invoked when player operations are received (controller side).
-        
-        Parameters:
-        - callback: Function that takes (sender, player_id, node_data, action) as arguments
-                   node_data will be None for REMOVE operations
-        """
-        self._on_player_received = callback
-    
-    async def send_player_operation(self, action: ActionType, player_id: str, root_node: Optional[Node | None] = None):
-        """
-        Send a player operation to the send queue (node side).
-        
-        Parameters:
-        - action: The type of operation (ADD, UPDATE or REMOVE)
-        - player_id: Unique identifier for the player
-        - root_node: The root node of the player's OSC structure (optional for REMOVE operations)
-        """
-        # Serialize immediately and create message
-        message = {
-            "__type__": "osc_player",
-            "player_id": player_id,
-            "action": action.value,
-            "node_data": serialize_node(root_node)
-        }
-        
-        # Use base class send_message which adds to self.outgoing queue
-        await self.send_message(message)
-        Logger.debug(f"Queued {action.value} operation for player {player_id}")
-
-    async def get_player_operation(self) -> PlayerOperation | None:
-        """
-        Get the next player operation from the queue (controller side).
-        
-        This filters messages to only return OSC player operations.
-        
-        Returns:
-        - PlayerOperation or None if no player operations available
-        """
-        try:
-            message = await self.get_message()
-            
-            # message.data is already a dict (JSON-decoded by base class)
-            data = message.data
-            
-            # Check if this is an OSC player message
-            if data.get("__type__") == "osc_player":
-                action = ActionType(data["action"])
-                player_id = data["player_id"]
-                node_data = data.get("node_data")
-                
-                return PlayerOperation(
-                    action=action,
-                    player_id=player_id,
-                    node_data=node_data,
-                    sender=message.sender
-                )
-            else:
-                # Not a player operation, could be a regular message
-                Logger.debug(f"Received non-player message type: {data.get('__type__')}")
-                return None
-                
-        except Exception as e:
-            Logger.error(f"Error getting player operation: {e}")
-            return None
-    
-    async def start_player_receiver(self):
-        """
-        Continuously receive player operations and invoke callback (controller side).
-        
-        This runs in a loop, receiving player operations and invoking the callback
-        if set. Should be run as a background task.
-        
-        The callback receives: (sender, player_id, node_data, action)
-        - node_data will be None for REMOVE operations
-        """
-        while True:
-            try:
-                operation = await self.get_player_operation()
+                operation = await self.get_operation()
                 
                 if operation:
-                    sender_key = str(operation.sender)
+                    Logger.debug(f"Received {operation}")
                     
-                    Logger.info(
-                        f"Received {operation.action.value} for player {operation.player_id} "
-                        f"from {sender_key}"
-                    )
-                    
-                    # Invoke callback if set
-                    if self._on_player_received:
-                        if asyncio.iscoroutinefunction(self._on_player_received):
-                            await self._on_player_received(
-                                sender_key,
-                                operation.player_id,
-                                operation.node_data,
-                                operation.action
-                            )
+                    # Invoke callback if set (lookup by enum, not string value)
+                    message_function = self._on_operation_received.get(operation.type)
+                    if message_function:
+                        if asyncio.iscoroutinefunction(message_function):
+                            await message_function(operation)
                         else:
-                            self._on_player_received(
-                                sender_key,
-                                operation.player_id,
-                                operation.node_data,
-                                operation.action
-                            )
-                
-                await asyncio.sleep(0.01)  # Small delay to prevent tight loop
+                            message_function(operation)
+                await asyncio.sleep(0.01)  # Prevent tight loop
                 
             except Exception as e:
-                Logger.error(f"Error in start_player_receiver: {e}")
-                await asyncio.sleep(1)  # Back off on error
+                Logger.error(f"{type(e)} handling {operation}: {e}")
+                await asyncio.sleep(0.1)  # Back off on error

@@ -99,12 +99,29 @@ class AsyncCommsThread(Thread):
     async def stop_async(self) -> None:
         """Async stop handler.
         
-        Stops the event loop by scheduling a call to stop it. This is called
-        internally by `stop()` and should not be called directly.
+        Cancels all running tasks, waits for cleanup, then stops the event loop.
+        This is called internally by `stop()` and should not be called directly.
         
         Note:
             This coroutine must run in the same event loop that it stops.
         """
+        # Get all tasks except the current one
+        current_task = asyncio.current_task()
+        pending_tasks = [
+            task for task in asyncio.all_tasks(self.event_loop)
+            if task is not current_task and not task.done()
+        ]
+        
+        # Cancel all pending tasks
+        for task in pending_tasks:
+            task.cancel()
+        
+        # Wait for all tasks to complete cancellation
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+            Logger.debug(f'{self.name} cancelled {len(pending_tasks)} pending tasks')
+        
+        # Now stop the event loop
         self.event_loop.call_soon_threadsafe(self.event_loop.stop)
         Logger.info(f'{self.name} event loop stopped')
 

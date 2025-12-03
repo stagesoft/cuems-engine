@@ -4,7 +4,7 @@ from typing import Optional
 from cuemsutils.log import Logger
 
 from .AsyncCommsThread import AsyncCommsThread
-from .NodesHub import NodesHub, ActionType
+from .NodesHub import NodesHub, ActionType, OperationType, NodeOperation
 
 
 class NodeCommunications(AsyncCommsThread):
@@ -28,58 +28,44 @@ class NodeCommunications(AsyncCommsThread):
         self.node_id = node_id
 
     def create_all_tasks(self):
-        """Create async tasks for node communications
-        
-        Note: NNG hub is not started since communication happens via OSCQuery
-        """
-        Logger.info('Starting all tasks in NodeCommunications (OSCQuery mode)')
-        # Return empty list - communication happens via OSCQuery, not NNG
-        return []
-    
-    async def hub_message_receiver(self):
-        """Receive and process messages from the NNG hub"""
-        Logger.info('Hub message receiver started')
-        while not self.stop_requested:
-            try:
-                message = await self.nng_hub.get_message()
-                if message and isinstance(message.data, dict):
-                    msg_type = message.data.get('__type__')
-                    if msg_type == 'command':
-                        action = message.data.get('action')
-                        value = message.data.get('value', '')
-                        Logger.info(f'Received command from hub: {action}')
-                        self.run_command(action, value)
-                await asyncio.sleep(0.01)
-            except asyncio.CancelledError:
-                Logger.debug('Hub message receiver cancelled')
-                break
-            except Exception as e:
-                if self.stop_requested:
-                    break
-                Logger.error(f'Error in hub_message_receiver: {e}')
-                await asyncio.sleep(1)
-        Logger.info('Hub message receiver stopped')
+        """Create async tasks for node communications."""
+        Logger.info('Starting all tasks in NodeCommunications')
+        return [
+            asyncio.create_task(self.nng_hub.start())
+        ]
 
     #########################
     # Nng comms to Controller
     #########################
-    def add_player(self, player_id: str, root_node, timeout: Optional[float] = None) -> dict:
+    def send_operation(self, operation: NodeOperation, timeout: Optional[float] = None):
+        """
+        Send a NodeOperation to the controller (thread-safe).
+        
+        Parameters:
+        - operation: NodeOperation to send
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        return self.run_coroutine(self.nng_hub.send_operation, operation, timeout)
+    
+    def add_player(self, player_id: str, data: dict, timeout: Optional[float] = None):
         """
         Add a player to the OSC hub (thread-safe).
         
         Parameters:
         - player_id: Unique identifier for the player
-        - root_node: pyossia Node object (the player's device root)
+        - data: Player data to send
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        message = {
-            "player_id": player_id,
-            "root_node": root_node,
-            "action": ActionType.ADD
-        }
-        return self.run_coroutine(self.nng_hub.add_player, message, timeout)
+        operation = NodeOperation(
+            type=OperationType.PLAYER,
+            action=ActionType.ADD,
+            sender=self.node_id,
+            target=player_id,
+            data=data
+        )
+        return self.send_operation(operation, timeout)
     
-    def remove_player(self, player_id: str, timeout: Optional[float] = None) -> dict:
+    def remove_player(self, player_id: str, timeout: Optional[float] = None):
         """
         Remove a player from the OSC hub (thread-safe).
         
@@ -87,8 +73,11 @@ class NodeCommunications(AsyncCommsThread):
         - player_id: Unique identifier of the player to remove
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        message = {
-            "player_id": player_id,
-            "action": ActionType.REMOVE
-        }
-        return self.run_coroutine(self.nng_hub.remove_player, message, timeout)
+        operation = NodeOperation(
+            type=OperationType.PLAYER,
+            action=ActionType.REMOVE,
+            sender=self.node_id,
+            target=player_id,
+            data=None
+        )
+        return self.send_operation(operation, timeout)

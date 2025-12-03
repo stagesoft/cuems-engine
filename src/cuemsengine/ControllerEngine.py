@@ -6,7 +6,7 @@ from cuemsutils.log import Logger, logged
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
 from .comms.ControllerCommunications import ControllerCommunications
-from .comms.NodesHub import PlayerOperation
+from .comms.NodesHub import NodeOperation, ActionType
 from .osc import ENGINE_CMD_ENDPOINTS
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.PortHandler import PORT_HANDLER
@@ -71,7 +71,7 @@ class ControllerEngine(BaseEngine):
         )
         self.communications_thread.start()
 
-    def osc_player_received_callback(self, operation: PlayerOperation):
+    def osc_player_received_callback(self, operation: NodeOperation):
         """
         Callback invoked when players are received from nodes.
         

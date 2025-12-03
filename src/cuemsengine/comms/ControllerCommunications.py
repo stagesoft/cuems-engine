@@ -8,7 +8,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
 
 from .AsyncCommsThread import AsyncCommsThread
-from .NodesHub import NodesHub, PlayerOperation
+from .NodesHub import NodesHub, NodeOperation, OperationType
 
 
 class ControllerCommunications(AsyncCommsThread):
@@ -22,16 +22,16 @@ class ControllerCommunications(AsyncCommsThread):
     - HWDiscovery messages
     """
     def __init__(self, 
-                 osc_hub_address: str,
+                 nng_hub_address: str,
                  editor_callback: Callable,
-                 player_operation_callback: Optional[Callable] = None):
+                 node_operation_callback: dict[OperationType, Callable]):
         """
         Initialize AsyncCommsThread for ControllerEngine.
         
         Parameters:
-        - osc_hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
+        - nng_hub_address: TCP/IPC address for NNG hub (e.g., "tcp://127.0.0.1:5555")
         - editor_callback: Callback for editor messages
-        - player_operation_callback: Callback for received player operations
+        - node_operation_callback: Callback dictionary for received node operations
         """
         super().__init__()
         
@@ -43,22 +43,20 @@ class ControllerCommunications(AsyncCommsThread):
         self.nodeconf = Communicator(IpcAddress.NODECONF.value)
         
         # Initialize OSC hub based on mode
-        Logger.info(f'Initializing OSC hub: {osc_hub_address} in {NodesHub.Mode.LISTENER.value} mode')
-        self.osc_hub = NodesHub(osc_hub_address, mode=NodesHub.Mode.LISTENER)
+        Logger.info(f'Initializing NNG hub: {nng_hub_address} in {NodesHub.Mode.LISTENER.value} mode')
+        self.nng_hub = NodesHub(
+            hub_address=nng_hub_address, mode=NodesHub.Mode.LISTENER
+        )
         
-        # Set player callback
-        self.player_operation_callback = player_operation_callback
-        if not player_operation_callback:
-            Logger.warning('No player_operation_callback provided in CONTROLLER mode')
-        if player_operation_callback:
-            self.osc_hub.set_player_received_callback(player_operation_callback)
+        # Set operation callbacks
+        self.nng_hub.set_receive_callbacks(node_operation_callback)
 
     def create_all_tasks(self):
         Logger.info('Starting all tasks in ControllerCommunications')
         return [
             asyncio.create_task(self.editor_listener()),
-            asyncio.create_task(self.osc_hub.start()),
-            asyncio.create_task(self.osc_hub.start_player_receiver())
+            asyncio.create_task(self.nng_hub.start()),
+            asyncio.create_task(self.nng_hub.start_message_receiver())
         ]
 
 
