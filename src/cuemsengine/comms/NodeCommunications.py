@@ -81,3 +81,41 @@ class NodeCommunications(AsyncCommsThread):
             data=None
         )
         return self.send_operation(operation, timeout)
+
+    def add_cue(self, cue_id: str, offset: str, timeout: Optional[float] = None):
+        """
+        Add a cue to the OSC hub (thread-safe).
+        
+        Parameters:
+        - cue_id: Unique identifier of the cue to add
+        - data: Data to send
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        operation = NodeOperation(
+            type=OperationType.CUE,
+            action=ActionType.ADD,
+            sender=self.node_id,
+            target=cue_id,
+            data={
+                'id': cue_id,
+                'offset': offset
+            }
+        )
+        return self.send_operation(operation, timeout)
+
+    def remove_cue(self, cue_id: str, timeout: Optional[float] = None):
+        """
+        Remove a cue from the OSC hub (thread-safe).
+        
+        Parameters:
+        - cue_id: Unique identifier of the cue to remove
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        operation = NodeOperation(
+            type=OperationType.CUE,
+            action=ActionType.REMOVE,
+            sender=self.node_id,
+            target=cue_id,
+            data={'id': cue_id}
+        )
+        return self.send_operation(operation, timeout)

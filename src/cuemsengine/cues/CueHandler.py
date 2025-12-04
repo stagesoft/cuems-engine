@@ -126,6 +126,8 @@ class CueHandler:
         """Disarms a cue by removing it from the armed_cues list."""
         PLAYER_HANDLER.remove_cue_player(cue)
 
+        self.communications_thread.remove_cue(cue.id)
+
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
@@ -175,7 +177,12 @@ class CueHandler:
             sleep(cue.prewait.milliseconds / 1000)
 
         if cue._local:
+            self.communications_thread.add_cue(cue.id, {
+                'id': cue.id,
+                'offset': cue._start_mtc.milliseconds
+            })
             run_cue(cue, mtc)
+            self.communications_thread.remove_cue(cue.id)
 
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
@@ -206,15 +213,6 @@ class CueHandler:
             sleep(1)
         thread.join()
         Logger.info(f'{thread.name} finished')
-
-    def route_player_message(self, parameter: str, value):
-        """Routes a player message to the cue."""
-        path_elements = parameter.split('/')
-        cue_osc = self.get_armed_cue(path_elements[0])
-        if cue_osc is None:
-            Logger.error(f'Cue {path_elements[0]} not found')
-            return
-        cue_osc._osc.set_value('/' + '/'.join(path_elements[1:]), value)
 
 
 # ---------------------------
