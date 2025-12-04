@@ -116,6 +116,8 @@ class CueHandler:
             cue.loaded = True
             if not found:
                 self.add_armed_cue(cue)
+            if isinstance(cue, AudioCue):
+                self.communications_thread.add_player(f'audioplayer_{cue.id}', None)
 
         if cue.post_go == 'go':
             self.arm(cue._target_object, init)
@@ -126,11 +128,12 @@ class CueHandler:
         """Disarms a cue by removing it from the armed_cues list."""
         PLAYER_HANDLER.remove_cue_player(cue)
 
-        self.communications_thread.remove_cue(cue.id)
-
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
+            if isinstance(cue, AudioCue):
+                self.communications_thread.remove_player(f'audioplayer_{cue.id}')
+            self.communications_thread.remove_cue(cue.id)
             return True
 
         return False

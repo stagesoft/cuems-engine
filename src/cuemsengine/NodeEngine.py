@@ -225,6 +225,9 @@ class NodeEngine(BaseEngine):
             Logger.error(e)
             Logger.error(f'Exiting...')
             exit(-1)
+        
+        for output in PLAYER_HANDLER._video_players.keys():
+            CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None)
 
     def quit_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
@@ -232,6 +235,9 @@ class NodeEngine(BaseEngine):
                 dev['osc'].set_value('/jadeo/cmd', 'quit')
             except Exception as e:
                 Logger.exception(e)
+
+        for output in PLAYER_HANDLER._video_players.keys():
+            CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}')
 
     def disconnect_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
@@ -265,6 +271,7 @@ class NodeEngine(BaseEngine):
                 path=self.cm.node_conf['dmxplayer']['path'],
                 args=self.cm.node_conf['dmxplayer']['args']
             )
+            CUE_HANDLER.communications_thread.add_player(f'dmxplayer_{node_uuid}', None)
             Logger.info(f'DMX player started successfully for node {node_uuid}')
         except Exception as e:
             Logger.error(f'Error starting DMX player: {e}')
@@ -279,6 +286,7 @@ class NodeEngine(BaseEngine):
                 dmx_client.set_value('/quit', 1)
             except Exception as e:
                 Logger.exception(e)
+        CUE_HANDLER.communications_thread.remove_player(f'dmxplayer_{self.cm.node_uuid}')
 
 
     #########################
