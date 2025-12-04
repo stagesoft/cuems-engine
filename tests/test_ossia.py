@@ -240,3 +240,54 @@ def test_oscclient_in_separate_process(process_cleanup):
     # Cleanup (handled by process_cleanup, but ensure it's terminated)
     if client_process.is_alive():
         client_process.terminate()
+
+def test_server_node_removal_affects_children():
+    # ARRANGE
+    from cuemsengine.osc.OssiaServer import OssiaServer
+    from cuemsengine.osc.helpers import ServerDevices
+    from time import sleep
+
+    server = OssiaServer(
+        endpoints = {
+            "/test": [ValueType.Int, print_callback, 10],
+            "/test/test1": [ValueType.Int, print_callback, 20],
+            "/test/test2": [ValueType.Int, print_callback, 30],
+        },
+        local_port = 9002
+    )
+    sleep(0.5)
+    assert len(server.device.root_node.children()) == 1
+    test_node = server.get_node("/test")
+    assert len(test_node.children()) == 2
+    server.device.root_node.remove_child("test")
+    assert len(server.device.root_node.children()) == 0
+
+def test_server_node_removal_affects_all_children():
+    # ARRANGE
+    from cuemsengine.osc.OssiaServer import OssiaServer
+    from cuemsengine.osc.helpers import ServerDevices
+    from time import sleep
+
+    server = OssiaServer(
+        endpoints = {
+            "/test1": [ValueType.Int, print_callback, 20],
+            "/testout": [ValueType.Int, print_callback, 20],
+            "/test1/test22": [ValueType.Int, print_callback, 30],
+            "/test1/test2/test3": [ValueType.Int, print_callback, 30],
+            "/test1/test2/test3/test4": [ValueType.Int, print_callback, 30],
+        },
+        local_port = 9002
+    )
+    sleep(0.5)
+    assert len(server.device.root_node.children()) == 2
+    test_node = server.get_node("/test1")
+    assert len(test_node.children()) == 2
+    server.device.root_node.remove_child("/test1/test2")
+    assert len(test_node.children()) == 1
+    assert len(server.device.root_node.children()) == 2
+
+    test_node = server.get_node("/test1/test22")
+    assert len(test_node.children()) == 0
+    
+    server.remove_node("/test1")
+    assert len(server.device.root_node.children()) == 1

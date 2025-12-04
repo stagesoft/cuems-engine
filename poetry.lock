@@ -893,18 +893,18 @@ docs = ["sphinx", "sphinx-rtd-theme", "sphinxcontrib-trio"]
 
 [[package]]
 name = "pyossia"
-version = "1.0.4+2308.g8f2c10bcf"
+version = "2.0.0rc6"
 description = "libossia is a modern C++, cross-environment distributed object model for creative coding and interaction scoring Edit"
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "pyossia-1.0.4+2308.g8f2c10bcf-cp311-cp311-linux_x86_64.whl", hash = "sha256:f3f492c12493c64d3063ccbe80327ffef31fb68507dec076ec0ea244b772da91"},
+    {file = "pyossia-2.0.0rc6-cp311-cp311-linux_x86_64.whl", hash = "sha256:dbd6345b64e01eae70eb033e03bfeefd2e4e4474bb58607c71355b427bc998ca"},
 ]
 
 [package.source]
 type = "file"
-url = "../libossia/build/src/ossia-python/dist/pyossia-1.0.4+2308.g8f2c10bcf-cp311-cp311-linux_x86_64.whl"
+url = "../libossia/build/src/ossia-python/dist/pyossia-2.0.0rc6-cp311-cp311-linux_x86_64.whl"
 
 [[package]]
 name = "pytest"
@@ -1299,4 +1299,4 @@ docs = ["Sphinx", "elementpath (>=4.4.0,<5.0.0)", "jinja2", "sphinx-rtd-theme"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "ba1c49550470cb0e2bebf498f0ba073d9184516a3e37e18507c0c10f723bf68f"
+content-hash = "43a6c7593829d6db44ab087d7606e71f99c43d66b94750201a7f668d49333c8d"
