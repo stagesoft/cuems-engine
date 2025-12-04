@@ -43,7 +43,8 @@ def start_audio_output(
     path: str,
     args: list[str],
     media: str,
-    uuid: str
+    uuid: str,
+    timeout: float = 5.0
 ) -> tuple[AudioPlayer, AudioClient]:
     """Starts an audio output
     
@@ -53,9 +54,13 @@ def start_audio_output(
         args: The arguments to pass to the audio player
         media: The media to play
         uuid: The uuid of the audio output
+        timeout: Maximum time to wait for player to start (seconds)
 
     Returns:
         A tuple containing the audio player and client
+        
+    Raises:
+        RuntimeError: If player fails to start within timeout or thread dies
     """
     player = AudioPlayer(
         port = port,
@@ -64,9 +69,7 @@ def start_audio_output(
         media = media,
         uuid = uuid
     )
-    player.start()
-    while player.pid is None:
-        sleep(0.001)
+    player.start(timeout=timeout)
 
     client = AudioClient(
         player_port = port,

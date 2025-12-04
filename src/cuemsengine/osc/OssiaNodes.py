@@ -57,9 +57,12 @@ class OssiaNodes(object):
         return self.nodes[path]
     
     def remove_node(self, path: str):
-        """Remove a node from the collection
+        """Remove a node from the collection and all its children
         """
-        del self.nodes[path]
+        self.device.root_node.remove_child(path)
+        children = [k for k in self.nodes.keys() if str(k).startswith(path)]
+        for key in children:
+            del self.nodes[str(key)]
 
     def remove_device(self) -> None:
         """Remove the device and all nodes from the collection
@@ -105,8 +108,17 @@ class OssiaNodes(object):
             raise ValueError(f"callback must have 1 or 2 parameters, not {l}")
 
     @logged
-    def set_value(self, node: Union[Node, str], value):
+    def set_value(self, node: Union[Node, str], value) -> None:
         """Set a value to a node
+        Parameters:
+            - node: The node to set the value to
+                - str: The path of the node
+                - Node: The node object
+            - value: The value to set to the node
+
+        Raises:
+            - ValueError: If the node is not found
+            - ValueError: If the value could not be set to the node
         """
         if isinstance(node, str):
             try:
@@ -116,6 +128,27 @@ class OssiaNodes(object):
         node.parameter.push_value(value)
         if node.parameter.value != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
+
+    @logged
+    def get_value(self, node: Union[Node, str]):
+        """Get a value from a node
+        Parameters:
+            - node: The node to get the value from
+                - str: The path of the node
+                - Node: The node object
+
+        Returns:
+            - value: The value of the node
+        
+        Raises:
+            - ValueError: If the node is not found
+        """
+        if isinstance(node, str):
+            try:
+                node = self.nodes[node]
+            except KeyError:
+                raise ValueError("Node not found")
+        return node.parameter.value
 
     def create_endpoint(self, path: str, param_args: list | None = None):
         """Create an endpoint as a node with parameter
@@ -151,11 +184,17 @@ class OssiaNodes(object):
         nodes = {}
         if node is None:
             node = self.device.root_node
+        Logger.debug(f"{self.__class__.__name__} Node {node.name} has {len(node.children())} children")
         if len(node.children()) == 0:
             nodes[str(node)] = node
-            return nodes
-        for i in node.children():
+            return nodes        
+        for n, i in enumerate[int, Node](node.children()):
+            Logger.debug(f"Adding child {n} named {i.name}")
             nodes.update(self.nodes_from_device(i))
+            # DEV: iteration raises RuntimeError at the end of the loop
+            if  n + 1 == len(node.children()):
+                Logger.debug(f"All children from {node.name} added")
+                break
         return nodes
 
     def __del__(self):

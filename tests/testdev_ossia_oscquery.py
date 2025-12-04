@@ -49,7 +49,7 @@ def test_oscquery_server_in_separate_process(process_cleanup):
     server_process.terminate()
 
 
-def test_oscquery_context_server_in_separate_process(ossia_server_factory):
+def test_oscquery_context_server_in_separate_process(ossia_server_factory, process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
@@ -86,8 +86,8 @@ def test_oscquery_context_server_in_separate_process(ossia_server_factory):
             print(f"Error type: {error_type}")
             result_queue.put(error_type)
 
-    # Start both processes
-    server_process = Process(target=run_server, args=(server_res, stop_event))
+    # Start process (register with process_cleanup for automatic cleanup)
+    server_process = process_cleanup(Process(target=run_server, args=(server_res, stop_event)))
 
     server_process.start()
 
@@ -101,8 +101,9 @@ def test_oscquery_context_server_in_separate_process(ossia_server_factory):
     assert 10 == server_res.get(), "Server initial value was not set to 10"
     assert 80 == server_res.get(), "Server value was not set to 80"
 
-    # Cleanup
-    server_process.terminate()
+    # Cleanup (handled by process_cleanup, but ensure it's terminated)
+    if server_process.is_alive():
+        server_process.terminate()
 
 def test_oscquery_context_client_fails_alone(ossia_client_factory, capfd):
     # ARRANGE
@@ -149,7 +150,7 @@ def test_oscquery_context_client_fails_alone(ossia_client_factory, capfd):
     # else:
     #     assert client_res[1] == 40, "Client value was not set"
 
-def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, ossia_server_factory, capfd):
+def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, ossia_server_factory, capfd, process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
@@ -197,9 +198,9 @@ def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, 
             while not stop_event.is_set():
                 sleep(0.1)
 
-    # Start both processes
-    server_process = Process(target=run_server, args=(server_res, stop_event))
-    client_process = Process(target=run_client, args=(client_res, stop_event))
+    # Start both processes (register with process_cleanup for automatic cleanup)
+    server_process = process_cleanup(Process(target=run_server, args=(server_res, stop_event)))
+    client_process = process_cleanup(Process(target=run_client, args=(client_res, stop_event)))
 
     server_process.start()
     sleep(3)
@@ -209,9 +210,11 @@ def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, 
     # Stop the processes
     stop_event.set()
     server_process.join(timeout=1)
-    server_process.terminate()
+    if server_process.is_alive():
+        server_process.terminate()
     client_process.join(timeout=1)
-    client_process.terminate()
+    if client_process.is_alive():
+        client_process.terminate()
 
     # ASSERT
     # Check if values were set correctly
@@ -223,7 +226,7 @@ def test_oscquery_client_and_server_in_separate_processes(ossia_client_factory, 
     assert 20 == server_res.get(), "Server did not receive client's value 20"
     assert 40 == server_res.get(), "Server did not receive client's value 40"
 
-def test_oscquery_multiple_clients_in_separate_processes():
+def test_oscquery_multiple_clients_in_separate_processes(process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
@@ -275,9 +278,9 @@ def test_oscquery_multiple_clients_in_separate_processes():
         while not stop_event.is_set():
             sleep(0.1)
 
-    # Start processes
-    server_process = Process(target=run_server, args=(server_res, stop_event))
-    clients_process = Process(target=run_clients, args=(client1_res, client2_res, stop_event))
+    # Start processes (register with process_cleanup for automatic cleanup)
+    server_process = process_cleanup(Process(target=run_server, args=(server_res, stop_event)))
+    clients_process = process_cleanup(Process(target=run_clients, args=(client1_res, client2_res, stop_event)))
     
     server_process.start()
     sleep(0.5)  # Allow server to start before clients
@@ -289,7 +292,11 @@ def test_oscquery_multiple_clients_in_separate_processes():
     # Stop the processes
     stop_event.set()
     server_process.join(timeout=1)
+    if server_process.is_alive():
+        server_process.terminate()
     clients_process.join(timeout=1)
+    if clients_process.is_alive():
+        clients_process.terminate()
 
     # ASSERT
     # Check if values were set correctly
@@ -311,10 +318,6 @@ def test_oscquery_multiple_clients_in_separate_processes():
     assert 30 == client2_res.get(), "Client2 initial value was not set to 30"
     assert 80 == client2_res.get(), "Client2 did not receive server's value 80"
     assert 50 == client2_res.get(), "Client2 value was not set to 50"
-
-    # Cleanup
-    server_process.terminate()
-    clients_process.terminate()
 
 def test_oscquery_server_clients_main_thread():
     # ARRANGE

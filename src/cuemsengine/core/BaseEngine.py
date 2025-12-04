@@ -12,13 +12,14 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
-from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
+from ..osc import VALUE_TYPES_DICT, OssiaServer, OssiaClient, ServerDevices, ClientDevices
 from ..osc.OssiaClient import PlayerClient
 from ..osc.helpers import add_callback_to_all, add_prefix_to_all
 from ..cues.CueHandler import CUE_HANDLER
 from ..tools.PortHandler import PORT_HANDLER
 
 MTC_PORT = "Midi Through Port-0"
+CONTROLLER_NETWORK_FLAG = "NodeType.master"
 SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
 CONTROLLER_HOST = "localhost" #"controller.local"
 NODE_ENGINE_PORT = 10000
@@ -61,6 +62,7 @@ class BaseEngine(SignalEngine):
         
         self.ongoing_cue = None
         self.next_cue_pointer = None
+        self.show_locked = False
 
         Logger.info(f"{self.__class__.__name__}@{self.node_name} initialized, waiting start signal")
 
@@ -76,8 +78,16 @@ class BaseEngine(SignalEngine):
 
     def stop_all(self) -> None:
         if self.with_mtc:
-            self.stop_mtc_listener()
-        self.remove_show_lock_file()
+            try:
+                self.stop_mtc_listener()
+            except Exception as e:
+                Logger.error(f'Error stopping MTC listener: {e}')
+                raise e
+        try:
+            self.remove_show_lock_file()
+        except Exception as e:
+            Logger.error(f'Error removing show lock file: {e}')
+            raise e
 
     ### STATUS ###
     def set_status(self, property: str, value: str, strict: bool = False) -> None:
@@ -90,7 +100,7 @@ class BaseEngine(SignalEngine):
         """
         if f"_{property}" in self.status.__dict__.keys():
             Logger.debug(f'Setting property {property} to {value}')
-            self.status.__setattr__(property, str(value))
+            self.status.__setattr__(property, value)
         else:
             Logger.error(f'Property {property} not found in EngineStatus')
             if strict:
@@ -120,29 +130,24 @@ class BaseEngine(SignalEngine):
         return [i[1:] for i in vars(self.status).keys()]
     
     def get_status_endpoints(self) -> dict[str, list[Any]]:
-        return {f"/engine/status/{k[1:]}": [ValueType.String, self.status_callback, v] for k,v in vars(self.status).items()}
-             
-    def build_status_endpoints(self, host: str, func: Callable = None) -> dict:
-        """Build the endpoints for a NodeEngine"""
-        if func is None:
-            func = self.status_callback
-        keys = self.status.__dict__.keys()
-        endpoints = {}
-        for key in keys:
-            endpoints[f"/{host}/status/{key[1:]}"] = [
-                ValueType.String,
-                func
-            ]
+        endpoints = self.build_endpoints_from_status()
+        Logger.debug(f"Status endpoints: {endpoints}")
+        # remove unwanted callbacks
+        for i in ["currentcue"]:
+            endpoints[f"/engine/status/{i}"][1] = None
         return endpoints
+
+    def build_endpoints_from_status(self) -> dict[str, list[Any, Callable | None, Any]]:
+        return {
+            f"/engine/status/{k[1:]}": [VALUE_TYPES_DICT[type(v).__name__], self.status_callback, v] for k,v in vars(self.status).items()
+        }   
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
-            host = self.node_host
-        # TODO: remove this hardcoded host
-        host = CONTROLLER_HOST
+            host = self.controller_ip
         self.oscquery_server = OssiaServer(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
@@ -151,52 +156,20 @@ class BaseEngine(SignalEngine):
             endpoints = endpoints
         )
 
-    def set_oscquery_client(self, endpoints: dict = None, host: str = None, port: int = None) -> OssiaClient:
+    def set_oscquery_client(self, host: str = None, port: int = None) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
-            host = self.node_host
-        # TODO: remove this hardcoded host
-        host = CONTROLLER_HOST
+            host = self.controller_ip
         oscquery_client = OssiaClient(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),
             remote_port = port,
-            remote_type = ClientDevices.OSCQUERY,
-            endpoints = endpoints
+            remote_type = ClientDevices.OSCQUERY
         )
         Logger.debug(f"OscQueryClient created: {oscquery_client}")
         self.oscquery_client_list.append(oscquery_client)
         return oscquery_client
-
-    def server_to_client_values(
-        self, client: OssiaClient, node: str, value: Any, strip: str = ""
-    ) -> None:
-        node = str(node).strip(strip)
-        Logger.debug(f"Setting node {node} to {value} in {client}")
-        try:
-            client.set_value(node, value)
-        except Exception as e:
-            Logger.error(f"Error setting {node} to {value} in {client}: {e}")
-
-    def client_to_server_values(self, node: str, value: Any) -> None:
-        node = str(node)
-        Logger.debug(f"Setting node {node} to {value} in server")
-        self.oscquery_server.set_value(node, value)
-
-    def add_player_nodes_to_local(self, client: PlayerClient, prefix: str = "") -> None:
-        Logger.debug(f"Procesing nodes from client: {client}")
-        if not isinstance(client, PlayerClient):
-            Logger.error(f"Client {client} is not a PlayerClient")
-            return
-        def set_client_values(node: str, value: Any) -> None:
-            self.server_to_client_values(client, node, value, strip = prefix
-        )
-        endpoints = client.get_endpoints()
-        endpoints = add_callback_to_all(endpoints, set_client_values)
-        endpoints = add_prefix_to_all(endpoints, prefix)
-        Logger.debug(f"Endpoints: {endpoints}")
-        self.oscquery_server.add_endpoints(endpoints)
 
     ### MTC LISTENER ###
     def set_mtc_listener(self) -> None:
@@ -219,10 +192,14 @@ class BaseEngine(SignalEngine):
             exit(-1)
 
     def stop_mtc_listener(self) -> None:
-        if self.mtc_listener is not None:
-            self.mtc_listener.stop()
-            self.mtc_listener.join()
-            self.mtc_listener = None
+        if self.mtc_listener is not None and self.mtc_listener.is_alive():
+            try:
+                self.mtc_listener.stop()
+                self.mtc_listener.join()
+                self.mtc_listener = None
+            except Exception as e:
+                Logger.error(f'Error stopping MTC listener: {e}')
+                raise e
 
     def reset_script(self) -> None:
         if self.script:
@@ -264,16 +241,56 @@ class BaseEngine(SignalEngine):
         except KeyError:
             Logger.error('Tmp path not found in config. Exiting !!!!!')
             exit(-1)
-    
-    def find_hosts(self) -> list:
-        Logger.info('Looking for hosts in network map: {self.cm.network_map}')
-        ## DEV: Hardcoded for now, should be replaced by the discovery system
-        return [CONTROLLER_HOST]
-        node_list = []
-        for  node in self.cm.network_map:
-            node_list.append(node)
-        """Hardcoded for now, should be replaced by a discovery system"""
-        return node_list
+
+        # Get controller IP from network map
+        try:
+            self.controller_ip = self.get_controller_ip()
+            Logger.info(f'Controller IP: {self.controller_ip}')
+        except Exception as e:
+            Logger.error(f'{type(e)} while getting controller IP: {e}')
+            exit(-1)
+
+    def get_controller_ip(self) -> str:
+        """Set the controller IP address"""
+        if not hasattr(self, 'cm') or not self.cm.network_map:
+            raise AttributeError('No network map found')
+        nodes = self.cm.network_map['node_list']
+        if not nodes:
+            raise ValueError('No nodes found in network map')
+        for node_item in nodes:
+            node = node_item.get('node', {}) if isinstance(node_item, dict) else {}
+            if node.get('node_type') == CONTROLLER_NETWORK_FLAG:
+                return node.get('ip')
+        raise ValueError('No controller node found in network map')
+
+    def find_hosts(self) -> list[dict[str, str | bool]]:
+        """
+        Extract the list of adopted online hosts in the network map
+
+        Returns:
+        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and controller flag
+
+        Exceptions:
+        - ValueError: No nodes found in network map
+        - AttributeError: No controller found in network map
+        """
+        Logger.info(f'Looking for hosts in network map')
+        network_dict = self.cm.network_map
+        if not network_dict:
+            raise ValueError('No network map not found')
+        nodes, _ = self.cm.network_map.get_nodes_by_adoption(network_dict)
+        if not nodes:
+            raise ValueError('No adopted nodes found in network map')
+        hosts = [
+            {'ip': node.get('ip'), 'uuid': node.get('uuid'), 'controller': node.get('node_type') == CONTROLLER_NETWORK_FLAG}
+            for node in nodes
+            if node.get('online') == 'True'
+        ]
+        if not any(host.get('controller') for host in hosts):
+            raise AttributeError('No controller found in network map')
+        if len([host for host in hosts if host.get('controller')]) > 1:
+            raise AttributeError('Multiple controllers found in network map')
+        return hosts
 
     def print_all_status(self) -> None:
         Logger.info('STATUS REQUEST BY SIGUSR2 SIGNAL')
@@ -309,6 +326,9 @@ class BaseEngine(SignalEngine):
                 self.show_locked = True
             except:
                 Logger.warning("Could not write show lock file")
+        else:
+            Logger.info(f'Show lock file {SHOW_LOCK_PATH} already exists')
+            self.show_locked = True
 
     def remove_show_lock_file(self): # DEV: static
         if path.isfile(SHOW_LOCK_PATH):
@@ -318,6 +338,9 @@ class BaseEngine(SignalEngine):
                 self.show_locked = False
             except OSError:
                 Logger.warning("Could not delete master lock file")
+        else:
+            Logger.info(f'Show lock file {SHOW_LOCK_PATH} does not exist')
+            self.show_locked = False
 
     @logged
     def read_script(self, project_name: str) -> None:
@@ -343,38 +366,20 @@ class BaseEngine(SignalEngine):
         
         if cuelist is None:
             cuelist = self.script.cuelist
-            if not cuelist.contents or len(cuelist.contents) == 0:
-                Logger.warning('Script cuelist is empty, nothing to process')
-                return
-            # Skip the script cuelist and process the first cuelist
-            #cuelist = cuelist.contents[0]
-        Logger.debug(f'Processing cuelist: {type(cuelist)} {cuelist.id} #########################')
+        Logger.info(f'Processing {type(cuelist).__name__}: {cuelist.id}')
         if not hasattr(cuelist, 'contents') or not cuelist.contents or len(cuelist.contents) == 0:
             Logger.warning('Cuelist contents is empty, nothing to process')
             return
         
-        if cuelist.check_mappings(self.cm):
-            CUE_HANDLER.arm(cuelist, True)
+        cuelist.localize_cue(self.cm.node_uuid)
+        CUE_HANDLER.arm(cuelist, True)
 
         try:
             for index, item in enumerate(cuelist.contents):
-                ## TODO: remove this hardcoded local flag
-                Logger.info(f'Processing item: {type(item)} {item.id}')
-                item._local = True
-                item.loaded = False
-                item.enabled = True
-                # if item.check_mappings(self.cm):
-                #     ## DEV: Hardcoded for now, should be replaced by the discovery system
-                #     item._local = True
-
-                #     Logger.info(f'{type(item)} {item.id} is mapped and {"not " if not item._local else ""}local')
-                # else:
-                #     raise Exception(f"Cue outputs badly assigned in cue : {item.id}")
-
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item)
 
-                # if item.autoload and item._local and not item.loaded:
+                item.localize_cue(self.cm.node_uuid)
                 
                 if item.target is None or item.target == "":
                     if (index + 1) == len(cuelist.contents):
@@ -391,7 +396,7 @@ class BaseEngine(SignalEngine):
                     item._target_object = self.script.find(item.target)
 
                 if item._local and not item.loaded:
-                    Logger.info(f'Arming item: {type(item)} {item.id}')
+                    Logger.info(f'Arming item: {type(item).__name__} {item.id}')
                     CUE_HANDLER.arm(item, True)
 
                 Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')

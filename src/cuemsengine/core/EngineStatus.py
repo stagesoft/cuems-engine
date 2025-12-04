@@ -16,10 +16,11 @@ class EngineStatus:
         self.deploy = None
         self.test = None
         self.timecode = None
-        self.currentcue = None
         self.nextcue = None
         self.running = None
         self.recieved = 0
+
+        del self.currentcue # start with empty array
 
     @property
     def load(self) -> str | None:
@@ -136,12 +137,47 @@ class EngineStatus:
         self._timecode = value
 
     @property
-    def currentcue(self) -> str | None:
+    def currentcue(self) -> list[list[str, str]]:
         return self._currentcue
 
     @currentcue.setter
-    def currentcue(self, value: str | None) -> None:
-        self._currentcue = value
+    def currentcue(self, value: list[str, str] | tuple[str, str]) -> None:
+        """Set a (cue, offset) pair to the current cue list
+        
+        Args:
+            value: A list or tuple of two strings
+        
+        Raises:
+            ValueError: If the value is not a list or tuple of two elements
+
+        Note:
+            Non-string values are converted to strings using str().
+        """
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            raise ValueError('Current cue must be a list or tuple of two strings')
+        id, offset = str(value[0]), str(value[1])
+        for item in self._currentcue:
+            if item[0] == id:
+                item[1] = offset
+                return
+        self._currentcue.append([id, offset])
+
+    @currentcue.deleter
+    def currentcue(self) -> None:
+        """Clear all current cue entries."""
+        self._currentcue = []
+    
+    def remove_currentcue(self, cue_id: str) -> None:
+        """Remove a specific cue entry by its ID.
+        
+        Args:
+            cue_id: The ID of the cue to remove
+        """
+        id = str(cue_id)
+        for i, item in enumerate(self._currentcue):
+            if item[0] == id:
+                self._currentcue.pop(i)
+                return
 
     @property
     def nextcue(self) -> str | None:

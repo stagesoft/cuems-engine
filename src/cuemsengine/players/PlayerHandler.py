@@ -2,14 +2,14 @@ from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from functools import partial
-from threading import Lock
+from threading import RLock
 from time import sleep
 from typing import Callable
 
 from .AudioPlayer import AudioPlayer, start_audio_output
 from .VideoPlayer import VideoPlayer, VideoClient
 from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
-from .DmxPlayer import DmxPlayer, DmxClient
+from .DmxPlayer import DmxPlayer, DmxClient, start_dmx_player
 
 from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
@@ -36,15 +36,16 @@ class PlayerHandler:
             cls._instance._audio_mixer = None
             cls._instance._audio_mixer_client = None
             cls._instance._cue_players = {}
-            cls._instance._dmx_output_generator = None
+            cls._instance._dmx_player = None
+            cls._instance._dmx_player_client = None
             cls._instance._player_endpoints_generator = None
             cls._instance._front_video_player = None
             cls._instance._video_output_names = []
-            cls._instance._lock = Lock()
+            cls._instance._video_players = {}
+            cls._instance._outputs_map = None
+            cls._instance._lock = RLock()  # Use RLock to allow reentrant locking
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
-            cls._instance._video_players = {}
-            cls._instance._dmx_players = {}
         return cls._instance
 
     # ---------------------------
@@ -87,7 +88,7 @@ class PlayerHandler:
         Logger.info(f'Setting audio output generator to {path} {args}')
         self._audio_output_generator = partial(start_audio_output, path=path, args=args)
 
-    def start_audio_mixer(self, audio_outputs: list, port: int, node_uuid: str, path: str = None, args: str | None = None) -> tuple[AudioMixer, MixerClient]:
+    def start_audio_mixer(self, audio_outputs: list, port: int, mixer_id: str, path: str = None, args: str | None = None) -> tuple[AudioMixer, MixerClient]:
         """Starts the audio mixer for this node.
         
         Args:
@@ -99,11 +100,11 @@ class PlayerHandler:
         Returns:
             Tuple containing the AudioMixer and MixerClient instances
         """
-        Logger.info(f'Starting audio mixer for node {node_uuid}')
+        Logger.info(f'Starting audio mixer {mixer_id}')
         self._audio_mixer, self._audio_mixer_client = start_audio_mixer(
             audio_outputs=audio_outputs,
             port=port,
-            node_uuid=node_uuid,
+            mixer_id=mixer_id,
             path=path,
             args=args
         )
@@ -116,6 +117,42 @@ class PlayerHandler:
     def get_audio_mixer_client(self) -> MixerClient:
         """Returns the audio mixer client instance."""
         return self._audio_mixer_client
+
+    # ---------------------------
+    # DMX Player Management
+    # ---------------------------
+
+    def start_dmx_player(self, port: int, node_uuid: str, path: str, args: str | None = None) -> tuple[DmxPlayer, DmxClient]:
+        """Starts the DMX player for this node.
+        
+        Args:
+            port: OSC port for dmxplayer communication
+            node_uuid: Unique identifier for this player node
+            path: Path to dmxplayer-cuems binary
+            
+        Returns:
+            Tuple containing the DmxPlayer and DmxClient instances
+        """
+        Logger.info(f'Starting DMX player for node {node_uuid}')
+        self._dmx_player, self._dmx_player_client = start_dmx_player(
+            port=port,
+            node_uuid=node_uuid,
+            path=path,
+            args=args
+        )
+        return self._dmx_player, self._dmx_player_client
+
+    def get_dmx_player(self) -> DmxPlayer:
+        """Returns the DMX player instance."""
+        return self._dmx_player
+
+    def get_dmx_player_client(self) -> DmxClient:
+        """Returns the DMX player client instance."""
+        return self._dmx_player_client
+
+    # ---------------------------
+    # Audio Cue Management
+    # ---------------------------
 
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
@@ -191,13 +228,18 @@ class PlayerHandler:
     def set_video_player(self, cue: VideoCue):
         """Sets the video player for the given cue"""
         Logger.debug(f'Setting video player for cue {cue.id}')
+        output_name = self.get_cue_output_name(cue)
+        if not output_name:
+            Logger.error(f'No video player found for cue {cue.id}')
+            raise ValueError(f'No video player found for cue {cue.id}')
+        
         if not self._front_video_player:
             # Initialize the front video player
-            player = self.get_active_videoplayer(self.get_cue_output_name(cue))
+            player = self.get_active_videoplayer(output_name)
             self._front_video_player = 1
         else:
-            player = self.get_inactive_videoplayer(self.get_cue_output_name(cue))
-        
+            player = self.get_inactive_videoplayer(output_name)
+
         cue._osc = player['osc']
         self.store_cue_player(cue, player['player'])
 
@@ -210,9 +252,31 @@ class PlayerHandler:
             return out
 
     def reset_video_players(self):
-        """Resets the video players."""
+        """Resets the video players and kills their processes."""
+        Logger.debug('Resetting video players')
         with self._lock:
+            # Kill all video player processes before resetting
+            for output_name, players in list(self._video_players.items()):
+                for player_dict in players:
+                    try:
+                        if 'player' in player_dict:
+                            player = player_dict['player']
+                            player.kill()
+                            # Wait for thread to die
+                            if player.is_alive():
+                                player.join(timeout=0.5)
+                    except Exception as e:
+                        Logger.debug(f'Error killing video player: {e}')
             self._video_players = {}
+            self._video_output_names = []
+    
+    def reset_all(self):
+        """Complete reset of PlayerHandler for testing"""
+        Logger.debug('Performing complete PlayerHandler reset')
+        self.reset_video_players()
+        self._cue_players = {}
+        self._front_video_player = None
+        self._outputs_map = None
 
     def start_video_outputs(
         self,
@@ -226,7 +290,13 @@ class PlayerHandler:
         for index, output_name in enumerate(output_names):
             with self._lock:
                 if output_name in self._video_players:
-                    continue
+                    # Clean up existing players for this output before recreating
+                    for player_dict in self._video_players[output_name]:
+                        try:
+                            if 'player' in player_dict:
+                                player_dict['player'].kill()
+                        except Exception as e:
+                            Logger.debug(f'Error killing existing video player: {e}')
                 self._video_players[output_name] = []
 
             new_ports = output_ports[index]
@@ -244,9 +314,9 @@ class PlayerHandler:
                         video_player_args,
                         '',
                     )
-                    player['player'].start()
-                    while player['player'].pid is None:
-                        sleep(0.001)
+                    # Start with timeout handling (now done in Player.start())
+                    player['player'].start(timeout=5.0)
+                    
                     player['pid'] = player['player'].pid
                     player['osc'] = VideoClient(
                         player['port'],
@@ -270,51 +340,6 @@ class PlayerHandler:
         """Returns the index of a given output name."""
         with self._lock:
             return self._video_output_names.index(output_name)
-
-
-    def start_dmx_outputs(
-        self,
-        output_names: list[str],
-        output_ports: list[dict[str, int]],
-        video_player_path: str,
-        video_player_args: str,
-    ):
-        """Starts the dmx players."""
-        Logger.info(f'Starting dmx outputs for {output_names} ')
-        for index, output_name in enumerate(output_names):
-            with self._lock:
-                if output_name in self._dmx_players:
-                    continue
-                self._dmx_players[output_name] = []
-
-            new_ports = output_ports[index]
-
-            player = dict()
-            player['route'] = f'/players/dmxplayer-{index}'
-            player['port'] = new_ports[f'dmx_player_{index}']
-
-            try:
-                player['player'] = DmxPlayer(
-                    player['port'],
-                    video_player_path,
-                    video_player_args
-                )
-                player['player'].start()
-                while player['player'].pid is None:
-                    sleep(0.001)
-                player['pid'] = player['player'].pid
-                player['osc'] = DmxClient(
-                    player['port'],
-                    player['route']
-                )
-            except Exception as e:
-                raise e
-
-            with self._lock:
-                self._dmx_players[output_name].append(player)
-
-
-
 
     def get_active_videoplayer(self, output_name: str):
         """Find the active player for a given output."""
@@ -362,16 +387,27 @@ class PlayerHandler:
             self._player_endpoints_generator(cue)
         except Exception as e:
             Logger.error(f'Error setting player endpoints for cue {cue.id}: {e}')
+    
+    def set_outputs_map(self, outputs_map: dict):
+        """Set the outputs map for the player handler"""
+        self._outputs_map = outputs_map
 
-    def get_cue_output_name(self, cue: Cue) -> str:
-        """Get the output name for a given cue."""
-        outputs_key = next(iter(cue.outputs))
-        Logger.debug(f'Cue outputs: {outputs_key} ')
-        Logger.debug(f'video player keys: {self._video_players.keys()}')
-        Logger.debug(f"Output key is {outputs_key} and output name {outputs_key['output_name'][-1]}")
-        output_id = outputs_key['output_name'][-1]
+    def get_cue_output_name(self, cue: Cue) -> str | None:
+        """Get the output name for a given cue from the outputs map.
+        
+        Args:
+            cue: The cue to get the output name for
 
-        return output_id
+        Returns:
+            The output name for the given cue or None if the cue is not found in the outputs map
+        
+        Raises:
+            AttributeError: If the outputs map is not set
+        """
+        if self._outputs_map is None:
+            Logger.error('Outputs map not set')
+            raise AttributeError('Outputs map not set')
+        return self._outputs_map.get(cue.id, None)
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""
@@ -379,6 +415,8 @@ class PlayerHandler:
         if path[-1] != 'media':
             path.append('media')
         self._media_folder = '/' + '/'.join(path)
+        if self._media_folder[0:2] == "//":
+            self._media_folder = self._media_folder[1:]
 
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""

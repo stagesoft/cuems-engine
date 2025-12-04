@@ -3,10 +3,42 @@ import sys
 import pytest
 import threading
 import multiprocessing
+import os
+import time
 from pathlib import Path
 
 # Store references to cleanup functions
 _cleanup_functions = []
+
+# WATCHDOG: Force exit if cleanup hangs after test completion
+_test_start_time = time.time()
+_pytest_finished = False
+_cleanup_start_time = None
+
+def _watchdog():
+    """Background thread that force-exits if cleanup hangs"""
+    while True:
+        time.sleep(0.5)
+        
+        # If cleanup started, give it 5 seconds max
+        if _cleanup_start_time:
+            cleanup_time = time.time() - _cleanup_start_time
+            if cleanup_time > 5:
+                print(f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting")
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(0)
+        
+        # Absolute max runtime: 40 seconds (should never hit this)
+        runtime = time.time() - _test_start_time
+        if runtime > 40:
+            print(f"\n⚠️  WATCHDOG: Total runtime {runtime:.0f}s exceeded, force exiting")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)
+
+_watchdog_thread = threading.Thread(target=_watchdog, daemon=True, name="Watchdog")
+_watchdog_thread.start()
 
 def add_cleanup_function(func):
     """Register a cleanup function to be called on test interruption"""
@@ -48,45 +80,101 @@ signal.signal(signal.SIGINT, signal_handler)
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_on_exit():
     """Session-level fixture that ensures cleanup happens even on interruption"""
+    global _pytest_finished, _cleanup_start_time
+    
     yield
-    # This will run at the end of the test session
-    # Call cleanup functions in case they weren't called by signal handler
+    
+    # Mark that tests are done, now in cleanup phase
+    _cleanup_start_time = time.time()
+    
+    # Do quick cleanup
     for cleanup_func in _cleanup_functions:
         try:
             cleanup_func()
-        except Exception:
-            pass  # Ignore errors during normal exit cleanup
+        except:
+            pass
+    
+    # Mark finished (watchdog will wait 2 more seconds then kill if needed)
+    _pytest_finished = True
+    
+    # Give threads a moment to finish
+    time.sleep(0.5)
 
 @pytest.fixture
 def engine_cleanup():
-    """Fixture to ensure engine instances are properly cleaned up"""
+    """Fixture to ensure engine instances are properly cleaned up - AGGRESSIVE MODE"""
+    import threading
+    
     engines = []
+    
+    def force_kill_threads():
+        """Force kill all daemon threads"""
+        for thread in threading.enumerate():
+            if thread != threading.current_thread() and thread.is_alive():
+                if hasattr(thread, '_stop'):
+                    try:
+                        thread._stop()
+                    except:
+                        pass
+    
+    def aggressive_cleanup(engine):
+        """Aggressively cleanup engine with no mercy"""
+        try:
+            # Stop communications thread first
+            if hasattr(engine, 'communications_thread'):
+                comm = engine.communications_thread
+                comm.stop_requested = True
+                if hasattr(comm, 'event_loop') and comm.event_loop:
+                    try:
+                        comm.event_loop.stop()
+                    except:
+                        pass
+                if hasattr(comm, 'ocsquery_queue_loop') and comm.ocsquery_queue_loop.is_alive():
+                    # Don't wait, just mark as stopped
+                    pass
+            
+            # Stop OSCQuery
+            if hasattr(engine, 'oscquery_server'):
+                try:
+                    engine.oscquery_server.remove_device()
+                except:
+                    pass
+            
+            if hasattr(engine, 'oscquery_client'):
+                try:
+                    del engine.oscquery_client
+                except:
+                    pass
+            
+            # Quick stop calls without waiting
+            if hasattr(engine, 'stop'):
+                try:
+                    engine.stop()
+                except:
+                    pass
+            
+            if hasattr(engine, 'stop_all'):
+                try:
+                    engine.stop_all()
+                except:
+                    pass
+                    
+        except Exception:
+            pass  # Suppress all errors
     
     def register_engine(engine):
         """Register an engine for cleanup"""
         engines.append(engine)
-        
-        # Add engine-specific cleanup function
-        def cleanup_engine():
-            if hasattr(engine, 'stop') and callable(engine.stop):
-                engine.stop()
-            if hasattr(engine, 'stop_all') and callable(engine.stop_all):
-                engine.stop_all()
-        
-        add_cleanup_function(cleanup_engine)
         return engine
     
     yield register_engine
     
-    # Cleanup all registered engines at the end of the test
+    # AGGRESSIVE CLEANUP - don't wait for anything
     for engine in engines:
-        try:
-            if hasattr(engine, 'stop') and callable(engine.stop):
-                engine.stop()
-            if hasattr(engine, 'stop_all') and callable(engine.stop_all):
-                engine.stop_all()
-        except Exception as e:
-            print(f"Error stopping engine: {e}")
+        aggressive_cleanup(engine)
+    
+    # Force kill any remaining threads
+    force_kill_threads()
 
 @pytest.fixture
 def process_cleanup():

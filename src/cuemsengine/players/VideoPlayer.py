@@ -12,7 +12,6 @@ class VideoPlayer(Player):
         self.path = path
         self.args = args
         self.media = media
-
         self.stdout = None
         self.stderr = None
 

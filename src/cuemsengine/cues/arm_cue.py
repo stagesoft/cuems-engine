@@ -21,43 +21,107 @@ def arm_audioCue(cue: AudioCue):
 
 @arm_cue.register
 def arm_dmxCue(cue: DmxCue):
-    pass
-
-    # Assign its own audioplayer object
-    # try:
-    #     cue._player = DmxPlayer(
-    #         cue._conf.players_port_index, 
-    #         cue._conf.node_conf['dmxplayer']['path'],
-    #         str(cue._conf.node_conf['dmxplayer']['args']),
-    #         str(
-    #             path.join(
-    #                 cue._conf.library_path,
-    #                 'media',
-    #                 cue.media['file_name']
-    #             )
-    #         )
-    #     )
-    # except Exception as e:
-    #     raise e
-
-    # cue._player.start()
-
-    # And dinamically attach it to the ossia for remote control it
-    cue._osc_route = f'/players/dmxplayer-{cue.id}'
-
-    # ossia.add_player_nodes(
-    #     PlayerOSCConfData( 
-    #         device_name=cue._osc_route, 
-    #         host=cue._conf.node_conf['osc_dest_host'], 
-    #         in_port=cue._player.port,
-    #         out_port=cue._player.port + 1, 
-    #         dictionary=cue.OSC_DMXPLAYER_CONF
-    #     )
-    # )
+    """Arm a DMX cue by extracting DMX scene data.
+    
+    The DMX scene data is already loaded in the cue object from the script XML.
+    We extract the universe and channel data from cue.DmxScene and store it
+    in a format suitable for sending as OSC bundles to the local DMX player.
+    
+    Note: cue._local should be set by check_mappings() based on the output_name.
+    For DMX cues, the output_name format is "{node_uuid}" (just the node UUID).
+    A DMX cue can have multiple outputs (one per target node). check_mappings()
+    should iterate through all outputs and set _local=True if ANY output_name
+    matches the current node UUID. Other outputs are ignored.
+    This function is only called for local cues (checked in CueHandler.arm()).
+    """
+    # Verify that _local is set (should be set by check_mappings() from output_name)
+    is_local = getattr(cue, '_local', True)
+    if not is_local:
+        Logger.warning(
+            f'DMX cue {cue.id} is not local but arm_dmxCue was called. '
+            f'This should not happen - check_mappings() should set _local from output_name.',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        return
+    
+    # Get the local DMX player client
+    dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+    
+    if dmx_client is None:
+        Logger.error(
+            f'No local DMX player available for cue {cue.id}',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        return
+    
+    # Assign the local DMX player client to the cue
+    cue._osc = dmx_client
+    Logger.debug(
+        f"DMX cue {cue.id} will use local DMX player (output_name inferred _local={is_local})",
+        extra = {"caller": cue.__class__.__name__}
+    )
+    
+    # Extract frame data from the DmxScene
+    try:
+        universe_frames = {}
+        
+        # Check if the cue has a DmxScene
+        if cue.DmxScene is None:
+            Logger.warning(
+                f"DMX cue {cue.id} has no DmxScene data",
+                extra = {"caller": cue.__class__.__name__}
+            )
+            cue._dmx_frames = {}
+            return
+        
+        # Extract universe data from the DmxScene
+        dmx_universe = cue.DmxScene.DmxUniverse
+        if dmx_universe is not None:
+            universe_num = dmx_universe.universe_num
+            channels_data = {}
+            
+            # Extract channel data from dmx_channels list
+            if dmx_universe.dmx_channels:
+                for dmx_channel in dmx_universe.dmx_channels:
+                    channel_num = dmx_channel.channel
+                    channel_value = dmx_channel.value
+                    channels_data[channel_num] = channel_value
+            
+            if channels_data:
+                universe_frames[universe_num] = channels_data
+        
+        # Store the parsed frame data in the cue for use when running
+        cue._dmx_frames = universe_frames
+        
+        if universe_frames:
+            total_channels = sum(len(channels) for channels in universe_frames.values())
+            Logger.info(
+                f"DMX cue {cue.id} armed: {len(universe_frames)} universe(s), {total_channels} channel(s)",
+                extra = {"caller": cue.__class__.__name__}
+            )
+        else:
+            Logger.warning(
+                f"DMX cue {cue.id} armed but no channel data found in DmxScene",
+                extra = {"caller": cue.__class__.__name__}
+            )
+            
+    except Exception as e:
+        Logger.error(
+            f'Error arming DMX cue {cue.id}: {e}',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        Logger.exception(e)
+        # Set empty frames to avoid errors when running
+        cue._dmx_frames = {}
 
 @arm_cue.register
 def arm_videoCue(cue: VideoCue):
-    PLAYER_HANDLER.set_video_player(cue)
+    try:
+        PLAYER_HANDLER.set_video_player(cue)
+    except ValueError as e:
+        Logger.error(f'Error arming video player for cue {cue.id}: {e}')
+        Logger.exception(e)
+        return
                 
     try:
         key = '/jadeo/cmd'

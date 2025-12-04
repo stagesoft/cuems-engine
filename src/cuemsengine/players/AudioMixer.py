@@ -21,24 +21,23 @@ class AudioMixer(Player):
     where channel can be 'master' or '0', '1', '2', etc.
     """
 
-    def __init__(self, audio_outputs, port, node_uuid, path=None, args: str | None = None):
+    def __init__(self, audio_outputs, port, mixer_id: str, path=None, args: str | None = None):
         """Initialize the AudioMixer.
         
         Args:
             audio_outputs: List of audio output configurations
             port: OSC port for jack-volume communication
-            node_uuid: Unique identifier for this mixer node
+            mixer_id: Unique identifier for this mixer
             path: Optional path to jack-volume binary (defaults to JACK_VOLUME_PATH)
         """
         super().__init__()
         self.conn_man = JackConnectionManager()
-        self.node_uuid = node_uuid
         self.port = port
         self.ports = self.conn_man.get_ports()
         self.path = path if path else JACK_VOLUME_PATH
         self.channel_number = len(audio_outputs)
         self.audio_outputs = audio_outputs
-        self.client_name = f'{self.node_uuid}_mixer'
+        self.client_name = get_mixer_client_name(mixer_id)
         self.extra_args = args
         
         # Build command line arguments for jack-volume
@@ -48,12 +47,8 @@ class AudioMixer(Player):
             '-n', str(self.channel_number)
         ]
         
-        # Start the mixer process
-        self.start()
-        sleep(2)  # wait for jack-volume to start up before connecting to it
-        
-        # Connect JACK ports
-        self.connect_to_jack()
+        # Note: start() will be called by start_audio_mixer() with timeout
+        # self.connect_to_jack() will be called after start() in start_audio_mixer()
 
     @logged
     def run(self):
@@ -156,24 +151,24 @@ class MixerClient(PlayerClient):
     where channel can be 'master' or '0', '1', '2', etc.
     """
 
-    def __init__(self, player_port: int, channel_number: int, client_name: str):
+    def __init__(self, player_port: int, channel_number: int, mixer_id: str):
         """Initialize the MixerClient.
         
         Args:
             player_port: OSC port where jack-volume is listening
             channel_number: Number of audio channels in the mixer
-            client_name: Name of the jack-volume client
+            mixer_id: Unique identifier for this mixer
         """
-        self.client_name = client_name
+        self.client_name = get_mixer_client_name(mixer_id)
         self.channel_number = channel_number
         
         # Build OSC endpoint configuration for jack-volume
-        endpoints = build_mixer_osc_endpoints(client_name, channel_number)
+        endpoints = build_mixer_osc_endpoints(self.client_name, channel_number)
         
         super().__init__(
             player_port=player_port,
             endpoints=endpoints,
-            name=f'mixer-{client_name}'
+            name=f'mixer-{mixer_id}'
         )
 
     @logged
@@ -289,9 +284,10 @@ class MixerClient(PlayerClient):
 def start_audio_mixer(
     audio_outputs: list,
     port: int,
-    node_uuid: str,
+    mixer_id: str,
     path: str = None,
-    args: str | None = None
+    args: str | None = None,
+    timeout: float = 5.0
 ) -> tuple[AudioMixer, MixerClient]:
     """Start an audio mixer and its OSC client.
     
@@ -301,32 +297,54 @@ def start_audio_mixer(
     Args:
         audio_outputs: List of audio output configurations
         port: OSC port for jack-volume communication
-        node_uuid: Unique identifier for this mixer node
+        mixer_id: Unique identifier for this mixer
         path: Optional path to jack-volume binary
+        args: Additional arguments for jack-volume
+        timeout: Maximum time to wait for mixer to start (seconds)
     
     Returns:
         Tuple containing the AudioMixer and MixerClient instances
+        
+    Raises:
+        RuntimeError: If mixer fails to start within timeout or thread dies
     """
-    # Create and start the mixer
+    # Create the mixer
     mixer = AudioMixer(
         audio_outputs=audio_outputs,
         port=port,
-        node_uuid=node_uuid,
+        mixer_id=mixer_id,
         path=path,
         args=args
     )
     
-    # Wait for mixer process to start
-    while mixer.pid is None:
-        sleep(0.001)
+    # Start with timeout handling
+    mixer.start(timeout=timeout)
+    
+    # Wait for jack-volume to fully initialize before connecting
+    sleep(2)
+    
+    # Connect JACK ports
+    mixer.connect_to_jack()
     
     # Create OSC client for controlling the mixer
     client = MixerClient(
         player_port=port,
         channel_number=len(audio_outputs),
-        client_name=f'{node_uuid}_mixer'
+        mixer_id=mixer_id
     )
     
-    Logger.info(f"Audio mixer started: {node_uuid}_mixer on port {port}")
+    Logger.info(f"Audio mixer {mixer_id} started on port {port}")
     return mixer, client
 
+
+### Helper functions ###
+def get_mixer_client_name(mixer_id: str) -> str:
+    """Get the client name for the mixer.
+    
+    Args:
+        mixer_id: Unique identifier for this mixer
+        
+    Returns:
+        Client name for the mixer
+    """
+    return f'{mixer_id}_mixer'

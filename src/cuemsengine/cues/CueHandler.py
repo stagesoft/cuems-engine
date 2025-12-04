@@ -5,6 +5,7 @@ from cuemsutils.cues import VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import logged, Logger
 
+from ..comms.NodeCommunications import NodeCommunications
 from .run_cue import run_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
@@ -35,7 +36,23 @@ class CueHandler:
             cls._instance._lock = Lock()
         return cls._instance
 
-    ## Armed Cues List Methods
+
+    # ---------------------------
+    # Communications To Controller
+    # ---------------------------
+    def set_nng_comms(self, hub_address: str, node_id: str):
+        """Set the communications infrastructure"""
+        Logger.info(f"Starting communications for Node {node_id}")
+        Logger.info(f"NNG Hub address: {hub_address}")
+        self.communications_thread = NodeCommunications(
+            hub_address=hub_address,
+            node_id=node_id
+        )
+        self.communications_thread.start()
+
+    # ---------------------------
+    # Armed Cues List Methods
+    # ---------------------------
 
     def add_armed_cue(self, cue: Cue) -> None:
         """Adds an armed cue to the list."""
@@ -93,12 +110,14 @@ class CueHandler:
             return True
         
         if cue._local and cue.enabled:
-            Logger.info(f"Arming {type(cue)} {cue.id}")
+            Logger.info(f"Arming {type(cue).__name__} {cue.id}")
             # Arm the cue
             arm_cue(cue)
             cue.loaded = True
             if not found:
                 self.add_armed_cue(cue)
+            if isinstance(cue, AudioCue):
+                self.communications_thread.add_player(f'audioplayer_{cue.id}', None)
 
         if cue.post_go == 'go':
             self.arm(cue._target_object, init)
@@ -112,6 +131,9 @@ class CueHandler:
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
+            if isinstance(cue, AudioCue):
+                self.communications_thread.remove_player(f'audioplayer_{cue.id}')
+            self.communications_thread.remove_cue(cue.id)
             return True
 
         return False
@@ -158,7 +180,12 @@ class CueHandler:
             sleep(cue.prewait.milliseconds / 1000)
 
         if cue._local:
+            self.communications_thread.add_cue(cue.id, {
+                'id': cue.id,
+                'offset': cue._start_mtc.milliseconds
+            })
             run_cue(cue, mtc)
+            self.communications_thread.remove_cue(cue.id)
 
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
@@ -189,6 +216,7 @@ class CueHandler:
             sleep(1)
         thread.join()
         Logger.info(f'{thread.name} finished')
+
 
 # ---------------------------
 # Singleton

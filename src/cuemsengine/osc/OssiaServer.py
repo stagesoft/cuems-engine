@@ -38,6 +38,8 @@ class OssiaServer(OssiaNodes):
         
         Create a local device and set it up to handle oscquery or osc requests
         """
+        if not self.device:
+            raise RuntimeError("OssiaServer device not bound")
         done = server(self)
         sleep(STARTUP_DELAY)
         self.started = done
