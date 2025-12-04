@@ -12,7 +12,7 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 
 from .EngineStatus import EngineStatus
 from ..tools.MtcListener import MtcListener
-from ..osc import ValueType, OssiaServer, OssiaClient, ServerDevices, ClientDevices
+from ..osc import VALUE_TYPES_DICT, OssiaServer, OssiaClient, ServerDevices, ClientDevices
 from ..osc.OssiaClient import PlayerClient
 from ..osc.helpers import add_callback_to_all, add_prefix_to_all
 from ..cues.CueHandler import CUE_HANDLER
@@ -100,7 +100,7 @@ class BaseEngine(SignalEngine):
         """
         if f"_{property}" in self.status.__dict__.keys():
             Logger.debug(f'Setting property {property} to {value}')
-            self.status.__setattr__(property, str(value))
+            self.status.__setattr__(property, value)
         else:
             Logger.error(f'Property {property} not found in EngineStatus')
             if strict:
@@ -130,20 +130,17 @@ class BaseEngine(SignalEngine):
         return [i[1:] for i in vars(self.status).keys()]
     
     def get_status_endpoints(self) -> dict[str, list[Any]]:
-        return {f"/engine/status/{k[1:]}": [ValueType.String, self.status_callback, v] for k,v in vars(self.status).items()}
-    
-    def build_status_endpoints(self, host: str, func: Callable = None) -> dict:
-        """Build the endpoints for a NodeEngine"""
-        if func is None:
-            func = self.status_callback
-        keys = self.status.__dict__.keys()
-        endpoints = {}
-        for key in keys:
-            endpoints[f"/{host}/status/{key[1:]}"] = [
-                ValueType.String,
-                func
-            ]
+        endpoints = self.build_endpoints_from_status()
+        Logger.debug(f"Status endpoints: {endpoints}")
+        # remove unwanted callbacks
+        for i in ["currentcue"]:
+            endpoints[f"/engine/status/{i}"][1] = None
         return endpoints
+
+    def build_endpoints_from_status(self) -> dict[str, list[Any, Callable | None, Any]]:
+        return {
+            f"/engine/status/{k[1:]}": [VALUE_TYPES_DICT[type(v).__name__], self.status_callback, v] for k,v in vars(self.status).items()
+        }   
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):

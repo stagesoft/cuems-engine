@@ -7,7 +7,7 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
 from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import NodeOperation, ActionType
-from .osc import ENGINE_CMD_ENDPOINTS
+from .osc import ENGINE_CMD_ENDPOINTS, PLAYERS_ENDPOINTS_DICT
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.PortHandler import PORT_HANDLER
 
@@ -84,26 +84,47 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'Received {operation}')
         
 
-    def stop(self):
-        self.stop_comms()
-        super().stop()
+    def cue_operation_callback(self, operation: NodeOperation):
+        """Callback invoked when cues are received from nodes."""
+        Logger.info(f'Received {operation}')
+        if operation.action == ActionType.ADD:
+            self.add_cue_oscquery_nodes(operation)
+        elif operation.action == ActionType.REMOVE:
+            self.remove_cue_oscquery_nodes(operation)
+        else:
+            Logger.warning(f'Unknown cue action: {operation.action}')
 
-    @logged
-    def stop_comms(self):
-        if self.with_mtc:
-            self.stop_timecode()
-        if self.oscquery_server:
-            self.oscquery_server.remove_device()
-        if hasattr(self, '_loop'):
-            self._loop.call_soon_threadsafe(self._loop.stop)
+    def add_cue_oscquery_nodes(self, operation: NodeOperation):
+        """Add the running cues information to the local OSCQuery server one by one.
 
-    def on_timecode_change(self, value: str) -> None:
-        Logger.debug(f'Timecode changed to {value}')
-        if self.go_offset:
-            self.set_oscquery_values({
-                '/engine/status/timecode': value
-            })
+        Publishes the updated currentcue information to the local OSCQuery server after each addition.
 
+        Args:
+            operation: NodeOperation object containing the cue information inside the data dictionary
+                - id: ID of the cue
+                - offset: Offset of the cue
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If an error occurs while adding the cue to the current cue
+        """
+        try:
+            self.status.currentcue = [operation.data['id'], operation.data['offset']]
+        except Exception as e:
+            Logger.error(f'Error adding to currentcue {operation.data["id"]}: {e}')
+            return
+        self.set_oscquery_values({
+            '/engine/status/currentcue': self.status.currentcue
+        })
+
+    def remove_cue_oscquery_nodes(self, operation: NodeOperation):
+        """Remove the cue from running cues information from the local OSCQuery server"""
+        self.status.remove_currentcue(operation.data['id'])
+        self.set_oscquery_values({
+            '/engine/status/currentcue': self.status.currentcue
+        })
 
     #########################
     # Editor commands
