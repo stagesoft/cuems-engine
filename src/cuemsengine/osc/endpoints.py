@@ -14,6 +14,14 @@ OSC_AUDIOPLAYER_CONF = {
     '/check' : [ValueType.Impulse, None]
 }
 
+OSC_AUDIOMIXER_CONF = {
+    '/master' : [ValueType.Float, None],
+    '/0' : [ValueType.Float, None],
+    '/1' : [ValueType.Float, None],
+    '/2' : [ValueType.Float, None],
+    '/3' : [ValueType.Float, None],
+}
+
 OSC_DMXPLAYER_CONF = { 
     '/quit' : [ValueType.Impulse, None],
     '/load' : [ValueType.String, None], 
@@ -45,6 +53,13 @@ OSC_VIDEOPLAYER_CONF = {
     '/jadeo/ontop' : [ValueType.Bool, None]
 }
 
+OSC_PLAYERS_DICT = {
+    'audio/cue': OSC_AUDIOPLAYER_CONF,
+    'audio/mixer': OSC_AUDIOMIXER_CONF,
+    'dmx/mixer': OSC_DMXPLAYER_CONF,
+    'video/mixer': OSC_VIDEOPLAYER_CONF
+}
+
 OSC_ENGINE_CMD_CONF = {
     '/engine/command/load' : [ValueType.String, None],
     '/engine/command/loadcue' : [ValueType.String, None],
@@ -60,14 +75,3 @@ OSC_ENGINE_CMD_CONF = {
     '/engine/command/test' : [ValueType.String, None],
     '/engine/command/update' : [ValueType.String, None]
 }
-
-"""
-OSC_ENGINE_COMMS_CONF = {
-    '/engine/comms/type' : [ValueType.String, self.comms_callback],
-    '/engine/comms/subtype' : [ValueType.String, None],
-    '/engine/comms/action' : [ValueType.String, None],
-    '/engine/comms/action_uuid' : [ValueType.String, self.action_uuid_callback],
-    '/engine/comms/value' : [ValueType.String, None],
-    '/engine/comms/data' : [ValueType.String, None]
-}
-"""

@@ -6,7 +6,7 @@ from cuemsutils.log import Logger, logged
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
 from .comms.ControllerCommunications import ControllerCommunications
-from .comms.NodesHub import NodeOperation, ActionType
+from .comms.NodesHub import NodeOperation, ActionType, OperationType
 from .osc import ENGINE_CMD_ENDPOINTS, PLAYERS_ENDPOINTS_DICT
 from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
 from .tools.PortHandler import PORT_HANDLER
@@ -37,7 +37,7 @@ class ControllerEngine(BaseEngine):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_editor_request('')
-        
+        self.set_node_operation_callback()
 
     def start(self):
         self.create_timecode()
@@ -67,11 +67,57 @@ class ControllerEngine(BaseEngine):
         self.communications_thread = ControllerCommunications(
             osc_hub_address=osc_hub_address,
             editor_callback=self.editor_command_callback,
-            player_operation_callback=self.osc_player_received_callback
+            node_operation_callback=self.node_operation_callback
         )
         self.communications_thread.start()
 
-    def osc_player_received_callback(self, operation: NodeOperation):
+    def stop(self):
+        self.stop_comms()
+        super().stop()
+
+    @logged
+    def stop_comms(self):
+        if self.with_mtc:
+            self.stop_timecode()
+        if hasattr(self, 'communications_thread'):
+            self.communications_thread.stop()
+        if hasattr(self, 'oscquery_server'):
+            self.oscquery_server.remove_device()
+
+    #########################
+    # Timecode
+    #########################
+    def create_timecode(self):
+        if self.with_mtc:
+            self.mtcmaster = libmtcmaster.MTCSender_create()
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")
+
+    def start_timecode(self):
+        if self.with_mtc:
+            libmtcmaster.MTCSender_play(self.mtcmaster)
+            Logger.info("Midi TimeCode started.")
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")
+
+    def stop_timecode(self):
+        if self.with_mtc:
+            libmtcmaster.MTCSender_stop(self.mtcmaster)
+            Logger.info("Midi TimeCode stopped.")
+        else:
+            Logger.info("Midi TimeCode requires with_mtc to be True.")
+
+
+    #########################
+    # Operation callbacks
+    #########################
+    def set_node_operation_callback(self):
+        self.node_operation_callback = {
+            OperationType.PLAYER: self.player_operation_callback,
+            OperationType.CUE: self.cue_operation_callback
+        }
+
+    def player_operation_callback(self, operation: NodeOperation):
         """
         Callback invoked when players are received from nodes.
         
@@ -83,6 +129,62 @@ class ControllerEngine(BaseEngine):
         """
         Logger.info(f'Received {operation}')
         
+        if operation.action == ActionType.ADD:
+            self.add_player_oscquery_nodes(operation)
+        elif operation.action == ActionType.REMOVE:
+            self.remove_player_oscquery_nodes(operation)
+        else:
+            Logger.warning(f'Unknown player action: {operation.action}')
+
+    def add_player_oscquery_nodes(self, operation: NodeOperation):
+        """Add the player nodes to the local OSCQuery server"""
+        common_path = self.build_player_oscquery_path(operation)
+        if not common_path:
+            Logger.warning(f'Player path returned None, skipping addition')
+            return
+        node_data = self.endpoints_from_player_path(common_path)
+        if not node_data:
+            Logger.warning(f'Player endpoints returned None, skipping addition')
+            return
+        self.oscquery_server.add_endpoints(node_data)
+
+    def remove_player_oscquery_nodes(self, operation: NodeOperation):
+        """Remove the player nodes from the local OSCQuery server"""
+        common_path = self.build_player_oscquery_path(operation)
+        if not common_path:
+            Logger.warning(f'Player path returned None, skipping removal')
+            return
+        # Filter for cue-specific players
+        if '/cue/' not in common_path:
+            Logger.warning(f'Player {operation.target} is not a cue-specific player, skipping removal')
+            return
+        self.oscquery_server.remove_node(common_path)
+
+    def build_player_oscquery_path(self, operation: NodeOperation) -> str | None:
+        """Build the player OSCQuery path"""
+        ptype, id = operation.target.split('_')
+        common_path = f'/engine/players/{operation.sender}/'
+        if ptype == 'audioplayer':
+            common_path += f'audio/cue/{id}/'
+        elif ptype == 'audiomixer':
+            common_path += f'audio/mixer/{id}/'
+        elif ptype == 'videoplayer':
+            common_path += f'video/mixer/{id}/'
+        elif ptype == 'dmxplayer':
+            common_path += f'dmx/mixer/{id}/'
+        else:
+            Logger.warning(f'Unknown player type: {ptype}')
+            return None
+        return common_path
+
+    def endpoints_from_player_path(self, path: str) -> dict:
+        """Build the player OSCQuery endpoints"""
+        endpoints = {}
+        for key, value in PLAYERS_ENDPOINTS_DICT.items():
+            if key in path:
+                endpoints.update(value)
+        add_prefix_to_all(endpoints, path)
+        return endpoints
 
     def cue_operation_callback(self, operation: NodeOperation):
         """Callback invoked when cues are received from nodes."""
@@ -278,6 +380,13 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             self.oscquery_server.set_value(key, value)
 
+    def on_timecode_change(self, value: str) -> None:
+        Logger.debug(f'Timecode changed to {value}')
+        if self.go_offset:
+            self.set_oscquery_values({
+                '/engine/status/timecode': value
+            })
+
     #########################
     # Project management
     #########################
@@ -358,23 +467,3 @@ class ControllerEngine(BaseEngine):
         # For now, this is a fire-and-forget command
         
         return True
-
-    def create_timecode(self):
-        if self.with_mtc:
-            self.mtcmaster = libmtcmaster.MTCSender_create()
-        else:
-            Logger.info("Midi TimeCode requires with_mtc to be True.")
-
-    def start_timecode(self):
-        if self.with_mtc:
-            libmtcmaster.MTCSender_play(self.mtcmaster)
-            Logger.info("Midi TimeCode started.")
-        else:
-            Logger.info("Midi TimeCode requires with_mtc to be True.")
-
-    def stop_timecode(self):
-        if self.with_mtc:
-            libmtcmaster.MTCSender_stop(self.mtcmaster)
-            Logger.info("Midi TimeCode stopped.")
-        else:
-            Logger.info("Midi TimeCode requires with_mtc to be True.")
