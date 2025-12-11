@@ -9,7 +9,7 @@ description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
 license = "GPL-3.0"
 authors = [
-    "Ion Reguera <ion@stagelab.com>",
+    "Ion Reguera <ion@stagelab.coop>",
     "Adrià Masip <adria.back@gmail.com>"
 ]
 keywords = []
