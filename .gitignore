@@ -23,7 +23,3 @@ site/
 !.venv/pyvenv.cfg
 
 dev/test_xml_files/media/
-
-debian/
-
-debian/

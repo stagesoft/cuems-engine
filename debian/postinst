@@ -1,0 +1,77 @@
+#!/bin/bash
+set -e
+
+CUEMS_VENV="/usr/lib/cuems"
+
+case "$1" in
+    configure)
+        # Verify virtual environment exists
+        if [ ! -f "$CUEMS_VENV/bin/python3" ]; then
+            echo "ERROR: Virtual environment not found at $CUEMS_VENV" >&2
+            echo "Please ensure cuems-utils package is properly installed." >&2
+            exit 1
+        fi
+        
+        # Verify console scripts were installed
+        if [ ! -f "$CUEMS_VENV/bin/controller-engine" ]; then
+            echo "WARNING: Console script controller-engine not found" >&2
+        fi
+        if [ ! -f "$CUEMS_VENV/bin/node-engine" ]; then
+            echo "WARNING: Console script node-engine not found" >&2
+        fi
+        
+        # Reload systemd (service files from cuems-common)
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper update-state >/dev/null 2>&1 || true
+        elif command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+        fi
+        
+        echo "cuems-engine installed successfully."
+        echo "Package: cuemsengine installed to $CUEMS_VENV/lib/python*/site-packages/"
+        echo "Console scripts: $CUEMS_VENV/bin/controller-engine, $CUEMS_VENV/bin/node-engine, $CUEMS_VENV/bin/system-ports"
+        echo "Service files provided by cuems-common package."
+        
+        # Enable and start the services
+        if command -v systemctl >/dev/null 2>&1; then
+            # Enable and start cuems-controller-engine (controller-engine)
+            if systemctl is-enabled cuems-controller-engine >/dev/null 2>&1; then
+                echo "Service cuems-controller-engine is already enabled."
+            else
+                systemctl enable cuems-controller-engine || echo "WARNING: Failed to enable cuems-controller-engine service" >&2
+            fi
+            
+            if systemctl is-active --quiet cuems-controller-engine 2>/dev/null; then
+                echo "Service cuems-controller-engine is already running."
+            else
+                systemctl start cuems-controller-engine || echo "WARNING: Failed to start cuems-controller-engine service" >&2
+            fi
+            
+            # Enable and start cuems-node-engine
+            if systemctl is-enabled cuems-node-engine >/dev/null 2>&1; then
+                echo "Service cuems-node-engine is already enabled."
+            else
+                systemctl enable cuems-node-engine || echo "WARNING: Failed to enable cuems-node-engine service" >&2
+            fi
+            
+            if systemctl is-active --quiet cuems-node-engine 2>/dev/null; then
+                echo "Service cuems-node-engine is already running."
+            else
+                systemctl start cuems-node-engine || echo "WARNING: Failed to start cuems-node-engine service" >&2
+            fi
+        fi
+        ;;
+        
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+        
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0
+

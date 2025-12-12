@@ -1,12 +1,33 @@
-Source: osc-control
+Source: cuems-engine
 Section: python
-Priority: extra
-Maintainer: Ion Reguera <ion@stagelab.net>
-Build-Depends: debhelper (>= 9), python3, dh-virtualenv (>= 0.8)
-Standards-Version: 3.9.5
+Priority: optional
+Maintainer: Ion Reguera <ion@stagelab.coop>
+Build-Depends: debhelper-compat (= 13),
+               dh-virtualenv (>= 1.2),
+               python3-all,
+               python3-setuptools,
+               python3-pip,
+               python3-dev
+Standards-Version: 4.6.0
+Homepage: https://github.com/stagesoft/cuems-engine
 
-Package: osc-control
-Architecture: any
-Pre-Depends: dpkg (>= 1.16.1), python3.7, ${misc:Pre-Depends}
-Depends: ${misc:Depends}, libossia, libmtcmaster, audioplayer, xjadeo
-Description: osc-control Package!
+Package: cuems-engine
+Architecture: all
+Depends: ${misc:Depends},
+         ${python3:Depends},
+         cuems-utils (>= 0.1.0rc4),
+         cuems-common (>= 1.0.0),
+         python3 (>= 3.11),
+         python3-pyossia (>= 2.0.0-rc6+124+cuems2)
+Description: CUEMS Engine - Engine infrastructure of the CueMS system
+ CUEMS Engine provides the core engine infrastructure for the CUEMS
+ system, including controller and node engines for media playback,
+ MIDI control, and OSC communication.
+ .
+ This package installs into the /usr/lib/cuems/ virtual environment
+ provided by cuems-utils. Console scripts are installed to
+ /usr/lib/cuems/bin/node-engine, /usr/lib/cuems/bin/controller-engine,
+ and /usr/lib/cuems/bin/system-ports.
+ .
+ The systemd service files are provided by cuems-common and run the
+ respective console scripts.

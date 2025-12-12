@@ -38,7 +38,7 @@ python-daemon = "3.1.2"
 python-osc = "1.9.3"
 JACK-Client = ">=0.5.4"
 systemd-python = "^235"
-pyossia = {path = "/disk/Projects/StageLab/libossia/build/src/ossia-python/dist/pyossia-2.0.0rc6-cp311-cp311-linux_x86_64.whl"}
+# pyossia is provided by python3-pyossia Debian package (see debian/control)
 
 [tool.poetry.group.dev.dependencies]
 psutil = "*"
@@ -54,7 +54,6 @@ flake8 = "*"
 [tool.poetry.scripts]
 node-engine = "scripts.node_engine:main"
 controller-engine = "scripts.controller_engine:main"
-system-ports = "scripts.system_ports:main"
 
 [[tool.poetry.packages]]
 include = "cuemsengine"

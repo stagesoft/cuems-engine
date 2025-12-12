@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        # Stop services if running (service files from cuems-common)
+        if [ -d /run/systemd/system ]; then
+            if command -v systemctl >/dev/null 2>&1; then
+                if systemctl is-active --quiet cuems-controller-engine 2>/dev/null; then
+                    systemctl stop cuems-controller-engine || true
+                fi
+                if systemctl is-active --quiet cuems-node-engine 2>/dev/null; then
+                    systemctl stop cuems-node-engine || true
+                fi
+            fi
+        fi
+        ;;
+        
+    upgrade)
+        # Don't stop services on upgrade
+        ;;
+        
+    failed-upgrade)
+        ;;
+        
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0
+

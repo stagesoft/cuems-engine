@@ -1,12 +1,11 @@
-osc-control (0.0.0-2) unstable; urgency=low
+cuems-engine (0.1.0rc1-1) bookworm; urgency=medium
 
-  * Making it work
+  * Initial Debian package release
+  * Engine infrastructure for CUEMS system
+  * Controller and node engines for media playback
+  * MIDI and OSC communication support
+  * Integration with cuems-utils virtual environment
+  * Systemd service support
+  * Console scripts: node-engine, controller-engine, system-ports
 
- -- Ion Reguera <ion@stagelab.net>  Thu, 21 May 2020 17:00:00 +0200
-
-
-osc-control (0.0-1) unstable; urgency=low
-
-  * Initial dev release
-
- -- Ion Reguera <ion@stagelab.net>  Thu, 21 May 2020 17:00:00 +0200
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 11 Dec 2025 00:00:00 +0000
