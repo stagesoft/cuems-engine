@@ -147,7 +147,8 @@ class BaseEngine(SignalEngine):
         if port is None:
             port = self.cm.node_conf['oscquery_ws_port']
         if host is None:
-            host = self.controller_ip
+            # For ControllerEngine, controller_ip might be None, use CONTROLLER_HOST as fallback
+            host = getattr(self, 'controller_ip', None) or CONTROLLER_HOST
         self.oscquery_server = OssiaServer(
             host = host,
             local_port = PORT_HANDLER.new_random_port(),

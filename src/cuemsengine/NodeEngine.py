@@ -93,6 +93,37 @@ class NodeEngine(BaseEngine):
     #########################
     # OSCQuery logic
     #########################
+    def add_player_endpoints(self, cue: Cue, prefix: str = '/players'):
+        """Add player endpoints from a cue to the OSCQuery server
+        
+        Args:
+            cue: The cue containing the player client
+            prefix: Prefix to add to all endpoint paths (default: '/players')
+        """
+        if not hasattr(cue, '_osc') or cue._osc is None:
+            Logger.warning(f'Cue {cue.id} has no OSC client, cannot add endpoints')
+            return
+        
+        try:
+            # Get endpoints from the player client
+            endpoints = cue._osc.get_endpoints()
+            if not endpoints:
+                Logger.warning(f'No endpoints found for cue {cue.id}')
+                return
+            
+            # Add prefix to all endpoints
+            prefixed_endpoints = add_prefix_to_all(endpoints, f"{prefix}/{self.cm.node_uuid}/{cue.id}")
+            
+            # Add endpoints to OSCQuery server
+            if hasattr(self, 'oscquery_server') and self.oscquery_server:
+                self.oscquery_server.add_endpoints(prefixed_endpoints)
+                Logger.debug(f'Added {len(prefixed_endpoints)} endpoints for cue {cue.id}')
+            else:
+                Logger.warning('OSCQuery server not initialized, cannot add endpoints')
+        except Exception as e:
+            Logger.error(f'Error adding player endpoints for cue {cue.id}: {e}')
+            Logger.exception(e)
+
     def set_oscquery_comms(self):
         """Set the OSCQuery commands for the NodeEngine"""
         self.commands_dict = {

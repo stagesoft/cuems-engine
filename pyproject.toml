@@ -37,7 +37,7 @@ python-rtmidi = "*"
 python-daemon = "3.1.2"
 python-osc = "1.9.3"
 JACK-Client = ">=0.5.4"
-systemd-python = "^235"
+# systemd-python is provided by python3-systemd Debian package (see debian/control)
 # pyossia is provided by python3-pyossia Debian package (see debian/control)
 
 [tool.poetry.group.dev.dependencies]
