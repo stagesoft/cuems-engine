@@ -1,4 +1,7 @@
 #!/usr/bin/make -f
+
+export DH_VIRTUALENV_INSTALL_ROOT=/usr/lib
+
 %:
 	dh $@ --with python-virtualenv
 
