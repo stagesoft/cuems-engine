@@ -52,6 +52,9 @@ override_dh_fixperms:
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wrapt-1.17.3.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/xmlschema-3.4.3.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cuemsutils-0.1.0rc4.dist-info
+	# Remove systemd-python (provided by python3-systemd Debian package)
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/systemd_python-235.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/systemd
 	# Remove shared package directories (provided by cuems-utils)
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/aiofiles
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cffi
