@@ -52,8 +52,8 @@ isort = "*"
 flake8 = "*"
 
 [tool.poetry.scripts]
-node-engine = "scripts.node_engine:main"
-controller-engine = "scripts.controller_engine:main"
+node-engine = "cuemsengine.scripts.node_engine:main"
+controller-engine = "cuemsengine.scripts.controller_engine:main"
 
 [[tool.poetry.packages]]
 include = "cuemsengine"
