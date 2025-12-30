@@ -256,8 +256,9 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f'{type(e)} handling editor command: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
-            self.error_to_editor(context, value=f"Command {type(e)}: {e}")
+            self.error_to_editor(context, value=f"Command {type(e)}: {e}", request_uuid=request_uuid)
 
     def handle_editor_command(self, action, value, context=None):
         command_dict = {
@@ -273,6 +274,8 @@ class ControllerEngine(BaseEngine):
                 self.confirm_to_editor(
                     context, type=action, value='OK'
                 )
+                # Clear the editor request after successful confirmation
+                self.set_editor_request('')
             
         else:
             raise ValueError(f'Command {action} not recognized')
@@ -293,13 +296,13 @@ class ControllerEngine(BaseEngine):
     def error_to_editor(self, context, value=None, request_uuid = None, action = None):
         if not request_uuid:
             request_uuid = self.get_editor_request()
-        if not action:
-            action = 'error'
         return_message={
-            'type': action,
+            'type': 'error',
             'value': value,
             'action_uuid': request_uuid
         }
+        if action:
+            return_message['action'] = action
         Logger.debug(f'Sending error to editor: {return_message}')
         try:
             self.communications_thread.reply_to_editor(return_message, context)
@@ -409,22 +412,28 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f'Error loading project config: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
-            self.error_to_editor( context, 
+            self.error_to_editor(context, 
                 f"Project config error: {e}",
+                request_uuid=request_uuid,
                 action='project_ready'
             )
+            return False
 
         try:
             self.read_script(project_name)
         except Exception as e:
             Logger.error(f'Error loading project script: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
             self.error_to_editor(context, 
                 f"Project script error: {e}",
+                request_uuid=request_uuid,
                 action='project_ready'
             )
+            return False
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
@@ -437,8 +446,8 @@ class ControllerEngine(BaseEngine):
 
         # Confirm the project is loaded
         self.set_show_lock_file()
-        self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')
+        # Note: Don't clear editor_request here - handle_editor_command will clear it after confirmation
         return True
 
     def deploy_project(self, project_name):
