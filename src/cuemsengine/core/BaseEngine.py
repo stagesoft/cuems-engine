@@ -138,20 +138,35 @@ class BaseEngine(SignalEngine):
         return endpoints
 
     def build_endpoints_from_status(self) -> dict[str, list[Any, Callable | None, Any]]:
-        return {
-            f"/engine/status/{k[1:]}": [VALUE_TYPES_DICT[type(v).__name__], self.status_callback, v] for k,v in vars(self.status).items()
-        }   
+        endpoints = {}
+        for k, v in vars(self.status).items():
+            if v is None:
+                # Skip None values or use a default type
+                continue
+            type_name = type(v).__name__
+            if type_name not in VALUE_TYPES_DICT:
+                Logger.warning(f"Unknown value type {type_name} for status property {k}, skipping")
+                continue
+            endpoints[f"/engine/status/{k[1:]}"] = [VALUE_TYPES_DICT[type_name], self.status_callback, v]
+        return endpoints   
 
     ### OSCQUERY ###
     def set_oscquery_server(self, endpoints: dict = None, host: str = None, port: int = None):
         if port is None:
-            port = self.cm.node_conf['oscquery_ws_port']
+            # Try to get port from config, fallback to default
+            if hasattr(self, 'cm') and self.cm and hasattr(self.cm, 'node_conf') and self.cm.node_conf:
+                port = self.cm.node_conf.get('oscquery_ws_port', 9001)
+            else:
+                port = 9001  # Default OSCQuery port
         if host is None:
             # For ControllerEngine, controller_ip might be None, use CONTROLLER_HOST as fallback
             host = getattr(self, 'controller_ip', None) or CONTROLLER_HOST
+        local_port = PORT_HANDLER.new_random_port()
+        if local_port is None:
+            raise RuntimeError("Failed to get random port for OSCQuery server")
         self.oscquery_server = OssiaServer(
             host = host,
-            local_port = PORT_HANDLER.new_random_port(),
+            local_port = local_port,
             remote_port = port,
             server = ServerDevices.OSCQUERY,
             endpoints = endpoints

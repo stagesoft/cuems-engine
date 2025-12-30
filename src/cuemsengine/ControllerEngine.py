@@ -60,12 +60,12 @@ class ControllerEngine(BaseEngine):
         
         # Get dynamic port from PORT_HANDLER
         osc_hub_port = PORT_HANDLER.new_random_port()
-        osc_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
+        nng_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
         
-        Logger.info(f'OSC Hub address: {osc_hub_address}')
+        Logger.info(f'NNG Hub address: {nng_hub_address}')
         
         self.communications_thread = ControllerCommunications(
-            osc_hub_address=osc_hub_address,
+            nng_hub_address=nng_hub_address,
             editor_callback=self.editor_command_callback,
             node_operation_callback=self.node_operation_callback
         )
