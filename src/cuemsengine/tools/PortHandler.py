@@ -89,12 +89,9 @@ class PortHandler(object):
         with self._lock:
             Logger.debug(f"All used ports: {self._all_used_ports}")
             Logger.debug(f'Random ports: {self._random_ports}')
-            result = self._all_used_ports.extend(self._random_ports)
-            if result is None:
-                Logger.warning("get_all_used_ports is returning None")
-                return set()
-            else:
-                return result
+            # extend() modifies in place and returns None, so combine lists instead
+            all_ports = list(self._all_used_ports) + list(self._random_ports)
+            return all_ports
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
         """
