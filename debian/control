@@ -19,7 +19,8 @@ Depends: ${misc:Depends},
          cuems-common (>= 1.0.0),
          python3 (>= 3.11),
          python3-pyossia (>= 2.0.0-rc6+124+cuems2),
-         python3-systemd (>= 235)
+         python3-systemd (>= 235),
+         python3-packaging
 Description: CUEMS Engine - Engine infrastructure of the CueMS system
  CUEMS Engine provides the core engine infrastructure for the CUEMS
  system, including controller and node engines for media playback,

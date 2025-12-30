@@ -11,6 +11,8 @@ override_dh_virtualenv:
 	dh_virtualenv --python python3 \
 		--install-suffix cuems \
 		--use-system-packages
+	# Ensure packaging is installed in venv (mido requires it)
+	/usr/lib/cuems/bin/pip install --force-reinstall packaging || true
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info
