@@ -458,9 +458,9 @@ class ControllerEngine(BaseEngine):
         self.script.unix_name = project_name
         # self.set_status('load', project_name)
 
+        # Only set status node, not command node (command would trigger recursive load)
         self.set_oscquery_values({
-            '/engine/status/load': project_name,
-            '/engine/command/load': project_name
+            '/engine/status/load': project_name
         })
 
         # Confirm the project is loaded
@@ -469,8 +469,8 @@ class ControllerEngine(BaseEngine):
         # Note: Don't clear editor_request here - handle_editor_command will clear it after confirmation
         return True
 
-    def deploy_project(self, project_name):
-        self.load_project(project_name)
+    def deploy_project(self, project_name, context=None):
+        self.load_project(project_name, context=context)
 
     def go_script(self, value):
         if self.get_status('running') == "yes":
