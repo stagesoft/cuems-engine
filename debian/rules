@@ -75,6 +75,7 @@ override_dh_fixperms:
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wrapt
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/xmlschema
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cuemsutils
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/daemon
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pip
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pkg_resources
 	# Remove shared binary files (provided by cuems-utils)
