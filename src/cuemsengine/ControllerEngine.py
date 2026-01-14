@@ -60,12 +60,12 @@ class ControllerEngine(BaseEngine):
         
         # Get dynamic port from PORT_HANDLER
         osc_hub_port = PORT_HANDLER.new_random_port()
-        osc_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
+        nng_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
         
-        Logger.info(f'OSC Hub address: {osc_hub_address}')
+        Logger.info(f'NNG Hub address: {nng_hub_address}')
         
         self.communications_thread = ControllerCommunications(
-            osc_hub_address=osc_hub_address,
+            nng_hub_address=nng_hub_address,
             editor_callback=self.editor_command_callback,
             node_operation_callback=self.node_operation_callback
         )
@@ -146,7 +146,10 @@ class ControllerEngine(BaseEngine):
         if not node_data:
             Logger.warning(f'Player endpoints returned None, skipping addition')
             return
-        self.oscquery_server.add_endpoints(node_data)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.add_endpoints(node_data)
+        else:
+            Logger.warning("OSCQuery server not initialized, cannot add player endpoints")
 
     def remove_player_oscquery_nodes(self, operation: NodeOperation):
         """Remove the player nodes from the local OSCQuery server"""
@@ -158,7 +161,10 @@ class ControllerEngine(BaseEngine):
         if '/cue/' not in common_path:
             Logger.warning(f'Player {operation.target} is not a cue-specific player, skipping removal')
             return
-        self.oscquery_server.remove_node(common_path)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.remove_node(common_path)
+        else:
+            Logger.warning("OSCQuery server not initialized, cannot remove player nodes")
 
     def build_player_oscquery_path(self, operation: NodeOperation) -> str | None:
         """Build the player OSCQuery path"""
@@ -256,8 +262,9 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f'{type(e)} handling editor command: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
-            self.error_to_editor(context, value=f"Command {type(e)}: {e}")
+            self.error_to_editor(context, value=f"Command {type(e)}: {e}", request_uuid=request_uuid)
 
     def handle_editor_command(self, action, value, context=None):
         command_dict = {
@@ -273,6 +280,8 @@ class ControllerEngine(BaseEngine):
                 self.confirm_to_editor(
                     context, type=action, value='OK'
                 )
+                # Clear the editor request after successful confirmation
+                self.set_editor_request('')
             
         else:
             raise ValueError(f'Command {action} not recognized')
@@ -293,13 +302,13 @@ class ControllerEngine(BaseEngine):
     def error_to_editor(self, context, value=None, request_uuid = None, action = None):
         if not request_uuid:
             request_uuid = self.get_editor_request()
-        if not action:
-            action = 'error'
         return_message={
-            'type': action,
+            'type': 'error',
             'value': value,
             'action_uuid': request_uuid
         }
+        if action:
+            return_message['action'] = action
         Logger.debug(f'Sending error to editor: {return_message}')
         try:
             self.communications_thread.reply_to_editor(return_message, context)
@@ -374,11 +383,20 @@ class ControllerEngine(BaseEngine):
             ENGINE_CMD_ENDPOINTS,
             cmd_dict
         )
-        self.oscquery_server.create_endpoints(endpoints)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.create_endpoints(endpoints)
+        else:
+            Logger.error("OSCQuery server not initialized in apply_oscquery_commands")
 
     def set_oscquery_values(self, values: dict):
+        if not hasattr(self, 'oscquery_server') or not self.oscquery_server:
+            Logger.warning("OSCQuery server not initialized, cannot set values")
+            return
         for key, value in values.items():
-            self.oscquery_server.set_value(key, value)
+            try:
+                self.oscquery_server.set_value(key, value)
+            except ValueError as e:
+                Logger.warning(f"Could not set OSCQuery value {key}={value}: {e}")
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -401,7 +419,11 @@ class ControllerEngine(BaseEngine):
         self.stop_timecode()
         
         if deploy_only:
-            self.oscquery_server.set_value('/engine/command/deploy', project_name)
+            if hasattr(self, 'oscquery_server') and self.oscquery_server:
+                try:
+                    self.oscquery_server.set_value('/engine/command/deploy', project_name)
+                except ValueError as e:
+                    Logger.warning(f"Could not set deploy command in OSCQuery: {e}")
             return True
         
         try:
@@ -409,22 +431,28 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f'Error loading project config: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
-            self.error_to_editor( context, 
+            self.error_to_editor(context, 
                 f"Project config error: {e}",
+                request_uuid=request_uuid,
                 action='project_ready'
             )
+            return False
 
         try:
             self.read_script(project_name)
         except Exception as e:
             Logger.error(f'Error loading project script: {e}')
             
+            request_uuid = self.get_editor_request()
             self.set_editor_request('')
             self.error_to_editor(context, 
                 f"Project script error: {e}",
+                request_uuid=request_uuid,
                 action='project_ready'
             )
+            return False
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
@@ -437,8 +465,8 @@ class ControllerEngine(BaseEngine):
 
         # Confirm the project is loaded
         self.set_show_lock_file()
-        self.set_editor_request('')
         Logger.info(f'Project {project_name} loaded')
+        # Note: Don't clear editor_request here - handle_editor_command will clear it after confirmation
         return True
 
     def deploy_project(self, project_name):
