@@ -43,7 +43,7 @@ override_dh_fixperms:
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/json_fix-1.0.0.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/lxml-5.3.0.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/peewee-3.17.8.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pip-25.1.1.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pip-*.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pycparser-2.23.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pynng-0.8.1.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/setuptools-80.3.1.dist-info
