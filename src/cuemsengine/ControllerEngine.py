@@ -245,13 +245,16 @@ class ControllerEngine(BaseEngine):
             item['value'] = ''
         if 'action_uuid' not in _item_keys:
             self.error_to_editor(context, "No action uuid submitted")
+            return
         self.set_editor_request(item['action_uuid'])
 
+        # If 'type' is present, this is a response, not a command - reject it
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
-                
+                request_uuid = self.get_editor_request()
                 self.set_editor_request('')
-            self.error_to_editor(context, "Response not recognized")
+                self.error_to_editor(context, "Response not recognized", request_uuid=request_uuid)
+                return
 
         try:
             self.handle_editor_command(
