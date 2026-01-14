@@ -36,24 +36,24 @@ override_dh_fixperms:
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/_virtualenv.*
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/_distutils_hack
 	# Remove shared dependencies (provided by cuems-utils)
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/aiofiles-24.1.0.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cffi-2.0.0.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/Deprecated-1.2.18.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/elementpath-4.8.0.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/json_fix-1.0.0.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/lxml-5.3.0.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/peewee-3.17.8.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/aiofiles-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cffi-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/Deprecated-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/elementpath-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/json_fix-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/lxml-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/peewee-*.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pip-*.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pycparser-2.23.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pynng-0.8.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/setuptools-80.3.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/sniffio-1.3.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/timecode-1.4.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/websockets-14.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wheel-0.45.1.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wrapt-1.17.3.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/xmlschema-3.4.3.dist-info
-	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cuemsutils-0.1.0rc4.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pycparser-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/pynng-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/setuptools-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/sniffio-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/timecode-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/websockets-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wheel-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/wrapt-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/xmlschema-*.dist-info
+	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/cuemsutils-*.dist-info
 	# Remove systemd-python (provided by python3-systemd Debian package)
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/systemd_python-235.dist-info
 	rm -rf debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/systemd
