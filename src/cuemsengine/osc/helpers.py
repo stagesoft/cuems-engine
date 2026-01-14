@@ -33,62 +33,25 @@ def new_osc_device(cls) -> OSCDevice:
     return x
 
 def new_oscquery_device(cls) -> OSCQueryDevice:
-    max_retries = 5
-    retry_delay = 2.0
-    update_timeout = 30.0  # seconds
-    update_interval = 0.5  # seconds
-    
-    # Retry device creation with exponential backoff
-    x = None
-    for attempt in range(max_retries):
-        try:
-            x = OSCQueryDevice(
-                cls.name,
-                f"ws://{cls.host}:{cls.remote_port}",
-                cls.local_port
-            )
-            break  # Success, exit retry loop
-        except Exception as e:
-            if attempt < max_retries - 1:
-                Logger.warning(f'Failed to create OSCQueryDevice (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {retry_delay}s...')
-                sleep(retry_delay)
-                retry_delay *= 1.5  # Exponential backoff
-            else:
-                Logger.exception(f'Failed to create OSCQueryDevice after {max_retries} attempts: {e}, type: {type(e)}')
-                return None
-    
-    if x is None:
-        return None
-    
+    try:
+        x = OSCQueryDevice(
+            cls.name,
+            f"ws://{cls.host}:{cls.remote_port}",
+            cls.local_port
+        )
+    except Exception as e:
+        Logger.exception(f'Failed to create OSCQueryDevice: {e}, type: {type(e)}')
+        return
     Logger.info(f'Added OSCQueryDevice: {cls.name}')
-    
-    # Retry device update with timeout
     try:
         result = False
-        start_time = datetime.now()
-        elapsed = 0.0
-        
-        while not result and elapsed < update_timeout:
-            try:
-                result = x.update()
-                if not result:
-                    sleep(update_interval)
-                    elapsed = (datetime.now() - start_time).total_seconds()
-                    Logger.debug(f'Waiting for remote device ws://{cls.host}:{cls.remote_port} to be ready... ({elapsed:.1f}s/{update_timeout}s)')
-            except Exception as update_error:
-                Logger.warning(f'Error during OSCQueryDevice update: {update_error}. Retrying...')
-                sleep(update_interval)
-                elapsed = (datetime.now() - start_time).total_seconds()
-                if elapsed >= update_timeout:
-                    raise TimeoutError(f'OSCQueryDevice update timed out after {update_timeout}s')
-        
-        if not result:
-            raise TimeoutError(f'OSCQueryDevice update failed: device not ready after {update_timeout}s')
-            
+        while not result:
+            result = x.update()
+            sleep(0.5)
+            Logger.debug(f'Waiting for remote device ws://{cls.host}:{cls.remote_port} to be ready...')
     except Exception as e:
         Logger.exception(f'Failed to update OSCQueryDevice: {e}, type: {type(e)}')
-        return None
-    
+        return
     Logger.debug(f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port} {datetime.now()}")
     return x
 

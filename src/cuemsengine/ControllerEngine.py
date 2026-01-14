@@ -146,7 +146,10 @@ class ControllerEngine(BaseEngine):
         if not node_data:
             Logger.warning(f'Player endpoints returned None, skipping addition')
             return
-        self.oscquery_server.add_endpoints(node_data)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.add_endpoints(node_data)
+        else:
+            Logger.warning("OSCQuery server not initialized, cannot add player endpoints")
 
     def remove_player_oscquery_nodes(self, operation: NodeOperation):
         """Remove the player nodes from the local OSCQuery server"""
@@ -158,7 +161,10 @@ class ControllerEngine(BaseEngine):
         if '/cue/' not in common_path:
             Logger.warning(f'Player {operation.target} is not a cue-specific player, skipping removal')
             return
-        self.oscquery_server.remove_node(common_path)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.remove_node(common_path)
+        else:
+            Logger.warning("OSCQuery server not initialized, cannot remove player nodes")
 
     def build_player_oscquery_path(self, operation: NodeOperation) -> str | None:
         """Build the player OSCQuery path"""
@@ -377,11 +383,20 @@ class ControllerEngine(BaseEngine):
             ENGINE_CMD_ENDPOINTS,
             cmd_dict
         )
-        self.oscquery_server.create_endpoints(endpoints)
+        if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            self.oscquery_server.create_endpoints(endpoints)
+        else:
+            Logger.error("OSCQuery server not initialized in apply_oscquery_commands")
 
     def set_oscquery_values(self, values: dict):
+        if not hasattr(self, 'oscquery_server') or not self.oscquery_server:
+            Logger.warning("OSCQuery server not initialized, cannot set values")
+            return
         for key, value in values.items():
-            self.oscquery_server.set_value(key, value)
+            try:
+                self.oscquery_server.set_value(key, value)
+            except ValueError as e:
+                Logger.warning(f"Could not set OSCQuery value {key}={value}: {e}")
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -404,7 +419,11 @@ class ControllerEngine(BaseEngine):
         self.stop_timecode()
         
         if deploy_only:
-            self.oscquery_server.set_value('/engine/command/deploy', project_name)
+            if hasattr(self, 'oscquery_server') and self.oscquery_server:
+                try:
+                    self.oscquery_server.set_value('/engine/command/deploy', project_name)
+                except ValueError as e:
+                    Logger.warning(f"Could not set deploy command in OSCQuery: {e}")
             return True
         
         try:

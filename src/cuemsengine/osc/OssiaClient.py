@@ -33,17 +33,10 @@ class OssiaClient(OssiaNodes):
 
     def bind_device(self, remote_type: ClientSetupFunction):
         Logger.info(f"Using remote device: {remote_type.__annotations__['return']}")
-        try:
-            self.device = remote_type(self)
-            sleep(STARTUP_DELAY)
-            if not self.device:
-                device_type_name = remote_type.__annotations__['return'].__name__ if '__annotations__' in dir(remote_type) else 'unknown'
-                raise RuntimeError(f"OssiaClient device not bound: {device_type_name} creation failed for {self.name} at {self.host}:{self.remote_port}")
-        except Exception as e:
-            device_type_name = remote_type.__annotations__['return'].__name__ if '__annotations__' in dir(remote_type) else 'unknown'
-            Logger.error(f"Failed to bind {device_type_name} device for {self.name} at {self.host}:{self.remote_port}: {e}")
-            raise RuntimeError(f"OssiaClient device not bound: {e}") from e
-        
+        self.device = remote_type(self)
+        sleep(STARTUP_DELAY)
+        if not self.device:
+            raise RuntimeError("OssiaClient device not bound")
         Logger.debug(f"OssiaClient device bound: {self.device}")
 
         Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")

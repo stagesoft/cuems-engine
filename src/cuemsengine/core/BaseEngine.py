@@ -223,8 +223,13 @@ class BaseEngine(SignalEngine):
             self.ongoing_cue = None
             self.next_cue_pointer = None
             self.go_offset = 0
-            self.oscquery_server.set_value('/engine/status/running', "no")
-            self.oscquery_server.set_value('/engine/status/gocue', "no")
+            # Only set OSCQuery values if server exists and has the nodes
+            if hasattr(self, 'oscquery_server') and self.oscquery_server:
+                try:
+                    self.oscquery_server.set_value('/engine/status/running', "no")
+                    self.oscquery_server.set_value('/engine/status/gocue', "no")
+                except ValueError as e:
+                    Logger.warning(f"Could not reset OSCQuery status nodes: {e}. Server may not be fully initialized.")
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset:
