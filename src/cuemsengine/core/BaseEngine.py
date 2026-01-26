@@ -132,22 +132,30 @@ class BaseEngine(SignalEngine):
     def get_status_endpoints(self) -> dict[str, list[Any]]:
         endpoints = self.build_endpoints_from_status()
         Logger.debug(f"Status endpoints: {endpoints}")
-        # remove unwanted callbacks
-        for i in ["currentcue"]:
-            endpoints[f"/engine/status/{i}"][1] = None
+        # remove unwanted callbacks from status nodes that are set programmatically
+        # to avoid callback loops and threading issues when push_value() is called
+        for i in ["currentcue", "running", "load", "timecode"]:
+            if f"/engine/status/{i}" in endpoints:
+                endpoints[f"/engine/status/{i}"][1] = None
         return endpoints
 
     def build_endpoints_from_status(self) -> dict[str, list[Any, Callable | None, Any]]:
         endpoints = {}
+        Logger.debug(f"Building endpoints from status, vars: {list(vars(self.status).keys())}")
         for k, v in vars(self.status).items():
             if v is None:
-                # Skip None values or use a default type
+                Logger.debug(f"Skipping {k} (value is None)")
                 continue
             type_name = type(v).__name__
+            # Map Python type names to pyossia type names
+            if type_name == 'str':
+                type_name = 'string'
             if type_name not in VALUE_TYPES_DICT:
                 Logger.warning(f"Unknown value type {type_name} for status property {k}, skipping")
                 continue
-            endpoints[f"/engine/status/{k[1:]}"] = [VALUE_TYPES_DICT[type_name], self.status_callback, v]
+            endpoint_path = f"/engine/status/{k[1:]}"
+            endpoints[endpoint_path] = [VALUE_TYPES_DICT[type_name], self.status_callback, v]
+            Logger.debug(f"Added endpoint: {endpoint_path} with type {type_name} and value {v}")
         return endpoints   
 
     ### OSCQUERY ###

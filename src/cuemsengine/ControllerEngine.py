@@ -1,5 +1,7 @@
 import asyncio
 from functools import partial
+import threading
+import time
 
 from cuemsutils.log import Logger, logged
 
@@ -39,9 +41,16 @@ class ControllerEngine(BaseEngine):
         self.set_editor_request('')
         self.set_node_operation_callback()
 
+        # Command polling: checks OSCQuery endpoints for value changes
+        # Note: Direct callbacks disabled due to pyossia GIL threading issues
+        self._command_poll_thread = None
+        self._command_poll_stop = threading.Event()
+        self._last_command_values = {}
+
     def start(self):
         self.create_timecode()
         self.set_comms()
+        self.start_command_polling()
         super().start()
     
     @logged
@@ -72,6 +81,7 @@ class ControllerEngine(BaseEngine):
         self.communications_thread.start()
 
     def stop(self):
+        self.stop_command_polling()
         self.stop_comms()
         super().stop()
 
@@ -83,6 +93,80 @@ class ControllerEngine(BaseEngine):
             self.communications_thread.stop()
         if hasattr(self, 'oscquery_server'):
             self.oscquery_server.remove_device()
+
+    def start_command_polling(self):
+        """Start the command polling thread"""
+        if not self._command_poll_thread or not self._command_poll_thread.is_alive():
+            Logger.info("Starting command polling thread")
+            self._command_poll_stop.clear()
+            self._command_poll_thread = threading.Thread(
+                target=self._command_poll_loop,
+                name="CommandPollThread",
+                daemon=True
+            )
+            self._command_poll_thread.start()
+
+    def stop_command_polling(self):
+        """Stop the command polling thread"""
+        if self._command_poll_thread and self._command_poll_thread.is_alive():
+            Logger.info("Stopping command polling thread")
+            self._command_poll_stop.set()
+            timeout = 0.5  # 500ms timeout
+            self._command_poll_thread.join(timeout=timeout)
+            if self._command_poll_thread.is_alive():
+                Logger.warning("Command polling thread did not terminate gracefully")
+
+    def _command_poll_loop(self):
+        """Poll OSCQuery command endpoints for value changes"""
+        # Map command paths to handler methods
+        command_handlers = {
+            '/engine/command/go': self.go_script,
+            '/engine/command/load': self.deploy_project,
+        }
+
+        poll_interval = 0.1  # 100ms polling interval
+        Logger.info("Command polling loop started")
+
+        while not self._command_poll_stop.wait(poll_interval):
+            try:
+                if not hasattr(self, 'oscquery_server') or not self.oscquery_server:
+                    continue
+
+                for cmd_path, handler in command_handlers.items():
+                    try:
+                        # Check if node exists
+                        if cmd_path not in self.oscquery_server.nodes:
+                            continue
+
+                        # Get current value
+                        node = self.oscquery_server.nodes[cmd_path]
+                        current_value = node.parameter.value
+                        last_value = self._last_command_values.get(cmd_path)
+
+                        # Trigger on value change AND non-empty value
+                        if current_value != last_value and current_value:
+                            Logger.info(f"Command detected: {cmd_path} = {repr(current_value)}")
+                            self._last_command_values[cmd_path] = current_value
+
+                            # Execute handler
+                            try:
+                                handler(current_value)
+                            except Exception as e:
+                                Logger.error(f"Error executing {cmd_path}: {e}", exc_info=True)
+
+                            # Reset value to allow re-triggering
+                            try:
+                                node.parameter.push_value("")
+                                self._last_command_values[cmd_path] = ""
+                            except Exception as e:
+                                Logger.warning(f"Could not reset {cmd_path}: {e}")
+
+                    except Exception as e:
+                        Logger.error(f"Error polling {cmd_path}: {e}")
+
+            except Exception as e:
+                Logger.error(f"Error in command poll loop: {e}", exc_info=True)
+                time.sleep(1.0)  # Back off on error
 
     #########################
     # Timecode
@@ -363,24 +447,35 @@ class ControllerEngine(BaseEngine):
 
     def set_oscquery(self):
         Logger.info("Starting oscquery for Controller")
-        self.set_oscquery_server(self.get_status_endpoints())
+        status_endpoints = self.get_status_endpoints()
+        Logger.debug(f"Creating OSCQuery server with {len(status_endpoints)} status endpoints: {list(status_endpoints.keys())}")
+        self.set_oscquery_server(status_endpoints)
+        Logger.debug(f"OSCQuery server created with nodes: {list(self.oscquery_server.nodes.keys())}")
         self.apply_oscquery_commands()
+        Logger.debug(f"After applying commands, OSCQuery server has nodes: {list(self.oscquery_server.nodes.keys())}")
 
     def apply_oscquery_commands(self):
+        """
+        Register OSCQuery command endpoints.
+
+        Note: All callbacks are set to None due to pyossia threading issues.
+        The library invokes callbacks from C++ threads without acquiring Python's GIL,
+        causing crashes. Commands are instead handled via polling (_command_poll_loop).
+        """
         cmd_dict = {
-            'deploy': None, # works via Editor NNG ReqRep
-            'load': self.deploy_project,
-            'loadcue': None, # self.load_cue,
-            'go': self.go_script,
-            'gocue': None, # self.go_cue_callback,
-            # 'hwdiscovery': None, # self.hw_discovery_callback,
-            'pause': None, # self.pause_callback,
-            'preload': None, # self.load_cue_callback,
-            'resetall': None, # self.reset_all_callback,
-            'stop': None, # self.stop_callback,
-            'test': None, # self.test_callback
-            'unload': None, # self.unload_cue_callback,
-            'update': None, # works via NNG Hub
+            'deploy': None,    # Handled via Editor NNG ReqRep
+            'load': None,      # Polled by _command_poll_loop
+            'loadcue': None,
+            'go': None,        # Polled by _command_poll_loop
+            'gocue': None,
+            # 'hwdiscovery': None,
+            'pause': None,
+            'preload': None,
+            'resetall': None,
+            'stop': None,
+            'test': None,
+            'unload': None,
+            'update': None,    # Handled via NNG Hub
         }
         endpoints = add_callbacks_from_dict(
             ENGINE_CMD_ENDPOINTS,
@@ -400,6 +495,7 @@ class ControllerEngine(BaseEngine):
                 self.oscquery_server.set_value(key, value)
             except ValueError as e:
                 Logger.warning(f"Could not set OSCQuery value {key}={value}: {e}")
+                Logger.debug(f"Available OSCQuery nodes: {list(self.oscquery_server.nodes.keys())}")
 
     def on_timecode_change(self, value: str) -> None:
         Logger.debug(f'Timecode changed to {value}')
@@ -486,10 +582,11 @@ class ControllerEngine(BaseEngine):
         
         self.start_timecode()
         
-        # Send GO command via OSCQuery - nodes listen to this
+        # Update status only - do not set command node to avoid callback loop
+        # External clients set /engine/command/go which triggers this callback
+        # This callback should only update status nodes, not command nodes
         self.set_oscquery_values({
-            '/engine/status/running': "yes",
-            '/engine/command/go': value
+            '/engine/status/running': "yes"
         })
         
         Logger.info(f'GO command sent via OSCQuery: {value}')

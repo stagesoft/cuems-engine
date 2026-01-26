@@ -14,7 +14,7 @@ cuems-engine (0.1.0rc2-1) bookworm; urgency=medium
     - Maintains no_start_server=True for proper systemd/PipeWire integration
     - Requires PipeWire JACK libraries via LD_LIBRARY_PATH
 
- -- Ion Reguera <ion@stagelab.coop>  Wed, 22 Jan 2026 17:50:00 +0100
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 22 Jan 2026 17:50:00 +0100
 
 cuems-engine (0.1.0rc1-1) bookworm; urgency=medium
 
