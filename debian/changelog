@@ -1,3 +1,21 @@
+cuems-engine (0.1.0rc2-1) bookworm; urgency=medium
+
+  * Fixed EngineStatus initialization order bug
+    - Initialize _recieved before test property to prevent AttributeError
+  * Fixed OSCQuery GIL crashes
+    - Disabled ALL OSCQuery callbacks to prevent GIL crashes from C++ threads
+    - Implemented polling loop for safe command value change detection (100ms)
+    - Python thread safely checks for command value changes
+    - Commands auto-reset after execution for next trigger
+  * Added comprehensive OSCQuery debugging
+    - Enhanced logging for endpoint creation and node management
+    - Debug output for status endpoint building process
+  * JACK/PipeWire compatibility
+    - Maintains no_start_server=True for proper systemd/PipeWire integration
+    - Requires PipeWire JACK libraries via LD_LIBRARY_PATH
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 22 Jan 2026 17:50:00 +0100
+
 cuems-engine (0.1.0rc1-1) bookworm; urgency=medium
 
   * Initial Debian package release
