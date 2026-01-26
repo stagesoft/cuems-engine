@@ -3,22 +3,22 @@ class EngineStatus:
     A class that represents the status of an engine.
     """
     def __init__(self):
-        self.load = None
-        self.loadcue = None
-        self.go = None
-        self.gocue = None
-        self.pause = None
-        self.stop = None
-        self.resetall = None
-        self.preload = None
-        self.unload = None
-        self.hwdiscovery = None
-        self.deploy = None
-        self.test = None
-        self.timecode = None
-        self.nextcue = None
-        self.running = None
-        self.recieved = 0
+        self.recieved = 0  # Initialize before test (test setter increments this)
+        self.load = ""
+        self.loadcue = ""
+        self.go = ""
+        self.gocue = ""
+        self.pause = ""
+        self.stop = ""
+        self.resetall = ""
+        self.preload = ""
+        self.unload = ""
+        self.hwdiscovery = ""
+        self.deploy = ""
+        self.test = ""
+        self.timecode = 0
+        self.nextcue = ""
+        self.running = ""
 
         del self.currentcue # start with empty array
 

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "cuemsengine"
-version = "0.1.0rc1"
+version = "0.1.0rc2"
 description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
 license = "GPL-3.0"
