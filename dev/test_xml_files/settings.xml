@@ -31,12 +31,12 @@
                 <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
-                <path>/usr/local/bin/audioplayer-cuems</path>
+                <path>/usr/bin/audioplayer-cuems</path>
                 <args>-w -1</args>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>
-                <path>/usr/local/bin/dmxplayer</path>
+                <path>/usr/bin/dmxplayer</path>
                 <args></args>
                 <universes>1</universes>
             </dmxplayer>
