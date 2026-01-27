@@ -3,7 +3,8 @@ from pyossia import GlobalMessageQueue
 from threading import Thread
 from time import sleep
 
-from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue, MediaCue
+from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
+from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
