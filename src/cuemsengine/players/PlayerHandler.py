@@ -407,7 +407,11 @@ class PlayerHandler:
         if self._outputs_map is None:
             Logger.error('Outputs map not set')
             raise AttributeError('Outputs map not set')
-        return self._outputs_map.get(cue.id, None)
+        outputs = self._outputs_map.get(cue.id, None)
+        # outputs_map stores lists, but callers expect a single string
+        if isinstance(outputs, list) and len(outputs) > 0:
+            return outputs[0]
+        return outputs
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""
