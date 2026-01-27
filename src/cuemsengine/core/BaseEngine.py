@@ -424,7 +424,7 @@ class BaseEngine(SignalEngine):
                 else:
                     item._target_object = self.script.find(item.target)
 
-                if item._local and not item.loaded:
+                if item._local and (not hasattr(item, 'loaded') or not item.loaded):
                     Logger.info(f'Arming item: {type(item).__name__} {item.id}')
                     CUE_HANDLER.arm(item, True)
 

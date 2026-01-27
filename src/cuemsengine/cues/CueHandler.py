@@ -117,7 +117,11 @@ class CueHandler:
             if not found:
                 self.add_armed_cue(cue)
             if isinstance(cue, AudioCue):
-                self.communications_thread.add_player(f'audioplayer_{cue.id}', None)
+                # Non-blocking NNG notification (fire-and-forget)
+                try:
+                    self.communications_thread.add_player(f'audioplayer_{cue.id}', None, timeout=0.1)
+                except Exception:
+                    pass  # Ignore - NNG is for distributed nodes
 
         if cue.post_go == 'go':
             self.arm(cue._target_object, init)
@@ -131,9 +135,13 @@ class CueHandler:
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
-            if isinstance(cue, AudioCue):
-                self.communications_thread.remove_player(f'audioplayer_{cue.id}')
-            self.communications_thread.remove_cue(cue.id)
+            # Non-blocking NNG notifications (fire-and-forget)
+            try:
+                if isinstance(cue, AudioCue):
+                    self.communications_thread.remove_player(f'audioplayer_{cue.id}', timeout=0.1)
+                self.communications_thread.remove_cue(cue.id, timeout=0.1)
+            except Exception:
+                pass  # Ignore - NNG is for distributed nodes
             return True
 
         return False
@@ -157,7 +165,7 @@ class CueHandler:
     def go(self, cue: Cue, mtc: MtcListener) -> Thread:
         """Starts a cue in a thread."""
         Logger.info(f'GO command received. Starting cue {cue.id}')
-        if not cue.loaded:
+        if not hasattr(cue, 'loaded') or not cue.loaded:
             raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
 
         thread = Thread(
@@ -180,12 +188,14 @@ class CueHandler:
             sleep(cue.prewait.milliseconds / 1000)
 
         if cue._local:
-            self.communications_thread.add_cue(cue.id, {
-                'id': cue.id,
-                'offset': cue._start_mtc.milliseconds
-            })
+            # Run cue immediately - don't wait for NNG notifications
             run_cue(cue, mtc)
-            self.communications_thread.remove_cue(cue.id)
+            
+            # Notify controller in background (fire-and-forget)
+            try:
+                self.communications_thread.remove_cue(cue.id, timeout=0.1)
+            except Exception:
+                pass  # Ignore - this is just for status tracking
 
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)

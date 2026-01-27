@@ -1,9 +1,10 @@
 from functools import partial
-from pyossia import GlobalMessageQueue
 from threading import Thread
 from time import sleep
+import requests
 
-from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue, MediaCue
+from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
+from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
 
@@ -62,8 +63,9 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
-        self.set_oscquery_comms()
-        self.set_players()
+        self.set_oscquery_comms()  # Creates client but NOT GMQ yet
+        self.set_players()  # Creates player devices (may iterate children())
+        self.start_oscquery_queue()  # Create GMQ AFTER all devices are set up
         self.mtc_listener.start()
         super().start()
         
@@ -125,45 +127,113 @@ class NodeEngine(BaseEngine):
             Logger.exception(e)
 
     def set_oscquery_comms(self):
-        """Set the OSCQuery commands for the NodeEngine"""
+        """Set up the OSCQuery client for the NodeEngine.
+        
+        NOTE: We use HTTP polling instead of pyossia's GlobalMessageQueue
+        because GMQ is unreliable with multiple devices.
+        """
         self.commands_dict = {
             'deploy': self.ready_project,
-            # Not a node responsibility
-            # 'hwdiscovery': None, # self.hw_discovery_callback,
             'load': self.load_project,
-            'loadcue': None, # self.load_cue,
+            'loadcue': None,
             'go': self.go_script,
-            'gocue': self.go_script, # self.go_cue_callback,
-            'pause': None, # self.pause_callback,
-            # 'preload': None, # self.load_cue_callback,
-            'resetall': None, # self.reset_all_callback,
-            'stop': None, # self.stop_callback,
-            'test': None, # self.test_callback
-            'unload': None, # self.unload_cue_callback,
-            'update': None, # self.update_player_endpoints,
+            'gocue': self.go_script,
+            'pause': None,
+            'resetall': None,
+            'stop': None,
+            'test': None,
+            'unload': None,
+            'update': None,
         }
         self.oscquery_client = self.set_oscquery_client()
-        self.oscquery_queue = GlobalMessageQueue(self.oscquery_client.device)
+
+    def start_oscquery_queue(self):
+        """Start the HTTP polling loop for OSCQuery commands.
+        
+        This replaces the unreliable pyossia GlobalMessageQueue with
+        a simple HTTP polling mechanism that queries the OSCQuery server
+        directly for command values.
+        """
+        # Initialize last known values for change detection
+        self._last_load_value = None
+        self._last_go_value = None
+        self._oscquery_base_url = f"http://{self.controller_ip}:{self.cm.node_conf.get('oscquery_ws_port', 9190)}"
+        
         self.ocsquery_queue_loop.start()
+        Logger.info(f"OSCQuery HTTP polling started - URL: {self._oscquery_base_url}")
     
+    def _fetch_oscquery_value(self, path: str):
+        """Fetch a value from the OSCQuery server via HTTP.
+        
+        Args:
+            path: The OSC path to query (e.g., '/engine/command/load')
+            
+        Returns:
+            The VALUE from the OSCQuery response, or None on error
+        """
+        try:
+            url = f"{self._oscquery_base_url}{path}"
+            response = requests.get(url, timeout=0.5)
+            if response.status_code == 200:
+                data = response.json()
+                # OSCQuery returns {"VALUE": [...]} or {"VALUE": "string"}
+                if 'VALUE' in data:
+                    val = data['VALUE']
+                    # VALUE is typically an array, get first element
+                    if isinstance(val, list) and len(val) > 0:
+                        return val[0]
+                    return val
+            return None
+        except requests.exceptions.RequestException:
+            return None
+        except Exception as e:
+            Logger.debug(f"OSCQuery fetch error for {path}: {e}")
+            return None
+
     def oscquery_loop(self):
-        while not self.stop_requested:
-            message = self.oscquery_queue.pop()
-            if message is not None:
-                parameter, value = message
-                self.route_message(parameter, value)
-            else:
-                sleep(0.001)
+        """HTTP polling loop to detect OSCQuery command changes.
+        
+        Polls /engine/command/load and /engine/command/go every 100ms
+        and calls the appropriate handler when values change.
+        """
+        try:
+            while not self.stop_requested:
+                # Poll LOAD command
+                try:
+                    load_val = self._fetch_oscquery_value('/engine/command/load')
+                    if load_val and load_val != self._last_load_value and load_val != '':
+                        Logger.info(f"LOAD command detected via HTTP: {load_val}")
+                        self._last_load_value = load_val
+                        self.load_project(load_val)
+                except Exception as e:
+                    Logger.error(f"Error polling LOAD command: {e}")
+                
+                # Poll GO command
+                try:
+                    go_val = self._fetch_oscquery_value('/engine/command/go')
+                    if go_val and go_val != self._last_go_value and go_val != '':
+                        Logger.info(f"GO command detected via HTTP: {go_val}")
+                        self._last_go_value = go_val
+                        self.go_script(go_val)
+                except Exception as e:
+                    Logger.error(f"Error polling GO command: {e}")
+                
+                sleep(0.1)  # 100ms poll interval
+                
+        except Exception as e:
+            Logger.error(f"Fatal error in OSCQuery polling loop: {e}")
 
     def route_message(self, parameter, value):
         # Exclude 'engine' common node
         path_elements = str(parameter.node).split('/')[2:]
-        Logger.debug(f'Routing message: {path_elements}')
         if path_elements[0] == 'command':
             self.run_command(path_elements[1], value)
-        if path_elements[0] == 'players':
+        elif path_elements[0] == 'status':
+            Logger.debug(f'Status update received: {path_elements[1]} = {repr(value)}')
+        elif path_elements[0] == 'players':
             # Exclude other nodes' players
             if path_elements[1] != self.cm.node_uuid:
+                Logger.debug(f'Ignoring player message for other node: {path_elements[1]}')
                 return
             # Route the message to the appropriate player handler
             if path_elements[2] == 'video':
@@ -177,9 +247,15 @@ class NodeEngine(BaseEngine):
             return
 
     def run_command(self, command, value):
+        Logger.debug(f'NodeEngine executing command: {command}({repr(value)})')
         if command in self.commands_dict.keys():
-            self.commands_dict[command](value)
-            return True
+            handler = self.commands_dict[command]
+            if handler is not None:
+                handler(value)
+                return True
+            else:
+                Logger.warning(f'Command {command} has no handler')
+                return False
         else:
             Logger.error(f'Command {command} not found')
             return False
@@ -258,7 +334,10 @@ class NodeEngine(BaseEngine):
             exit(-1)
         
         for output in PLAYER_HANDLER._video_players.keys():
-            CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None)
+            try:
+                CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None, timeout=0.1)
+            except Exception:
+                pass  # Ignore - NNG is for distributed nodes
 
     def quit_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
@@ -268,7 +347,10 @@ class NodeEngine(BaseEngine):
                 Logger.exception(e)
 
         for output in PLAYER_HANDLER._video_players.keys():
-            CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}')
+            try:
+                CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}', timeout=0.1)
+            except Exception:
+                pass  # Ignore - NNG is for distributed nodes
 
     def disconnect_video_devs(self):
         for dev in PLAYER_HANDLER.get_video_players():
@@ -302,7 +384,10 @@ class NodeEngine(BaseEngine):
                 path=self.cm.node_conf['dmxplayer']['path'],
                 args=self.cm.node_conf['dmxplayer']['args']
             )
-            CUE_HANDLER.communications_thread.add_player(f'dmxplayer_{node_uuid}', None)
+            try:
+                CUE_HANDLER.communications_thread.add_player(f'dmxplayer_{node_uuid}', None, timeout=0.1)
+            except Exception:
+                pass  # Ignore - NNG is for distributed nodes
             Logger.info(f'DMX player started successfully for node {node_uuid}')
         except Exception as e:
             Logger.error(f'Error starting DMX player: {e}')
@@ -417,7 +502,6 @@ class NodeEngine(BaseEngine):
             Logger.warning('No MTC listener, cannot process GO command.')
             return
 
-        # Signal go start
         Logger.info(f'GO command received. Starting script {self.script.name}')
         self.set_status('running', "yes")
 

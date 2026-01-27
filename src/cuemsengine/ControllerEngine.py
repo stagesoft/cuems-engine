@@ -67,9 +67,12 @@ class ControllerEngine(BaseEngine):
         else:
             osc_hub_host = CONTROLLER_HOST
         
-        # Get dynamic port from PORT_HANDLER
-        osc_hub_port = PORT_HANDLER.new_random_port()
-        nng_hub_address = f"tcp://{osc_hub_host}:{osc_hub_port}"
+        # Get NNG hub port from config (must match NodeEngine)
+        if hasattr(self, 'cm') and self.cm and hasattr(self.cm, 'node_conf'):
+            nng_hub_port = self.cm.node_conf.get('nng_hub_port', 9093)
+        else:
+            nng_hub_port = 9093
+        nng_hub_address = f"tcp://{osc_hub_host}:{nng_hub_port}"
         
         Logger.info(f'NNG Hub address: {nng_hub_address}')
         
@@ -154,12 +157,13 @@ class ControllerEngine(BaseEngine):
                             except Exception as e:
                                 Logger.error(f"Error executing {cmd_path}: {e}", exc_info=True)
 
-                            # Reset value to allow re-triggering
-                            try:
-                                node.parameter.push_value("")
-                                self._last_command_values[cmd_path] = ""
-                            except Exception as e:
-                                Logger.warning(f"Could not reset {cmd_path}: {e}")
+                            # Reset LOAD value to allow re-triggering (but not GO - NodeEngine needs to see it)
+                            if cmd_path == '/engine/command/load':
+                                try:
+                                    node.parameter.push_value("")
+                                    self._last_command_values[cmd_path] = ""
+                                except Exception as e:
+                                    Logger.warning(f"Could not reset {cmd_path}: {e}")
 
                     except Exception as e:
                         Logger.error(f"Error polling {cmd_path}: {e}")
@@ -573,7 +577,7 @@ class ControllerEngine(BaseEngine):
 
     def go_script(self, value):
         if self.get_status('running') == "yes":
-            Logger.info(f'Script {type(value)} already running.')
+            Logger.info(f'Script already running.')
             return
 
         if not self.script:
@@ -582,16 +586,11 @@ class ControllerEngine(BaseEngine):
         
         self.start_timecode()
         
-        # Update status only - do not set command node to avoid callback loop
-        # External clients set /engine/command/go which triggers this callback
-        # This callback should only update status nodes, not command nodes
+        # Set both command (for NodeEngine HTTP polling) and status
         self.set_oscquery_values({
-            '/engine/status/running': "yes"
+            '/engine/status/running': "yes",
+            '/engine/command/go': value if value else "go"
         })
         
-        Logger.info(f'GO command sent via OSCQuery: {value}')
-        
-        # Note: In a full implementation, we would wait for nodes to signal completion
-        # For now, this is a fire-and-forget command
-        
+        Logger.info(f'GO command processed')
         return True
