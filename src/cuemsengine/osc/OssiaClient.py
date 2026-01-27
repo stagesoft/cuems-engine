@@ -39,9 +39,15 @@ class OssiaClient(OssiaNodes):
             raise RuntimeError("OssiaClient device not bound")
         Logger.debug(f"OssiaClient device bound: {self.device}")
 
-        Logger.debug(f"OssiaClient previous nodes: {self.nodes.keys()}")
-        self.nodes = self.nodes_from_device()
-        Logger.debug(f"OssiaClient new nodes: {self.nodes}")
+        # Skip nodes_from_device() for OSCQuery clients to preserve GMQ functionality
+        if remote_type == ClientDevices.OSCQUERY:
+            self.nodes = {}
+        else:
+            try:
+                self.nodes = self.nodes_from_device()
+            except Exception as e:
+                Logger.warning(f"nodes_from_device() failed: {e}")
+                self.nodes = {}
 
     def add_node_creation_callback(self, callback: callable):
         Logger.debug(f"Now adding callback to {self.device}")
