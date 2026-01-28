@@ -193,16 +193,16 @@ class NodeEngine(BaseEngine):
     def oscquery_loop(self):
         """HTTP polling loop to detect OSCQuery command changes.
         
-        Polls /engine/command/load and /engine/command/go every 100ms
+        Polls /engine/status/load and /engine/command/go every 100ms
         and calls the appropriate handler when values change.
         """
         try:
             while not self.stop_requested:
-                # Poll LOAD command
+                # Poll LOAD status (controller sets status, not command, to avoid recursive load)
                 try:
-                    load_val = self._fetch_oscquery_value('/engine/command/load')
+                    load_val = self._fetch_oscquery_value('/engine/status/load')
                     if load_val and load_val != self._last_load_value and load_val != '':
-                        Logger.info(f"LOAD command detected via HTTP: {load_val}")
+                        Logger.info(f"LOAD detected via HTTP: {load_val}")
                         self._last_load_value = load_val
                         self.load_project(load_val)
                 except Exception as e:

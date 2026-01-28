@@ -157,13 +157,7 @@ class ControllerEngine(BaseEngine):
                             except Exception as e:
                                 Logger.error(f"Error executing {cmd_path}: {e}", exc_info=True)
 
-                            # Reset LOAD value to allow re-triggering (but not GO - NodeEngine needs to see it)
-                            if cmd_path == '/engine/command/load':
-                                try:
-                                    node.parameter.push_value("")
-                                    self._last_command_values[cmd_path] = ""
-                                except Exception as e:
-                                    Logger.warning(f"Could not reset {cmd_path}: {e}")
+                            # Don't reset command values - NodeEngine needs to see them via HTTP polling
 
                     except Exception as e:
                         Logger.error(f"Error polling {cmd_path}: {e}")
