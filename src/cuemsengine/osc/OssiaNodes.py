@@ -154,9 +154,9 @@ class OssiaNodes(object):
         """Create an endpoint as a node with parameter
         """
         try:
-        self.set_node(path)
-        if param_args and isinstance(param_args, list):
-            self.set_parameter(self.nodes[path], *param_args)
+            self.set_node(path)
+            if param_args and isinstance(param_args, list):
+                self.set_parameter(self.nodes[path], *param_args)
             Logger.debug(f"Created endpoint: {path}")
         except Exception as e:
             Logger.error(f"Failed to create endpoint {path}: {type(e).__name__}: {e}")
