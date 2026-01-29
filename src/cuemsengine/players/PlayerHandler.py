@@ -46,6 +46,9 @@ class PlayerHandler:
             cls._instance._lock = RLock()  # Use RLock to allow reentrant locking
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
+            # TEMPORARY: Track which outputs have videos loaded during arm (xjadeo limitation)
+            # xjadeo can only hold one video per instance, so we only load the first cue's video
+            cls._instance._video_loaded_outputs = set()
         return cls._instance
 
     # ---------------------------
@@ -369,6 +372,29 @@ class PlayerHandler:
 
             if output_name in self._video_players:
                 self._video_players[output_name] = self._video_players[output_name][::-1]
+
+    # ---------------------------
+    # Video Load Tracking (TEMPORARY for xjadeo)
+    # ---------------------------
+    # xjadeo can only display one video per instance. To ensure the first cue's
+    # video is loaded for instant play, we track which outputs have videos loaded
+    # during arm and skip loading for subsequent cues on the same output.
+    # TODO: Remove when migrating to multi-layer video player.
+
+    def is_video_loaded_for_output(self, output_name: str) -> bool:
+        """Check if a video has been loaded for the given output during arm."""
+        with self._lock:
+            return output_name in self._video_loaded_outputs
+
+    def mark_video_loaded_for_output(self, output_name: str) -> None:
+        """Mark that a video has been loaded for the given output during arm."""
+        with self._lock:
+            self._video_loaded_outputs.add(output_name)
+
+    def reset_video_loaded_outputs(self) -> None:
+        """Reset the video loaded tracking (call when loading a new project)."""
+        with self._lock:
+            self._video_loaded_outputs = set()
 
     # ---------------------------
     # Helper functions

@@ -416,6 +416,8 @@ class NodeEngine(BaseEngine):
         self.deploy_media(project)
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
+        # Reset video loaded tracking for new project (xjadeo workaround)
+        PLAYER_HANDLER.reset_video_loaded_outputs()
         PORT_HANDLER.clean_random_ports()
 
     def map_cue_outputs(self, cuelist: CueList = None):

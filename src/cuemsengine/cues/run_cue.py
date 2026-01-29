@@ -5,6 +5,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..tools.MtcListener import MtcListener
+from ..players.PlayerHandler import PLAYER_HANDLER
 from .helpers import find_timing
 
 @singledispatch
@@ -176,8 +177,29 @@ def run_videoCue(cue: VideoCue, mtc):
     """
     Run a VideoCue
     """
-    # Define the offset
     Logger.info(f'Running video cue loop {cue.id}')
+    
+    # TEMPORARY FIX for xjadeo: Load the video file on run.
+    # xjadeo can only display one video at a time, so when multiple cues share
+    # the same output, the last armed cue's video overwrites previous ones.
+    # This ensures the correct video is loaded when the cue actually runs.
+    # TODO: Remove this when migrating to a multi-layer video player that can
+    # pre-load multiple videos simultaneously (arm loads, run just plays).
+    try:
+        key = '/jadeo/load'
+        value = PLAYER_HANDLER.media_path(cue.media['file_name'])
+        cue._osc.set_value(key, value)
+        Logger.info(
+            f"load {value} result: {str(cue._osc.get_node(key).parameter.value)}",
+            extra = {"caller": cue.__class__.__name__}
+        )
+    except KeyError:
+        Logger.debug(
+            f'Key error (load) in run_videoCue {key}',
+            extra = {"caller": cue.__class__.__name__}
+        )
+    
+    # Define the offset
     try:
         key = '/jadeo/offset'
         cue._start_mtc = mtc.main_tc

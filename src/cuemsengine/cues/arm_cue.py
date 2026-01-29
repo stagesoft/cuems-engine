@@ -136,10 +136,24 @@ def arm_videoCue(cue: VideoCue):
             extra = {"caller": cue.__class__.__name__}
         )
 
+    # TEMPORARY FIX for xjadeo: Only load the first video per output during arm.
+    # xjadeo can only display one video at a time per instance. Loading subsequent
+    # cues would overwrite the first one, breaking instant play.
+    # Subsequent videos are loaded on-demand in run_videoCue.
+    # TODO: Remove this check when migrating to multi-layer video player.
+    output_name = PLAYER_HANDLER.get_cue_output_name(cue)
+    if PLAYER_HANDLER.is_video_loaded_for_output(output_name):
+        Logger.debug(
+            f'Skipping video load during arm for cue {cue.id} - output {output_name} already has video loaded',
+            extra = {"caller": cue.__class__.__name__}
+        )
+        return
+    
     try:
         key = '/jadeo/load'
         value = PLAYER_HANDLER.media_path(cue.media['file_name'])
         cue._osc.set_value(key, value)
+        PLAYER_HANDLER.mark_video_loaded_for_output(output_name)
         Logger.info(
             key + " " + str(cue._osc.get_node(key).parameter.value),
             extra = {"caller": cue.__class__.__name__}
