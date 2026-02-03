@@ -174,23 +174,24 @@ def run_dmxCue(cue: DmxCue, mtc):
 
 @run_cue.register
 def run_videoCue(cue: VideoCue, mtc):
-    """
-    Run a VideoCue
-    """
+    """Run a VideoCue."""
     Logger.info(f'Running video cue loop {cue.id}')
     
-    # TEMPORARY FIX for xjadeo: Load the video file on run.
-    # xjadeo can only display one video at a time, so when multiple cues share
-    # the same output, the last armed cue's video overwrites previous ones.
-    # This ensures the correct video is loaded when the cue actually runs.
-    # TODO: Remove this when migrating to a multi-layer video player that can
-    # pre-load multiple videos simultaneously (arm loads, run just plays).
+    # Calculate timing
+    cue._start_mtc = mtc.main_tc
+    duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
+    cue._end_mtc = cue._start_mtc + duration
+    # xjadeo formula: displayFrame = MTC + offset
+    # To show video frame 0 when MTC is at frame N, we need offset = -N
+    offset_to_go = -cue._start_mtc.frame_number
+    
+    # Load the video file
     try:
         key = '/jadeo/load'
         value = PLAYER_HANDLER.media_path(cue.media['file_name'])
         cue._osc.set_value(key, value)
         Logger.info(
-            f"load {value} result: {str(cue._osc.get_node(key).parameter.value)}",
+            f"load {value}",
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:
@@ -198,33 +199,29 @@ def run_videoCue(cue: VideoCue, mtc):
             f'Key error (load) in run_videoCue {key}',
             extra = {"caller": cue.__class__.__name__}
         )
-    
-    # Define the offset
-    try:
-        key = '/jadeo/offset'
-        cue._start_mtc = mtc.main_tc
-        duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
-        cue._end_mtc = cue._start_mtc + duration
-        #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0]['Region']['in_time'])
-        #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
-        offset_to_go = cue._start_mtc.frame_number
-        cue._osc.set_value(key, str(offset_to_go))
-        Logger.info(
-            f"offset {offset_to_go} result: {str(cue._osc.get_node(key).parameter.value)}",
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error 1 in run_videoCue {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
 
-    # Connect to mtc signal
+    # Wait for video to load
+    from time import sleep
+    import subprocess
+    
+    sleep(0.3)
+    
+    xjadeo_port = cue._osc.remote_port
+    Logger.info(f"Video cue: port={xjadeo_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
+    
+    # Set offset using oscsend (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
+    # Note: pyossia set_value doesn't reliably send OSC to xjadeo
     try:
-        key = '/jadeo/cmd'
-        cue._osc.set_value(key, "midi connect Midi Through")
-    except KeyError:
-        Logger.debug(
-            f'Key error 2 (connect) in run_videoCue {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/offset', 'i', str(int(offset_to_go))], capture_output=True, timeout=2)
+        Logger.info(f"oscsend offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
+    except Exception as e:
+        Logger.error(f"oscsend offset failed: {e}", extra={"caller": cue.__class__.__name__})
+    
+    sleep(0.1)
+    
+    # Connect to MTC using oscsend
+    try:
+        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/cmd', 's', 'midi connect Midi Through'], capture_output=True, timeout=2)
+        Logger.info(f"oscsend midi connect", extra={"caller": cue.__class__.__name__})
+    except Exception as e:
+        Logger.error(f"oscsend midi connect failed: {e}", extra={"caller": cue.__class__.__name__})

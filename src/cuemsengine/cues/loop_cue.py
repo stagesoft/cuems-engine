@@ -132,20 +132,21 @@ def loop_videoCue(cue: VideoCue, mtc):
                 sleep(0.005)
 
             if cue._local:
+                cue._start_mtc = mtc.main_tc
+                cue._end_mtc = cue._start_mtc + duration
+                offset_to_go = - (cue._start_mtc.frame_number)
+                
+                # Use oscsend (TODO: investigate why pyossia doesn't work in cue context)
                 try:
-                    key = '/jadeo/offset'
-                    cue._start_mtc = mtc.main_tc
-                    cue._end_mtc = cue._start_mtc + duration
-                    offset_to_go = - (cue._start_mtc.frame_number)
-
-                    cue._osc.set_value(key, str(offset_to_go))
-                    Logger.info(
-                        key + " " + str(cue._osc.get_node(key).parameter.value),
-                        extra = {"caller": cue.__class__.__name__}
-                    )
-                except KeyError:
-                    Logger.debug(
-                        f'Key error 1 (offset) in go_callback {key}',
+                    import subprocess
+                    xjadeo_port = cue._osc.remote_port
+                    Logger.info(f"oscsend to port {xjadeo_port}: offset {offset_to_go}", extra={"caller": cue.__class__.__name__})
+                    result = subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/offset', 'i', str(int(offset_to_go))],
+                                  capture_output=True, timeout=1)
+                    Logger.info(f"oscsend result: exit={result.returncode}", extra={"caller": cue.__class__.__name__})
+                except Exception as e:
+                    Logger.error(
+                        f'offset failed: {e}',
                         extra = {"caller": cue.__class__.__name__}
                     )
             
@@ -154,15 +155,15 @@ def loop_videoCue(cue: VideoCue, mtc):
         Logger.debug(f'loop finished with Loop counter: {loop_counter} and set loop {cue.loop}')
         if cue._local:
             try:
-                key = '/jadeo/cmd'
-                cue._osc.set_value(key, 'midi disconnect')
+                key = '/jadeo/midi/disconnect'
+                cue._osc.set_value(key, 1)
                 Logger.info(
-                    key + " " + str(cue._osc.get_value(key)),
+                    f"midi disconnect result: {str(cue._osc.get_value(key))}",
                     extra = {"caller": cue.__class__.__name__}
                 )
             except KeyError:
                 Logger.debug(
-                    f'Key error 1 (disconnect) in arm_callback {key}',
+                    f'Key error (disconnect) in loop_videoCue {key}',
                     extra = {"caller": cue.__class__.__name__}
                 )
         

@@ -124,10 +124,10 @@ def arm_videoCue(cue: VideoCue):
         return
                 
     try:
-        key = '/jadeo/cmd'
-        cue._osc.set_value(key, 'midi disconnect')
+        key = '/jadeo/midi/disconnect'
+        cue._osc.set_value(key, 1)
         Logger.info(
-            key + " " + str(cue._osc.get_node(key).parameter.value),
+            f"midi disconnect result: {str(cue._osc.get_node(key).parameter.value)}",
             extra = {"caller": cue.__class__.__name__}
         )
     except KeyError:
