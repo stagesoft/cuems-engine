@@ -140,6 +140,7 @@ class ControllerEngine(BaseEngine):
         command_handlers = {
             '/engine/command/go': self.go_script,
             '/engine/command/load': self.deploy_project,
+            '/engine/command/stop': self.stop_script,
         }
 
         poll_interval = 0.1  # 100ms polling interval
@@ -599,4 +600,26 @@ class ControllerEngine(BaseEngine):
         })
         
         Logger.info(f'GO command processed')
+        return True
+
+    def stop_script(self, value):
+        """Handle STOP command - stop timecode, notify nodes, and reset for next GO"""
+        if self.get_status('running') != "yes":
+            Logger.info('Script not running, nothing to stop.')
+            return
+
+        self.stop_timecode()
+        
+        # Set stop command for NodeEngine polling, update status, and clear go command
+        # Clearing go command allows it to be detected again on next GO
+        self.set_oscquery_values({
+            '/engine/status/running': "no",
+            '/engine/command/stop': value if value else "stop",
+            '/engine/command/go': ""  # Clear so next GO can be detected
+        })
+        
+        # Also reset the polling state so GO can be detected again
+        self._last_command_values['/engine/command/go'] = ""
+        
+        Logger.info('STOP command processed - ready for next GO')
         return True

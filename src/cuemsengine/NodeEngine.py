@@ -140,7 +140,7 @@ class NodeEngine(BaseEngine):
             'gocue': self.go_script,
             'pause': None,
             'resetall': None,
-            'stop': None,
+            'stop': self.stop_playback,
             'test': None,
             'unload': None,
             'update': None,
@@ -157,6 +157,7 @@ class NodeEngine(BaseEngine):
         # Initialize last known values for change detection
         self._last_load_value = None
         self._last_go_value = None
+        self._last_stop_value = None
         self._oscquery_base_url = f"http://{self.controller_ip}:{self.cm.node_conf.get('oscquery_ws_port', 9190)}"
         
         self.ocsquery_queue_loop.start()
@@ -217,6 +218,16 @@ class NodeEngine(BaseEngine):
                         self.go_script(go_val)
                 except Exception as e:
                     Logger.error(f"Error polling GO command: {e}")
+                
+                # Poll STOP command (Impulse type - check for any non-null value)
+                try:
+                    stop_val = self._fetch_oscquery_value('/engine/command/stop')
+                    if stop_val is not None and stop_val != self._last_stop_value:
+                        Logger.info(f"STOP command detected via HTTP: {stop_val}")
+                        self._last_stop_value = stop_val
+                        self.stop_playback()
+                except Exception as e:
+                    Logger.error(f"Error polling STOP command: {e}")
                 
                 sleep(0.1)  # 100ms poll interval
                 
@@ -544,6 +555,32 @@ class NodeEngine(BaseEngine):
 
         Logger.info(f'go_script reached end of script')
     #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
+
+    def stop_playback(self, value=None):
+        """Stop playback and reset to ready state.
+        
+        This stops playback and resets the project so it's ready for GO again.
+        """
+        Logger.info('STOP command received. Stopping playback.')
+        
+        # Disconnect all video players from MIDI
+        self.disconnect_video_devs()
+        
+        # Update status
+        self.set_status('running', "no")
+        
+        # Reset script state so GO can work again from the beginning
+        if self.script:
+            self.ready_script()
+            Logger.info(f'Project {self.script.name} reset and ready for GO.')
+        else:
+            # Just disarm if no script loaded
+            CUE_HANDLER.disarm_all()
+        
+        # Reset polling state so next GO can be detected
+        self._last_go_value = ""
+        
+        Logger.info('Playback stopped.')
 
 
 ## MISCELLANEOUS FUNCTIONS ##
