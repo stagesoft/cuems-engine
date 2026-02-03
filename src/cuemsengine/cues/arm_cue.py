@@ -149,17 +149,13 @@ def arm_videoCue(cue: VideoCue):
         )
         return
     
+    # Use oscsend for reliable video loading (pyossia is unreliable with xjadeo)
+    import subprocess
+    xjadeo_port = cue._osc.remote_port
+    video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
     try:
-        key = '/jadeo/load'
-        value = PLAYER_HANDLER.media_path(cue.media['file_name'])
-        cue._osc.set_value(key, value)
+        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/load', 's', video_path], capture_output=True, timeout=2)
         PLAYER_HANDLER.mark_video_loaded_for_output(output_name)
-        Logger.info(
-            key + " " + str(cue._osc.get_node(key).parameter.value),
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error 2 (load) in arm_callback {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+        Logger.info(f"/jadeo/load {video_path}", extra={"caller": cue.__class__.__name__})
+    except Exception as e:
+        Logger.error(f"oscsend load failed: {e}", extra={"caller": cue.__class__.__name__})

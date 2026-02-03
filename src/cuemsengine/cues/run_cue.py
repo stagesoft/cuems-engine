@@ -185,24 +185,17 @@ def run_videoCue(cue: VideoCue, mtc):
     # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
     
-    # Load the video file
-    try:
-        key = '/jadeo/load'
-        value = PLAYER_HANDLER.media_path(cue.media['file_name'])
-        cue._osc.set_value(key, value)
-        Logger.info(
-            f"load {value}",
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error (load) in run_videoCue {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
-
     import subprocess
     
+    # Load the video file using oscsend (pyossia is unreliable with xjadeo)
     xjadeo_port = cue._osc.remote_port
+    video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
+    try:
+        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/load', 's', video_path], capture_output=True, timeout=2)
+        Logger.info(f"load {video_path}", extra={"caller": cue.__class__.__name__})
+    except Exception as e:
+        Logger.error(f"oscsend load failed: {e}", extra={"caller": cue.__class__.__name__})
+    
     Logger.info(f"Video cue: port={xjadeo_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
     
     # Set offset using oscsend (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
