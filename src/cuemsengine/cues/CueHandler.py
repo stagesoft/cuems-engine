@@ -42,6 +42,8 @@ class CueHandler:
     # ---------------------------
     def set_nng_comms(self, hub_address: str, node_id: str):
         """Set the communications infrastructure"""
+        from time import sleep
+        
         Logger.info(f"Starting communications for Node {node_id}")
         Logger.info(f"NNG Hub address: {hub_address}")
         self.communications_thread = NodeCommunications(
@@ -49,6 +51,20 @@ class CueHandler:
             node_id=node_id
         )
         self.communications_thread.start()
+        
+        # Wait for NNG thread to initialize (prevents race condition in nni_random)
+        max_wait = 5.0  # seconds
+        wait_interval = 0.1
+        waited = 0.0
+        while waited < max_wait:
+            if (self.communications_thread.is_alive() and 
+                self.communications_thread.event_loop is not None):
+                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
+                break
+            sleep(wait_interval)
+            waited += wait_interval
+        else:
+            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
 
     # ---------------------------
     # Armed Cues List Methods

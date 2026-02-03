@@ -82,6 +82,21 @@ class ControllerEngine(BaseEngine):
             node_operation_callback=self.node_operation_callback
         )
         self.communications_thread.start()
+        
+        # Wait for NNG thread to initialize (prevents race condition in nni_random)
+        from time import sleep
+        max_wait = 5.0  # seconds
+        wait_interval = 0.1
+        waited = 0.0
+        while waited < max_wait:
+            if (self.communications_thread.is_alive() and 
+                self.communications_thread.event_loop is not None):
+                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
+                break
+            sleep(wait_interval)
+            waited += wait_interval
+        else:
+            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
 
     def stop(self):
         self.stop_command_polling()
