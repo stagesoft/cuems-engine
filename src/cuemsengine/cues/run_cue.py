@@ -200,11 +200,7 @@ def run_videoCue(cue: VideoCue, mtc):
             extra = {"caller": cue.__class__.__name__}
         )
 
-    # Wait for video to load
-    from time import sleep
     import subprocess
-    
-    sleep(0.3)
     
     xjadeo_port = cue._osc.remote_port
     Logger.info(f"Video cue: port={xjadeo_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
@@ -216,8 +212,6 @@ def run_videoCue(cue: VideoCue, mtc):
         Logger.info(f"oscsend offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
     except Exception as e:
         Logger.error(f"oscsend offset failed: {e}", extra={"caller": cue.__class__.__name__})
-    
-    sleep(0.1)
     
     # Connect to MTC using oscsend
     try:
