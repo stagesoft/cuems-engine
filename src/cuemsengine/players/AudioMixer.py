@@ -70,17 +70,22 @@ class AudioMixer(Player):
             self.conn_man.connect_by_name(output_port, playback_port)
 
     @logged
-    def connect_player_to_mixer(self, player_name: str, player_output_prefix: str = 'output', mixer_channel: int = 0):
+    def connect_player_to_mixer(self, player_name: str, player_output_prefix: str = 'output', mixer_channel: int = 0, max_retries: int = 10, retry_delay: float = 0.2):
         """Connect a player's output to a specific mixer input channel.
         
         First disconnects any existing connections from the player's outputs,
-        then connects them to the mixer inputs.
+        then connects them to the mixer inputs. Will retry if ports are not
+        immediately available (race condition with player startup).
         
         Args:
             player_name: Name of the player JACK client to connect
             player_output_prefix: Prefix for player's output ports (e.g., 'output')
             mixer_channel: Mixer input channel number (0-indexed)
+            max_retries: Maximum number of connection attempts (default 10)
+            retry_delay: Delay between retries in seconds (default 0.2)
         """
+        from time import sleep
+        
         if mixer_channel >= self.channel_number:
             Logger.error(f"Invalid mixer channel: {mixer_channel}. Max: {self.channel_number - 1}")
             return
@@ -90,6 +95,18 @@ class AudioMixer(Player):
         channel_1_output = f"{player_name}:{player_output_prefix}_1"
         mixer_input_0 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
         mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
+        
+        # Wait for player JACK ports to be available (retry mechanism)
+        for attempt in range(max_retries):
+            # Check if ports exist by trying to get connections
+            connections = self.conn_man.get_connections(channel_0_output)
+            if connections is not None or self.conn_man.port_exists(channel_0_output):
+                break
+            if attempt < max_retries - 1:
+                Logger.debug(f"Waiting for JACK port {channel_0_output} (attempt {attempt + 1}/{max_retries})")
+                sleep(retry_delay)
+        else:
+            Logger.warning(f"JACK port {channel_0_output} not available after {max_retries} attempts")
         
         # First, disconnect any existing connections from player outputs
         Logger.debug(f"Disconnecting existing connections from {channel_0_output}")

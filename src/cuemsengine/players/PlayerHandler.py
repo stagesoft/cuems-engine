@@ -3,7 +3,6 @@ from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from functools import partial
 from threading import RLock
-from time import sleep
 from typing import Callable
 
 from .AudioPlayer import AudioPlayer, start_audio_output
@@ -184,14 +183,12 @@ class PlayerHandler:
         
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
-            # Wait for the player to register with JACK
-            sleep(0.5)
-            
             # Use the cue ID as the player name (same as the client name format)
             uuid_slug = ''.join(str(cue.id).split('-'))
             player_name = f'audioplayer-{uuid_slug}'
             Logger.info(f'Connecting player {player_name} to audio mixer')
             # Connect to mixer channel 0 by default (can be made configurable later)
+            # connect_player_to_mixer has built-in retry logic for JACK port availability
             self._audio_mixer.connect_player_to_mixer(
                 player_name=player_name,
                 player_output_prefix='output',

@@ -79,6 +79,24 @@ class JackConnectionManager:
             Logger.error(f"Unexpected error getting JACK ports: {e}")
             return []
     
+    def port_exists(self, port_name: str) -> bool:
+        """Check if a JACK port exists.
+        
+        Args:
+            port_name: Full name of the port (e.g., 'client_name:port_name')
+            
+        Returns:
+            True if the port exists, False otherwise
+        """
+        if self.client is None:
+            return False
+        
+        try:
+            ports = self.client.get_ports(name_pattern=f'^{port_name}$')
+            return len(ports) > 0
+        except Exception:
+            return False
+    
     @logged
     def connect_by_name(self, source_port: str, destination_port: str) -> bool:
         """Connect two JACK ports by name.
