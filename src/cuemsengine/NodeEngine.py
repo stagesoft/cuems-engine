@@ -301,6 +301,12 @@ class NodeEngine(BaseEngine):
                     args=self.cm.node_conf['audiomixer']['args']
                 )
                 Logger.info(f'Audio mixer started successfully for mixer {mixer_id}')
+                # Register mixer with Controller via NNG
+                try:
+                    CUE_HANDLER.communications_thread.add_player(f'audiomixer_{mixer_id}', None, timeout=0.1)
+                    Logger.info(f'Audio mixer {mixer_id} registered with Controller')
+                except Exception as e:
+                    Logger.warning(f'Could not register mixer with Controller: {e}')
             except Exception as e:
                 Logger.error(f'Error starting audio mixer: {e}')
                 Logger.exception(e)

@@ -267,15 +267,15 @@ class ControllerEngine(BaseEngine):
     def build_player_oscquery_path(self, operation: NodeOperation) -> str | None:
         """Build the player OSCQuery path"""
         ptype, id = operation.target.split('_')
-        common_path = f'/engine/players/{operation.sender}/'
+        common_path = f'/engine/players/{operation.sender}'
         if ptype == 'audioplayer':
-            common_path += f'audio/cue/{id}/'
+            common_path += f'/audio/cue/{id}'
         elif ptype == 'audiomixer':
-            common_path += f'audio/mixer/{id}/'
+            common_path += f'/audio/mixer/{id}'
         elif ptype == 'videoplayer':
-            common_path += f'video/mixer/{id}/'
+            common_path += f'/video/mixer/{id}'
         elif ptype == 'dmxplayer':
-            common_path += f'dmx/mixer/{id}/'
+            common_path += f'/dmx/mixer/{id}'
         else:
             Logger.warning(f'Unknown player type: {ptype}')
             return None
@@ -287,8 +287,7 @@ class ControllerEngine(BaseEngine):
         for key, value in PLAYERS_ENDPOINTS_DICT.items():
             if key in path:
                 endpoints.update(value)
-        add_prefix_to_all(endpoints, path)
-        return endpoints
+        return add_prefix_to_all(endpoints, path)
 
     def cue_operation_callback(self, operation: NodeOperation):
         """Callback invoked when cues are received from nodes."""
