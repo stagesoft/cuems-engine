@@ -79,9 +79,9 @@ def run_audioCue(cue: AudioCue, mtc):
         cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
         cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
         
-        #cue._end_mtc = cue._start_mtc + (cue.media.regions[0].out_time - cue.media.regions[0].in_time)
-        #offset_to_go = float(-(cue._start_mtc.milliseconds) + cue.media.regions[0].in_time.milliseconds)
-        offset_to_go = cue._start_mtc.milliseconds
+        # Audio player formula: file_position = MTC + offset
+        # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
+        offset_to_go = float(-cue._start_mtc.milliseconds)
 
         cue._osc.set_value(key, offset_to_go)
         Logger.info(

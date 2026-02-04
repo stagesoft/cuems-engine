@@ -54,7 +54,9 @@ def loop_audioCue(cue: AudioCue, mtc):
                 # Recalculate offset and apply for next loop iteration
                 cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
-                offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
+                # Audio player formula: file_position = MTC + offset
+                # To restart from position 0, offset = -start_mtc
+                offset_to_go = float(-cue._start_mtc.milliseconds)
                 try:
                     key = '/offset'
                     cue._osc.set_value(key, offset_to_go)
