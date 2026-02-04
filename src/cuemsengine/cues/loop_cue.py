@@ -47,12 +47,14 @@ def loop_audioCue(cue: AudioCue, mtc):
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.005)
 
-            if cue._local:
-                # Recalculate offset and apply
+            loop_counter += 1
+            
+            # Only update offset if we're going to loop again
+            if cue._local and (not cue.loop or loop_counter < cue.loop):
+                # Recalculate offset and apply for next loop iteration
                 cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
                 offset_to_go = float(-(cue._start_mtc.milliseconds) + duration.milliseconds)
-                # offset_to_go = duration.milliseconds * (-1)
                 try:
                     key = '/offset'
                     cue._osc.set_value(key, offset_to_go)
@@ -61,8 +63,6 @@ def loop_audioCue(cue: AudioCue, mtc):
                         f'Key error 3 in go_callback {key}',
                         extra = {"caller": cue.__class__.__name__}
                     )
-
-            loop_counter += 1
 
         if cue._local:                
             try:
