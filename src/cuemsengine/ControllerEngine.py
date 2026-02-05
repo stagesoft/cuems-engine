@@ -160,6 +160,36 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"Error forwarding player OSC to nodes: {e}")
 
+    def _forward_load_to_nodes(self, project_name: str) -> None:
+        """Forward a load command to NodeEngine via NNG.
+        
+        This ensures the NodeEngine loads the project script when
+        the project is loaded from the Editor via IPC.
+        
+        Args:
+            project_name: Name of the project to load
+        """
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            Logger.warning("Cannot forward load to nodes: communications thread not available")
+            return
+        
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target='load',
+            data={'value': project_name, 'address': '/engine/command/load'}
+        )
+        
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.info(f"Forwarded load command to nodes: {project_name}")
+        except Exception as e:
+            Logger.error(f"Error forwarding load command to nodes: {e}")
+
     def stop(self):
         self.stop_comms()
         super().stop()
@@ -418,6 +448,9 @@ class ControllerEngine(BaseEngine):
         
         # Update internal status
         self.set_status('load', project_name)
+
+        # Forward load command to NodeEngine via NNG
+        self._forward_load_to_nodes(project_name)
 
         # Confirm the project is loaded
         self.set_show_lock_file()

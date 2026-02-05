@@ -133,7 +133,10 @@ def loop_videoCue(cue: VideoCue, mtc):
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
 
-            if cue._local:
+            loop_counter += 1
+            
+            # Only update offset if we're going to loop again
+            if cue._local and (not cue.loop or loop_counter < cue.loop):
                 cue._start_mtc = mtc.main_tc
                 cue._end_mtc = cue._start_mtc + duration
                 offset_to_go = - (cue._start_mtc.frame_number)
@@ -147,8 +150,6 @@ def loop_videoCue(cue: VideoCue, mtc):
                         f'offset failed: {e}',
                         extra = {"caller": cue.__class__.__name__}
                     )
-            
-            loop_counter += 1
 
         Logger.debug(f'loop finished with Loop counter: {loop_counter} and set loop {cue.loop}')
         if cue._local:

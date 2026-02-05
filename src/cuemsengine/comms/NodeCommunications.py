@@ -60,6 +60,10 @@ class NodeCommunications(AsyncCommsThread):
     def _handle_command_operation(self, operation: NodeOperation) -> None:
         """Handle a COMMAND operation received from ControllerEngine.
         
+        IMPORTANT: Commands are executed in a separate thread to avoid blocking
+        the NNG message receiver. Some commands like 'go' can block for the 
+        duration of cue playback, which would prevent receiving STOP/LOAD commands.
+        
         Args:
             operation: The NodeOperation containing the command
         """
@@ -74,10 +78,22 @@ class NodeCommunications(AsyncCommsThread):
         Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
         
         if self._command_callback:
-            try:
-                self._command_callback(command_name, value, address)
-            except Exception as e:
-                Logger.error(f"Error executing command callback for {command_name}: {e}")
+            # Execute command in a separate thread to avoid blocking the NNG receiver
+            # This is critical because commands like 'go' block until cue playback completes
+            import threading
+            def run_command():
+                try:
+                    self._command_callback(command_name, value, address)
+                except Exception as e:
+                    Logger.error(f"Error executing command callback for {command_name}: {e}")
+            
+            thread = threading.Thread(
+                target=run_command,
+                name=f"NNG-Command-{command_name}",
+                daemon=True
+            )
+            thread.start()
+            Logger.debug(f"Started command thread: {thread.name}")
         else:
             Logger.warning(f"No command callback set for NodeCommunications")
 
