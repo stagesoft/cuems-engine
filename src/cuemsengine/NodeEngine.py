@@ -481,10 +481,6 @@ class NodeEngine(BaseEngine):
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def go_script(self, value):
-        if self.get_status('running') == "yes":
-            Logger.info(f'Script already running. Current cue: {self.ongoing_cue.id}')
-            return
-
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
@@ -493,18 +489,20 @@ class NodeEngine(BaseEngine):
             Logger.warning('No MTC listener, cannot process GO command.')
             return
 
-        Logger.info(f'GO command received. Starting script {self.script.name}')
-        self.set_status('running', "yes")
-
-        # Get the cue to go
+        # Determine the cue to go
         if not self.ongoing_cue:
+            # First GO - start from beginning
             cue_to_go = self.script.cuelist.contents[0]
+            Logger.info(f'GO command received. Starting script {self.script.name}')
         else:
+            # Successive GO - advance to next cue
             if self.next_cue_pointer:
                 cue_to_go = self.next_cue_pointer
+                Logger.info(f'GO command received. Advancing to next cue: {cue_to_go.id}')
             else:
-                Logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.id}')
-                self.ready_script()
+                # No next cue that requires manual GO - do nothing
+                # (auto-chained cues will handle themselves via post_go)
+                Logger.info(f'No next cue to advance to. Script is running via auto-chain.')
                 return
 
         if not cue_to_go._local:
@@ -514,12 +512,18 @@ class NodeEngine(BaseEngine):
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
             return
+
+        # Update state
+        self.set_status('running', "yes")
         self.ongoing_cue = cue_to_go
-    #    self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
+        
+        # Start the cue
         main_thread = CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener
         )
+        
+        # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         self.go_offset = self.mtc_listener.main_tc.milliseconds
 
@@ -529,10 +533,7 @@ class NodeEngine(BaseEngine):
         else:
             next_cue = ""
 
-        CUE_HANDLER.wait_for_cue(main_thread)
-
-        Logger.info(f'go_script reached end of script')
-    #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
+        Logger.info(f'Cue {cue_to_go.id} started. Next cue: {next_cue if next_cue else "none"}')
 
     def stop_playback(self, value=None):
         """Stop playback and reset to ready state.
