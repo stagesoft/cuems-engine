@@ -138,14 +138,10 @@ def loop_videoCue(cue: VideoCue, mtc):
                 cue._end_mtc = cue._start_mtc + duration
                 offset_to_go = - (cue._start_mtc.frame_number)
                 
-                # Use oscsend (TODO: investigate why pyossia doesn't work in cue context)
+                # Set new offset via pyossia OSC
                 try:
-                    import subprocess
-                    xjadeo_port = cue._osc.remote_port
-                    Logger.info(f"oscsend to port {xjadeo_port}: offset {offset_to_go}", extra={"caller": cue.__class__.__name__})
-                    result = subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/offset', 'i', str(int(offset_to_go))],
-                                  capture_output=True, timeout=1)
-                    Logger.info(f"oscsend result: exit={result.returncode}", extra={"caller": cue.__class__.__name__})
+                    cue._osc.set_value('/jadeo/offset.1', int(offset_to_go))
+                    Logger.info(f"offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
                 except Exception as e:
                     Logger.error(
                         f'offset failed: {e}',

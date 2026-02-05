@@ -185,30 +185,26 @@ def run_videoCue(cue: VideoCue, mtc):
     # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
     
-    import subprocess
-    
-    # Load the video file using oscsend (pyossia is unreliable with xjadeo)
-    xjadeo_port = cue._osc.remote_port
+    # Load the video file via pyossia OSC
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
     try:
-        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/load', 's', video_path], capture_output=True, timeout=2)
+        cue._osc.set_value('/jadeo/load', video_path)
         Logger.info(f"load {video_path}", extra={"caller": cue.__class__.__name__})
     except Exception as e:
-        Logger.error(f"oscsend load failed: {e}", extra={"caller": cue.__class__.__name__})
+        Logger.error(f"Video load failed: {e}", extra={"caller": cue.__class__.__name__})
     
-    Logger.info(f"Video cue: port={xjadeo_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
+    Logger.info(f"Video cue: port={cue._osc.remote_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
     
-    # Set offset using oscsend (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
-    # Note: pyossia set_value doesn't reliably send OSC to xjadeo
+    # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
     try:
-        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/offset', 'i', str(int(offset_to_go))], capture_output=True, timeout=2)
-        Logger.info(f"oscsend offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
+        cue._osc.set_value('/jadeo/offset.1', int(offset_to_go))
+        Logger.info(f"offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
     except Exception as e:
-        Logger.error(f"oscsend offset failed: {e}", extra={"caller": cue.__class__.__name__})
+        Logger.error(f"Offset set failed: {e}", extra={"caller": cue.__class__.__name__})
     
-    # Connect to MTC using oscsend
+    # Connect to MTC via pyossia OSC
     try:
-        subprocess.run(['/usr/local/bin/oscsend', '127.0.0.1', str(xjadeo_port), '/jadeo/cmd', 's', 'midi connect Midi Through'], capture_output=True, timeout=2)
-        Logger.info(f"oscsend midi connect", extra={"caller": cue.__class__.__name__})
+        cue._osc.set_value('/jadeo/cmd', 'midi connect Midi Through')
+        Logger.info(f"midi connect", extra={"caller": cue.__class__.__name__})
     except Exception as e:
-        Logger.error(f"oscsend midi connect failed: {e}", extra={"caller": cue.__class__.__name__})
+        Logger.error(f"MIDI connect failed: {e}", extra={"caller": cue.__class__.__name__})
