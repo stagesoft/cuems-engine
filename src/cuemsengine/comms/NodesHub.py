@@ -17,6 +17,7 @@ class OperationType(Enum):
     """The type of operation to be performed."""
     CUE = "cue"
     PLAYER = "player"
+    COMMAND = "command"  # For ControllerEngine → NodeEngine command forwarding
 
 @dataclass
 class NodeOperation:

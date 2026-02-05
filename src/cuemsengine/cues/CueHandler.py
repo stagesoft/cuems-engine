@@ -243,6 +243,88 @@ class CueHandler:
         thread.join()
         Logger.info(f'{thread.name} finished')
 
+    # ---------------------------
+    # OSCQuery Message Routing
+    # ---------------------------
+
+    def route_audio_message(self, path_parts: list[str], value) -> None:
+        """Route audio OSCQuery message to the appropriate handler.
+
+        Args:
+            path_parts: Path parts after 'audio' (e.g., ['mixer', '0', 'master', 'volume']
+                        or ['cue', '<uuid>', '0', 'volume'])
+            value: The OSC value to set
+        """
+        if not path_parts:
+            Logger.warning("Empty audio path parts")
+            return
+
+        if path_parts[0] == 'mixer':
+            # Route to audio mixer: ['mixer', '<output_index>', '<channel>', 'volume']
+            # → /audiomixer/0_mixer/<channel>
+            if len(path_parts) >= 3:
+                output_index = path_parts[1]
+                channel = path_parts[2]
+                mixer_cmd = f'/audiomixer/{output_index}_mixer/{channel}'
+                mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+                if mixer_client:
+                    Logger.debug(f"Routing audio mixer: {mixer_cmd} = {value}")
+                    mixer_client.set_value(mixer_cmd, float(value))
+                else:
+                    Logger.warning("Audio mixer client not available")
+            else:
+                Logger.warning(f"Invalid mixer path: {path_parts}")
+
+        elif path_parts[0] == 'cue':
+            # Route to cue player: ['cue', '<uuid>', '<channel>', 'volume']
+            # → /vol<channel> on the armed cue's OSC client
+            if len(path_parts) >= 3:
+                cue_uuid = path_parts[1]
+                channel = path_parts[2]
+                audio_cmd = f'/vol{channel}'
+                cue = self.get_armed_cue_by_id(cue_uuid)
+                if cue and hasattr(cue, '_osc') and cue._osc:
+                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {value}")
+                    cue._osc.set_value(audio_cmd, float(value))
+                else:
+                    Logger.warning(f"Cue {cue_uuid} not found or has no OSC client")
+            else:
+                Logger.warning(f"Invalid cue audio path: {path_parts}")
+        else:
+            Logger.warning(f"Unknown audio path type: {path_parts[0]}")
+
+    def route_dmx_message(self, path_parts: list[str], value) -> None:
+        """Route DMX OSCQuery message to the DMX player.
+
+        Args:
+            path_parts: Path parts after 'dmx' (e.g., ['mixer', '0', 'channel', '1'])
+            value: The OSC value to set
+        """
+        if not path_parts:
+            Logger.warning("Empty DMX path parts")
+            return
+
+        # Build DMX command from path: find 'mixer' and use everything after it
+        if 'mixer' in path_parts:
+            mixer_index = path_parts.index('mixer') + 1  # +1 to skip 'mixer' keyword
+            dmx_cmd = '/' + '/'.join(path_parts[mixer_index:])
+            dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+            if dmx_client:
+                Logger.debug(f"Routing DMX: {dmx_cmd} = {value}")
+                dmx_client.set_value(dmx_cmd, value)
+            else:
+                Logger.warning("DMX player client not available")
+        else:
+            Logger.warning(f"Invalid DMX path (no 'mixer' keyword): {path_parts}")
+
+    def get_armed_cue_by_id(self, cue_id: str) -> Cue | None:
+        """Returns the armed cue with the given uuid string."""
+        with self._lock:
+            for cue in self._armed_cues:
+                if cue.id == cue_id:
+                    return cue
+        return None
+
 
 # ---------------------------
 # Singleton

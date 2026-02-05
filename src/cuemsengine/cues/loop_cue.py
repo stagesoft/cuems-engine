@@ -45,7 +45,7 @@ def loop_audioCue(cue: AudioCue, mtc):
 
         while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.005)
+                sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
 
             loop_counter += 1
             
@@ -96,7 +96,7 @@ def loop_dmxCue(cue: DmxCue, mtc):
     try:
         # Wait for the cue duration to elapse
         while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-            sleep(0.005)
+            sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
 
         if cue._local:
             # Reserved for future looping implementation
@@ -131,7 +131,7 @@ def loop_videoCue(cue: VideoCue, mtc):
 
         while not cue.loop or loop_counter < cue.loop:
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.005)
+                sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
 
             if cue._local:
                 cue._start_mtc = mtc.main_tc

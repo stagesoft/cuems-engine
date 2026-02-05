@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Callable, Any
 
 from cuemsutils.log import Logger
 
@@ -8,31 +8,78 @@ from .NodesHub import NodesHub, ActionType, OperationType, NodeOperation
 
 
 class NodeCommunications(AsyncCommsThread):
-    def __init__(self, hub_address: str, node_id: str):
+    def __init__(self, hub_address: str, node_id: str, 
+                 command_callback: Optional[Callable[[str, Any], None]] = None):
         """
         Initialize AsyncCommsThread for NodeEngine.
         
         - Runs `OscNodesHub` in `DIALER` mode
         - Sends players to `ControllerEngine`
-        - Listens to Controller OSCQueryServer using a GlobalMessageQueue
-        - Filters and redirects OSCQuery signals to local endpoints
+        - Receives COMMAND operations from ControllerEngine via NNG
+        - Routes commands to NodeEngine handlers
         
         Parameters:
         - hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
-        - commands_dict: Dictionary of engine commands to run on the node
+        - node_id: Unique identifier for this node
+        - command_callback: Optional callback for handling received commands.
+                           Called with (command_name: str, value: Any)
         """
         super().__init__()
         self.nng_hub = NodesHub(
             hub_address, mode=NodesHub.Mode.DIALER
         )
         self.node_id = node_id
+        self._command_callback = command_callback
+        
+        # Set up receive callback for COMMAND operations
+        self.nng_hub.set_receive_callbacks({
+            OperationType.COMMAND: self._handle_command_operation
+        })
+
+    def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:
+        """Set the callback for handling received commands.
+        
+        Args:
+            callback: Function to call when a command is received.
+                     Called with (command_name: str, value: Any)
+        """
+        self._command_callback = callback
+        Logger.debug(f"Command callback set in NodeCommunications")
 
     def create_all_tasks(self):
         """Create async tasks for node communications."""
         Logger.info('Starting all tasks in NodeCommunications')
+        Logger.info(f'NNG hub mode: {self.nng_hub.mode}')
+        Logger.info(f'NNG hub address: {self.nng_hub.address}')
+        Logger.info(f'Command callbacks registered: {list(self.nng_hub._on_operation_received.keys()) if self.nng_hub._on_operation_received else "None"}')
         return [
-            asyncio.create_task(self.nng_hub.start())
+            asyncio.create_task(self.nng_hub.start()),
+            asyncio.create_task(self.nng_hub.start_message_receiver())
         ]
+    
+    def _handle_command_operation(self, operation: NodeOperation) -> None:
+        """Handle a COMMAND operation received from ControllerEngine.
+        
+        Args:
+            operation: The NodeOperation containing the command
+        """
+        if operation.type != OperationType.COMMAND:
+            return
+        
+        command_name = operation.target
+        data = operation.data or {}
+        value = data.get('value')
+        address = data.get('address', f'/engine/command/{command_name}')
+        
+        Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
+        
+        if self._command_callback:
+            try:
+                self._command_callback(command_name, value, address)
+            except Exception as e:
+                Logger.error(f"Error executing command callback for {command_name}: {e}")
+        else:
+            Logger.warning(f"No command callback set for NodeCommunications")
 
     #########################
     # Nng comms to Controller

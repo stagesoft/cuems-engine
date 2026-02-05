@@ -1,5 +1,6 @@
 from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 from threading import Thread
+from time import sleep
 import os
 
 from cuemsutils.log import logged, Logger
@@ -46,7 +47,9 @@ class Player(Thread):
             stdout_lines_iterator = iter(self.p.stdout.readline, b'')
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:
-                    Logger.debug(f"Calling subprocess with {line}")
+                    Logger.debug(f"Subprocess output: {line}")
+                # Prevent CPU spinning when subprocess has no output
+                sleep(0.01)
             
             self.status = 'running'
         except Exception as e:

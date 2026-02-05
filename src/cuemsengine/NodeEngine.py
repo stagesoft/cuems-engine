@@ -1,7 +1,5 @@
 from functools import partial
-from threading import Thread
 from time import sleep
-import requests
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.MediaCue import MediaCue
@@ -38,10 +36,6 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.ocsquery_queue_loop = Thread(
-            target=self.oscquery_loop, name='OSCQueryQueueLoop'
-        )
-
         self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
@@ -63,18 +57,84 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
-        self.set_oscquery_comms()  # Creates client but NOT GMQ yet
-        self.set_players()  # Creates player devices (may iterate children())
-        self.start_oscquery_queue()  # Create GMQ AFTER all devices are set up
+        self._setup_nng_command_callback()  # Set up NNG command receiving
+        self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
+        self.set_players()  # Creates player devices
         self.mtc_listener.start()
         super().start()
+    
+    def _setup_nng_command_callback(self):
+        """Set up the callback for receiving commands via NNG from ControllerEngine.
+        
+        This provides push-based command delivery as an alternative to HTTP polling.
+        Commands are received via the NNG bus and routed to the appropriate handlers.
+        """
+        if hasattr(CUE_HANDLER, 'communications_thread') and CUE_HANDLER.communications_thread:
+            CUE_HANDLER.communications_thread.set_command_callback(self._handle_nng_command)
+            Logger.info("NNG command callback registered for NodeEngine")
+        else:
+            Logger.warning("CUE_HANDLER communications thread not available for command callback")
+    
+    def _handle_nng_command(self, command_name: str, value, address: str = None):
+        """Handle a command received via NNG from ControllerEngine.
+        
+        Args:
+            command_name: The command name (e.g., 'go', 'load', 'stop', 'player_control')
+            value: The command value
+            address: The original OSC address (optional)
+        """
+        Logger.info(f"NNG command received: {command_name} = {repr(value)}")
+        
+        if command_name == 'player_control' and address:
+            # Handle player control messages (mixer volumes, video controls, etc.)
+            self._handle_player_control_message(address, value)
+        else:
+            # Handle standard commands (go, load, stop)
+            self.run_command(command_name, value)
+    
+    def _handle_player_control_message(self, address: str, value):
+        """Handle player control messages received via NNG.
+        
+        Routes to appropriate player handlers based on the OSC address.
+        
+        Args:
+            address: The OSC address (e.g., '/engine/players/<uuid>/audio/mixer/...')
+            value: The value to set
+        """
+        # Parse address: /engine/players/<node_uuid>/<type>/...
+        parts = address.strip('/').split('/')
+        if len(parts) < 4:
+            Logger.warning(f"Invalid player control address: {address}")
+            return
+        
+        # Expected: ['engine', 'players', '<node_uuid>', '<type>', ...]
+        if parts[0] != 'engine' or parts[1] != 'players':
+            Logger.warning(f"Unexpected player control address format: {address}")
+            return
+        
+        node_uuid = parts[2]
+        player_type = parts[3]
+        path_parts = parts[4:] if len(parts) > 4 else []
+        
+        # Only handle messages for this node
+        if node_uuid != self.cm.node_uuid:
+            Logger.debug(f"Ignoring player message for other node: {node_uuid}")
+            return
+        
+        # Route to appropriate handler
+        if player_type == 'video':
+            redirect_video_cmd(path_parts, value)
+        elif player_type == 'audio':
+            CUE_HANDLER.route_audio_message(path_parts, value)
+        elif player_type == 'dmx':
+            CUE_HANDLER.route_dmx_message(path_parts, value)
+        else:
+            Logger.debug(f"Unknown player type in control message: {player_type}")
         
     @logged
     def stop(self):
         self.stop_requested = True
         self.stop_node_engine()
-        if self.ocsquery_queue_loop.is_alive():
-            self.ocsquery_queue_loop.join(timeout=1)
         super().stop()
 
     def stop_node_engine(self):
@@ -127,10 +187,10 @@ class NodeEngine(BaseEngine):
             Logger.exception(e)
 
     def set_oscquery_comms(self):
-        """Set up the OSCQuery client for the NodeEngine.
+        """Set up the command dictionary for the NodeEngine.
         
-        NOTE: We use HTTP polling instead of pyossia's GlobalMessageQueue
-        because GMQ is unreliable with multiple devices.
+        Commands are received via NNG from ControllerEngine.
+        OSCQuery client is no longer used since pyossia server was removed.
         """
         self.commands_dict = {
             'deploy': self.ready_project,
@@ -145,94 +205,6 @@ class NodeEngine(BaseEngine):
             'unload': None,
             'update': None,
         }
-        self.oscquery_client = self.set_oscquery_client()
-
-    def start_oscquery_queue(self):
-        """Start the HTTP polling loop for OSCQuery commands.
-        
-        This replaces the unreliable pyossia GlobalMessageQueue with
-        a simple HTTP polling mechanism that queries the OSCQuery server
-        directly for command values.
-        """
-        # Initialize last known values for change detection
-        self._last_load_value = None
-        self._last_go_value = None
-        self._last_stop_value = None
-        self._oscquery_base_url = f"http://{self.controller_ip}:{self.cm.node_conf.get('oscquery_ws_port', 9190)}"
-        
-        self.ocsquery_queue_loop.start()
-        Logger.info(f"OSCQuery HTTP polling started - URL: {self._oscquery_base_url}")
-    
-    def _fetch_oscquery_value(self, path: str):
-        """Fetch a value from the OSCQuery server via HTTP.
-        
-        Args:
-            path: The OSC path to query (e.g., '/engine/command/load')
-            
-        Returns:
-            The VALUE from the OSCQuery response, or None on error
-        """
-        try:
-            url = f"{self._oscquery_base_url}{path}"
-            response = requests.get(url, timeout=0.5)
-            if response.status_code == 200:
-                data = response.json()
-                # OSCQuery returns {"VALUE": [...]} or {"VALUE": "string"}
-                if 'VALUE' in data:
-                    val = data['VALUE']
-                    # VALUE is typically an array, get first element
-                    if isinstance(val, list) and len(val) > 0:
-                        return val[0]
-                    return val
-            return None
-        except requests.exceptions.RequestException:
-            return None
-        except Exception as e:
-            Logger.debug(f"OSCQuery fetch error for {path}: {e}")
-            return None
-
-    def oscquery_loop(self):
-        """HTTP polling loop to detect OSCQuery command changes.
-        
-        Polls /engine/status/load and /engine/command/go every 100ms
-        and calls the appropriate handler when values change.
-        """
-        try:
-            while not self.stop_requested:
-                # Poll LOAD status (controller sets status, not command, to avoid recursive load)
-                try:
-                    load_val = self._fetch_oscquery_value('/engine/status/load')
-                    if load_val and load_val != self._last_load_value and load_val != '':
-                        Logger.info(f"LOAD detected via HTTP: {load_val}")
-                        self._last_load_value = load_val
-                        self.load_project(load_val)
-                except Exception as e:
-                    Logger.error(f"Error polling LOAD command: {e}")
-                
-                # Poll GO command
-                try:
-                    go_val = self._fetch_oscquery_value('/engine/command/go')
-                    if go_val and go_val != self._last_go_value and go_val != '':
-                        Logger.info(f"GO command detected via HTTP: {go_val}")
-                        self._last_go_value = go_val
-                        self.go_script(go_val)
-                except Exception as e:
-                    Logger.error(f"Error polling GO command: {e}")
-                
-                # Poll STOP command (Impulse type - check for any non-null value)
-                try:
-                    stop_val = self._fetch_oscquery_value('/engine/command/stop')
-                    if stop_val is not None and stop_val != self._last_stop_value:
-                        Logger.info(f"STOP command detected via HTTP: {stop_val}")
-                        self._last_stop_value = stop_val
-                        self.stop_playback()
-                except Exception as e:
-                    Logger.error(f"Error polling STOP command: {e}")
-                
-                sleep(0.1)  # 100ms poll interval
-                
-        except Exception as e:
-            Logger.error(f"Fatal error in OSCQuery polling loop: {e}")
 
     def route_message(self, parameter, value):
         # Exclude 'engine' common node
@@ -582,9 +554,6 @@ class NodeEngine(BaseEngine):
         else:
             # Just disarm if no script loaded
             CUE_HANDLER.disarm_all()
-        
-        # Reset polling state so next GO can be detected
-        self._last_go_value = ""
         
         Logger.info('Playback stopped.')
 
