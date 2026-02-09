@@ -73,6 +73,21 @@ def run_audioCue(cue: AudioCue, mtc):
     """
     Run an AudioCue
     """
+    # Try to connect player to mixer (JACK ports may now be available)
+    try:
+        mixer = PLAYER_HANDLER.get_audio_mixer()
+        if mixer:
+            uuid_slug = ''.join(str(cue.id).split('-'))
+            player_name = f'audioplayer-{uuid_slug}'
+            Logger.debug(f"Attempting to connect {player_name} to mixer at play time")
+            mixer.connect_player_to_mixer(
+                player_name=player_name,
+                player_output_prefix='output',
+                mixer_channel=0
+            )
+    except Exception as e:
+        Logger.warning(f"Could not connect player to mixer: {e}")
+    
     # Define the offset
     try:
         key = '/offset'

@@ -57,9 +57,9 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
-        self._setup_nng_command_callback()  # Set up NNG command receiving
         self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
-        self.set_players()  # Creates player devices
+        self.set_players()  # Creates player devices - must be before NNG callback
+        self._setup_nng_command_callback()  # Set up NNG command receiving (after players ready)
         self.mtc_listener.start()
         super().start()
     
@@ -96,40 +96,76 @@ class NodeEngine(BaseEngine):
         """Handle player control messages received via NNG.
         
         Routes to appropriate player handlers based on the OSC address.
+        Supports two formats:
+        1. Engine format: /engine/players/<uuid>/<type>/...
+        2. Direct format: /<uuid>/<type>/... (from UI)
         
         Args:
-            address: The OSC address (e.g., '/engine/players/<uuid>/audio/mixer/...')
+            address: The OSC address
             value: The value to set
         """
-        # Parse address: /engine/players/<node_uuid>/<type>/...
         parts = address.strip('/').split('/')
-        if len(parts) < 4:
+        
+        # Determine format and extract node_uuid, player_type, path_parts
+        if len(parts) >= 4 and parts[0] == 'engine' and parts[1] == 'players':
+            # Engine format: /engine/players/<node_uuid>/<type>/...
+            node_uuid = parts[2]
+            player_type = parts[3]
+            path_parts = parts[4:] if len(parts) > 4 else []
+        elif len(parts) >= 2:
+            # Direct format: /<node_uuid>/<type>/...
+            node_uuid = parts[0]
+            player_type = parts[1]
+            path_parts = parts[2:] if len(parts) > 2 else []
+        else:
             Logger.warning(f"Invalid player control address: {address}")
             return
-        
-        # Expected: ['engine', 'players', '<node_uuid>', '<type>', ...]
-        if parts[0] != 'engine' or parts[1] != 'players':
-            Logger.warning(f"Unexpected player control address format: {address}")
-            return
-        
-        node_uuid = parts[2]
-        player_type = parts[3]
-        path_parts = parts[4:] if len(parts) > 4 else []
         
         # Only handle messages for this node
         if node_uuid != self.cm.node_uuid:
             Logger.debug(f"Ignoring player message for other node: {node_uuid}")
             return
         
-        # Route to appropriate handler
+        Logger.debug(f"Handling player control: type={player_type}, path={path_parts}, value={value}")
+        
+        # Route to appropriate handler based on player type
         if player_type == 'video':
             redirect_video_cmd(path_parts, value)
         elif player_type == 'audio':
             CUE_HANDLER.route_audio_message(path_parts, value)
         elif player_type == 'dmx':
             CUE_HANDLER.route_dmx_message(path_parts, value)
+        elif player_type == 'audiomixer':
+            # Direct audiomixer command: /<uuid>/audiomixer/<channel>
+            # path_parts[0] is channel (e.g., '0', 'master')
+            self._handle_audiomixer_command(path_parts, value)
+        elif player_type == 'jadeo':
+            # Direct video command: /<uuid>/jadeo/<cmd>
+            redirect_video_cmd(['jadeo'] + path_parts, value)
         else:
             Logger.debug(f"Unknown player type in control message: {player_type}")
+    
+    def _handle_audiomixer_command(self, path_parts: list, value):
+        """Handle direct audiomixer OSC command.
+        
+        Args:
+            path_parts: Remaining path parts after /<uuid>/audiomixer/
+                       e.g., ['0'] for channel 0, ['master'] for master
+            value: Volume value (0.0 to 1.0)
+        """
+        if not path_parts:
+            Logger.warning("Empty audiomixer command path")
+            return
+        
+        channel = path_parts[0]
+        # jack-volume expects /audiomixer/<client_name>/<channel>
+        mixer_cmd = f'/audiomixer/0_mixer/{channel}'
+        
+        try:
+            PLAYER_HANDLER.get_audio_mixer_client().set_value(mixer_cmd, value)
+            Logger.debug(f"Audiomixer command: {mixer_cmd} = {value}")
+        except Exception as e:
+            Logger.error(f"Error sending audiomixer command: {e}")
         
     @logged
     def stop(self):
@@ -428,6 +464,11 @@ class NodeEngine(BaseEngine):
 
     def load_project(self, project):
         """Load the project files to the node"""
+        # Don't allow loading while script is running
+        if self.get_status('running') == "yes":
+            Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
+            return
+        
         if self.get_status('load') == project:
             Logger.info(f'Project {project} already loaded')
             return
@@ -500,9 +541,14 @@ class NodeEngine(BaseEngine):
                 cue_to_go = self.next_cue_pointer
                 Logger.info(f'GO command received. Advancing to next cue: {cue_to_go.id}')
             else:
-                # No next cue that requires manual GO - do nothing
-                # (auto-chained cues will handle themselves via post_go)
-                Logger.info(f'No next cue to advance to. Script is running via auto-chain.')
+                # No next cue - script has finished (or remaining cues auto-chain)
+                # Reset state same as STOP does, ready for next GO
+                Logger.info(f'Script finished. Resetting for next GO.')
+                self.set_status('running', 'no')
+                self.ongoing_cue = None
+                self.next_cue_pointer = None
+                self.ready_script()  # Re-arm all cues like STOP does
+                # Return here - next GO will start from beginning (arming is async)
                 return
 
         if not cue_to_go._local:

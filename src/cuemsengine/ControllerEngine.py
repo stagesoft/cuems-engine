@@ -125,12 +125,59 @@ class ControllerEngine(BaseEngine):
             '/engine/command/stop', self.stop_script, forward_to_nodes=True
         )
         
-        # Register wildcard handler for player messages
+        # Register wildcard handler for player messages (engine format)
         self.communications_thread.register_osc_handler(
             '/engine/players/*', self._handle_player_osc_message
         )
         
+        # Register handler for direct node/player messages from UI
+        # UI sends: /<node_uuid>/audiomixer/<channel> or /<node_uuid>/jadeo/<cmd>
+        # We need to catch these and forward to NodeEngine
+        node_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
+        if node_uuid:
+            self.communications_thread.register_osc_handler(
+                f'/{node_uuid}/*', self._handle_direct_player_osc_message
+            )
+            Logger.info(f"Registered direct player OSC handler for /{node_uuid}/*")
+        
         Logger.info("OSC command handlers registered for WebSocket receiving")
+    
+    def _handle_direct_player_osc_message(self, address: str, args: list):
+        """Handle direct player OSC messages from UI (/<node_uuid>/<type>/...).
+        
+        These are forwarded directly to the local node's player handlers.
+        """
+        value = args[0] if args else None
+        
+        # Parse: /<node_uuid>/<type>/<...>
+        parts = address.strip('/').split('/')
+        if len(parts) < 2:
+            Logger.warning(f"Invalid direct player OSC address: {address}")
+            return
+        
+        # parts[0] is node_uuid, parts[1] is type (audiomixer, jadeo, etc.)
+        player_type = parts[1]
+        
+        Logger.debug(f"Direct player OSC: {address} = {repr(value)}")
+        
+        # Forward to NodeEngine via NNG as player_control
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target='player_control',
+            data={'address': address, 'value': value}
+        )
+        
+        try:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.debug(f"Forwarded direct player OSC to nodes: {address} = {repr(value)}")
+        except Exception as e:
+            Logger.error(f"Error forwarding direct player OSC to nodes: {e}")
     
     def _handle_player_osc_message(self, address: str, args: list):
         """Handle player-related OSC messages from UI.
@@ -403,6 +450,11 @@ class ControllerEngine(BaseEngine):
     #########################
 
     def load_project(self, project_name, context=None, deploy_only=False):
+        # Don't allow loading while script is running
+        if self.get_status('running') == "yes":
+            Logger.warning(f'Cannot load project {project_name} while script is running. Stop first.')
+            return False
+        
         if self.get_status('load') == project_name:
             Logger.info(f'Project {project_name} already loaded')
             return True

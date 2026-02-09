@@ -70,12 +70,16 @@ class AudioMixer(Player):
             self.conn_man.connect_by_name(output_port, playback_port)
 
     @logged
-    def connect_player_to_mixer(self, player_name: str, player_output_prefix: str = 'output', mixer_channel: int = 0, max_retries: int = 10, retry_delay: float = 0.2):
+    def connect_player_to_mixer(self, player_name: str, player_output_prefix: str = 'output', mixer_channel: int = 0, max_retries: int = 30, retry_delay: float = 0.5):
         """Connect a player's output to a specific mixer input channel.
         
         First disconnects any existing connections from the player's outputs,
         then connects them to the mixer inputs. Will retry if ports are not
         immediately available (race condition with player startup).
+        
+        Handles both mono and stereo players:
+        - Mono: output_0 → input_1 (single channel)
+        - Stereo: output_0 → input_1, output_1 → input_2
         
         Args:
             player_name: Name of the player JACK client to connect
@@ -90,11 +94,11 @@ class AudioMixer(Player):
             Logger.error(f"Invalid mixer channel: {mixer_channel}. Max: {self.channel_number - 1}")
             return
             
-        # Define player output ports (assuming stereo outputs)
+        # Define player output ports
         channel_0_output = f"{player_name}:{player_output_prefix}_0"
         channel_1_output = f"{player_name}:{player_output_prefix}_1"
-        mixer_input_0 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
-        mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
+        mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
+        mixer_input_2 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
         
         # Wait for player JACK ports to be available (retry mechanism)
         for attempt in range(max_retries):
@@ -108,40 +112,59 @@ class AudioMixer(Player):
         else:
             Logger.warning(f"JACK port {channel_0_output} not available after {max_retries} attempts")
         
+        # Check if player is stereo (has output_1) or mono (only output_0)
+        is_stereo = self.conn_man.port_exists(channel_1_output)
+        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
+        
         # First, disconnect any existing connections from player outputs
         Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
-        Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
-        
-        # Get existing connections and disconnect them
         channel_0_connections = self.conn_man.get_connections(channel_0_output)
         for connection in channel_0_connections:
             Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
             self.conn_man.disconnect_by_name(channel_0_output, connection)
         
-        channel_1_connections = self.conn_man.get_connections(channel_1_output)
-        for connection in channel_1_connections:
-            Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
-            self.conn_man.disconnect_by_name(channel_1_output, connection)
+        if is_stereo:
+            Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
+            channel_1_connections = self.conn_man.get_connections(channel_1_output)
+            for connection in channel_1_connections:
+                Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
+                self.conn_man.disconnect_by_name(channel_1_output, connection)
         
-        # Now connect to mixer inputs
-        Logger.debug(f"Connecting {channel_0_output} to {mixer_input_0}")
-        Logger.debug(f"Connecting {channel_1_output} to {mixer_input_1}")
+        # Connect to mixer inputs
+        # For mono: connect output_0 to both input_1 and input_2 (if available)
+        # For stereo: connect output_0 → input_1, output_1 → input_2
         
-        self.conn_man.connect_by_name(channel_0_output, mixer_input_0)
-        self.conn_man.connect_by_name(channel_1_output, mixer_input_1)
+        # Connect first channel
+        if self.conn_man.port_exists(mixer_input_1):
+            Logger.debug(f"Connecting {channel_0_output} to {mixer_input_1}")
+            self.conn_man.connect_by_name(channel_0_output, mixer_input_1)
+        else:
+            Logger.warning(f"Mixer input port {mixer_input_1} does not exist")
+        
+        # Connect second channel (if mixer has it)
+        if self.conn_man.port_exists(mixer_input_2):
+            if is_stereo:
+                Logger.debug(f"Connecting {channel_1_output} to {mixer_input_2}")
+                self.conn_man.connect_by_name(channel_1_output, mixer_input_2)
+            else:
+                # Mono player: connect output_0 to both mixer inputs for centered sound
+                Logger.debug(f"Mono player: Connecting {channel_0_output} to {mixer_input_2}")
+                self.conn_man.connect_by_name(channel_0_output, mixer_input_2)
+        else:
+            Logger.debug(f"Mixer input port {mixer_input_2} does not exist (mono mixer)")
 
 
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
     """Build OSC endpoint configuration for audio mixer.
     
-    Creates OSC addresses in the format:
-    /audiomixer/{instance}/master
-    /audiomixer/{instance}/0
-    /audiomixer/{instance}/1
+    Creates OSC addresses in the format expected by jack-volume (audiomixer_routes branch):
+    /audiomixer/{client_name}/master
+    /audiomixer/{client_name}/0
+    /audiomixer/{client_name}/1
     etc.
     
     Args:
-        client_name: Name of the mixer client instance
+        client_name: Name of the mixer client instance (JACK client name)
         channel_number: Number of audio channels in the mixer
     
     Returns:
