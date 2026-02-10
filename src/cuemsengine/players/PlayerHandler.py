@@ -183,15 +183,16 @@ class PlayerHandler:
         
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
-            # Use the cue ID as the player name (same as the client name format)
+            # Use the cue ID as the player name
+            # audioplayer-cuems creates JACK client as "Audio_Player-{uuid}" with ports "outport 0", "outport 1"
             uuid_slug = ''.join(str(cue.id).split('-'))
-            player_name = f'audioplayer-{uuid_slug}'
+            player_name = f'Audio_Player-{uuid_slug}'
             Logger.info(f'Connecting player {player_name} to audio mixer')
             # Connect to mixer channel 0 by default (can be made configurable later)
             # connect_player_to_mixer has built-in retry logic for JACK port availability
             self._audio_mixer.connect_player_to_mixer(
                 player_name=player_name,
-                player_output_prefix='output',
+                player_output_prefix='outport',  # audioplayer-cuems uses "outport 0", "outport 1"
                 mixer_channel=0
             )
 

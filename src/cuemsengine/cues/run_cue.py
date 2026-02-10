@@ -78,11 +78,12 @@ def run_audioCue(cue: AudioCue, mtc):
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
             uuid_slug = ''.join(str(cue.id).split('-'))
-            player_name = f'audioplayer-{uuid_slug}'
+            # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
+            player_name = f'Audio_Player-{uuid_slug}'
             Logger.debug(f"Attempting to connect {player_name} to mixer at play time")
             mixer.connect_player_to_mixer(
                 player_name=player_name,
-                player_output_prefix='output',
+                player_output_prefix='outport',  # audioplayer-cuems uses "outport 0", "outport 1"
                 mixer_channel=0
             )
     except Exception as e:

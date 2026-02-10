@@ -95,8 +95,9 @@ class AudioMixer(Player):
             return
             
         # Define player output ports
-        channel_0_output = f"{player_name}:{player_output_prefix}_0"
-        channel_1_output = f"{player_name}:{player_output_prefix}_1"
+        # audioplayer-cuems uses space format: "outport 0", "outport 1"
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
         mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
         mixer_input_2 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
         
