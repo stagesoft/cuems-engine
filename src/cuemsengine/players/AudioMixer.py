@@ -258,6 +258,17 @@ class MixerClient(PlayerClient):
             self.set_channel_volume(i, gain)
 
     @logged
+    def reset_volumes(self):
+        """Reset all volumes to maximum (1.0).
+        
+        Call this when loading a project or starting playback to ensure
+        consistent volume levels.
+        """
+        Logger.info("Resetting mixer volumes to default (1.0)")
+        self.set_master_volume(1.0)
+        self.set_all_channels_volume(1.0)
+
+    @logged
     def mute_channel(self, channel: int):
         """Mute a specific channel by setting its volume to 0.0.
         

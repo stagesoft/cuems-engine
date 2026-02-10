@@ -518,6 +518,12 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
+        
+        # Reset mixer volumes to default when preparing script
+        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+        if mixer_client:
+            mixer_client.reset_volumes()
+        
         self.initial_cuelist_process()
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
@@ -547,6 +553,22 @@ class NodeEngine(BaseEngine):
                 self.set_status('running', 'no')
                 self.ongoing_cue = None
                 self.next_cue_pointer = None
+                
+                # Notify Controller that script finished (so it can update its own status)
+                try:
+                    from .comms.NodesHub import NodeOperation, OperationType, ActionType
+                    operation = NodeOperation(
+                        op_type=OperationType.STATUS,
+                        action=ActionType.UPDATE,
+                        sender=self.cm.node_uuid,
+                        target='script_finished',
+                        data={'running': 'no'}
+                    )
+                    CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+                    Logger.debug('Notified Controller that script finished')
+                except Exception as e:
+                    Logger.warning(f'Could not notify Controller of script finish: {e}')
+                
                 self.ready_script()  # Re-arm all cues like STOP does
                 # Return here - next GO will start from beginning (arming is async)
                 return

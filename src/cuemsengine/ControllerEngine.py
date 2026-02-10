@@ -278,7 +278,8 @@ class ControllerEngine(BaseEngine):
     def set_node_operation_callback(self):
         self.node_operation_callback = {
             OperationType.PLAYER: self.player_operation_callback,
-            OperationType.CUE: self.cue_operation_callback
+            OperationType.CUE: self.cue_operation_callback,
+            OperationType.STATUS: self.status_operation_callback
         }
 
     def player_operation_callback(self, operation: NodeOperation):
@@ -307,6 +308,21 @@ class ControllerEngine(BaseEngine):
             Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
         else:
             Logger.warning(f'Unknown cue action: {operation.action}')
+
+    def status_operation_callback(self, operation: NodeOperation):
+        """Callback invoked when status updates are received from nodes.
+        
+        Handles script_finished notifications to sync running status.
+        """
+        Logger.info(f'Status operation received: {operation}')
+        if operation.target == 'script_finished':
+            # Node reports script finished - update our running status
+            if operation.data and operation.data.get('running') == 'no':
+                Logger.info('Script finished notification received from node - updating running status')
+                self.set_status('running', 'no')
+                self.stop_timecode()
+        else:
+            Logger.debug(f'Unknown status target: {operation.target}')
 
     #########################
     # Editor commands
