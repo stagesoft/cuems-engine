@@ -554,7 +554,7 @@ class NodeEngine(BaseEngine):
                 try:
                     from .comms.NodesHub import NodeOperation, OperationType, ActionType
                     operation = NodeOperation(
-                        op_type=OperationType.STATUS,
+                        type=OperationType.STATUS,
                         action=ActionType.UPDATE,
                         sender=self.cm.node_uuid,
                         target='script_finished',
@@ -598,6 +598,38 @@ class NodeEngine(BaseEngine):
             next_cue = ""
 
         Logger.info(f'Cue {cue_to_go.id} started. Next cue: {next_cue if next_cue else "none"}')
+        
+        # Start a watcher thread to detect when playback completes naturally
+        def watch_playback_completion():
+            """Wait for main cue thread to finish and update status."""
+            main_thread.join()
+            # Only reset if we're still marked as running (not stopped manually)
+            if self.get_status('running') == 'yes':
+                Logger.info('Playback completed naturally. Resetting status.')
+                self.set_status('running', 'no')
+                self.ongoing_cue = None
+                self.next_cue_pointer = None
+                
+                # Notify Controller that script finished
+                try:
+                    from .comms.NodesHub import NodeOperation, OperationType, ActionType
+                    operation = NodeOperation(
+                        type=OperationType.STATUS,
+                        action=ActionType.UPDATE,
+                        sender=self.cm.node_uuid,
+                        target='script_finished',
+                        data={'running': 'no'}
+                    )
+                    CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+                    Logger.debug('Notified Controller that script finished')
+                except Exception as e:
+                    Logger.warning(f'Could not notify Controller of script finish: {e}')
+                
+                self.ready_script()  # Re-arm all cues like STOP does
+        
+        from threading import Thread
+        watcher = Thread(target=watch_playback_completion, daemon=True)
+        watcher.start()
 
     def stop_playback(self, value=None):
         """Stop playback and reset to ready state.
