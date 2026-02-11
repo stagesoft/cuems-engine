@@ -193,8 +193,8 @@ def run_videoCue(cue: VideoCue, mtc):
     """Run a VideoCue."""
     Logger.info(f'Running video cue loop {cue.id}')
     
-    # Calculate timing
-    cue._start_mtc = mtc.main_tc
+    # Calculate timing - create snapshot copy of current MTC (not a reference!)
+    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc.main_tc.milliseconds/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     # xjadeo formula: displayFrame = MTC + offset
