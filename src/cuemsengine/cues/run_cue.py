@@ -213,7 +213,7 @@ def run_videoCue(cue: VideoCue, mtc):
     
     # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
     try:
-        cue._osc.set_value('/jadeo/offset.1', int(offset_to_go))
+        cue._osc.set_value('/jadeo/offset', int(offset_to_go))
         Logger.info(f"offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
     except Exception as e:
         Logger.error(f"Offset set failed: {e}", extra={"caller": cue.__class__.__name__})

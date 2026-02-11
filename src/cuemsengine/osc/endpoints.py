@@ -46,8 +46,7 @@ OSC_VIDEOPLAYER_CONF = {
     '/jadeo/load' : [ValueType.String, None],
     '/jadeo/cmd' : [ValueType.String, None],
     '/jadeo/quit' : [ValueType.Int, None],
-    '/jadeo/offset' : [ValueType.String, None],
-    '/jadeo/offset.1' : [ValueType.Int, None],
+    '/jadeo/offset' : [ValueType.Int, None],  # Changed to Int - xjadeo handles /jadeo/offset with "i" type
     '/jadeo/midi/connect' : [ValueType.String, None],
     '/jadeo/midi/disconnect' : [ValueType.Int, None],
     '/jadeo/ontop' : [ValueType.Bool, None]
