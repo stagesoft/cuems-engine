@@ -468,10 +468,6 @@ class NodeEngine(BaseEngine):
         if self.get_status('running') == "yes":
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
-        
-        if self.get_status('load') == project:
-            Logger.info(f'Project {project} already loaded')
-            return
 
         # Obtain the project files
         self.ready_project(project)

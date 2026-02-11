@@ -470,10 +470,6 @@ class ControllerEngine(BaseEngine):
         if self.get_status('running') == "yes":
             Logger.warning(f'Cannot load project {project_name} while script is running. Stop first.')
             return False
-        
-        if self.get_status('load') == project_name:
-            Logger.info(f'Project {project_name} already loaded')
-            return True
 
         Logger.info(f'Loading project {project_name}')
         self.reset_script()
