@@ -89,12 +89,11 @@ def run_audioCue(cue: AudioCue, mtc):
     except Exception as e:
         Logger.warning(f"Could not connect player to mixer: {e}")
     
-    # Define the offset - use MTC framerate to prevent drift when looping
+    # Define the offset
     try:
         key = '/offset'
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc.main_tc.milliseconds/1000)
-        duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
-        cue._end_mtc = cue._start_mtc + duration
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
+        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
         
         # Audio player formula: file_position = MTC + offset
         # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
@@ -132,8 +131,8 @@ def run_dmxCue(cue: DmxCue, mtc):
     Only fadein_time is used for now. fade_out defaults to 0
     """
     try:
-        # Calculate MTC timing - use MTC framerate for consistency
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc.main_tc.milliseconds/1000)
+        # Calculate MTC timing (same as AudioCue)
+        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
         
         # DMX cues have no media - duration is inferred from fade times
         # Duration = fadein_time + fadeout_time (both in milliseconds)
@@ -141,9 +140,9 @@ def run_dmxCue(cue: DmxCue, mtc):
         fadeout_ms = getattr(cue, 'fadeout_time', 0)
         duration_ms = fadein_ms + fadeout_ms
         
-        # Convert duration to timecode format using MTC framerate
+        # Convert duration to timecode format (HH:MM:SS.mmm)
         duration_seconds = duration_ms / 1000.0
-        cue._end_mtc = cue._start_mtc + CTimecode(framerate=mtc.main_tc.framerate, start_seconds=duration_seconds)
+        cue._end_mtc = cue._start_mtc + CTimecode(start_seconds=duration_seconds)
         
         # Calculate offset (same calculation as AudioCue)
         offset_milliseconds = cue._start_mtc.milliseconds

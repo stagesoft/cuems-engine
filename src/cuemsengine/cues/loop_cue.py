@@ -42,8 +42,8 @@ def loop_audioCue(cue: AudioCue, mtc):
     
     try:
         loop_counter = 0
-        # Use MTC framerate for all timing to prevent drift when looping
-        duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
+        # duration = cue.media.regions[0].out_time - cue.media.regions[0].in_time
+        duration = CTimecode(cue.media.duration)
         Logger.info(f'Audio duration: {duration}, _end_mtc: {cue._end_mtc.milliseconds}ms, current MTC: {mtc.main_tc.milliseconds}ms')
 
         while not cue.loop or loop_counter < cue.loop:
@@ -60,8 +60,8 @@ def loop_audioCue(cue: AudioCue, mtc):
             Logger.info(f'After increment: loop_counter={loop_counter}, will_loop_again={will_loop_again}')
             
             if cue._local and will_loop_again:
-                # Recalculate offset using MTC framerate to prevent drift
-                cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=cue._end_mtc.milliseconds/1000)
+                # Recalculate offset and apply for next loop iteration
+                cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
                 # Audio player formula: file_position = MTC + offset
                 # To restart from position 0, offset = -start_mtc
