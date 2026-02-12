@@ -46,7 +46,8 @@ def loop_audioCue(cue: AudioCue, mtc):
         duration = CTimecode(cue.media.duration)
         Logger.info(f'Audio duration: {duration}, _end_mtc: {cue._end_mtc.milliseconds}ms, current MTC: {mtc.main_tc.milliseconds}ms')
 
-        while not cue.loop or loop_counter < cue.loop:
+        # cue.loop: -1 = infinite, 0 = infinite, positive = fixed count
+        while cue.loop < 1 or loop_counter < cue.loop:
             Logger.info(f'Audio loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}')
             
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
@@ -55,8 +56,8 @@ def loop_audioCue(cue: AudioCue, mtc):
             Logger.info(f'Audio iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1
             
-            # Only update offset if we're going to loop again
-            will_loop_again = not cue.loop or loop_counter < cue.loop
+            # Only update offset if we're going to loop again (cue.loop < 1 means infinite)
+            will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             Logger.info(f'After increment: loop_counter={loop_counter}, will_loop_again={will_loop_again}')
             
             if cue._local and will_loop_again:
@@ -142,7 +143,8 @@ def loop_videoCue(cue: VideoCue, mtc):
         Logger.info(f'Video duration: {duration}, duration in frames: {duration.frame_number} {duration.framerate}')
         Logger.info(f'Initial _end_mtc: {cue._end_mtc.milliseconds}ms, current MTC: {mtc.main_tc.milliseconds}ms')
 
-        while not cue.loop or loop_counter < cue.loop:
+        # cue.loop: -1 = infinite, 0 = infinite, positive = fixed count
+        while cue.loop < 1 or loop_counter < cue.loop:
             Logger.info(f'Loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}')
             
             # Wait for video iteration to complete
@@ -152,8 +154,8 @@ def loop_videoCue(cue: VideoCue, mtc):
             Logger.info(f'Video iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1
             
-            # Check if we'll loop again
-            will_loop_again = not cue.loop or loop_counter < cue.loop
+            # Check if we'll loop again (cue.loop < 1 means infinite)
+            will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             
             if cue._local and will_loop_again:
                 # Update timing for next iteration
