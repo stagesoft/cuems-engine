@@ -469,10 +469,17 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
 
-        # Obtain the project files
+        # FIRST: Clean up any existing audio players from the previous project
+        # This MUST happen BEFORE ready_project() which replaces self.script
+        # Otherwise the old cue objects are orphaned and their players never get killed
+        Logger.debug('Cleaning up previous project resources before loading new one')
+        PLAYER_HANDLER.kill_all_audio_players()
+        CUE_HANDLER.disarm_all()
+        
+        # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
         
-        # Prepare the script to be played
+        # Prepare the script to be played (arms new cues)
         self.ready_script()
 
         # Start cue dependencies

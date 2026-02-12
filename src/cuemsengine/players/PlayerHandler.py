@@ -35,6 +35,7 @@ class PlayerHandler:
             cls._instance._audio_mixer = None
             cls._instance._audio_mixer_client = None
             cls._instance._cue_players = {}
+            cls._instance._audio_players_by_id = {}  # Track audio players by cue ID string
             cls._instance._dmx_player = None
             cls._instance._dmx_player_client = None
             cls._instance._player_endpoints_generator = None
@@ -66,19 +67,72 @@ class PlayerHandler:
 
     def remove_cue_player(self, cue: Cue):
             """Removes a cue player"""
+            osc_client = None
+            cue_id = str(cue.id)
             with self._lock:
                 try:
                     player = self._cue_players.pop(cue)
                 except KeyError:
-                    Logger.error(f'Cue player not found for cue {cue.id}')
-                    player = None
+                    # Try to find by ID in _audio_players_by_id
+                    player = self._audio_players_by_id.pop(cue_id, None)
+                    if player is None:
+                        Logger.error(f'Cue player not found for cue {cue.id}')
+                
+                # Also remove from ID-based tracking
+                self._audio_players_by_id.pop(cue_id, None)
+                
+                # Save OSC client reference before clearing
+                osc_client = getattr(cue, '_osc', None)
                 cue._osc = None
             if isinstance(player, AudioPlayer):
                 PORT_HANDLER.remove_ports(cue)
-                if player is not None:
-                    player.kill()
-                    player.join()
-                    player = None
+                self._kill_audio_player(player, osc_client, cue_id)
+
+    def _kill_audio_player(self, player, osc_client, cue_id):
+        """Helper method to kill an audio player process"""
+        if player is None:
+            return
+        
+        # First, try to send /quit OSC command to gracefully stop the player
+        if osc_client is not None:
+            try:
+                osc_client.set_value('/quit', True)
+                Logger.debug(f'Sent /quit command to audio player for cue {cue_id}')
+            except Exception as e:
+                Logger.warning(f'Failed to send /quit to audio player: {e}')
+        
+        # Then kill the subprocess forcefully
+        try:
+            if player.p is not None:
+                player.p.kill()
+                Logger.debug(f'Killed audio player subprocess for cue {cue_id}')
+        except Exception as e:
+            Logger.warning(f'Failed to kill audio player subprocess: {e}')
+        
+        # Wait for thread to finish
+        try:
+            player.join(timeout=2.0)
+        except Exception as e:
+            Logger.warning(f'Failed to join audio player thread: {e}')
+
+    def kill_all_audio_players(self):
+        """Kill ALL tracked audio players - used during project cleanup"""
+        with self._lock:
+            players_to_kill = list(self._audio_players_by_id.items())
+            self._audio_players_by_id.clear()
+            
+            # Also clear audio players from _cue_players
+            cue_players_to_remove = []
+            for cue, player in self._cue_players.items():
+                if isinstance(player, AudioPlayer):
+                    cue_players_to_remove.append((cue, player))
+            for cue, player in cue_players_to_remove:
+                self._cue_players.pop(cue, None)
+                players_to_kill.append((str(cue.id), player))
+        
+        Logger.info(f'Killing {len(players_to_kill)} audio players during cleanup')
+        for cue_id, player in players_to_kill:
+            self._kill_audio_player(player, None, cue_id)
 
 
     # ---------------------------
@@ -180,6 +234,10 @@ class PlayerHandler:
         cue._osc = client
         self.set_player_endpoints(cue)
         self.store_cue_player(cue, player)
+        
+        # Also track by cue ID string for cleanup when cue object is lost
+        with self._lock:
+            self._audio_players_by_id[str(cue.id)] = player
         
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
