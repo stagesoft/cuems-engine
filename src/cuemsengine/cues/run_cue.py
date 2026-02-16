@@ -103,18 +103,32 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
     offset_to_go = float(-cue._start_mtc.milliseconds)
     
-    # Try to connect player to mixer (JACK ports may now be available)
+    # Try to connect player to mixer based on cue output settings
     try:
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
             uuid_slug = ''.join(str(cue.id).split('-'))
             # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
             player_name = f'Audio_Player-{uuid_slug}'
-            Logger.debug(f"Attempting to connect {player_name} to mixer at play time")
-            mixer.connect_player_to_mixer(
+            
+            # Parse cue.outputs to determine which mixer inputs to use
+            # Format: [{'output_name': 'uuid_system:playback_1', ...}, ...]
+            selected_outputs = []
+            if hasattr(cue, 'outputs') and cue.outputs:
+                for output in cue.outputs:
+                    output_name = output.get('output_name', '')
+                    # Extract port name after the UUID (36 chars + underscore)
+                    if len(output_name) > 37:
+                        port_name = output_name[37:]  # e.g., 'system:playback_1'
+                        selected_outputs.append(port_name)
+            
+            Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
+            
+            # Connect based on selected outputs
+            mixer.connect_player_to_outputs(
                 player_name=player_name,
-                player_output_prefix='outport',  # audioplayer-cuems uses "outport 0", "outport 1"
-                mixer_channel=0
+                player_output_prefix='outport',
+                selected_outputs=selected_outputs
             )
     except Exception as e:
         Logger.warning(f"Could not connect player to mixer: {e}")
@@ -148,11 +162,12 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     try:
         master_vol = getattr(cue, 'master_vol', None)
         if master_vol is not None:
-            # Convert to float and clamp to valid range (0.0 to 1.0)
-            vol_value = max(0.0, min(1.0, float(master_vol)))
+            # UI uses 0-100 percentage, audioplayer expects 0.0-1.0 gain
+            # Convert and clamp to valid range
+            vol_value = max(0.0, min(1.0, float(master_vol) / 100.0))
             cue._osc.set_value('/volmaster', vol_value)
             Logger.info(
-                f"master_vol {vol_value} set on audio cue {cue.id}",
+                f"master_vol {master_vol}% -> {vol_value} set on audio cue {cue.id}",
                 extra = {"caller": cue.__class__.__name__}
             )
     except Exception as e:

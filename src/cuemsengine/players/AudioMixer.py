@@ -154,6 +154,105 @@ class AudioMixer(Player):
         else:
             Logger.debug(f"Mixer input port {mixer_input_2} does not exist (mono mixer)")
 
+    @logged
+    def connect_player_to_outputs(self, player_name: str, player_output_prefix: str = 'outport', 
+                                   selected_outputs: list = None, max_retries: int = 30, retry_delay: float = 0.5):
+        """Connect a player to specific system outputs based on cue configuration.
+        
+        Maps selected output port names to mixer inputs:
+        - system:playback_1 → mixer input_1
+        - system:playback_2 → mixer input_2
+        
+        For stereo audio with a single output selected, both player channels
+        are summed to that output. For both outputs, normal stereo routing.
+        
+        Args:
+            player_name: Name of the player JACK client to connect
+            player_output_prefix: Prefix for player's output ports (e.g., 'outport')
+            selected_outputs: List of output port names (e.g., ['system:playback_1'])
+            max_retries: Maximum number of connection attempts
+            retry_delay: Delay between retries in seconds
+        """
+        from time import sleep
+        
+        # Default to stereo (both outputs) if none specified
+        if not selected_outputs:
+            selected_outputs = ['system:playback_1', 'system:playback_2']
+            Logger.debug(f"No outputs specified, defaulting to stereo: {selected_outputs}")
+        
+        # Define player output ports - audioplayer-cuems uses "outport 0", "outport 1"
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
+        
+        # Map output port names to mixer inputs
+        # Assuming mixer input_1 connects to system:playback_1, input_2 to playback_2
+        output_to_input = {
+            'system:playback_1': f"{self.client_name}:input_1",
+            'system:playback_2': f"{self.client_name}:input_2",
+        }
+        
+        # Wait for player JACK ports to be available
+        for attempt in range(max_retries):
+            connections = self.conn_man.get_connections(channel_0_output)
+            if connections is not None or self.conn_man.port_exists(channel_0_output):
+                break
+            if attempt < max_retries - 1:
+                Logger.debug(f"Waiting for JACK port {channel_0_output} (attempt {attempt + 1}/{max_retries})")
+                sleep(retry_delay)
+        else:
+            Logger.warning(f"JACK port {channel_0_output} not available after {max_retries} attempts")
+            return
+        
+        # Check if player is stereo
+        is_stereo = self.conn_man.port_exists(channel_1_output)
+        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
+        
+        # First, disconnect any existing connections from player outputs
+        Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+        channel_0_connections = self.conn_man.get_connections(channel_0_output)
+        for connection in channel_0_connections:
+            self.conn_man.disconnect_by_name(channel_0_output, connection)
+        
+        if is_stereo:
+            channel_1_connections = self.conn_man.get_connections(channel_1_output)
+            for connection in channel_1_connections:
+                self.conn_man.disconnect_by_name(channel_1_output, connection)
+        
+        # Determine which mixer inputs to connect to
+        target_inputs = []
+        for output in selected_outputs:
+            if output in output_to_input:
+                mixer_input = output_to_input[output]
+                if self.conn_man.port_exists(mixer_input):
+                    target_inputs.append(mixer_input)
+                else:
+                    Logger.warning(f"Mixer input {mixer_input} does not exist")
+        
+        if not target_inputs:
+            Logger.error(f"No valid mixer inputs found for outputs: {selected_outputs}")
+            return
+        
+        Logger.info(f"Connecting {player_name} to outputs: {selected_outputs} -> {target_inputs}")
+        
+        if len(target_inputs) == 1:
+            # Single output: sum both channels to that input
+            mixer_input = target_inputs[0]
+            Logger.debug(f"Single output: connecting both player channels to {mixer_input}")
+            self.conn_man.connect_by_name(channel_0_output, mixer_input)
+            if is_stereo:
+                self.conn_man.connect_by_name(channel_1_output, mixer_input)
+        elif len(target_inputs) == 2:
+            # Stereo: normal L/R routing
+            Logger.debug(f"Stereo output: L to {target_inputs[0]}, R to {target_inputs[1]}")
+            self.conn_man.connect_by_name(channel_0_output, target_inputs[0])
+            if is_stereo:
+                self.conn_man.connect_by_name(channel_1_output, target_inputs[1])
+            else:
+                # Mono player: connect to both for centered sound
+                self.conn_man.connect_by_name(channel_0_output, target_inputs[1])
+        else:
+            Logger.warning(f"Unexpected number of target inputs: {len(target_inputs)}")
+
 
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
     """Build OSC endpoint configuration for audio mixer.
