@@ -265,8 +265,18 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         cue: The video cue to run
         mtc: The MTC listener (for framerate info)
         frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
+    
+    Supports multiple video outputs - sends commands to all OSC clients in cue._osc_list.
     """
     Logger.info(f'Running video cue loop {cue.id}')
+    
+    # Get OSC clients for all outputs
+    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
+    if not osc_list:
+        Logger.error(f'No OSC clients available for video cue {cue.id}')
+        return
+    
+    Logger.debug(f'Video cue {cue.id} has {len(osc_list)} output(s)')
     
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
     if frozen_mtc_ms is not None:
@@ -283,26 +293,29 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
     
-    # Load the video file via pyossia OSC
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    try:
-        cue._osc.set_value('/jadeo/load', video_path)
-        Logger.info(f"load {video_path}", extra={"caller": cue.__class__.__name__})
-    except Exception as e:
-        Logger.error(f"Video load failed: {e}", extra={"caller": cue.__class__.__name__})
     
-    Logger.info(f"Video cue: port={cue._osc.remote_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
-    
-    # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
-    try:
-        cue._osc.set_value('/jadeo/offset', int(offset_to_go))
-        Logger.info(f"offset: {offset_to_go}", extra={"caller": cue.__class__.__name__})
-    except Exception as e:
-        Logger.error(f"Offset set failed: {e}", extra={"caller": cue.__class__.__name__})
-    
-    # Connect to MTC via pyossia OSC
-    try:
-        cue._osc.set_value('/jadeo/cmd', 'midi connect Midi Through')
-        Logger.info(f"midi connect", extra={"caller": cue.__class__.__name__})
-    except Exception as e:
-        Logger.error(f"MIDI connect failed: {e}", extra={"caller": cue.__class__.__name__})
+    # Send commands to ALL video outputs
+    for i, osc_client in enumerate(osc_list):
+        # Load the video file via pyossia OSC
+        try:
+            osc_client.set_value('/jadeo/load', video_path)
+            Logger.info(f"load {video_path} on output {i}", extra={"caller": cue.__class__.__name__})
+        except Exception as e:
+            Logger.error(f"Video load failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
+        
+        Logger.info(f"Video cue output {i}: port={osc_client.remote_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
+        
+        # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
+        try:
+            osc_client.set_value('/jadeo/offset', int(offset_to_go))
+            Logger.info(f"offset: {offset_to_go} on output {i}", extra={"caller": cue.__class__.__name__})
+        except Exception as e:
+            Logger.error(f"Offset set failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
+        
+        # Connect to MTC via pyossia OSC
+        try:
+            osc_client.set_value('/jadeo/cmd', 'midi connect Midi Through')
+            Logger.info(f"midi connect on output {i}", extra={"caller": cue.__class__.__name__})
+        except Exception as e:
+            Logger.error(f"MIDI connect failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})

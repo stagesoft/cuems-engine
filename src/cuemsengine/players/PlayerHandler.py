@@ -285,22 +285,40 @@ class PlayerHandler:
     # ---------------------------
 
     def set_video_player(self, cue: VideoCue):
-        """Sets the video player for the given cue"""
+        """Sets the video player(s) for the given cue.
+        
+        Supports multiple outputs - stores OSC clients in cue._osc_list.
+        For backward compatibility, cue._osc is set to the first output's client.
+        """
         Logger.debug(f'Setting video player for cue {cue.id}')
-        output_name = self.get_cue_output_name(cue)
-        if not output_name:
+        output_names = self.get_all_cue_output_names(cue)
+        if not output_names:
             Logger.error(f'No video player found for cue {cue.id}')
             raise ValueError(f'No video player found for cue {cue.id}')
         
-        if not self._front_video_player:
-            # Initialize the front video player
-            player = self.get_active_videoplayer(output_name)
-            self._front_video_player = 1
+        Logger.debug(f'Video cue {cue.id} has outputs: {output_names}')
+        
+        # Collect OSC clients for all outputs
+        # Each output has its own dedicated xjadeo instance
+        cue._osc_list = []
+        with self._lock:
+            for output_name in output_names:
+                if output_name in self._video_players and self._video_players[output_name]:
+                    # Get the xjadeo player for this output (only one per output)
+                    player = self._video_players[output_name][0]
+                    Logger.debug(f'Video cue {cue.id}: output {output_name} -> player port {player["osc"].remote_port}')
+                    cue._osc_list.append(player['osc'])
+                    self.store_cue_player(cue, player['player'])
+                else:
+                    Logger.warning(f'No video player available for output {output_name}')
+        
+        Logger.debug(f'Video cue {cue.id} has {len(cue._osc_list)} OSC client(s)')
+        
+        # Backward compatibility: set cue._osc to first output
+        if cue._osc_list:
+            cue._osc = cue._osc_list[0]
         else:
-            player = self.get_inactive_videoplayer(output_name)
-
-        cue._osc = player['osc']
-        self.store_cue_player(cue, player['player'])
+            raise ValueError(f'No video players available for cue {cue.id}')
 
     def get_video_players(self):
         """Returns the video players."""
@@ -494,6 +512,28 @@ class PlayerHandler:
         if isinstance(outputs, list) and len(outputs) > 0:
             return outputs[0]
         return outputs
+
+    def get_all_cue_output_names(self, cue: Cue) -> list:
+        """Get all output names for a given cue from the outputs map.
+        
+        Args:
+            cue: The cue to get the output names for
+
+        Returns:
+            List of output names for the given cue, or empty list if not found
+        
+        Raises:
+            AttributeError: If the outputs map is not set
+        """
+        if self._outputs_map is None:
+            Logger.error('Outputs map not set')
+            raise AttributeError('Outputs map not set')
+        outputs = self._outputs_map.get(cue.id, None)
+        if isinstance(outputs, list):
+            return outputs
+        elif outputs:
+            return [outputs]
+        return []
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""

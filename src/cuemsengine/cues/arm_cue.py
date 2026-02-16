@@ -122,38 +122,46 @@ def arm_videoCue(cue: VideoCue):
         Logger.error(f'Error arming video player for cue {cue.id}: {e}')
         Logger.exception(e)
         return
-                
-    try:
-        key = '/jadeo/midi/disconnect'
-        cue._osc.set_value(key, 1)
-        Logger.info(
-            f"midi disconnect result: {str(cue._osc.get_node(key).parameter.value)}",
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error 1 (disconnect) in arm_callback {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    
+    # Get OSC clients for all outputs (set by set_video_player)
+    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
+    if not osc_list:
+        Logger.error(f'No OSC clients available for cue {cue.id}')
+        return
+    
+    # Send MIDI disconnect to all outputs
+    for osc_client in osc_list:
+        try:
+            key = '/jadeo/midi/disconnect'
+            osc_client.set_value(key, 1)
+            Logger.debug(f"midi disconnect sent to {osc_client.remote_port}", extra={"caller": cue.__class__.__name__})
+        except KeyError:
+            Logger.debug(f'Key error (disconnect) in arm_callback', extra={"caller": cue.__class__.__name__})
 
     # TEMPORARY FIX for xjadeo: Only load the first video per output during arm.
     # xjadeo can only display one video at a time per instance. Loading subsequent
     # cues would overwrite the first one, breaking instant play.
     # Subsequent videos are loaded on-demand in run_videoCue.
     # TODO: Remove this check when migrating to multi-layer video player.
-    output_name = PLAYER_HANDLER.get_cue_output_name(cue)
-    if PLAYER_HANDLER.is_video_loaded_for_output(output_name):
-        Logger.debug(
-            f'Skipping video load during arm for cue {cue.id} - output {output_name} already has video loaded',
-            extra = {"caller": cue.__class__.__name__}
-        )
-        return
     
-    # Load video file via pyossia OSC
+    # Get all output names for this cue
+    output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    try:
-        cue._osc.set_value('/jadeo/load', video_path)
-        PLAYER_HANDLER.mark_video_loaded_for_output(output_name)
-        Logger.info(f"/jadeo/load {video_path}", extra={"caller": cue.__class__.__name__})
-    except Exception as e:
-        Logger.error(f"Video load failed: {e}", extra={"caller": cue.__class__.__name__})
+    
+    # Load video on each output that hasn't been loaded yet
+    for i, output_name in enumerate(output_names):
+        if PLAYER_HANDLER.is_video_loaded_for_output(output_name):
+            Logger.debug(
+                f'Skipping video load during arm for cue {cue.id} - output {output_name} already has video loaded',
+                extra = {"caller": cue.__class__.__name__}
+            )
+            continue
+        
+        # Get the OSC client for this output (same index as output_names)
+        if i < len(osc_list):
+            try:
+                osc_list[i].set_value('/jadeo/load', video_path)
+                PLAYER_HANDLER.mark_video_loaded_for_output(output_name)
+                Logger.info(f"/jadeo/load {video_path} on output {output_name}", extra={"caller": cue.__class__.__name__})
+            except Exception as e:
+                Logger.error(f"Video load failed on output {output_name}: {e}", extra={"caller": cue.__class__.__name__})
