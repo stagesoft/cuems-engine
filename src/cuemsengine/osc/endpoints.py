@@ -24,14 +24,13 @@ OSC_AUDIOMIXER_CONF = {
 
 OSC_DMXPLAYER_CONF = { 
     '/quit' : [ValueType.Impulse, None],
-    '/load' : [ValueType.String, None], 
-    '/wait' : [ValueType.Float, None],
-    '/play' : [ValueType.Impulse, None],
-    '/stop' : [ValueType.Impulse, None],
+    '/check' : [ValueType.Impulse, None],
     '/stoponlost' : [ValueType.Bool, None],
-    # TODO '/mtcfollow' : [ValueType.Bool, None],
-    '/offset': [ValueType.Float, None],
-    '/check' : [ValueType.Impulse, None]
+    '/mtcfollow' : [ValueType.Bool, None],
+    '/frame' : [ValueType.List, None],        # [universe_id, ch0, val0, ch1, val1, ...]
+    '/fade_time' : [ValueType.Float, None],   # Fade duration in seconds
+    '/mtc_time' : [ValueType.String, None],   # MTC time as string ("now", "+H:M:S", "H:M:S")
+    '/start_offset' : [ValueType.Int, None],  # Start offset in milliseconds
 }
 
 OSC_VIDEOPLAYER_CONF = {
@@ -62,10 +61,10 @@ OSC_PLAYERS_DICT = {
 OSC_ENGINE_CMD_CONF = {
     '/engine/command/load' : [ValueType.String, None],
     '/engine/command/loadcue' : [ValueType.String, None],
-    '/engine/command/go' : [ValueType.String, None],
-    '/engine/command/gocue' : [ValueType.String, None],
-    '/engine/command/pause' : [ValueType.String, None],
-    '/engine/command/stop' : [ValueType.String, None],
+    '/engine/command/go' : [ValueType.Impulse, None],
+    '/engine/command/gocue' : [ValueType.Impulse, None],
+    '/engine/command/pause' : [ValueType.Impulse, None],
+    '/engine/command/stop' : [ValueType.Impulse, None],
     '/engine/command/resetall' : [ValueType.String, None],
     '/engine/command/preload' : [ValueType.String, None],
     '/engine/command/unload' : [ValueType.String, None],
