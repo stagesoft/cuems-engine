@@ -178,8 +178,14 @@ class CueHandler:
     # ---------------------------
 
     @logged
-    def go(self, cue: Cue, mtc: MtcListener) -> Thread:
-        """Starts a cue in a thread."""
+    def go(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None) -> Thread:
+        """Starts a cue in a thread.
+        
+        Args:
+            cue: The cue to start
+            mtc: The MTC listener
+            frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained cues
+        """
         Logger.info(f'GO command received. Starting cue {cue.id}')
         if not hasattr(cue, 'loaded') or not cue.loaded:
             raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
@@ -187,7 +193,7 @@ class CueHandler:
         thread = Thread(
             name=f'GO:{cue.__class__.__name__}:{cue.id}',
             target=self.go_threaded,
-            args=[cue, mtc],
+            args=[cue, mtc, frozen_mtc_ms],
             daemon=True
         )
         thread.start()
@@ -198,14 +204,29 @@ class CueHandler:
                 self.arm(cue._target_object)
         return thread
 
-    def go_threaded(self, cue: Cue, mtc: MtcListener):
-        """Runs a cue based on its properties."""
+    def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
+        """Runs a cue based on its properties.
+        
+        Args:
+            cue: The cue to run
+            mtc: The MTC listener (for live MTC)
+            frozen_mtc_ms: Optional frozen MTC timestamp in milliseconds.
+                           If provided, this timestamp is used for sync calculations
+                           and passed to chained cues (post_go='go') to ensure they
+                           all use the same reference time.
+        """
         if cue.prewait > 0:
             sleep(cue.prewait.milliseconds / 1000)
+        
+        # CRITICAL FOR SYNC: Capture MTC timestamp ONCE for this cue and all chained cues
+        # This ensures that when post_go='go' triggers another cue, both use the same time
+        if frozen_mtc_ms is None:
+            frozen_mtc_ms = float(mtc.main_tc.milliseconds)
+            Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
 
         if cue._local:
-            # Run cue immediately - don't wait for NNG notifications
-            run_cue(cue, mtc)
+            # Run cue immediately - pass both live MTC (for framerate) and frozen timestamp
+            run_cue(cue, mtc, frozen_mtc_ms)
             
             # Notify controller in background (fire-and-forget)
             try:
@@ -218,7 +239,8 @@ class CueHandler:
 
         if cue.post_go == 'go':
             Logger.info(f'Running post go for next cue:{cue.target}')
-            post_go_thread = self.go(cue._target_object, mtc)
+            # Pass the SAME frozen_mtc_ms to the chained cue for perfect sync
+            post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
         Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)

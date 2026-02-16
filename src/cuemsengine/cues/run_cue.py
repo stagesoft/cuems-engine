@@ -9,14 +9,22 @@ from ..players.PlayerHandler import PLAYER_HANDLER
 from .helpers import find_timing
 
 @singledispatch
-def run_cue(cue: Cue, mtc: MtcListener):
+def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
     """
-    Run a cue based on its type
+    Run a cue based on its type.
+    
+    Args:
+        cue: The cue to run
+        mtc: The MTC listener (for framerate info)
+        frozen_mtc_ms: Optional frozen MTC timestamp in milliseconds.
+                       When provided (e.g., for chained cues with post_go='go'),
+                       this timestamp is used instead of reading live MTC.
+                       This ensures perfect sync between audio and video cues.
     """
     pass
 
 @run_cue.register
-def run_cueList(cue: CueList, mtc: MtcListener):
+def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
     """
     Run a CueList
 
@@ -32,7 +40,7 @@ def run_cueList(cue: CueList, mtc: MtcListener):
         )
 
 @run_cue.register
-def run_actionCue(cue: ActionCue, mtc: MtcListener):
+def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
     """
     Run an ActionCue
     """
@@ -69,10 +77,32 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener):
         cue._action_target_object.enabled = False
 
 @run_cue.register
-def run_audioCue(cue: AudioCue, mtc):
+def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     """
     Run an AudioCue
+    
+    Args:
+        cue: The audio cue to run
+        mtc: The MTC listener (for framerate info)
+        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
     """
+    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+    # Otherwise read live MTC. This ensures audio and video cues share the same reference.
+    if frozen_mtc_ms is not None:
+        mtc_ms = frozen_mtc_ms
+        Logger.debug(f'AudioCue {cue.id} using frozen MTC: {mtc_ms}ms')
+    else:
+        mtc_ms = float(mtc.main_tc.milliseconds)
+    
+    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
+    # Convert duration to MTC framerate to prevent drift when looping
+    duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
+    cue._end_mtc = cue._start_mtc + duration
+    
+    # Audio player formula: file_position = MTC + offset
+    # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
+    offset_to_go = float(-cue._start_mtc.milliseconds)
+    
     # Try to connect player to mixer (JACK ports may now be available)
     try:
         mixer = PLAYER_HANDLER.get_audio_mixer()
@@ -89,24 +119,18 @@ def run_audioCue(cue: AudioCue, mtc):
     except Exception as e:
         Logger.warning(f"Could not connect player to mixer: {e}")
     
-    # Define the offset
+    # Define the offset - use MTC framerate for consistent timing with video
     try:
         key = '/offset'
-        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
-        cue._end_mtc = cue._start_mtc + CTimecode(cue.media.duration)
-        
-        # Audio player formula: file_position = MTC + offset
-        # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-        offset_to_go = float(-cue._start_mtc.milliseconds)
 
         cue._osc.set_value(key, offset_to_go)
         Logger.info(
             f"offset {offset_to_go} to {key}: {str(cue._osc.get_node(key).parameter.value)}",
             extra = {"caller": cue.__class__.__name__}
         )
-    except KeyError:
-        Logger.debug(
-            f'Key error 1 in run_audioCue {key}',
+    except Exception as e:
+        Logger.warning(
+            f'Error setting offset in run_audioCue: {e}',
             extra = {"caller": cue.__class__.__name__}
         )
 
@@ -114,14 +138,14 @@ def run_audioCue(cue: AudioCue, mtc):
     try:
         key = '/mtcfollow'
         cue._osc.set_value(key, 1)
-    except KeyError:
-        Logger.debug(
-            f'Key error 2 in run_audioCue {key}',
+    except Exception as e:
+        Logger.warning(
+            f'Error setting mtcfollow in run_audioCue: {e}',
             extra = {"caller": cue.__class__.__name__}
         )
 
 @run_cue.register
-def run_dmxCue(cue: DmxCue, mtc):
+def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
     """
     Run a DmxCue
     
@@ -129,10 +153,22 @@ def run_dmxCue(cue: DmxCue, mtc):
     Synchronized with MTC. The scene contains frame data, timing, and fade info.
     DMX cues have no media duration - duration is inferred from fade times.
     Only fadein_time is used for now. fade_out defaults to 0
+    
+    Args:
+        cue: The DMX cue to run
+        mtc: The MTC listener (for framerate info)
+        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
     """
     try:
-        # Calculate MTC timing (same as AudioCue)
-        cue._start_mtc = CTimecode(start_seconds=mtc.main_tc.milliseconds/1000)
+        # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+        if frozen_mtc_ms is not None:
+            mtc_ms = frozen_mtc_ms
+            Logger.debug(f'DmxCue {cue.id} using frozen MTC: {mtc_ms}ms')
+        else:
+            mtc_ms = float(mtc.main_tc.milliseconds)
+        
+        # Calculate MTC timing - use explicit framerate for consistency
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
         
         # DMX cues have no media - duration is inferred from fade times
         # Duration = fadein_time + fadeout_time (both in milliseconds)
@@ -140,9 +176,10 @@ def run_dmxCue(cue: DmxCue, mtc):
         fadeout_ms = getattr(cue, 'fadeout_time', 0)
         duration_ms = fadein_ms + fadeout_ms
         
-        # Convert duration to timecode format (HH:MM:SS.mmm)
+        # Convert duration to timecode format with explicit framerate
         duration_seconds = duration_ms / 1000.0
-        cue._end_mtc = cue._start_mtc + CTimecode(start_seconds=duration_seconds)
+        duration = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=duration_seconds)
+        cue._end_mtc = cue._start_mtc + duration
         
         # Calculate offset (same calculation as AudioCue)
         offset_milliseconds = cue._start_mtc.milliseconds
@@ -189,12 +226,25 @@ def run_dmxCue(cue: DmxCue, mtc):
         Logger.exception(e)
 
 @run_cue.register
-def run_videoCue(cue: VideoCue, mtc):
-    """Run a VideoCue."""
+def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
+    """Run a VideoCue.
+    
+    Args:
+        cue: The video cue to run
+        mtc: The MTC listener (for framerate info)
+        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
+    """
     Logger.info(f'Running video cue loop {cue.id}')
     
+    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+    if frozen_mtc_ms is not None:
+        mtc_ms = frozen_mtc_ms
+        Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
+    else:
+        mtc_ms = float(mtc.main_tc.milliseconds)
+    
     # Calculate timing - create snapshot copy of current MTC (not a reference!)
-    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc.main_tc.milliseconds/1000)
+    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     # xjadeo formula: displayFrame = MTC + offset
