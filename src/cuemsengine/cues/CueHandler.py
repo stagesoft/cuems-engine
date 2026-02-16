@@ -306,8 +306,10 @@ class CueHandler:
                 audio_cmd = f'/vol{channel}'
                 cue = self.get_armed_cue_by_id(cue_uuid)
                 if cue and hasattr(cue, '_osc') and cue._osc:
-                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {value}")
-                    cue._osc.set_value(audio_cmd, float(value))
+                    # Clamp volume to valid range (0.0 to 1.0)
+                    vol_value = max(0.0, min(1.0, float(value)))
+                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {vol_value}")
+                    cue._osc.set_value(audio_cmd, vol_value)
                 else:
                     Logger.warning(f"Cue {cue_uuid} not found or has no OSC client")
             else:

@@ -143,6 +143,23 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             f'Error setting mtcfollow in run_audioCue: {e}',
             extra = {"caller": cue.__class__.__name__}
         )
+    
+    # Apply master volume from cue settings
+    try:
+        master_vol = getattr(cue, 'master_vol', None)
+        if master_vol is not None:
+            # Convert to float and clamp to valid range (0.0 to 1.0)
+            vol_value = max(0.0, min(1.0, float(master_vol)))
+            cue._osc.set_value('/volmaster', vol_value)
+            Logger.info(
+                f"master_vol {vol_value} set on audio cue {cue.id}",
+                extra = {"caller": cue.__class__.__name__}
+            )
+    except Exception as e:
+        Logger.warning(
+            f'Error setting master volume in run_audioCue: {e}',
+            extra = {"caller": cue.__class__.__name__}
+        )
 
 @run_cue.register
 def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
