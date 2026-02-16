@@ -237,6 +237,15 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
         
+        # Enable MTC follow (same behaviour as audioplayer: follow timecode while cue runs)
+        try:
+            cue._osc.set_value('/mtcfollow', 1)
+        except Exception as e:
+            Logger.warning(
+                f'Error setting mtcfollow in run_dmxCue: {e}',
+                extra={"caller": cue.__class__.__name__}
+            )
+
         # Send DMX scene bundle to local player
         cue._osc.send_dmx_scene(
             universe_frames=universe_frames,
