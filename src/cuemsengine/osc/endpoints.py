@@ -44,39 +44,27 @@ OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/display/warp' : [ValueType.List, None], # [output_name, mesh_path]
     '/videocomposer/display/save' : [ValueType.String, None], # [file_path]
     '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
+    '/videocomposer/layer/list' : [ValueType.Impulse, None],
     '/videocomposer/layer/load' : [ValueType.List, None], # [file_path, layer_id]
-    '/videocomposer/layer/LAYER_ID/play' : [ValueType.Impulse, None],
-    '/videocomposer/layer/LAYER_ID/offset' : [ValueType.Int, None],
-    '/videocomposer/layer/LAYER_ID/mtcfollow' : [ValueType.String, None],
-    '/videocomposer/layer/LAYER_ID/stop' : [ValueType.Impulse, None],
-    '/videocomposer/layer/LAYER_ID/visible' : [ValueType.Int, None],
-    '/videocomposer/layer/LAYER_ID/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
-    '/videocomposer/layer/LAYER_ID/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)
-    '/videocomposer/layer/LAYER_ID/scale' : [ValueType.List, None], # [x, y] (x and y are scale ratio of the layer)
-    '/videocomposer/layer/LAYER_ID/rotation' : [ValueType.Float, None], # rotation in degrees
-    '/videocomposer/layer/LAYER_ID/zorder' : [ValueType.Int, None], # z-order of the layer (higher numbers are in front)
-    '/videocomposer/layer/LAYER_ID/corner_deform' : [ValueType.List, None], # [x0, y0, offset0, ..., x3, y3, offset3] (x and y are pixel coordinates of the corner, offset is the deformation amount)
-    '/videocomposer/layer/LAYER_ID/corner_deform_enable' : [ValueType.Int, None], # Enable / Disable corner deformation [0 or 1]
-    '/videocomposer/layer/LAYER_ID/corner_deform_hq' : [ValueType.Int, None], # Enable / Disable high-quality mode [0 or 1]
+    '/videocomposer/layer/unload' : [ValueType.String, None], # [layer_id]
+    '/videocomposer/layer/remove' : [ValueType.String, None], # [layer_id]
     '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
 }
 
-OSC_VIDEOPLAYER_XJADEO_CONF = {
-    '/jadeo/xscale' : [ValueType.Float, None],
-    '/jadeo/yscale' : [ValueType.Float, None], 
-    '/jadeo/corners' : [ValueType.List, None],
-    '/jadeo/corner1' : [ValueType.List, None],
-    '/jadeo/corner2' : [ValueType.List, None],
-    '/jadeo/corner3' : [ValueType.List, None],
-    '/jadeo/corner4' : [ValueType.List, None],
-    '/jadeo/start' : [ValueType.Int, None],
-    '/jadeo/load' : [ValueType.String, None],
-    '/jadeo/cmd' : [ValueType.String, None],
-    '/jadeo/quit' : [ValueType.Int, None],
-    '/jadeo/offset' : [ValueType.Int, None],  # Changed to Int - xjadeo handles /jadeo/offset with "i" type
-    '/jadeo/midi/connect' : [ValueType.String, None],
-    '/jadeo/midi/disconnect' : [ValueType.Int, None],
-    '/jadeo/ontop' : [ValueType.Bool, None]
+OSC_VIDEOPLAYER_LAYER_CONF = {
+    '/videocomposer/layer/{}/play' : [ValueType.Impulse, None],
+    '/videocomposer/layer/{}/offset' : [ValueType.Int, None],
+    '/videocomposer/layer/{}/mtcfollow' : [ValueType.String, None],
+    '/videocomposer/layer/{}/stop' : [ValueType.Impulse, None],
+    '/videocomposer/layer/{}/visible' : [ValueType.Int, None],
+    '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
+    '/videocomposer/layer/{}/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)
+    '/videocomposer/layer/{}/scale' : [ValueType.List, None], # [x, y] (x and y are scale ratio of the layer)
+    '/videocomposer/layer/{}/rotation' : [ValueType.Float, None], # rotation in degrees
+    '/videocomposer/layer/{}/zorder' : [ValueType.Int, None], # z-order of the layer (higher numbers are in front)
+    '/videocomposer/layer/{}/corner_deform' : [ValueType.List, None], # [x0, y0, offset0, ..., x3, y3, offset3] (x and y are pixel coordinates of the corner, offset is the deformation amount)
+    '/videocomposer/layer/{}/corner_deform_enable' : [ValueType.Int, None], # Enable / Disable corner deformation [0 or 1]
+    '/videocomposer/layer/{}/corner_deform_hq' : [ValueType.Int, None], # Enable / Disable high-quality mode [0 or 1]
 }
 
 OSC_PLAYERS_DICT = {

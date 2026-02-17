@@ -1,40 +1,33 @@
-from cuemsutils.log import logged
+from cuemsutils.log import logged, Logger
 
 from .Player import Player
 from ..osc.OssiaClient import PlayerClient
 from ..osc.endpoints import OSC_VIDEOPLAYER_CONF
 
 class VideoPlayer(Player):
-    def __init__(self, port, output, path, args, media):
+    """Video player systemd service wrapper.
+
+    This class restarts the videocomposer service.
+    
+    IMPORTANT: This class should not be used, since videocomposer is a systemd service and not a subprocess.
+    """
+    def __init__(self):
         super().__init__()
-        self._port = port
-        self.output = output
-        self.path = path
-        self.args = args
-        self.media = media
-        self.stdout = None
-        self.stderr = None
+        Logger.warning('Restarting the videocomposer service. Use VideoClient only to control videocomposer.')
 
     @logged
     def run(self):
-        # Calling xjadeo in a subprocess
-        process_call_list = [self.path]
-        if self.args:
-            for arg in self.args.split():
-                process_call_list.append(arg)
-        process_call_list.extend([
-            '--osc', str(self._port),
-            '--start-screen', self.output,
-            self.media
-        ])
-
+        # Calling videocomposer in a subprocess
+        process_call_list = [
+            'systemctl',
+            'restart',
+            'videocomposer.service'
+        ]
+        Logger.info(f'Restarting videocomposer service: {process_call_list}')
         self.call_subprocess(process_call_list)
 
-    def port(self):
-        return self._port
-
 class VideoClient(PlayerClient):
-    def __init__(self, player_port: int, name: str = "videoplayer"):
+    def __init__(self, player_port: int, name: str = "videocomposer"):
         super().__init__(
             player_port = player_port,
             name = name,
