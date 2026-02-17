@@ -213,8 +213,10 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         duration = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=duration_seconds)
         cue._end_mtc = cue._start_mtc + duration
         
-        # Calculate offset (same calculation as AudioCue)
+        # Absolute MTC time for this cue (ms). DMX player expects mtc_time as absolute
+        # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead, time).
         offset_milliseconds = cue._start_mtc.milliseconds
+        mtc_time_str = f"0:0:{offset_milliseconds / 1000.0}"
         
         # Get DMX frame data from the cue
         universe_frames = getattr(cue, '_dmx_frames', {})
@@ -237,25 +239,16 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
         
-        # Enable MTC follow (same behaviour as audioplayer: follow timecode while cue runs)
-        try:
-            cue._osc.set_value('/mtcfollow', 1)
-        except Exception as e:
-            Logger.warning(
-                f'Error setting mtcfollow in run_dmxCue: {e}',
-                extra={"caller": cue.__class__.__name__}
-            )
-
-        # Send DMX scene bundle to local player
+        # Send DMX scene bundle to local player (mtc_time absolute so no overlap/loss)
         cue._osc.send_dmx_scene(
             universe_frames=universe_frames,
-            mtc_time=offset_milliseconds,
+            mtc_time=mtc_time_str,
             fade_time=fade_time
         )
         
         Logger.info(
             f"DMX scene sent to local player for cue {cue.id}: "
-            f"offset={offset_milliseconds}ms, universes={len(universe_frames)}, fade={fade_time}s",
+            f"mtc_time={mtc_time_str} ({offset_milliseconds}ms), universes={len(universe_frames)}, fade={fade_time}s",
             extra = {"caller": cue.__class__.__name__}
         )
         
