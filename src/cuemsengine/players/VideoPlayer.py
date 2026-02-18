@@ -33,3 +33,24 @@ class VideoClient(PlayerClient):
             name = name,
             endpoints = OSC_VIDEOPLAYER_CONF
         )
+
+class VideoOutput:
+    def __init__(self, **kwargs):
+        self.name = kwargs.get('name')
+        self.x = kwargs.get('x')
+        self.y = kwargs.get('y')
+        self.width = kwargs.get('width')
+        self.height = kwargs.get('height')
+        self.resolution = kwargs.get('resolution', "native")
+
+    def apply_config(self, video_client: VideoClient) -> None:
+        """Applies the configuration to the video client."""
+        video_client.set_value('/videocomposer/display/resolution_mode', self.resolution)
+        self.set_region(video_client)
+
+    def set_region(self, video_client: VideoClient) -> None:
+        """Sets the region of the video output."""
+        if any([self.x, self.y, self.width, self.height]) is None:
+            return
+        
+        video_client.set_value('/videocomposer/display/region', [self.name, self.x, self.y, self.width, self.height])
