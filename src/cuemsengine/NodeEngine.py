@@ -8,11 +8,11 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .osc.OssiaClient import PlayerClient
 from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
 from .osc.helpers import add_callback_to_all, add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
+from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
 
@@ -723,24 +723,19 @@ def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
     if not cue:
         Logger.error(f'Cue {cue_uuid} not found')
         return
-    client: PlayerClient = cue._osc
+    client: AudioClient = cue._osc
     client.set_value(audio_cmd, value)
 
 def redirect_dmx_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the DMX command to the DMX player"""
     dmx_index = path_parts.index('mixer') + 1 # +1 to skip the 'mixer' keyword
     dmx_cmd = '/' + '/'.join(path_parts[dmx_index:])
-    PLAYER_HANDLER.get_dmx_player_client().set_value(dmx_cmd, value)
+    client: DmxClient = PLAYER_HANDLER.get_dmx_player_client()
+    client.set_value(dmx_cmd, value)
 
 def redirect_video_cmd(path_parts: list[str], value: str) -> None:
-    """Redirect the video command to the video player at front"""
-    jadeo_index = path_parts.index('jadeo')
-    jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
-    output_index = path_parts[jadeo_index - 1]
-    output_name = PLAYER_HANDLER.get_video_output_names(int(output_index))
-    output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
-    if not output_player:
-        Logger.error(f'No active video player found for output {output_name} at index {output_index}')
-        return None
-    client: PlayerClient = output_player['osc']
-    client.set_value(jadeo_cmd, value)
+    """Redirect the video command to the video client"""
+    videocomposer_index = path_parts.index('videocomposer')
+    videocomposer_cmd = '/' + '/'.join(path_parts[videocomposer_index:])
+    client: VideoClient = PLAYER_HANDLER.get_video_client()
+    client.set_value(videocomposer_cmd, value)
