@@ -68,17 +68,6 @@ class DmxClient(PlayerClient):
         self._mtc_time_param = root.add_node("/mtc_time").create_parameter(ossia.ValueType.String)
         self._start_offset_param = root.add_node("/start_offset").create_parameter(ossia.ValueType.Int)
         self._fade_time_param = root.add_node("/fade_time").create_parameter(ossia.ValueType.Float)
-        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(ossia.ValueType.Int)
-
-    def enable_mtcfollow(self) -> None:
-        """Re-enable MTC following in the DMX player.
-
-        Called before sending a new cue so the dmxplayer resumes tracking
-        timecode. Must be called after send_blackout() which leaves
-        mtcfollow disabled intentionally.
-        """
-        self._mtcfollow_param.push_value(1)
-        Logger.debug("DMX mtcfollow re-enabled for playback")
 
     @logged
     def send_dmx_scene(

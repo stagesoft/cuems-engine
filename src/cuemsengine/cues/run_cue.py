@@ -239,10 +239,6 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
         
-        # Re-enable MTC following (send_blackout leaves it disabled so the
-        # blackout scene has unlimited time to complete via OLA FetchDMX).
-        cue._osc.enable_mtcfollow()
-
         # Send DMX scene bundle to local player (mtc_time absolute so no overlap/loss)
         cue._osc.send_dmx_scene(
             universe_frames=universe_frames,
