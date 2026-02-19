@@ -1,5 +1,4 @@
 from cuemsutils.log import Logger, logged
-from time import sleep
 from pyossia import ossia
 
 from .Player import Player
@@ -69,6 +68,17 @@ class DmxClient(PlayerClient):
         self._mtc_time_param = root.add_node("/mtc_time").create_parameter(ossia.ValueType.String)
         self._start_offset_param = root.add_node("/start_offset").create_parameter(ossia.ValueType.Int)
         self._fade_time_param = root.add_node("/fade_time").create_parameter(ossia.ValueType.Float)
+        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(ossia.ValueType.Int)
+
+    def enable_mtcfollow(self) -> None:
+        """Re-enable MTC following in the DMX player.
+
+        Called before sending a new cue so the dmxplayer resumes tracking
+        timecode. Must be called after send_blackout() which leaves
+        mtcfollow disabled intentionally.
+        """
+        self._mtcfollow_param.push_value(1)
+        Logger.debug("DMX mtcfollow re-enabled for playback")
 
     @logged
     def send_dmx_scene(
@@ -120,27 +130,34 @@ class DmxClient(PlayerClient):
 
     @logged
     def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
-        """Send a blackout scene (all channels to 0) for immediate effect.
-        
-        Uses mtc_time='now' and fade_time=0.0 so the DMX player applies
-        the blackout immediately. Used on STOP and LOAD to reset outputs.
-        
+        """Send a blackout (all channels to 0) directly to OLA.
+
+        Bypasses the dmxplayer's scene mechanism entirely by calling
+        ola_set_dmx for each universe. This avoids race conditions between
+        the OSC receiver thread and the OLA timer thread in dmxplayer-cuems
+        (the scene's mtcStart can capture a stale playHead value when MTC
+        has just stopped).
+
         Args:
-            universe_ids: DMX universe(s) to black out. Pass a single int (e.g. 0)
-                         or a tuple (e.g. (0, 1)). Default (0, 1) covers the
-                         two most common universes; use the project's universes
-                         if known. Standard DMX has 512 channels (1-512) per universe.
+            universe_ids: DMX universe(s) to black out.
         """
+        import subprocess
+
         if isinstance(universe_ids, int):
             universe_ids = (universe_ids,)
-        channels = {ch: 0 for ch in range(1, 513)}
-        universe_frames = {uid: channels for uid in universe_ids}
-        self.send_dmx_scene(
-            universe_frames=universe_frames,
-            mtc_time="now",
-            fade_time=0.0
-        )
-        Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
+
+        zeros = ','.join(['0'] * 512)
+        for uid in universe_ids:
+            try:
+                subprocess.run(
+                    ['ola_set_dmx', '-u', str(uid), '-d', zeros],
+                    timeout=2, check=True,
+                    capture_output=True,
+                )
+            except Exception as e:
+                Logger.error(f"Blackout ola_set_dmx failed for universe {uid}: {e}")
+
+        Logger.info(f"Sent DMX blackout via ola_set_dmx for universe(s) {universe_ids}")
 
 @logged
 def start_dmx_player(
