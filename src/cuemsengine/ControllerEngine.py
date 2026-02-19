@@ -1,4 +1,5 @@
 import asyncio
+import time
 from functools import partial
 
 from cuemsutils.log import Logger, logged
@@ -32,6 +33,11 @@ class ControllerEngine(BaseEngine):
       - Handling the NodeConf system
     '''
     def __init__(self, **kwargs):
+        # Must be set before super().__init__() because BaseEngine sets
+        # self.timecode = None which triggers on_timecode_change() via the
+        # property setter, and that method reads these attributes.
+        self._last_timecode_broadcast = 0.0
+        self._timecode_broadcast_interval = 0.5  # 2 Hz max for timecode , for 20mhz set it to 0.05
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
@@ -39,7 +45,14 @@ class ControllerEngine(BaseEngine):
     def start(self):
         self.create_timecode()
         self.set_comms()
+        self.mtc_listener.start()
         super().start()
+
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
+        """Set status and push to UI via WebSocket when running, armed, or load."""
+        super().set_status(property, value, strict)
+        if property in ('running', 'armed', 'load'):
+            self._broadcast_status(property, value)
     
     @logged
     def set_comms(self):
@@ -116,13 +129,13 @@ class ControllerEngine(BaseEngine):
         """
         # Command handlers - same as used in _command_poll_loop
         self.communications_thread.register_command_handler(
-            '/engine/command/go', self.go_script, forward_to_nodes=True
+            '/engine/command/go', self.go_script, forward_to_nodes=False
         )
         self.communications_thread.register_command_handler(
-            '/engine/command/load', self.deploy_project, forward_to_nodes=True
+            '/engine/command/load', self.deploy_project, forward_to_nodes=False
         )
         self.communications_thread.register_command_handler(
-            '/engine/command/stop', self.stop_script, forward_to_nodes=True
+            '/engine/command/stop', self.stop_script, forward_to_nodes=False
         )
         
         # Register wildcard handler for player messages (engine format)
@@ -208,34 +221,8 @@ class ControllerEngine(BaseEngine):
             Logger.error(f"Error forwarding player OSC to nodes: {e}")
 
     def _forward_load_to_nodes(self, project_name: str) -> None:
-        """Forward a load command to NodeEngine via NNG.
-        
-        This ensures the NodeEngine loads the project script when
-        the project is loaded from the Editor via IPC.
-        
-        Args:
-            project_name: Name of the project to load
-        """
-        if not hasattr(self, 'communications_thread') or not self.communications_thread:
-            Logger.warning("Cannot forward load to nodes: communications thread not available")
-            return
-        
-        operation = NodeOperation(
-            type=OperationType.COMMAND,
-            action=ActionType.UPDATE,
-            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
-            target='load',
-            data={'value': project_name, 'address': '/engine/command/load'}
-        )
-        
-        try:
-            asyncio.run_coroutine_threadsafe(
-                self.communications_thread.nng_hub.send_operation(operation),
-                self.communications_thread.event_loop
-            )
-            Logger.info(f"Forwarded load command to nodes: {project_name}")
-        except Exception as e:
-            Logger.error(f"Error forwarding load command to nodes: {e}")
+        """Forward a load command to NodeEngine via NNG."""
+        self._forward_command_to_nodes('/engine/command/load', project_name)
 
     def stop(self):
         self.stop_comms()
@@ -312,15 +299,17 @@ class ControllerEngine(BaseEngine):
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
         
-        Handles script_finished notifications to sync running status.
+        Handles script_finished and armed_ready notifications.
         """
         Logger.info(f'Status operation received: {operation}')
         if operation.target == 'script_finished':
-            # Node reports script finished - update our running status
             if operation.data and operation.data.get('running') == 'no':
                 Logger.info('Script finished notification received from node - updating running status')
                 self.set_status('running', 'no')
-                self.stop_timecode()
+        elif operation.target == 'armed_ready':
+            if operation.data and operation.data.get('armed') == 'yes':
+                Logger.info('Re-arm complete from node - GO available')
+                self.set_status('armed', 'yes')
         else:
             Logger.debug(f'Unknown status target: {operation.target}')
 
@@ -457,9 +446,22 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             Logger.debug(f"Status update (no-op): {key} = {repr(value)}")
 
+    def _broadcast_status(self, key: str, value) -> None:
+        """Push status to UI via WebSocket OSC (realtime)."""
+        if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
+            self.communications_thread.broadcast_osc(f'/engine/status/{key}', value)
+
     def on_timecode_change(self, value: str) -> None:
-        """Handle timecode changes - logs for now."""
-        Logger.debug(f'Timecode changed to {value}')
+        """Handle timecode changes - broadcast to UI (throttled to 20 Hz)."""
+        now = time.monotonic()
+        if now - self._last_timecode_broadcast >= self._timecode_broadcast_interval:
+            self._last_timecode_broadcast = now
+            try:
+                tc_int = int(value) if value is not None else 0
+                self._broadcast_status('timecode', tc_int)
+                Logger.debug(f'Timecode broadcast {tc_int}')
+            except (TypeError, ValueError):
+                pass
 
     #########################
     # Project management
@@ -472,6 +474,7 @@ class ControllerEngine(BaseEngine):
             return False
 
         Logger.info(f'Loading project {project_name}')
+        self.set_status('armed', 'no')
         self.reset_script()
         self.stop_timecode()
         
@@ -513,8 +516,15 @@ class ControllerEngine(BaseEngine):
         # Update internal status
         self.set_status('load', project_name)
 
-        # Forward load command to NodeEngine via NNG
+        # Forward load command to NodeEngine via NNG (nodes will arm cues)
         self._forward_load_to_nodes(project_name)
+
+        # Timecode starts on load; runs until next load or engine shutdown
+        self.start_timecode()
+        self.go_offset = 0  # Enable mtc_callback → on_timecode_change → broadcast
+        # armed=yes is NOT set here -- it's set when NodeEngine reports armed_ready
+        # via status_operation_callback, ensuring cues are actually armed before
+        # the UI shows GO as available
 
         # Confirm the project is loaded
         self.set_show_lock_file()
@@ -525,33 +535,65 @@ class ControllerEngine(BaseEngine):
     def deploy_project(self, project_name):
         self.load_project(project_name)
 
-    def go_script(self, value):
-        if self.get_status('running') == "yes":
-            Logger.info(f'Script already running.')
+    def go_script(self, value, context=None):
+        if self.get_status('armed') != "yes":
+            Logger.warning('Cues not armed. GO not available.')
             return
 
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
         
-        self.start_timecode()
-        
-        # Update internal status
         self.set_status('running', "yes")
-        
+
+        # Forward GO to NodeEngine via NNG (needed when called from editor;
+        # when called from WebSocket the comms layer also forwards, but the
+        # NodeEngine's run_command is idempotent so a double-call is harmless)
+        self._forward_command_to_nodes('/engine/command/go', value)
+
         Logger.info(f'GO command processed')
         return True
 
+    def _forward_command_to_nodes(self, address: str, value) -> None:
+        """Forward a generic command to NodeEngine via NNG."""
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            Logger.warning("Cannot forward command to nodes: communications thread not available")
+            return
+
+        parts = address.strip('/').split('/')
+        command_name = parts[-1] if parts else address
+
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target=command_name,
+            data={'value': value, 'address': address}
+        )
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
+        except Exception as e:
+            Logger.error(f"Error forwarding command to nodes: {e}")
+
     def stop_script(self, value):
-        """Handle STOP command - stop timecode and update status"""
+        """Handle STOP command - stop timecode, update status and forward to nodes."""
         if self.get_status('running') != "yes":
             Logger.info('Script not running, nothing to stop.')
             return
 
+        self.go_offset = None
         self.stop_timecode()
-        
-        # Update internal status
+        self._broadcast_status('timecode', 0)
+
         self.set_status('running', "no")
-        
-        Logger.info('STOP command processed - ready for next GO')
+        self.set_status('armed', 'no')
+
+        self._forward_command_to_nodes('/engine/command/stop', value)
+
+        Logger.info('STOP command processed - timecode stopped; nodes will re-arm')
         return True
