@@ -23,14 +23,22 @@ class CueHandler:
     Thread-safe: internal state mutations are guarded by a Lock.
     """
 
-    _instance = None
+    _instance: 'CueHandler | None' = None
+
+    # Instance attributes (declared for IDE/type checker support)
+    _armed_cues: list[Cue]
+    _armed_cues_set: set[str]
+    _video_players: dict
+    _front_video_player: VideoPlayer | None
+    _lock: Lock
+    communications_thread: NodeCommunications
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             # Initialize instance attributes
-            cls._instance._armed_cues: list[Cue] = []
-            cls._instance._armed_cues_set: set[str] = set()
+            cls._instance._armed_cues = []
+            cls._instance._armed_cues_set = set()
             cls._instance._video_players = {}
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
