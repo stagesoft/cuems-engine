@@ -365,31 +365,25 @@ class NodeEngine(BaseEngine):
                 pass  # Ignore - NNG is for distributed nodes
 
     def quit_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'quit')
-            except Exception as e:
-                Logger.exception(e)
-
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}', timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+        try:
+            PLAYER_HANDLER.quit_videocomposer()
+            Logger.info('Videocomposer quit successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     def disconnect_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'midi disconnect')
-            except Exception as e:
-                Logger.exception(e)
+        try:
+            PLAYER_HANDLER.disconnect_video_midi()
+            Logger.info('Videocomposer disconnected successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     def unload_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/load', '')
-            except Exception as e:
-                Logger.exception(e)
+        try:
+            PLAYER_HANDLER.reset_video_layers()
+            Logger.info('Video layers unloaded successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     # DMX functions
     def set_dmx_players(self):
