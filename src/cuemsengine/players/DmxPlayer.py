@@ -118,6 +118,30 @@ class DmxClient(PlayerClient):
             Logger.exception(e)
             raise
 
+    @logged
+    def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
+        """Send a blackout scene (all channels to 0) for immediate effect.
+        
+        Uses mtc_time='now' and fade_time=0.0 so the DMX player applies
+        the blackout immediately. Used on STOP and LOAD to reset outputs.
+        
+        Args:
+            universe_ids: DMX universe(s) to black out. Pass a single int (e.g. 0)
+                         or a tuple (e.g. (0, 1)). Default (0, 1) covers the
+                         two most common universes; use the project's universes
+                         if known. Standard DMX has 512 channels (1-512) per universe.
+        """
+        if isinstance(universe_ids, int):
+            universe_ids = (universe_ids,)
+        channels = {ch: 0 for ch in range(1, 513)}
+        universe_frames = {uid: channels for uid in universe_ids}
+        self.send_dmx_scene(
+            universe_frames=universe_frames,
+            mtc_time="now",
+            fade_time=0.0
+        )
+        Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
+
 @logged
 def start_dmx_player(
     port: int,
