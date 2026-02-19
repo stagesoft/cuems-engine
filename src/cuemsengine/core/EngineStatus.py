@@ -19,6 +19,7 @@ class EngineStatus:
         self.timecode = 0
         self.nextcue = ""
         self.running = ""
+        self.armed = ""
 
         del self.currentcue # start with empty array
 
@@ -194,3 +195,11 @@ class EngineStatus:
     @running.setter
     def running(self, value: int | None) -> None:
         self._running = value
+
+    @property
+    def armed(self) -> str | None:
+        return self._armed
+
+    @armed.setter
+    def armed(self, value: str | None) -> None:
+        self._armed = value

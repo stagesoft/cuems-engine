@@ -38,7 +38,7 @@ class BaseEngine(SignalEngine):
         self.with_cm = with_cm
         self.with_mtc = with_mtc
         self.with_signals = with_signals
-        self.go_offset = 0
+        self.go_offset = None  # None = not computing timecode; 0 = raw MTC
         self.script: CuemsScript = None
         self.stop_requested = False
         self.node_name = None
@@ -134,7 +134,7 @@ class BaseEngine(SignalEngine):
         Logger.debug(f"Status endpoints: {endpoints}")
         # remove unwanted callbacks from status nodes that are set programmatically
         # to avoid callback loops and threading issues when push_value() is called
-        for i in ["currentcue", "running", "load", "timecode"]:
+        for i in ["currentcue", "running", "load", "timecode", "armed"]:
             if f"/engine/status/{i}" in endpoints:
                 endpoints[f"/engine/status/{i}"][1] = None
         return endpoints
@@ -230,7 +230,7 @@ class BaseEngine(SignalEngine):
             self.script = None
             self.ongoing_cue = None
             self.next_cue_pointer = None
-            self.go_offset = 0
+            self.go_offset = None
             # Only set OSCQuery values if server exists and has the nodes
             if hasattr(self, 'oscquery_server') and self.oscquery_server:
                 try:
@@ -240,7 +240,7 @@ class BaseEngine(SignalEngine):
                     Logger.warning(f"Could not reset OSCQuery status nodes: {e}. Server may not be fully initialized.")
 
     def mtc_callback(self, mtc: CTimecode) -> None:
-        if self.go_offset:
+        if self.go_offset is not None:
             self.timecode = mtc.milliseconds - self.go_offset
 
     ### CONFIG MANAGER ###
