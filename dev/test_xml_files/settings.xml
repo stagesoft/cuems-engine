@@ -26,9 +26,8 @@
             <osc_in_port_base>7000</osc_in_port_base>
             <nng_hub_port>5555</nng_hub_port>
             <videoplayer>
-                <path>/usr/bin/xjadeo</path>
-                <args>--ontop --fullscreen --no-splash --quiet --no-initial-sync --midi-driver alsa-seq --ignore-file-offset</args>
-                <outputs>2</outputs>
+                <path>/usr/bin/videocomposer</path>
+                <args></args>
             </videoplayer>
             <audioplayer>
                 <path>/usr/bin/audioplayer-cuems</path>

@@ -15,6 +15,9 @@ from .tools.PortHandler import PORT_HANDLER
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
+# OSC port for the videocomposer, should be extracted from settings.xml
+# TODO: Extract from settings.xml
+OSC_VIDEOPLAYER_PORT = 7500
 
 class NodeEngine(BaseEngine):
     """
@@ -180,10 +183,10 @@ class NodeEngine(BaseEngine):
 
     def stop_video_devs(self):
         try:
+            PLAYER_HANDLER.reset_video_layers()
             self.unload_video_devs()
             self.quit_video_devs()
             self.disconnect_video_devs()
-            PLAYER_HANDLER.reset_video_players()
             Logger.info('Quitted video devs')
         except Exception as e:
             Logger.warning(f'Exception raised when quitting video devs: {e}')
@@ -335,34 +338,18 @@ class NodeEngine(BaseEngine):
             Logger.info('No video outputs detected.')
             return
         
-        output_names = self.cm.node_hw_outputs['video_outputs']
-        output_ports = []
-        for index in range(len(output_names)):
-            ports = PORT_HANDLER.assign_ports([
-                f'video_player_{index}_0',
-                f'video_player_{index}_1'
-            ])
-            PORT_HANDLER.add_config_ports(ports)
-            output_ports.append(ports)
-
-        try:
-            PLAYER_HANDLER.start_video_outputs(
-                output_names,
-                output_ports,
-                self.cm.node_conf['videoplayer']['path'],
-                self.cm.node_conf['videoplayer']['args']
-            )
-        except Exception as e:
-            Logger.error(f'Error checking & starting video devices...')
-            Logger.error(e)
-            Logger.error(f'Exiting...')
-            exit(-1)
+        # Set the video client
+        PLAYER_HANDLER.set_video_client(OSC_VIDEOPLAYER_PORT)
+        # Add the video client port to the config ports
+        PORT_HANDLER.add_config_ports({'videocomposer': OSC_VIDEOPLAYER_PORT})
         
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None, timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+        # Start the video outputs
+        output_names = self.cm.node_hw_outputs['video_outputs']
+        # TODO: Add the video output configuration from settings.xml
+        # Note: This is a temporary solution to get the video outputs working.
+        # It appends them laterally on the screen at 1080p resolution.
+        video_outputs = {k: {'name': k, 'x': 1920 * index, 'y': 0, 'width': 1920, 'height': 1080, 'resolution': '1080p'} for index, k in enumerate(output_names)}
+        PLAYER_HANDLER.start_video_outputs(video_outputs)
 
     def quit_video_devs(self):
         try:
