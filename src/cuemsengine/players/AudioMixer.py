@@ -62,10 +62,9 @@ class AudioMixer(Player):
 
     @logged
     def connect_to_jack(self):
-        """Connect mixer outputs to system playback ports."""
-        for i in range(self.channel_number):
+        """Connect mixer outputs to the configured playback ports."""
+        for i, playback_port in enumerate(self.audio_outputs):
             output_port = f"{self.client_name}:output_{i+1}"
-            playback_port = f"system:playback_{i+1}"
             Logger.debug(f"Connecting {output_port} to {playback_port}")
             self.conn_man.connect_by_name(output_port, playback_port)
 
