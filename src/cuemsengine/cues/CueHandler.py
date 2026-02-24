@@ -164,6 +164,9 @@ class CueHandler:
                 if isinstance(cue, AudioCue):
                     self.communications_thread.remove_player(f'audioplayer_{cue.id}', timeout=0.1)
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
+                if isinstance(cue, VideoCue):
+                    cue._osc.set_value(f'/videocomposer/layer/{cue.id}/visible', [0])
+                    cue._osc.set_value('/videocomposer/layer/remove', [cue.id])
             except Exception:
                 pass  # Ignore - NNG is for distributed nodes
             return True

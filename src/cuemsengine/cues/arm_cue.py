@@ -121,6 +121,8 @@ def arm_videoCue(cue: VideoCue):
         if client is None:
             Logger.error(f'No video client available for cue {cue.id}')
             return
+        cue._osc = client
+        Logger.debug(f"video client assigned to VideoCue {cue.id}")
     except Exception as e:
         Logger.error(f'Error retrieving video client for cue {cue.id}: {e}')
         Logger.exception(e)
@@ -129,12 +131,15 @@ def arm_videoCue(cue: VideoCue):
     # Get all output names for this cue
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
+    YES = [1]
+    NO = [0]
+    layer_path = f'/videocomposer/layer/{cue.id}'
 
     # Create a new layer for the video cue with full transparency and auto unload
     client.set_value('/videocomposer/layer/load', [video_path, cue.id])
     Logger.info(f"video layer {video_path} for cue {cue.id} created")
-    client.set_value(f'/videocomposer/layer/{cue.id}/visible', 0)
-    client.set_value(f'/videocomposer/layer/{cue.id}/autounload', 1)
+    client.set_value(f'{layer_path}/visible', NO)
+    client.set_value(f'{layer_path}/autounload', YES)
 
     # Use video outputs to position the layer
     # TODO: Position the layer on all outputs
@@ -142,5 +147,5 @@ def arm_videoCue(cue: VideoCue):
         Logger.warning(f"Multiple video outputs for cue {cue.id}, only positioning the first one")
     
     output = PLAYER_HANDLER.get_video_output(output_names[0])
-    client.set_value(f'/videocomposer/layer/{cue.id}/position', [output.x, output.y])
+    client.set_value(f'{layer_path}/position', [output.x, output.y])
     Logger.debug(f"video layer {cue.id} positioned at {output.x}, {output.y}")

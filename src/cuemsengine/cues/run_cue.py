@@ -302,29 +302,12 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
     
-    video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    
-    # Send commands to ALL video outputs
-    for i, osc_client in enumerate(osc_list):
-        # Load the video file via pyossia OSC
-        try:
-            osc_client.set_value('/jadeo/load', video_path)
-            Logger.info(f"load {video_path} on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"Video load failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
-        
-        Logger.info(f"Video cue output {i}: port={osc_client.remote_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
-        
-        # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
-        try:
-            osc_client.set_value('/jadeo/offset', int(offset_to_go))
-            Logger.info(f"offset: {offset_to_go} on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"Offset set failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
-        
-        # Connect to MTC via pyossia OSC
-        try:
-            osc_client.set_value('/jadeo/cmd', 'midi connect Midi Through')
-            Logger.info(f"midi connect on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"MIDI connect failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
+
+    # Play the layer
+    layer_path = f'/videocomposer/layer/{cue.id}'
+    YES = [1]
+    video_client = PLAYER_HANDLER.get_video_client()
+    video_client.set_value(f'{layer_path}/offset', [int(offset_to_go)])
+    video_client.set_value(f'{layer_path}/visible', YES)
+    video_client.set_value(f'{layer_path}/mtcfollow', YES)
+    Logger.info(f"video cue {cue.id} played with offset {offset_to_go}")

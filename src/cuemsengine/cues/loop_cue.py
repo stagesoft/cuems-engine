@@ -4,31 +4,32 @@ from time import sleep
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
-from cuemsutils.tools.CTimecode import CTimecode
+
+from ..tools.MtcListener import MtcListener, CTimecode
 
 @singledispatch
-def loop_cue(cue: Cue, mtc):
+def loop_cue(cue: Cue, mtc: MtcListener):
     """
     Loop a cue based on its type
     """
     pass
 
 @loop_cue.register
-def loop_cueList(cue: CueList, mtc):
+def loop_cueList(cue: CueList, mtc: MtcListener):
     """
     Loop a CueList
     """
     pass
 
 @loop_cue.register
-def loop_actionCue(cue: ActionCue, mtc):
+def loop_actionCue(cue: ActionCue, mtc: MtcListener):
     """
     Loop an ActionCue
     """
     pass
 
 @loop_cue.register
-def loop_audioCue(cue: AudioCue, mtc):
+def loop_audioCue(cue: AudioCue, mtc: MtcListener):
     """Handle the audio media playback loop.
         
     This method manages the playback loop for audio media, including handling
@@ -89,7 +90,7 @@ def loop_audioCue(cue: AudioCue, mtc):
         pass
 
 @loop_cue.register
-def loop_dmxCue(cue: DmxCue, mtc):
+def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
     """Handle the DMX cue duration wait.
     
     DMX scenes are fire-and-forget (sent once in run_dmxCue), so we only wait 
@@ -122,26 +123,16 @@ def loop_dmxCue(cue: DmxCue, mtc):
         pass
 
 @loop_cue.register
-def loop_videoCue(cue: VideoCue, mtc):
+def loop_videoCue(cue: VideoCue, mtc: MtcListener):
     """Handle the video media playback loop.
         
     This method manages the playback loop for video media, including handling
     looping behavior, frame rate conversion, and OSC communication for timing control.
     
-    Supports multiple video outputs - sends commands to all OSC clients in cue._osc_list.
-    
-    Note: xjadeo must have force_redraw on offset change for seamless looping.
-    
     Args:
         mtc: The MIDI Time Code interface.
     """
     Logger.info(f'Running video cue loop {cue.id}, cue.loop={cue.loop} (type={type(cue.loop).__name__})')
-    
-    # Get OSC clients for all outputs
-    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
-    if not osc_list:
-        Logger.error(f'No OSC clients available for video cue {cue.id}')
-        return
     
     try:
         loop_counter = 0
@@ -174,24 +165,13 @@ def loop_videoCue(cue: VideoCue, mtc):
                 
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_change_frames} (MTC={mtc.main_tc.milliseconds}ms, _start_mtc={cue._start_mtc.milliseconds}ms, _end_mtc={cue._end_mtc.milliseconds}ms)')
                 
-                # Send offset to ALL outputs
-                for i, osc_client in enumerate(osc_list):
-                    try:
-                        osc_client.set_value('/jadeo/offset', int(offset_change_frames))
-                        Logger.debug(f"Offset sent to xjadeo output {i}: {offset_change_frames}", extra={"caller": cue.__class__.__name__})
-                    except Exception as e:
-                        Logger.error(f'Offset send failed on output {i}: {e}', extra={"caller": cue.__class__.__name__})
+                try:
+                    cue._osc.set_value(f'/videocomposer/layer/{cue.id}/offset', [int(offset_change_frames)])
+                    Logger.debug(f"Offset sent to video cue {cue.id}: {offset_change_frames}")
+                except Exception as e:
+                    Logger.error(f'Offset send failed for video cue {cue.id}: {e}')
 
         Logger.info(f'Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}')
-        if cue._local:
-            # Disconnect MIDI on ALL outputs
-            for i, osc_client in enumerate(osc_list):
-                try:
-                    key = '/jadeo/midi/disconnect'
-                    osc_client.set_value(key, 1)
-                    Logger.debug(f"midi disconnect sent to output {i}", extra={"caller": cue.__class__.__name__})
-                except KeyError:
-                    Logger.debug(f'Key error (disconnect) in loop_videoCue on output {i}', extra={"caller": cue.__class__.__name__})
         
     except AttributeError:
         pass
