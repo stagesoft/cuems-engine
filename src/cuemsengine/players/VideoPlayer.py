@@ -45,7 +45,7 @@ class VideoOutput:
 
     def apply_config(self, video_client: VideoClient) -> None:
         """Applies the configuration to the video client."""
-        video_client.set_value('/videocomposer/display/resolution_mode', self.resolution)
+        video_client.set_value('/videocomposer/display/resolution_mode', [self.resolution])
         self.set_region(video_client)
 
     def set_region(self, video_client: VideoClient) -> None:

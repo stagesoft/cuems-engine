@@ -335,17 +335,17 @@ class PlayerHandler:
             # Remove all video layers 
             video_layers = self._video_client.get_value('/videocomposer/layer/list')
             for layer in video_layers:
-                self._video_client.set_value('/videocomposer/layer/remove', layer)
+                self._video_client.set_value('/videocomposer/layer/remove', [layer])
 
     def disconnect_video_midi(self):
         """Disconnects the video layers."""
         Logger.debug('Disconnecting video MIDI')
-        self._video_client.set_value('/videocomposer/midi/disconnect', "")
+        self._video_client.set_value('/videocomposer/midi/disconnect', [""])
 
     def quit_videocomposer(self):
         """Quits the videocomposer."""
         Logger.debug('Quitting videocomposer')
-        self._video_client.set_value('/videocomposer/quit', "")
+        self._video_client.set_value('/videocomposer/quit', [""])
         self._video_client = None
         self._video_outputs = {}
 
