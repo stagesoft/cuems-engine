@@ -39,9 +39,11 @@ except ImportError:
 
 try:
     from pythonosc.osc_message import OscMessage
+    from pythonosc.osc_message_builder import OscMessageBuilder
     from pythonosc.parsing import osc_types
 except ImportError:
     OscMessage = None
+    OscMessageBuilder = None
     osc_types = None
 
 
@@ -119,7 +121,8 @@ def parse_osc_message(data: bytes) -> tuple[str, list[Any]] | None:
 async def handle_websocket_connection(
     websocket,
     message_handler: Callable[[str, list[Any]], None],
-    stop_check: Callable[[], bool]
+    stop_check: Callable[[], bool],
+    client_set: Optional[set] = None
 ) -> None:
     """Handle a single WebSocket connection.
     
@@ -128,7 +131,11 @@ async def handle_websocket_connection(
         message_handler: Callback function to handle parsed OSC messages.
                         Called with (address: str, args: list)
         stop_check: Function that returns True when the listener should stop
+        client_set: Optional set to track connected clients for broadcast. If provided,
+                    websocket is added on connect and removed on disconnect.
     """
+    if client_set is not None:
+        client_set.add(websocket)
     client_info = f"{websocket.remote_address}" if hasattr(websocket, 'remote_address') else "unknown"
     Logger.info(f"WebSocket OSC client connected: {client_info}")
     
@@ -156,7 +163,43 @@ async def handle_websocket_connection(
     except Exception as e:
         Logger.error(f"WebSocket OSC connection error: {e}")
     finally:
+        if client_set is not None:
+            client_set.discard(websocket)
         Logger.debug(f"WebSocket OSC connection closed: {client_info}")
+
+
+def build_osc_message(address: str, value: Any) -> Optional[bytes]:
+    """Build a binary OSC message for the given address and value.
+    
+    Args:
+        address: OSC address (e.g. '/engine/status/running')
+        value: Value to send. Type is inferred: str -> 's', int -> 'i', float -> 'f'.
+        
+    Returns:
+        Bytes to send over WebSocket, or None if building failed.
+    """
+    if not OscMessageBuilder:
+        Logger.warning("pythonosc not available - cannot build OSC message")
+        return None
+    try:
+        builder = OscMessageBuilder(address)
+        if value is None:
+            builder.add_arg('')
+        elif isinstance(value, bool):
+            builder.add_arg(value)
+        elif isinstance(value, str):
+            builder.add_arg(value)
+        elif isinstance(value, int):
+            builder.add_arg(value)
+        elif isinstance(value, float):
+            builder.add_arg(value)
+        else:
+            builder.add_arg(str(value))
+        msg = builder.build()
+        return msg.dgram
+    except Exception as e:
+        Logger.debug(f"Error building OSC message: {e}")
+        return None
 
 
 async def websocket_osc_listener(
@@ -164,7 +207,8 @@ async def websocket_osc_listener(
     port: int,
     message_handler: Callable[[str, list[Any]], None],
     stop_check: Callable[[], bool],
-    existing_server_check: Optional[Callable[[], bool]] = None
+    existing_server_check: Optional[Callable[[], bool]] = None,
+    client_set: Optional[set] = None
 ) -> None:
     """Async WebSocket OSC listener.
     
@@ -204,7 +248,7 @@ async def websocket_osc_listener(
     
     try:
         async with websocket_serve(
-            lambda ws: handle_websocket_connection(ws, message_handler, stop_check),
+            lambda ws: handle_websocket_connection(ws, message_handler, stop_check, client_set),
             host,
             port,
             # Allow concurrent connections

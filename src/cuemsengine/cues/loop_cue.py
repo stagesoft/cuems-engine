@@ -107,12 +107,6 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
             sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
 
         if cue._local:
-            # Disable MTC follow when cue ends (same behaviour as audioplayer)
-            try:
-                cue._osc.set_value('/mtcfollow', 0)
-                Logger.info("DMX mtcfollow disabled", extra={"caller": cue.__class__.__name__})
-            except Exception as e:
-                Logger.warning(f'Error disabling mtcfollow: {e}', extra={"caller": cue.__class__.__name__})
             # Reserved for future looping implementation
             # Currently DMX scenes are sent once in run_dmxCue
             pass

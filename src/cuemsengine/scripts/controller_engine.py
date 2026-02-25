@@ -36,11 +36,21 @@ Use Ctrl+C to stop when running manually.
     engine = ControllerEngine()
     engine.start()
     
+    def handle_signal(signum, frame):
+        Logger.info(f"Received signal {signum}, stopping engine...")
+        engine.stop_all()
+        raise SystemExit(0)
+    
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+    
     try:
         signal.pause()
     except KeyboardInterrupt:
         Logger.info("Received interrupt signal, stopping engine...")
         engine.stop_all()
+    except SystemExit:
+        pass
     except Exception as e:
         Logger.error(f"Engine error: {type(e).__name__}: {e}")
         engine.stop_all()

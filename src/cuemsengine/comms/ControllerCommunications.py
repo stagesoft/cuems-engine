@@ -10,7 +10,8 @@ from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
 from .AsyncCommsThread import AsyncCommsThread
 from .NodesHub import NodesHub, NodeOperation, OperationType, ActionType
 from ..osc.WebSocketOscHandler import (
-    websocket_osc_listener, 
+    websocket_osc_listener,
+    build_osc_message,
     WebSocketOscRouter
 )
 
@@ -69,6 +70,9 @@ class ControllerCommunications(AsyncCommsThread):
         
         # WebSocket OSC router for message handling
         self._osc_router = WebSocketOscRouter()
+        
+        # Track connected WebSocket clients for status broadcast (bidirectional)
+        self._ws_clients: set = set()
         
         # Command handlers (set by ControllerEngine)
         self._command_handlers: dict[str, Callable] = {}
@@ -179,8 +183,33 @@ class ControllerCommunications(AsyncCommsThread):
             host=self._ws_osc_host,
             port=self._ws_osc_port,
             message_handler=self._osc_router.route,
-            stop_check=lambda: self.stop_requested
+            stop_check=lambda: self.stop_requested,
+            client_set=self._ws_clients
         )
+
+    def broadcast_osc(self, address: str, value: Any) -> None:
+        """Send an OSC status message to all connected WebSocket clients.
+        
+        Call from ControllerEngine when status changes (running, armed, load, timecode).
+        Thread-safe: schedules send on the comms event loop.
+        
+        Args:
+            address: OSC address (e.g. '/engine/status/armed')
+            value: Value to send (str, int, or float)
+        """
+        data = build_osc_message(address, value)
+        if not data or not self._ws_clients:
+            return
+        async def _send_all():
+            for ws in list(self._ws_clients):
+                try:
+                    await ws.send(data)
+                except Exception as e:
+                    Logger.debug(f"WebSocket broadcast to client failed: {e}")
+        try:
+            asyncio.run_coroutine_threadsafe(_send_all(), self.event_loop)
+        except Exception as e:
+            Logger.debug(f"Could not schedule status broadcast: {e}")
 
 
     #########################

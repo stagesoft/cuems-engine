@@ -450,7 +450,21 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
 
-        # FIRST: Clean up any existing audio players from the previous project
+        # DMX blackout and JACK volume reset before cleanup (clean outputs)
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f'DMX blackout failed: {e}')
+        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+        if mixer_client:
+            try:
+                mixer_client.reset_volumes()
+            except Exception as e:
+                Logger.warning(f'JACK volume reset failed: {e}')
+
+        # Clean up any existing audio players from the previous project
         # This MUST happen BEFORE ready_project() which replaces self.script
         # Otherwise the old cue objects are orphaned and their players never get killed
         Logger.debug('Cleaning up previous project resources before loading new one')
@@ -471,6 +485,22 @@ class NodeEngine(BaseEngine):
         self.script.unix_name = project
         self.set_status('load', project)
         Logger.info(f'Project {project} loaded')
+
+        # Notify Controller that arming is complete (GO button can go green)
+        try:
+            from .comms.NodesHub import NodeOperation, OperationType, ActionType
+            operation = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid,
+                target='armed_ready',
+                data={'armed': 'yes'}
+            )
+            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+            Logger.debug('Notified Controller that arming after load is complete')
+        except Exception as e:
+            Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+
         return True
 
     def deploy_project(self, project):
@@ -531,30 +561,8 @@ class NodeEngine(BaseEngine):
                 cue_to_go = self.next_cue_pointer
                 Logger.info(f'GO command received. Advancing to next cue: {cue_to_go.id}')
             else:
-                # No next cue - script has finished (or remaining cues auto-chain)
-                # Reset state same as STOP does, ready for next GO
-                Logger.info(f'Script finished. Resetting for next GO.')
-                self.set_status('running', 'no')
-                self.ongoing_cue = None
-                self.next_cue_pointer = None
-                
-                # Notify Controller that script finished (so it can update its own status)
-                try:
-                    from .comms.NodesHub import NodeOperation, OperationType, ActionType
-                    operation = NodeOperation(
-                        type=OperationType.STATUS,
-                        action=ActionType.UPDATE,
-                        sender=self.cm.node_uuid,
-                        target='script_finished',
-                        data={'running': 'no'}
-                    )
-                    CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-                    Logger.debug('Notified Controller that script finished')
-                except Exception as e:
-                    Logger.warning(f'Could not notify Controller of script finish: {e}')
-                
-                self.ready_script()  # Re-arm all cues like STOP does
-                # Return here - next GO will start from beginning (arming is async)
+                # No next cue - script has finished. Do not stop timecode or reset state.
+                Logger.info('No more cues. Press STOP to restart.')
                 return
 
         if not cue_to_go._local:
@@ -586,59 +594,53 @@ class NodeEngine(BaseEngine):
             next_cue = ""
 
         Logger.info(f'Cue {cue_to_go.id} started. Next cue: {next_cue if next_cue else "none"}')
-        
-        # Start a watcher thread to detect when playback completes naturally
-        def watch_playback_completion():
-            """Wait for main cue thread to finish and update status."""
-            main_thread.join()
-            # Only reset if we're still marked as running (not stopped manually)
-            if self.get_status('running') == 'yes':
-                Logger.info('Playback completed naturally. Resetting status.')
-                self.set_status('running', 'no')
-                self.ongoing_cue = None
-                self.next_cue_pointer = None
-                
-                # Notify Controller that script finished
-                try:
-                    from .comms.NodesHub import NodeOperation, OperationType, ActionType
-                    operation = NodeOperation(
-                        type=OperationType.STATUS,
-                        action=ActionType.UPDATE,
-                        sender=self.cm.node_uuid,
-                        target='script_finished',
-                        data={'running': 'no'}
-                    )
-                    CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-                    Logger.debug('Notified Controller that script finished')
-                except Exception as e:
-                    Logger.warning(f'Could not notify Controller of script finish: {e}')
-                
-                self.ready_script()  # Re-arm all cues like STOP does
-        
-        from threading import Thread
-        watcher = Thread(target=watch_playback_completion, daemon=True)
-        watcher.start()
 
     def stop_playback(self, value=None):
-        """Stop playback and reset to ready state.
+        """Stop playback, full cleanup, then re-arm so GO is available again.
         
-        This stops playback and resets the project so it's ready for GO again.
+        Does the cleanup that ready_script() doesn't handle (DMX blackout,
+        disconnect video, kill audio), then delegates reset + re-arm to
+        ready_script(). Notifies Controller when armed (GO button green).
         """
         Logger.info('STOP command received. Stopping playback.')
         
-        # Disconnect all video players from MIDI
-        self.disconnect_video_devs()
-        
-        # Update status
         self.set_status('running', "no")
         
-        # Reset script state so GO can work again from the beginning
+        # DMX blackout immediately (visual output goes dark ASAP)
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f'DMX blackout failed: {e}')
+        
+        # Disconnect video players from MIDI
+        self.disconnect_video_devs()
+        
+        # Kill all audio players (ready_script does not do this)
+        PLAYER_HANDLER.kill_all_audio_players()
+        
+        # Reset state + disarm + volume reset + re-arm cues
         if self.script:
             self.ready_script()
             Logger.info(f'Project {self.script.name} reset and ready for GO.')
+            
+            # Notify Controller that re-arm is complete (GO button can go green)
+            try:
+                from .comms.NodesHub import NodeOperation, OperationType, ActionType
+                operation = NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target='armed_ready',
+                    data={'armed': 'yes'}
+                )
+                CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+                Logger.debug('Notified Controller that re-arm is complete')
+            except Exception as e:
+                Logger.warning(f'Could not notify Controller of armed_ready: {e}')
         else:
-            # Just disarm if no script loaded
-            CUE_HANDLER.disarm_all()
+            Logger.info('Playback stopped (no script loaded).')
         
         Logger.info('Playback stopped.')
 

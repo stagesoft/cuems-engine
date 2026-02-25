@@ -1,5 +1,4 @@
 from cuemsutils.log import Logger, logged
-from time import sleep
 from pyossia import ossia
 
 from .Player import Player
@@ -117,6 +116,37 @@ class DmxClient(PlayerClient):
             Logger.error(f"Error sending DMX scene bundle: {e}")
             Logger.exception(e)
             raise
+
+    @logged
+    def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
+        """Send a blackout (all channels to 0) directly to OLA.
+
+        Bypasses the dmxplayer's scene mechanism entirely by calling
+        ola_set_dmx for each universe. This avoids race conditions between
+        the OSC receiver thread and the OLA timer thread in dmxplayer-cuems
+        (the scene's mtcStart can capture a stale playHead value when MTC
+        has just stopped).
+
+        Args:
+            universe_ids: DMX universe(s) to black out.
+        """
+        import subprocess
+
+        if isinstance(universe_ids, int):
+            universe_ids = (universe_ids,)
+
+        zeros = ','.join(['0'] * 512)
+        for uid in universe_ids:
+            try:
+                subprocess.run(
+                    ['ola_set_dmx', '-u', str(uid), '-d', zeros],
+                    timeout=2, check=True,
+                    capture_output=True,
+                )
+            except Exception as e:
+                Logger.error(f"Blackout ola_set_dmx failed for universe {uid}: {e}")
+
+        Logger.info(f"Sent DMX blackout via ola_set_dmx for universe(s) {universe_ids}")
 
 @logged
 def start_dmx_player(
