@@ -183,11 +183,10 @@ class AudioMixer(Player):
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
         
-        # Map output port names to mixer inputs
-        # Assuming mixer input_1 connects to system:playback_1, input_2 to playback_2
+        # Build output→input mapping from the configured audio_outputs list
         output_to_input = {
-            'system:playback_1': f"{self.client_name}:input_1",
-            'system:playback_2': f"{self.client_name}:input_2",
+            name: f"{self.client_name}:input_{i+1}"
+            for i, name in enumerate(self.audio_outputs)
         }
         
         # Wait for player JACK ports to be available
