@@ -114,6 +114,8 @@ class CueHandler:
 
     def arm(self, cue: Cue, init=False) -> bool:
         """Arms a cue by appending it to the armed_cues list."""
+        if cue is None:
+            return False
         with self._lock:
             found = cue in self._armed_cues
         if hasattr(cue, 'loaded') and cue.loaded:

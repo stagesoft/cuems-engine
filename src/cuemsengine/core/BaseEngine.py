@@ -403,8 +403,12 @@ class BaseEngine(SignalEngine):
         cuelist.localize_cue(self.cm.node_uuid)
         CUE_HANDLER.arm(cuelist, True)
 
-        try:
-            for index, item in enumerate(cuelist.contents):
+        for index, item in enumerate(cuelist.contents):
+            if item is None:
+                Logger.warning(f'Skipping None item at index {index} in cuelist {cuelist.id}')
+                continue
+
+            try:
                 if isinstance(item, CueList):
                     self.initial_cuelist_process(item)
 
@@ -419,8 +423,13 @@ class BaseEngine(SignalEngine):
                         item.target = None
                         item._target_object = None
                     else:
-                        item.target = cuelist.contents[index + 1].id
-                        item._target_object = cuelist.contents[index + 1]
+                        next_item = cuelist.contents[index + 1]
+                        if next_item is not None:
+                            item.target = next_item.id
+                            item._target_object = next_item
+                        else:
+                            item.target = None
+                            item._target_object = None
                 else:
                     item._target_object = self.script.find(item.target)
 
@@ -432,6 +441,6 @@ class BaseEngine(SignalEngine):
                 if isinstance(item, ActionCue):
                     item._action_target_object = self.script.find(item.action_target)
 
-        except Exception as e:
-            Logger.error(f'Error arming cuelist : {cuelist.id} : {e}')
-            raise
+            except Exception as e:
+                Logger.error(f'Error processing item at index {index} in cuelist {cuelist.id}: {e}')
+                continue
