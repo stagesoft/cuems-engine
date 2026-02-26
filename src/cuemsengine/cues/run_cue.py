@@ -111,16 +111,18 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
             player_name = f'Audio_Player-{uuid_slug}'
             
-            # Parse cue.outputs to determine which mixer inputs to use
-            # Format: [{'output_name': 'uuid_system:playback_1', ...}, ...]
+            # Resolve JACK port names from cue output IDs via audio output lookup
             selected_outputs = []
             if hasattr(cue, 'outputs') and cue.outputs:
                 for output in cue.outputs:
                     output_name = output.get('output_name', '')
-                    # Extract port name after the UUID (36 chars + underscore)
                     if len(output_name) > 37:
-                        port_name = output_name[37:]  # e.g., 'system:playback_1'
-                        selected_outputs.append(port_name)
+                        output_id = output_name[37:]
+                        port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
+                        if port_name:
+                            selected_outputs.append(port_name)
+                        else:
+                            selected_outputs.append(output_id)
             
             Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
             

@@ -37,6 +37,7 @@ class PlayerHandler:
     _player_endpoints_generator: partial | None
     _video_client: VideoClient | None
     _video_outputs: dict[str, VideoOutput]
+    _audio_outputs: dict[str, dict]
     _loaded_layer_ids: set[str]
     _outputs_map: dict | None
     _lock: RLock
@@ -58,6 +59,7 @@ class PlayerHandler:
             cls._instance._player_endpoints_generator = None
             cls._instance._video_client = None
             cls._instance._video_outputs = {}
+            cls._instance._audio_outputs = {}
             cls._instance._loaded_layer_ids = set()
             cls._instance._outputs_map = None
             cls._instance._lock = RLock()
@@ -122,6 +124,17 @@ class PlayerHandler:
         """Sets the audio player generator"""
         Logger.info(f'Setting audio output generator to {path} {args}')
         self._audio_output_generator = partial(start_audio_output, path=path, args=args)
+
+    def set_audio_outputs(self, audio_outputs: dict[str, dict]) -> None:
+        """Store audio output configs keyed by <id>."""
+        self._audio_outputs = audio_outputs
+
+    def resolve_audio_port(self, output_id: str) -> str | None:
+        """Resolve an output <id> to its JACK port name (mapped_to)."""
+        output = self._audio_outputs.get(output_id)
+        if output:
+            return output.get('mapped_to')
+        return None
 
     def start_audio_mixer(self, audio_outputs: list, port: int, mixer_id: str, path: str = None, args: str | None = None) -> tuple[AudioMixer, MixerClient]:
         """Starts the audio mixer for this node.

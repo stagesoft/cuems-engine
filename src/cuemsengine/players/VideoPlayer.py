@@ -53,6 +53,7 @@ class VideoClient(PlayerClient):
 class VideoOutput:
     def __init__(self, **kwargs):
         self.name = kwargs.get('name')
+        self.mapped_to = kwargs.get('mapped_to', self.name)
         self.x = kwargs.get('x', 0)
         self.y = kwargs.get('y', 0)
         self.width = kwargs.get('width', 1920)
@@ -73,7 +74,7 @@ class VideoOutput:
         self.set_region(video_client)
 
     def set_region(self, video_client: VideoClient) -> None:
-        """Sets the display region for this output."""
+        """Sets the display region using the DRM connector name (mapped_to)."""
         if None in [self.x, self.y, self.width, self.height]:
             return
-        video_client.set_value('/videocomposer/display/region', [self.name, self.x, self.y, self.width, self.height])
+        video_client.set_value('/videocomposer/display/region', [self.mapped_to, self.x, self.y, self.width, self.height])

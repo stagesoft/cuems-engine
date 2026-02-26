@@ -332,6 +332,21 @@ class NodeEngine(BaseEngine):
         else:
             Logger.info('No audio outputs detected, skipping audio mixer initialization')
         
+        # Build audio output lookup keyed by <id> (mirrors video output pattern)
+        audio_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('audio', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else output_data['name']
+                        audio_outputs[output_id] = {
+                            'name': output_data['name'],
+                            'mapped_to': mapped_to,
+                        }
+        PLAYER_HANDLER.set_audio_outputs(audio_outputs)
+
         # Set the audio player generator
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
@@ -351,16 +366,22 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.set_video_client(osc_video_port)
         PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
         
-        # Build video output configs from node_mappings (includes canvas_region from XML)
+        # Build video output configs from node_mappings
+        # Keys are <id> (stable integer, what cues reference via output_name)
+        # <name> is a human label, <mapped_to> is the DRM connector for videocomposer
         video_outputs = {}
         for port_type_dict in self.cm.node_mappings.get('video', []):
             for port_type_list in port_type_dict.values():
                 for port in port_type_list:
                     for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
                         name = output_data['name']
                         region = output_data.get('canvas_region', {})
-                        video_outputs[name] = {
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else name
+                        video_outputs[output_id] = {
                             'name': name,
+                            'mapped_to': mapped_to,
                             'x': region.get('x', 0),
                             'y': region.get('y', 0),
                             'width': region.get('width', 1920),
