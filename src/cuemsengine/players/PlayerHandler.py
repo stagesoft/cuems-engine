@@ -336,7 +336,16 @@ class PlayerHandler:
     def start_video_outputs(self, output_names: dict[str, dict[str, any]]) -> None:
         """Ensures that the all the required video output exist."""
         Logger.info(f'Checking & starting video outputs for {output_names} ')
+        canvas_w, canvas_h = 0, 0
+        for cfg in output_names.values():
+            region = cfg.get('canvas_region') or {}
+            right = region.get('x', 0) + region.get('width', 1920)
+            bottom = region.get('y', 0) + region.get('height', 1080)
+            canvas_w = max(canvas_w, right)
+            canvas_h = max(canvas_h, bottom)
         for output_name, output_config in output_names.items():
+            output_config['canvas_width'] = canvas_w
+            output_config['canvas_height'] = canvas_h
             video_output = VideoOutput(**output_config)
             video_output.apply_config(self._video_client)
             self._video_outputs[output_name] = video_output

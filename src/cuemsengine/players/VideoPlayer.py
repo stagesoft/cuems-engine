@@ -63,10 +63,19 @@ class VideoOutput:
             'x': self.x, 'y': self.y,
             'width': self.width, 'height': self.height,
         })
+        self.canvas_width = kwargs.get('canvas_width', self.width)
+        self.canvas_height = kwargs.get('canvas_height', self.height)
 
     def get_layer_placement(self) -> tuple[int, int]:
-        """Returns (canvas_x, canvas_y) for fullscreen placement on this output."""
-        return (self.canvas_region['x'], self.canvas_region['y'])
+        """Returns (x, y) offset from canvas center to this output's center.
+
+        The videocomposer uses center-relative coordinates: (0, 0) = canvas center.
+        """
+        output_cx = self.canvas_region['x'] + self.canvas_region['width'] // 2
+        output_cy = self.canvas_region['y'] + self.canvas_region['height'] // 2
+        canvas_cx = self.canvas_width // 2
+        canvas_cy = self.canvas_height // 2
+        return (output_cx - canvas_cx, output_cy - canvas_cy)
 
     def apply_config(self, video_client: VideoClient) -> None:
         """Applies the display configuration to the videocomposer."""
