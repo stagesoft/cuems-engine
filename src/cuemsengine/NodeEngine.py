@@ -8,16 +8,13 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
-from .osc.helpers import add_callback_to_all, add_prefix_to_all
+from .osc.helpers import add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
-# OSC port for the videocomposer, should be extracted from settings.xml
-# TODO: Extract from settings.xml
-OSC_VIDEOPLAYER_PORT = 7500
+VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
 class NodeEngine(BaseEngine):
     """
@@ -183,13 +180,24 @@ class NodeEngine(BaseEngine):
 
     def stop_video_devs(self):
         try:
-            PLAYER_HANDLER.reset_video_layers()
             self.unload_video_devs()
-            self.quit_video_devs()
-            self.disconnect_video_devs()
-            Logger.info('Quitted video devs')
+            Logger.info('Video devs stopped')
         except Exception as e:
-            Logger.warning(f'Exception raised when quitting video devs: {e}')
+            Logger.warning(f'Exception raised when stopping video devs: {e}')
+
+    def quit_video_devs(self):
+        try:
+            PLAYER_HANDLER.quit_videocomposer()
+            Logger.info('Videocomposer quit successfully')
+        except Exception as e:
+            Logger.exception(e)
+
+    def unload_video_devs(self):
+        try:
+            PLAYER_HANDLER.reset_video_layers()
+            Logger.info('Video layers unloaded successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     #########################
     # OSCQuery logic
@@ -338,10 +346,10 @@ class NodeEngine(BaseEngine):
             Logger.info('No video outputs detected.')
             return
         
-        # Set the video client
-        PLAYER_HANDLER.set_video_client(OSC_VIDEOPLAYER_PORT)
-        # Add the video client port to the config ports
-        PORT_HANDLER.add_config_ports({'videocomposer': OSC_VIDEOPLAYER_PORT})
+        vc_conf = self.cm.node_conf.get('videoplayer', {})
+        osc_video_port = int(vc_conf.get('osc_port', VIDEOCOMPOSER_OSC_PORT_DEFAULT))
+        PLAYER_HANDLER.set_video_client(osc_video_port)
+        PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
         
         # Start the video outputs
         output_names = self.cm.node_hw_outputs['video_outputs']
@@ -351,26 +359,6 @@ class NodeEngine(BaseEngine):
         video_outputs = {k: {'name': k, 'x': 1920 * index, 'y': 0, 'width': 1920, 'height': 1080, 'resolution': '1080p'} for index, k in enumerate(output_names)}
         PLAYER_HANDLER.start_video_outputs(video_outputs)
 
-    def quit_video_devs(self):
-        try:
-            PLAYER_HANDLER.quit_videocomposer()
-            Logger.info('Videocomposer quit successfully')
-        except Exception as e:
-            Logger.exception(e)
-
-    def disconnect_video_devs(self):
-        try:
-            PLAYER_HANDLER.disconnect_video_midi()
-            Logger.info('Videocomposer disconnected successfully')
-        except Exception as e:
-            Logger.exception(e)
-
-    def unload_video_devs(self):
-        try:
-            PLAYER_HANDLER.reset_video_layers()
-            Logger.info('Video layers unloaded successfully')
-        except Exception as e:
-            Logger.exception(e)
 
     # DMX functions
     def set_dmx_players(self):
@@ -422,8 +410,6 @@ class NodeEngine(BaseEngine):
         self.deploy_media(project)
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
-        # Reset video loaded tracking for new project (xjadeo workaround)
-        PLAYER_HANDLER.reset_video_loaded_outputs()
         PORT_HANDLER.clean_random_ports()
 
     def map_cue_outputs(self, cuelist: CueList = None):
@@ -614,8 +600,8 @@ class NodeEngine(BaseEngine):
             except Exception as e:
                 Logger.warning(f'DMX blackout failed: {e}')
         
-        # Disconnect video players from MIDI
-        self.disconnect_video_devs()
+        # Unload all video layers (instant visual blackout)
+        self.unload_video_devs()
         
         # Kill all audio players (ready_script does not do this)
         PLAYER_HANDLER.kill_all_audio_players()
