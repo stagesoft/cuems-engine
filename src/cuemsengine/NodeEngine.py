@@ -351,12 +351,22 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.set_video_client(osc_video_port)
         PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
         
-        # Start the video outputs
-        output_names = self.cm.node_hw_outputs['video_outputs']
-        # TODO: Add the video output configuration from settings.xml
-        # Note: This is a temporary solution to get the video outputs working.
-        # It appends them laterally on the screen at 1080p resolution.
-        video_outputs = {k: {'name': k, 'x': 1920 * index, 'y': 0, 'width': 1920, 'height': 1080, 'resolution': '1080p'} for index, k in enumerate(output_names)}
+        # Build video output configs from node_mappings (includes canvas_region from XML)
+        video_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('video', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        name = output_data['name']
+                        region = output_data.get('canvas_region', {})
+                        video_outputs[name] = {
+                            'name': name,
+                            'x': region.get('x', 0),
+                            'y': region.get('y', 0),
+                            'width': region.get('width', 1920),
+                            'height': region.get('height', 1080),
+                            'canvas_region': region if region else None,
+                        }
         PLAYER_HANDLER.start_video_outputs(video_outputs)
 
 
