@@ -263,44 +263,34 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
 def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     """Run a VideoCue.
     
-    Args:
-        cue: The video cue to run
-        mtc: The MTC listener (for framerate info)
-        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
-    
-    Supports multiple video outputs - sends commands to all OSC clients in cue._osc_list.
+    Sends offset/visible/mtcfollow to all layers in cue._layer_ids
+    via the single VideoClient in cue._osc.
     """
-    Logger.info(f'Running video cue loop {cue.id}')
-    
-    # Get OSC clients for all outputs
-    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
-    if not osc_list:
-        Logger.error(f'No OSC clients available for video cue {cue.id}')
+    Logger.info(f'Running video cue {cue.id}')
+
+    layer_ids = getattr(cue, '_layer_ids', [])
+    if not layer_ids or cue._osc is None:
+        Logger.error(f'Video cue {cue.id} has no layers or no OSC client')
         return
-    
-    Logger.debug(f'Video cue {cue.id} has {len(osc_list)} output(s)')
-    
-    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
     else:
         mtc_ms = float(mtc.main_tc.milliseconds)
-    
-    # Calculate timing - create snapshot copy of current MTC (not a reference!)
+
     cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
-    # xjadeo formula: displayFrame = MTC + offset
-    # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
-    
 
-    # Play the layer
-    layer_path = f'/videocomposer/layer/{cue.id}'
-    YES = [1]
-    video_client = PLAYER_HANDLER.get_video_client()
-    video_client.set_value(f'{layer_path}/offset', [int(offset_to_go)])
-    video_client.set_value(f'{layer_path}/visible', YES)
-    video_client.set_value(f'{layer_path}/mtcfollow', YES)
-    Logger.info(f"video cue {cue.id} played with offset {offset_to_go}")
+    mtc_port = getattr(mtc, 'port_name', 'Midi Through Port-0')
+    client = cue._osc
+
+    for layer_id in layer_ids:
+        layer_path = f'/videocomposer/layer/{layer_id}'
+        client.set_value(f'{layer_path}/offset', int(offset_to_go))
+        client.set_value(f'{layer_path}/visible', 1)
+        client.set_value(f'{layer_path}/mtcfollow', mtc_port)
+
+    Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")

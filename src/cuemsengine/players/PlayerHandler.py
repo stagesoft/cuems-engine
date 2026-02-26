@@ -37,6 +37,7 @@ class PlayerHandler:
     _player_endpoints_generator: partial | None
     _video_client: VideoClient | None
     _video_outputs: dict[str, VideoOutput]
+    _loaded_layer_ids: set[str]
     _outputs_map: dict | None
     _lock: RLock
     _media_folder: str
@@ -57,6 +58,7 @@ class PlayerHandler:
             cls._instance._player_endpoints_generator = None
             cls._instance._video_client = None
             cls._instance._video_outputs = {}
+            cls._instance._loaded_layer_ids = set()
             cls._instance._outputs_map = None
             cls._instance._lock = RLock()
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
@@ -108,6 +110,8 @@ class PlayerHandler:
         self._video_outputs = {}
         self._cue_players = {}
         self._outputs_map = None
+        with self._lock:
+            self._loaded_layer_ids.clear()
 
 
     # ---------------------------
@@ -328,26 +332,43 @@ class PlayerHandler:
         """Returns the VideoOutput object for a given output name."""
         return self._video_outputs[output_name]
 
+    def register_layer(self, layer_id: str) -> None:
+        """Track a layer as active in the videocomposer."""
+        with self._lock:
+            self._loaded_layer_ids.add(layer_id)
+
+    def deregister_layer(self, layer_id: str) -> None:
+        """Remove a layer from active tracking."""
+        with self._lock:
+            self._loaded_layer_ids.discard(layer_id)
+
     def reset_video_layers(self):
-        """Resets the video layers."""
+        """Unload all tracked video layers (video blackout)."""
         Logger.debug('Resetting video layers')
         with self._lock:
-            # Remove all video layers 
-            video_layers = self._video_client.get_value('/videocomposer/layer/list')
-            for layer in video_layers:
-                self._video_client.set_value('/videocomposer/layer/remove', [layer])
-
-    def disconnect_video_midi(self):
-        """Disconnects the video layers."""
-        Logger.debug('Disconnecting video MIDI')
-        self._video_client.set_value('/videocomposer/midi/disconnect', [""])
+            if self._video_client is None:
+                self._loaded_layer_ids.clear()
+                return
+            for layer_id in list(self._loaded_layer_ids):
+                try:
+                    self._video_client.set_value('/videocomposer/layer/unload', layer_id)
+                    self._video_client.remove_layer_endpoints(layer_id)
+                except Exception as e:
+                    Logger.debug(f'Error unloading layer {layer_id}: {e}')
+            self._loaded_layer_ids.clear()
 
     def quit_videocomposer(self):
-        """Quits the videocomposer."""
+        """Quits the videocomposer process."""
         Logger.debug('Quitting videocomposer')
-        self._video_client.set_value('/videocomposer/quit', [""])
+        if self._video_client is not None:
+            try:
+                self._video_client.set_value('/videocomposer/quit', None)
+            except Exception as e:
+                Logger.debug(f'Error sending quit to videocomposer: {e}')
         self._video_client = None
         self._video_outputs = {}
+        with self._lock:
+            self._loaded_layer_ids.clear()
 
 
     # ---------------------------

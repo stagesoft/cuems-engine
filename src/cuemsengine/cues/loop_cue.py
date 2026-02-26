@@ -120,11 +120,8 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
 def loop_videoCue(cue: VideoCue, mtc: MtcListener):
     """Handle the video media playback loop.
         
-    This method manages the playback loop for video media, including handling
-    looping behavior, frame rate conversion, and OSC communication for timing control.
-    
-    Args:
-        mtc: The MIDI Time Code interface.
+    Manages looping behavior for all layers in cue._layer_ids,
+    updating offset via the single VideoClient in cue._osc.
     """
     Logger.info(f'Running video cue loop {cue.id}, cue.loop={cue.loop} (type={type(cue.loop).__name__})')
     
@@ -134,36 +131,29 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
         Logger.info(f'Video duration: {duration}, duration in frames: {duration.frame_number} {duration.framerate}')
         Logger.info(f'Initial _end_mtc: {cue._end_mtc.milliseconds}ms, current MTC: {mtc.main_tc.milliseconds}ms')
 
-        # cue.loop: -1 = infinite, 0 = infinite, positive = fixed count
+        layer_ids = getattr(cue, '_layer_ids', [])
+
         while cue.loop < 1 or loop_counter < cue.loop:
-            Logger.info(f'Loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}')
-            
-            # Wait for video iteration to complete
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
+                sleep(0.02)
 
             Logger.info(f'Video iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1
             
-            # Check if we'll loop again (cue.loop < 1 means infinite)
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             
             if cue._local and will_loop_again:
-                # Update timing for next iteration
                 cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=cue._end_mtc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
+                offset_change_frames = -cue._start_mtc.frame_number
                 
-                # Calculate offset: xjadeo displays frame = MTC_frame + offset
-                # To show frame 0 when MTC is at _start_mtc, offset = -_start_mtc.frame_number
-                offset_change_frames = - cue._start_mtc.frame_number
+                Logger.info(f'Loop {loop_counter}: setting offset={offset_change_frames}')
                 
-                Logger.info(f'Loop {loop_counter}: setting offset={offset_change_frames} (MTC={mtc.main_tc.milliseconds}ms, _start_mtc={cue._start_mtc.milliseconds}ms, _end_mtc={cue._end_mtc.milliseconds}ms)')
-                
-                try:
-                    cue._osc.set_value(f'/videocomposer/layer/{cue.id}/offset', [int(offset_change_frames)])
-                    Logger.debug(f"Offset sent to video cue {cue.id}: {offset_change_frames}")
-                except Exception as e:
-                    Logger.error(f'Offset send failed for video cue {cue.id}: {e}')
+                for layer_id in layer_ids:
+                    try:
+                        cue._osc.set_value(f'/videocomposer/layer/{layer_id}/offset', int(offset_change_frames))
+                    except Exception as e:
+                        Logger.error(f'Offset send failed for layer {layer_id}: {e}')
 
         Logger.info(f'Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}')
         

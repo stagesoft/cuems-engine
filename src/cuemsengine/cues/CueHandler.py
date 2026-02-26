@@ -159,16 +159,27 @@ class CueHandler:
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
-            # Non-blocking NNG notifications (fire-and-forget)
             try:
                 if isinstance(cue, AudioCue):
                     self.communications_thread.remove_player(f'audioplayer_{cue.id}', timeout=0.1)
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
-                if isinstance(cue, VideoCue):
-                    cue._osc.set_value(f'/videocomposer/layer/{cue.id}/visible', [0])
-                    cue._osc.set_value('/videocomposer/layer/remove', [cue.id])
             except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+                pass
+
+            if isinstance(cue, VideoCue):
+                layer_ids = getattr(cue, '_layer_ids', [])
+                client = getattr(cue, '_osc', None)
+                if client and layer_ids:
+                    for layer_id in layer_ids:
+                        try:
+                            client.set_value(f'/videocomposer/layer/{layer_id}/visible', 0)
+                            client.set_value('/videocomposer/layer/unload', layer_id)
+                            client.remove_layer_endpoints(layer_id)
+                            PLAYER_HANDLER.deregister_layer(layer_id)
+                        except Exception as e:
+                            Logger.debug(f'Error disarming video layer {layer_id}: {e}')
+                cue._layer_ids = []
+
             return True
 
         return False

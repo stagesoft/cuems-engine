@@ -2,7 +2,7 @@ from cuemsutils.log import logged, Logger
 
 from .Player import Player
 from ..osc.OssiaClient import PlayerClient
-from ..osc.endpoints import OSC_VIDEOPLAYER_CONF
+from ..osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_VIDEOPLAYER_LAYER_CONF
 
 class VideoPlayer(Player):
     """Video player systemd service wrapper.
@@ -17,7 +17,6 @@ class VideoPlayer(Player):
 
     @logged
     def run(self):
-        # Calling videocomposer in a subprocess
         process_call_list = [
             'systemctl',
             'restart',
@@ -34,23 +33,47 @@ class VideoClient(PlayerClient):
             endpoints = OSC_VIDEOPLAYER_CONF
         )
 
+    def create_layer_endpoints(self, layer_id: str) -> None:
+        """Register per-layer OSC endpoints for the given layer_id."""
+        layer_endpoints = {
+            k.format(layer_id): v
+            for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
+        }
+        self.create_endpoints(layer_endpoints)
+
+    def remove_layer_endpoints(self, layer_id: str) -> None:
+        """Remove per-layer OSC endpoints for the given layer_id."""
+        for template_path in OSC_VIDEOPLAYER_LAYER_CONF:
+            path = template_path.format(layer_id)
+            try:
+                self.remove_node(path)
+            except Exception as e:
+                Logger.debug(f'Could not remove endpoint {path}: {e}')
+
 class VideoOutput:
     def __init__(self, **kwargs):
         self.name = kwargs.get('name')
-        self.x = kwargs.get('x')
-        self.y = kwargs.get('y')
-        self.width = kwargs.get('width')
-        self.height = kwargs.get('height')
+        self.x = kwargs.get('x', 0)
+        self.y = kwargs.get('y', 0)
+        self.width = kwargs.get('width', 1920)
+        self.height = kwargs.get('height', 1080)
         self.resolution = kwargs.get('resolution', "native")
+        self.canvas_region = kwargs.get('canvas_region', {
+            'x': self.x, 'y': self.y,
+            'width': self.width, 'height': self.height,
+        })
+
+    def get_layer_placement(self) -> tuple[int, int]:
+        """Returns (canvas_x, canvas_y) for fullscreen placement on this output."""
+        return (self.canvas_region['x'], self.canvas_region['y'])
 
     def apply_config(self, video_client: VideoClient) -> None:
-        """Applies the configuration to the video client."""
-        video_client.set_value('/videocomposer/display/resolution_mode', [self.resolution])
+        """Applies the display configuration to the videocomposer."""
+        video_client.set_value('/videocomposer/display/resolution_mode', self.resolution)
         self.set_region(video_client)
 
     def set_region(self, video_client: VideoClient) -> None:
-        """Sets the region of the video output."""
-        if any([self.x, self.y, self.width, self.height]) is None:
+        """Sets the display region for this output."""
+        if None in [self.x, self.y, self.width, self.height]:
             return
-        
         video_client.set_value('/videocomposer/display/region', [self.name, self.x, self.y, self.width, self.height])

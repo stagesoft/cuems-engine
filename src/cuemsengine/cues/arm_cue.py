@@ -122,30 +122,37 @@ def arm_videoCue(cue: VideoCue):
             Logger.error(f'No video client available for cue {cue.id}')
             return
         cue._osc = client
-        Logger.debug(f"video client assigned to VideoCue {cue.id}")
     except Exception as e:
         Logger.error(f'Error retrieving video client for cue {cue.id}: {e}')
         Logger.exception(e)
         return
-    
-    # Get all output names for this cue
+
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+    if not output_names:
+        Logger.error(f'No output names found for video cue {cue.id}')
+        return
+
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    YES = [1]
-    NO = [0]
-    layer_path = f'/videocomposer/layer/{cue.id}'
+    cue._layer_ids = []
 
-    # Create a new layer for the video cue with full transparency and auto unload
-    client.set_value('/videocomposer/layer/load', [video_path, cue.id])
-    Logger.info(f"video layer {video_path} for cue {cue.id} created")
-    client.set_value(f'{layer_path}/visible', NO)
-    client.set_value(f'{layer_path}/autounload', YES)
+    for index, output_name in enumerate(output_names):
+        layer_id = f"{cue.id}_{index}"
 
-    # Use video outputs to position the layer
-    # TODO: Position the layer on all outputs
-    if len(output_names) > 1:
-        Logger.warning(f"Multiple video outputs for cue {cue.id}, only positioning the first one")
-    
-    output = PLAYER_HANDLER.get_video_output(output_names[0])
-    client.set_value(f'{layer_path}/position', [output.x, output.y])
-    Logger.debug(f"video layer {cue.id} positioned at {output.x}, {output.y}")
+        client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+        client.create_layer_endpoints(layer_id)
+
+        layer_path = f'/videocomposer/layer/{layer_id}'
+        client.set_value(f'{layer_path}/visible', 0)
+        client.set_value(f'{layer_path}/autounload', 1)
+
+        try:
+            output = PLAYER_HANDLER.get_video_output(output_name)
+            x, y = output.get_layer_placement()
+            client.set_value(f'{layer_path}/position', [x, y])
+        except KeyError:
+            Logger.warning(f'Video output "{output_name}" not found, skipping position for layer {layer_id}')
+
+        PLAYER_HANDLER.register_layer(layer_id)
+        cue._layer_ids.append(layer_id)
+
+    Logger.info(f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for {video_path}")
