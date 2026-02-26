@@ -35,6 +35,7 @@ OSC_DMXPLAYER_CONF = {
 
 OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/check' : [ValueType.Impulse, None],
+    '/videocomposer/quit' : [ValueType.Impulse, None],
     '/videocomposer/display/list' : [ValueType.Impulse, None],
     '/videocomposer/display/modes' : [ValueType.String, None],
     '/videocomposer/display/resolution_mode' : [ValueType.String, None], # e.g. "1080p", "native", "maximum", "720p", "4k", "" empty string shows available modes
@@ -44,19 +45,18 @@ OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/display/warp' : [ValueType.List, None], # [output_name, mesh_path]
     '/videocomposer/display/save' : [ValueType.String, None], # [file_path]
     '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
-    '/videocomposer/layer/list' : [ValueType.Impulse, None],
     '/videocomposer/layer/load' : [ValueType.List, None], # [file_path, layer_id]
     '/videocomposer/layer/unload' : [ValueType.String, None], # [layer_id]
-    '/videocomposer/layer/remove' : [ValueType.String, None], # [layer_id]
     '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
 }
 
 OSC_VIDEOPLAYER_LAYER_CONF = {
     '/videocomposer/layer/{}/play' : [ValueType.Impulse, None],
+    '/videocomposer/layer/{}/pause' : [ValueType.Impulse, None],
     '/videocomposer/layer/{}/offset' : [ValueType.Int, None],
     '/videocomposer/layer/{}/mtcfollow' : [ValueType.String, None],
-    '/videocomposer/layer/{}/stop' : [ValueType.Impulse, None],
     '/videocomposer/layer/{}/visible' : [ValueType.Int, None],
+    '/videocomposer/layer/{}/autounload' : [ValueType.Int, None], # 0 or 1
     '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
     '/videocomposer/layer/{}/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)
     '/videocomposer/layer/{}/scale' : [ValueType.List, None], # [x, y] (x and y are scale ratio of the layer)
