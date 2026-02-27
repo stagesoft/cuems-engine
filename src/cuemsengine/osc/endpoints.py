@@ -45,8 +45,8 @@ OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/display/warp' : [ValueType.List, None], # [output_name, mesh_path]
     '/videocomposer/display/save' : [ValueType.String, None], # [file_path]
     '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
-    '/videocomposer/layer/load' : [ValueType.List, None], # [file_path, layer_id]
-    '/videocomposer/layer/unload' : [ValueType.String, None], # [layer_id]
+    '/videocomposer/layer/load' : [ValueType.List, None, None, False], # [file_path, layer_id] — no RepetitionFilter (command endpoint)
+    '/videocomposer/layer/unload' : [ValueType.String, None, None, False], # [layer_id] — no RepetitionFilter (command endpoint)
     '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
 }
 
@@ -55,7 +55,7 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     '/videocomposer/layer/{}/pause' : [ValueType.Impulse, None],
     '/videocomposer/layer/{}/offset' : [ValueType.Int, None],
     '/videocomposer/layer/{}/mtcfollow' : [ValueType.String, None],
-    '/videocomposer/layer/{}/visible' : [ValueType.Int, None],
+    '/videocomposer/layer/{}/visible' : [ValueType.Int, None, -1],
     '/videocomposer/layer/{}/autounload' : [ValueType.Int, None], # 0 or 1
     '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
     '/videocomposer/layer/{}/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)

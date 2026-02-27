@@ -78,13 +78,13 @@ class OssiaNodes(object):
         self.device = None
 
     @staticmethod
-    def set_parameter(node: Node, value_type, callback: Callable = None, value = None):
+    def set_parameter(node: Node, value_type, callback: Callable = None, value = None, repetition_filter = True):
         """Set a parameter to a node
         """
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
-        _.repetition_filter = ossia.RepetitionFilter.On
+        _.repetition_filter = ossia.RepetitionFilter.On if repetition_filter else ossia.RepetitionFilter.Off
         _.access_mode = ossia.AccessMode.Bi
         if callback:
             l = len(signature(callback).parameters)
