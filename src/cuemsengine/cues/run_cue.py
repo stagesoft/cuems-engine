@@ -7,7 +7,6 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..tools.MtcListener import MtcListener
 from .helpers import find_timing
-from .CueHandler import CUE_HANDLER
 
 @singledispatch
 async def run_cue(cue: Cue, mtc: MtcListener):
@@ -24,6 +23,8 @@ async def run_cueList(cue: CueList, mtc: MtcListener):
     This function will run the fist cue in the list
     """
     try:
+        from .CueHandler import CUE_HANDLER
+
         if cue.contents:
             CUE_HANDLER.go(cue.contents[0], mtc)
     except Exception as e:
@@ -40,7 +41,8 @@ async def run_actionCue(cue: ActionCue, mtc: MtcListener):
     pass
 
 
-    # TODO: Implement this
+    from .CueHandler import CUE_HANDLER
+
     if cue.action_type == 'load':
         CUE_HANDLER.arm(cue._action_target_object)
     elif cue.action_type == 'unload':
