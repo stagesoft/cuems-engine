@@ -5,7 +5,11 @@ This module provides a simple interface for managing JACK audio connections
 using the python-jack (JACK-Client) library.
 """
 
-import jack
+try:
+    import jack
+except (ImportError, OSError):
+    jack = None
+
 from cuemsutils.log import Logger, logged
 
 
@@ -28,6 +32,10 @@ class JackConnectionManager:
     
     def _initialize_client(self):
         """Initialize the JACK client."""
+        if jack is None:
+            Logger.warning("JACK library not available -- JackConnectionManager running in no-op mode")
+            self._client = None
+            return
         try:
             # Create a client without ports, just for connection management
             self._client = jack.Client(self.client_name, no_start_server=True)
