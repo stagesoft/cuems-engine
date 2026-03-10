@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            if command -v systemctl >/dev/null 2>&1; then
+                if systemctl is-active --quiet cuems-mock-videocomposer 2>/dev/null; then
+                    systemctl stop cuems-mock-videocomposer || true
+                fi
+                if systemctl is-enabled cuems-mock-videocomposer >/dev/null 2>&1; then
+                    systemctl disable cuems-mock-videocomposer || true
+                fi
+            fi
+        fi
+        ;;
+
+    upgrade)
+        ;;
+
+    failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

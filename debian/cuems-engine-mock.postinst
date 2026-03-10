@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+
+            if systemctl is-enabled cuems-mock-videocomposer >/dev/null 2>&1; then
+                echo "Service cuems-mock-videocomposer is already enabled."
+            else
+                systemctl enable cuems-mock-videocomposer || \
+                    echo "WARNING: Failed to enable cuems-mock-videocomposer service" >&2
+            fi
+
+            if systemctl is-active --quiet cuems-mock-videocomposer 2>/dev/null; then
+                echo "Service cuems-mock-videocomposer is already running."
+            else
+                systemctl start cuems-mock-videocomposer || \
+                    echo "WARNING: Failed to start cuems-mock-videocomposer service" >&2
+            fi
+        fi
+
+        echo "cuems-engine-mock installed."
+        echo "Mock wrappers installed to /usr/local/bin/: audioplayer-cuems, jack-volume, dmxplayer-cuems"
+        echo "Mock videocomposer service: cuems-mock-videocomposer (port 7000)"
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0
