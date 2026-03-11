@@ -114,6 +114,7 @@ class CueHandler:
         """Resets the list of armed cues."""
         with self._lock:
             self._armed_cues = []
+            self._armed_cues_set.clear()
 
 
     # ---------------------------
@@ -137,7 +138,6 @@ class CueHandler:
         
         if cue._local and cue.enabled:
             Logger.info(f"Arming {type(cue).__name__} {cue.id}")
-            # Arm the cue
             arm_cue(cue)
             cue.loaded = True
             if not found:
@@ -156,8 +156,6 @@ class CueHandler:
 
     def disarm(self, cue: Cue) -> bool:
         """Disarms a cue by removing it from the armed_cues list."""
-        PLAYER_HANDLER.remove_cue_player(cue)
-
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
@@ -182,14 +180,29 @@ class CueHandler:
                             Logger.debug(f'Error disarming video layer {layer_id}: {e}')
                 cue._layer_ids = []
 
+            PLAYER_HANDLER.remove_cue_player(cue)
             return True
 
         return False
 
+    def stop_all_cues(self) -> None:
+        """Signal all armed cues to stop their playback loops.
+        
+        Also bumps each cue's generation counter so that any still-running
+        go_threaded threads will see a mismatch and skip post-loop cleanup
+        (disarm), which would otherwise undo the re-arm that follows.
+        """
+        with self._lock:
+            for cue in self._armed_cues:
+                cue._stop_requested = True
+                cue._go_generation = getattr(cue, '_go_generation', 0) + 1
+
     def disarm_all(self) -> None:
         """Disarms all cues."""
-        all_cues = self.get_armed_cues()
-        for cue in all_cues:
+        self.stop_all_cues()
+        with self._lock:
+            cues_snapshot = list(self._armed_cues)
+        for cue in cues_snapshot:
             self.disarm(cue)
         self.reset_armed_cues()
 
@@ -214,10 +227,14 @@ class CueHandler:
         if not hasattr(cue, 'loaded') or not cue.loaded:
             raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
 
+        cue._stop_requested = False
+        go_gen = getattr(cue, '_go_generation', 0) + 1
+        cue._go_generation = go_gen
+
         thread = Thread(
             name=f'GO:{cue.__class__.__name__}:{cue.id}',
             target=self.go_threaded,
-            args=[cue, mtc, frozen_mtc_ms],
+            args=[cue, mtc, frozen_mtc_ms, go_gen],
             daemon=True
         )
         thread.start()
@@ -228,35 +245,30 @@ class CueHandler:
                 self.arm(cue._target_object)
         return thread
 
-    def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
+    def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0):
         """Runs a cue based on its properties.
         
         Args:
             cue: The cue to run
             mtc: The MTC listener (for live MTC)
             frozen_mtc_ms: Optional frozen MTC timestamp in milliseconds.
-                           If provided, this timestamp is used for sync calculations
-                           and passed to chained cues (post_go='go') to ensure they
-                           all use the same reference time.
+            go_gen: Generation counter captured at go() time. If the cue's
+                    generation has changed by the time the loop ends, another
+                    go/stop cycle occurred and this thread must not touch the cue.
         """
         if cue.prewait > 0:
             sleep(cue.prewait.milliseconds / 1000)
         
-        # CRITICAL FOR SYNC: Capture MTC timestamp ONCE for this cue and all chained cues
-        # This ensures that when post_go='go' triggers another cue, both use the same time
         if frozen_mtc_ms is None:
             frozen_mtc_ms = float(mtc.main_tc.milliseconds)
             Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
 
         if cue._local:
-            # Notify controller that cue has started playing (status → 1).
-            # Fire-and-forget; failure here must not block playback.
             try:
                 self.communications_thread.add_cue(cue.id, str(frozen_mtc_ms), timeout=0.1)
             except Exception:
                 pass
 
-            # Run cue immediately - pass both live MTC (for framerate) and frozen timestamp
             run_cue(cue, mtc, frozen_mtc_ms)
 
             # Notify controller that cue finished playing (status → 100).
@@ -270,11 +282,14 @@ class CueHandler:
 
         if cue.post_go == 'go':
             Logger.info(f'Running post go for next cue:{cue.target}')
-            # Pass the SAME frozen_mtc_ms to the chained cue for perfect sync
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
         Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)
+
+        if getattr(cue, '_go_generation', 0) != go_gen:
+            Logger.info(f'Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup')
+            return
 
         if cue.post_go == 'go_at_end' and cue._target_object:
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')

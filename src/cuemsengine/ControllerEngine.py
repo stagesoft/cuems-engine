@@ -352,7 +352,12 @@ class ControllerEngine(BaseEngine):
                 self.set_status('running', 'no')
         elif operation.target == 'armed_ready':
             if operation.data and operation.data.get('armed') == 'yes':
-                Logger.info('Re-arm complete from node - GO available')
+                if self.go_offset is None:
+                    Logger.info('Re-arm after stop - restarting timecode and enabling GO')
+                    self.start_timecode()
+                    self.go_offset = 0
+                else:
+                    Logger.info('Re-arm complete from node - enabling GO')
                 self.set_status('armed', 'yes')
         else:
             Logger.debug(f'Unknown status target: {operation.target}')
