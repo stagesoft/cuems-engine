@@ -16,19 +16,13 @@ override_dh_virtualenv:
 override_dh_install:
 	dh_install
 	# Stage mock wrapper scripts for cuems-engine-mock package
-	install -d debian/cuems-engine-mock/usr/local/bin
+	install -d debian/cuems-engine-mock/usr/bin
 	install -m 755 debian/mock-scripts/audioplayer-cuems \
-	    debian/cuems-engine-mock/usr/local/bin/audioplayer-cuems
+	    debian/cuems-engine-mock/usr/bin/audioplayer-cuems
 	install -m 755 debian/mock-scripts/jack-volume \
-	    debian/cuems-engine-mock/usr/local/bin/jack-volume
+	    debian/cuems-engine-mock/usr/bin/jack-volume
 	install -m 755 debian/mock-scripts/dmxplayer-cuems \
-	    debian/cuems-engine-mock/usr/local/bin/dmxplayer-cuems
-
-override_dh_usrlocal:
-	# cuems-engine-mock installs wrapper scripts to /usr/local/bin to match
-	# the binary paths configured in /etc/cuems/settings.xml -- skip the
-	# dh_usrlocal directory-only check for this package.
-	dh_usrlocal -pcuems-engine
+	    debian/cuems-engine-mock/usr/bin/dmxplayer-cuems
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info
