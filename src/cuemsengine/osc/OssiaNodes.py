@@ -59,6 +59,8 @@ class OssiaNodes(object):
     def remove_node(self, path: str):
         """Remove a node from the collection and all its children
         """
+        if not path or path.strip('/') == '':
+            return
         self.device.root_node.remove_child(path)
         children = [k for k in self.nodes.keys() if str(k).startswith(path)]
         for key in children:
@@ -76,13 +78,13 @@ class OssiaNodes(object):
         self.device = None
 
     @staticmethod
-    def set_parameter(node: Node, value_type, callback: Callable = None, value = None):
+    def set_parameter(node: Node, value_type, callback: Callable = None, value = None, repetition_filter = True):
         """Set a parameter to a node
         """
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
-        _.repetition_filter = ossia.RepetitionFilter.On
+        _.repetition_filter = ossia.RepetitionFilter.On if repetition_filter else ossia.RepetitionFilter.Off
         _.access_mode = ossia.AccessMode.Bi
         if callback:
             l = len(signature(callback).parameters)
@@ -187,11 +189,13 @@ class OssiaNodes(object):
 
     def nodes_from_device(self, node: Node = None) -> dict[str, Node]:
         nodes = {}
-        if node is None:
+        is_root = node is None
+        if is_root:
             node = self.device.root_node
         Logger.debug(f"{self.__class__.__name__} Node {node.name} has {len(node.children())} children")
         if len(node.children()) == 0:
-            nodes[str(node)] = node
+            if not is_root:
+                nodes[str(node)] = node
             return nodes        
         for n, i in enumerate[int, Node](node.children()):
             Logger.debug(f"Adding child {n} named {i.name}")

@@ -14,7 +14,10 @@ Type=simple
 #NotifyAccess=main
 #Restart=on-failure
 RestartSec=10
+ExecStartPre=-/bin/sh -c '/usr/bin/pkill -u stagelab -f "xjadeo.*--osc|audioplayer-cuems|dmxplayer-cuems|jack-volume" || true'
+ExecStartPre=-/bin/sleep 1
 ExecStart=/home/ion/.pyenv/versions/3.11.2/envs/cuems/bin/python3 /home/ion/src/cuems/cuems-engine/scripts/node_engine.py
+ExecStopPost=-/bin/sh -c '/usr/bin/pkill -u stagelab -f "xjadeo.*--osc|audioplayer-cuems|dmxplayer-cuems|jack-volume" || true'
 TimeoutSec=900
 
 [Install]

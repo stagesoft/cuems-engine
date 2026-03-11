@@ -1,42 +1,89 @@
-from cuemsutils.log import logged
+from cuemsutils.log import logged, Logger
 
 from .Player import Player
 from ..osc.OssiaClient import PlayerClient
-from ..osc.endpoints import OSC_VIDEOPLAYER_CONF
+from ..osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_VIDEOPLAYER_LAYER_CONF
 
 class VideoPlayer(Player):
-    def __init__(self, port, output, path, args, media):
+    """Video player systemd service wrapper.
+
+    This class restarts the videocomposer service.
+    
+    IMPORTANT: This class should not be used, since videocomposer is a systemd service and not a subprocess.
+    """
+    def __init__(self):
         super().__init__()
-        self._port = port
-        self.output = output
-        self.path = path
-        self.args = args
-        self.media = media
-        self.stdout = None
-        self.stderr = None
+        Logger.warning('Restarting the videocomposer service. Use VideoClient only to control videocomposer.')
 
     @logged
     def run(self):
-        # Calling xjadeo in a subprocess
-        process_call_list = [self.path]
-        if self.args:
-            for arg in self.args.split():
-                process_call_list.append(arg)
-        process_call_list.extend([
-            '--osc', str(self._port),
-            '--start-screen', self.output,
-            self.media
-        ])
-
+        process_call_list = [
+            'systemctl',
+            'restart',
+            'videocomposer.service'
+        ]
+        Logger.info(f'Restarting videocomposer service: {process_call_list}')
         self.call_subprocess(process_call_list)
 
-    def port(self):
-        return self._port
-
 class VideoClient(PlayerClient):
-    def __init__(self, player_port: int, name: str = "videoplayer"):
+    def __init__(self, player_port: int, name: str = "videocomposer"):
         super().__init__(
             player_port = player_port,
             name = name,
             endpoints = OSC_VIDEOPLAYER_CONF
         )
+
+    def create_layer_endpoints(self, layer_id: str) -> None:
+        """Register per-layer OSC endpoints for the given layer_id."""
+        layer_endpoints = {
+            k.format(layer_id): v
+            for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
+        }
+        self.create_endpoints(layer_endpoints)
+
+    def remove_layer_endpoints(self, layer_id: str) -> None:
+        """Remove per-layer OSC endpoints for the given layer_id."""
+        for template_path in OSC_VIDEOPLAYER_LAYER_CONF:
+            path = template_path.format(layer_id)
+            try:
+                self.remove_node(path)
+            except Exception as e:
+                Logger.debug(f'Could not remove endpoint {path}: {e}')
+
+class VideoOutput:
+    def __init__(self, **kwargs):
+        self.name = kwargs.get('name')
+        self.mapped_to = kwargs.get('mapped_to', self.name)
+        self.x = kwargs.get('x', 0)
+        self.y = kwargs.get('y', 0)
+        self.width = kwargs.get('width', 1920)
+        self.height = kwargs.get('height', 1080)
+        self.resolution = kwargs.get('resolution', "native")
+        self.canvas_region = kwargs.get('canvas_region', {
+            'x': self.x, 'y': self.y,
+            'width': self.width, 'height': self.height,
+        })
+        self.canvas_width = kwargs.get('canvas_width', self.width)
+        self.canvas_height = kwargs.get('canvas_height', self.height)
+
+    def get_layer_placement(self) -> tuple[int, int]:
+        """Returns (x, y) offset from canvas center to this output's center.
+
+        The videocomposer uses center-relative coordinates: (0, 0) = canvas center.
+        """
+        output_cx = self.canvas_region['x'] + self.canvas_region['width'] // 2
+        output_cy = self.canvas_region['y'] + self.canvas_region['height'] // 2
+        canvas_cx = self.canvas_width // 2
+        canvas_cy = self.canvas_height // 2
+        return (output_cx - canvas_cx, output_cy - canvas_cy)
+
+    def apply_config(self, video_client: VideoClient) -> None:
+        """Applies the display configuration to the videocomposer."""
+        video_client.set_value('/videocomposer/display/resolution_mode', self.resolution)
+        self.set_region(video_client)
+
+    def set_region(self, video_client: VideoClient) -> None:
+        """Sets the display region using the DRM connector name (mapped_to)."""
+        if None in [self.x, self.y, self.width, self.height]:
+            return
+        video_client.set_value('/videocomposer/display/region', [self.mapped_to, self.x, self.y, self.width, self.height])

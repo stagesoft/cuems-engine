@@ -1,7 +1,6 @@
 import asyncio
-from functools import partial
-import threading
 import time
+from functools import partial
 
 from cuemsutils.log import Logger, logged
 
@@ -9,9 +8,6 @@ from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
 from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import NodeOperation, ActionType, OperationType
-from .osc import ENGINE_CMD_ENDPOINTS, PLAYERS_ENDPOINTS_DICT
-from .osc.helpers import add_callbacks_from_dict, add_callback_to_all, add_prefix_to_all
-from .tools.PortHandler import PORT_HANDLER
 
 
 class ControllerEngine(BaseEngine):
@@ -37,25 +33,36 @@ class ControllerEngine(BaseEngine):
       - Handling the NodeConf system
     '''
     def __init__(self, **kwargs):
+        # Must be set before super().__init__() because BaseEngine sets
+        # self.timecode = None which triggers on_timecode_change() via the
+        # property setter, and that method reads these attributes.
+        self._last_timecode_broadcast = 0.0
+        self._timecode_broadcast_interval = 0.5  # 2 Hz max for timecode , for 20mhz set it to 0.05
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
 
-        # Command polling: checks OSCQuery endpoints for value changes
-        # Note: Direct callbacks disabled due to pyossia GIL threading issues
-        self._command_poll_thread = None
-        self._command_poll_stop = threading.Event()
-        self._last_command_values = {}
-
     def start(self):
         self.create_timecode()
         self.set_comms()
-        self.start_command_polling()
+        # HEADLESS/CLOUD: on servers without hardware MIDI the port list is
+        # empty at __init__ time.  create_timecode() above creates the virtual
+        # ALSA sender port, so we retry detection here to pick it up.
+        if self.mtc_listener.port_name is None:
+            Logger.info('Re-detecting MIDI port after MTC sender creation...')
+            self.mtc_listener._MtcListener__open_port(None)
+        self.mtc_listener.start()
         super().start()
+
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
+        """Set status and push to UI via WebSocket when running, armed, or load."""
+        super().set_status(property, value, strict)
+        if property in ('running', 'armed', 'load'):
+            self._broadcast_status(property, value)
     
     @logged
     def set_comms(self):
-        self.set_oscquery()
+        # Start communicators with WebSocket handler on port 9190
         self.set_communicators()
 
     def set_communicators(self):
@@ -70,21 +77,160 @@ class ControllerEngine(BaseEngine):
         # Get NNG hub port from config (must match NodeEngine)
         if hasattr(self, 'cm') and self.cm and hasattr(self.cm, 'node_conf'):
             nng_hub_port = self.cm.node_conf.get('nng_hub_port', 9093)
+            # Use port 9190 for WebSocket OSC - we start BEFORE pyossia to claim this port
+            # This allows UI to send commands via Apache's /realtime proxy to ws://127.0.0.1:9190
+            websocket_osc_port = self.cm.node_conf.get('oscquery_ws_port', 9190)
+            node_id = self.cm.node_conf.get('uuid', 'controller')
         else:
             nng_hub_port = 9093
+            websocket_osc_port = 9190  # Take port 9190 for WebSocket OSC
+            node_id = 'controller'
+        
         nng_hub_address = f"tcp://{osc_hub_host}:{nng_hub_port}"
         
         Logger.info(f'NNG Hub address: {nng_hub_address}')
         
+        # WebSocket OSC configuration for receiving commands from UI
+        # Uses port 9190 (same as Apache /realtime proxy target) to receive
+        # OSC commands directly. Started BEFORE pyossia to claim the port.
+        websocket_osc_config = {
+            'host': '0.0.0.0',
+            'port': websocket_osc_port,
+            'node_id': node_id
+        }
+        Logger.info(f'WebSocket OSC port: {websocket_osc_port}')
+        
         self.communications_thread = ControllerCommunications(
             nng_hub_address=nng_hub_address,
             editor_callback=self.editor_command_callback,
-            node_operation_callback=self.node_operation_callback
+            node_operation_callback=self.node_operation_callback,
+            websocket_osc_config=websocket_osc_config
         )
+        
+        # Register command handlers for WebSocket OSC
+        self._register_osc_command_handlers()
+        
         self.communications_thread.start()
+        
+        # Wait for NNG thread to initialize (prevents race condition in nni_random)
+        from time import sleep
+        max_wait = 5.0  # seconds
+        wait_interval = 0.1
+        waited = 0.0
+        while waited < max_wait:
+            if (self.communications_thread.is_alive() and 
+                self.communications_thread.event_loop is not None):
+                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
+                break
+            sleep(wait_interval)
+            waited += wait_interval
+        else:
+            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
+    
+    def _register_osc_command_handlers(self):
+        """Register OSC command handlers for WebSocket OSC receiving.
+        
+        These handlers are called when commands are received from the UI via
+        WebSocket OSC. Commands are also forwarded to NodeEngine via NNG.
+        """
+        # Command handlers - same as used in _command_poll_loop
+        self.communications_thread.register_command_handler(
+            '/engine/command/go', self.go_script, forward_to_nodes=False
+        )
+        self.communications_thread.register_command_handler(
+            '/engine/command/load', self.deploy_project, forward_to_nodes=False
+        )
+        self.communications_thread.register_command_handler(
+            '/engine/command/stop', self.stop_script, forward_to_nodes=False
+        )
+        
+        # Register wildcard handler for player messages (engine format)
+        self.communications_thread.register_osc_handler(
+            '/engine/players/*', self._handle_player_osc_message
+        )
+        
+        # Register handler for direct node/player messages from UI
+        # UI sends: /<node_uuid>/audiomixer/<channel> or /<node_uuid>/jadeo/<cmd>
+        # We need to catch these and forward to NodeEngine
+        node_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
+        if node_uuid:
+            self.communications_thread.register_osc_handler(
+                f'/{node_uuid}/*', self._handle_direct_player_osc_message
+            )
+            Logger.info(f"Registered direct player OSC handler for /{node_uuid}/*")
+        
+        Logger.info("OSC command handlers registered for WebSocket receiving")
+    
+    def _handle_direct_player_osc_message(self, address: str, args: list):
+        """Handle direct player OSC messages from UI (/<node_uuid>/<type>/...).
+        
+        These are forwarded directly to the local node's player handlers.
+        """
+        value = args[0] if args else None
+        
+        # Parse: /<node_uuid>/<type>/<...>
+        parts = address.strip('/').split('/')
+        if len(parts) < 2:
+            Logger.warning(f"Invalid direct player OSC address: {address}")
+            return
+        
+        # parts[0] is node_uuid, parts[1] is type (audiomixer, jadeo, etc.)
+        player_type = parts[1]
+        
+        Logger.debug(f"Direct player OSC: {address} = {repr(value)}")
+        
+        # Forward to NodeEngine via NNG as player_control
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target='player_control',
+            data={'address': address, 'value': value}
+        )
+        
+        try:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.debug(f"Forwarded direct player OSC to nodes: {address} = {repr(value)}")
+        except Exception as e:
+            Logger.error(f"Error forwarding direct player OSC to nodes: {e}")
+    
+    def _handle_player_osc_message(self, address: str, args: list):
+        """Handle player-related OSC messages from UI.
+        
+        These are forwarded to NodeEngine via NNG for player control
+        (video, audio mixer, DMX, etc.)
+        """
+        # Forward to NodeEngine via NNG
+        value = args[0] if args else None
+        
+        # Create a COMMAND operation for player control
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target='player_control',
+            data={'address': address, 'value': value}
+        )
+        
+        try:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.debug(f"Forwarded player OSC to nodes: {address} = {repr(value)}")
+        except Exception as e:
+            Logger.error(f"Error forwarding player OSC to nodes: {e}")
+
+    def _forward_load_to_nodes(self, project_name: str) -> None:
+        """Forward a load command to NodeEngine via NNG."""
+        self._forward_command_to_nodes('/engine/command/load', project_name)
 
     def stop(self):
-        self.stop_command_polling()
         self.stop_comms()
         super().stop()
 
@@ -94,83 +240,6 @@ class ControllerEngine(BaseEngine):
             self.stop_timecode()
         if hasattr(self, 'communications_thread'):
             self.communications_thread.stop()
-        if hasattr(self, 'oscquery_server'):
-            self.oscquery_server.remove_device()
-
-    def start_command_polling(self):
-        """Start the command polling thread"""
-        if not self._command_poll_thread or not self._command_poll_thread.is_alive():
-            Logger.info("Starting command polling thread")
-            self._command_poll_stop.clear()
-            self._command_poll_thread = threading.Thread(
-                target=self._command_poll_loop,
-                name="CommandPollThread",
-                daemon=True
-            )
-            self._command_poll_thread.start()
-
-    def stop_command_polling(self):
-        """Stop the command polling thread"""
-        if self._command_poll_thread and self._command_poll_thread.is_alive():
-            Logger.info("Stopping command polling thread")
-            self._command_poll_stop.set()
-            timeout = 0.5  # 500ms timeout
-            self._command_poll_thread.join(timeout=timeout)
-            if self._command_poll_thread.is_alive():
-                Logger.warning("Command polling thread did not terminate gracefully")
-
-    def _command_poll_loop(self):
-        """Poll OSCQuery command endpoints for value changes"""
-        # Map command paths to handler methods
-        command_handlers = {
-            '/engine/command/go': self.go_script,
-            '/engine/command/load': self.deploy_project,
-        }
-
-        poll_interval = 0.1  # 100ms polling interval
-        Logger.info("Command polling loop started")
-
-        while not self._command_poll_stop.wait(poll_interval):
-            try:
-                if not hasattr(self, 'oscquery_server') or not self.oscquery_server:
-                    continue
-
-                for cmd_path, handler in command_handlers.items():
-                    try:
-                        # Check if node exists
-                        if cmd_path not in self.oscquery_server.nodes:
-                            continue
-
-                        # Get current value
-                        node = self.oscquery_server.nodes[cmd_path]
-                        current_value = node.parameter.value
-                        last_value = self._last_command_values.get(cmd_path)
-
-                        # Trigger on value change AND non-empty value
-                        if current_value != last_value and current_value:
-                            Logger.info(f"Command detected: {cmd_path} = {repr(current_value)}")
-                            self._last_command_values[cmd_path] = current_value
-
-                            # Execute handler
-                            try:
-                                handler(current_value)
-                            except Exception as e:
-                                Logger.error(f"Error executing {cmd_path}: {e}", exc_info=True)
-
-                            # Reset LOAD value to allow re-triggering (but not GO - NodeEngine needs to see it)
-                            if cmd_path == '/engine/command/load':
-                                try:
-                                    node.parameter.push_value("")
-                                    self._last_command_values[cmd_path] = ""
-                                except Exception as e:
-                                    Logger.warning(f"Could not reset {cmd_path}: {e}")
-
-                    except Exception as e:
-                        Logger.error(f"Error polling {cmd_path}: {e}")
-
-            except Exception as e:
-                Logger.error(f"Error in command poll loop: {e}", exc_info=True)
-                time.sleep(1.0)  # Back off on error
 
     #########################
     # Timecode
@@ -202,7 +271,8 @@ class ControllerEngine(BaseEngine):
     def set_node_operation_callback(self):
         self.node_operation_callback = {
             OperationType.PLAYER: self.player_operation_callback,
-            OperationType.CUE: self.cue_operation_callback
+            OperationType.CUE: self.cue_operation_callback,
+            OperationType.STATUS: self.status_operation_callback
         }
 
     def player_operation_callback(self, operation: NodeOperation):
@@ -210,117 +280,44 @@ class ControllerEngine(BaseEngine):
         Callback invoked when players are received from nodes.
         
         Parameters:
-        - sender: ID of the node sending the player
-        - player_id: Unique identifier for the player
-        - node_data: Dictionary containing OSC node structure (None for REMOVE)
-        - action: ActionType (ADD, UPDATE, or REMOVE)
+        - operation: NodeOperation with sender, target (player_id), and action
         """
-        Logger.info(f'Received {operation}')
-        
-        if operation.action == ActionType.ADD:
-            self.add_player_oscquery_nodes(operation)
-        elif operation.action == ActionType.REMOVE:
-            self.remove_player_oscquery_nodes(operation)
-        else:
-            Logger.warning(f'Unknown player action: {operation.action}')
-
-    def add_player_oscquery_nodes(self, operation: NodeOperation):
-        """Add the player nodes to the local OSCQuery server"""
-        common_path = self.build_player_oscquery_path(operation)
-        if not common_path:
-            Logger.warning(f'Player path returned None, skipping addition')
-            return
-        node_data = self.endpoints_from_player_path(common_path)
-        if not node_data:
-            Logger.warning(f'Player endpoints returned None, skipping addition')
-            return
-        if hasattr(self, 'oscquery_server') and self.oscquery_server:
-            self.oscquery_server.add_endpoints(node_data)
-        else:
-            Logger.warning("OSCQuery server not initialized, cannot add player endpoints")
-
-    def remove_player_oscquery_nodes(self, operation: NodeOperation):
-        """Remove the player nodes from the local OSCQuery server"""
-        common_path = self.build_player_oscquery_path(operation)
-        if not common_path:
-            Logger.warning(f'Player path returned None, skipping removal')
-            return
-        # Filter for cue-specific players
-        if '/cue/' not in common_path:
-            Logger.warning(f'Player {operation.target} is not a cue-specific player, skipping removal')
-            return
-        if hasattr(self, 'oscquery_server') and self.oscquery_server:
-            self.oscquery_server.remove_node(common_path)
-        else:
-            Logger.warning("OSCQuery server not initialized, cannot remove player nodes")
-
-    def build_player_oscquery_path(self, operation: NodeOperation) -> str | None:
-        """Build the player OSCQuery path"""
-        ptype, id = operation.target.split('_')
-        common_path = f'/engine/players/{operation.sender}/'
-        if ptype == 'audioplayer':
-            common_path += f'audio/cue/{id}/'
-        elif ptype == 'audiomixer':
-            common_path += f'audio/mixer/{id}/'
-        elif ptype == 'videoplayer':
-            common_path += f'video/mixer/{id}/'
-        elif ptype == 'dmxplayer':
-            common_path += f'dmx/mixer/{id}/'
-        else:
-            Logger.warning(f'Unknown player type: {ptype}')
-            return None
-        return common_path
-
-    def endpoints_from_player_path(self, path: str) -> dict:
-        """Build the player OSCQuery endpoints"""
-        endpoints = {}
-        for key, value in PLAYERS_ENDPOINTS_DICT.items():
-            if key in path:
-                endpoints.update(value)
-        add_prefix_to_all(endpoints, path)
-        return endpoints
+        Logger.info(f'Player operation received: {operation}')
 
     def cue_operation_callback(self, operation: NodeOperation):
-        """Callback invoked when cues are received from nodes."""
-        Logger.info(f'Received {operation}')
+        """Callback invoked when cues are received from nodes.
+        
+        Updates internal status tracking for running cues.
+        """
+        Logger.info(f'Cue operation received: {operation}')
         if operation.action == ActionType.ADD:
-            self.add_cue_oscquery_nodes(operation)
+            try:
+                self.status.currentcue = [operation.data['id'], operation.data['offset']]
+                Logger.debug(f"Current cue updated: {self.status.currentcue}")
+            except Exception as e:
+                Logger.error(f'Error updating currentcue: {e}')
         elif operation.action == ActionType.REMOVE:
-            self.remove_cue_oscquery_nodes(operation)
+            self.status.remove_currentcue(operation.data['id'])
+            Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
         else:
             Logger.warning(f'Unknown cue action: {operation.action}')
 
-    def add_cue_oscquery_nodes(self, operation: NodeOperation):
-        """Add the running cues information to the local OSCQuery server one by one.
-
-        Publishes the updated currentcue information to the local OSCQuery server after each addition.
-
-        Args:
-            operation: NodeOperation object containing the cue information inside the data dictionary
-                - id: ID of the cue
-                - offset: Offset of the cue
-
-        Returns:
-            None
-
-        Raises:
-            Exception: If an error occurs while adding the cue to the current cue
+    def status_operation_callback(self, operation: NodeOperation):
+        """Callback invoked when status updates are received from nodes.
+        
+        Handles script_finished and armed_ready notifications.
         """
-        try:
-            self.status.currentcue = [operation.data['id'], operation.data['offset']]
-        except Exception as e:
-            Logger.error(f'Error adding to currentcue {operation.data["id"]}: {e}')
-            return
-        self.set_oscquery_values({
-            '/engine/status/currentcue': self.status.currentcue
-        })
-
-    def remove_cue_oscquery_nodes(self, operation: NodeOperation):
-        """Remove the cue from running cues information from the local OSCQuery server"""
-        self.status.remove_currentcue(operation.data['id'])
-        self.set_oscquery_values({
-            '/engine/status/currentcue': self.status.currentcue
-        })
+        Logger.info(f'Status operation received: {operation}')
+        if operation.target == 'script_finished':
+            if operation.data and operation.data.get('running') == 'no':
+                Logger.info('Script finished notification received from node - updating running status')
+                self.set_status('running', 'no')
+        elif operation.target == 'armed_ready':
+            if operation.data and operation.data.get('armed') == 'yes':
+                Logger.info('Re-arm complete from node - GO available')
+                self.set_status('armed', 'yes')
+        else:
+            Logger.debug(f'Unknown status target: {operation.target}')
 
     #########################
     # Editor commands
@@ -333,16 +330,13 @@ class ControllerEngine(BaseEngine):
             item['value'] = ''
         if 'action_uuid' not in _item_keys:
             self.error_to_editor(context, "No action uuid submitted")
-            return
         self.set_editor_request(item['action_uuid'])
 
-        # If 'type' is present, this is a response, not a command - reject it
         if 'type' in _item_keys:
             if item['type'] not in ['error', 'initial_settings']:
-                request_uuid = self.get_editor_request()
+                
                 self.set_editor_request('')
-                self.error_to_editor(context, "Response not recognized", request_uuid=request_uuid)
-                return
+            self.error_to_editor(context, "Response not recognized")
 
         try:
             self.handle_editor_command(
@@ -446,87 +440,52 @@ class ControllerEngine(BaseEngine):
 
 
     #########################
-    # OSCQuery
+    # Status Updates (stub - OSCQuery removed)
     #########################
 
-    def set_oscquery(self):
-        Logger.info("Starting oscquery for Controller")
-        status_endpoints = self.get_status_endpoints()
-        Logger.debug(f"Creating OSCQuery server with {len(status_endpoints)} status endpoints: {list(status_endpoints.keys())}")
-        self.set_oscquery_server(status_endpoints)
-        Logger.debug(f"OSCQuery server created with nodes: {list(self.oscquery_server.nodes.keys())}")
-        self.apply_oscquery_commands()
-        Logger.debug(f"After applying commands, OSCQuery server has nodes: {list(self.oscquery_server.nodes.keys())}")
-
-    def apply_oscquery_commands(self):
-        """
-        Register OSCQuery command endpoints.
-
-        Note: All callbacks are set to None due to pyossia threading issues.
-        The library invokes callbacks from C++ threads without acquiring Python's GIL,
-        causing crashes. Commands are instead handled via polling (_command_poll_loop).
-        """
-        cmd_dict = {
-            'deploy': None,    # Handled via Editor NNG ReqRep
-            'load': None,      # Polled by _command_poll_loop
-            'loadcue': None,
-            'go': None,        # Polled by _command_poll_loop
-            'gocue': None,
-            # 'hwdiscovery': None,
-            'pause': None,
-            'preload': None,
-            'resetall': None,
-            'stop': None,
-            'test': None,
-            'unload': None,
-            'update': None,    # Handled via NNG Hub
-        }
-        endpoints = add_callbacks_from_dict(
-            ENGINE_CMD_ENDPOINTS,
-            cmd_dict
-        )
-        if hasattr(self, 'oscquery_server') and self.oscquery_server:
-            self.oscquery_server.create_endpoints(endpoints)
-        else:
-            Logger.error("OSCQuery server not initialized in apply_oscquery_commands")
-
     def set_oscquery_values(self, values: dict):
-        if not hasattr(self, 'oscquery_server') or not self.oscquery_server:
-            Logger.warning("OSCQuery server not initialized, cannot set values")
-            return
+        """Stub for OSCQuery value setting - OSCQuery server has been removed.
+        
+        Status updates are now handled via internal state tracking.
+        TODO: Implement WebSocket status push if UI needs real-time status.
+        """
         for key, value in values.items():
-            try:
-                self.oscquery_server.set_value(key, value)
-            except ValueError as e:
-                Logger.warning(f"Could not set OSCQuery value {key}={value}: {e}")
-                Logger.debug(f"Available OSCQuery nodes: {list(self.oscquery_server.nodes.keys())}")
+            Logger.debug(f"Status update (no-op): {key} = {repr(value)}")
+
+    def _broadcast_status(self, key: str, value) -> None:
+        """Push status to UI via WebSocket OSC (realtime)."""
+        if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
+            self.communications_thread.broadcast_osc(f'/engine/status/{key}', value)
 
     def on_timecode_change(self, value: str) -> None:
-        Logger.debug(f'Timecode changed to {value}')
-        if self.go_offset:
-            self.set_oscquery_values({
-                '/engine/status/timecode': value
-            })
+        """Handle timecode changes - broadcast to UI (throttled to 20 Hz)."""
+        now = time.monotonic()
+        if now - self._last_timecode_broadcast >= self._timecode_broadcast_interval:
+            self._last_timecode_broadcast = now
+            try:
+                tc_int = int(value) if value is not None else 0
+                self._broadcast_status('timecode', tc_int)
+                Logger.debug(f'Timecode broadcast {tc_int}')
+            except (TypeError, ValueError):
+                pass
 
     #########################
     # Project management
     #########################
 
     def load_project(self, project_name, context=None, deploy_only=False):
-        if self.get_status('load') == project_name:
-            Logger.info(f'Project {project_name} already loaded')
-            return True
+        # Don't allow loading while script is running
+        if self.get_status('running') == "yes":
+            Logger.warning(f'Cannot load project {project_name} while script is running. Stop first.')
+            return False
 
         Logger.info(f'Loading project {project_name}')
+        self.set_status('armed', 'no')
         self.reset_script()
         self.stop_timecode()
         
         if deploy_only:
-            if hasattr(self, 'oscquery_server') and self.oscquery_server:
-                try:
-                    self.oscquery_server.set_value('/engine/command/deploy', project_name)
-                except ValueError as e:
-                    Logger.warning(f"Could not set deploy command in OSCQuery: {e}")
+            Logger.info(f"Deploy only requested for {project_name}")
             return True
         
         try:
@@ -559,12 +518,19 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
-        # self.set_status('load', project_name)
+        
+        # Update internal status
+        self.set_status('load', project_name)
 
-        # Only set status node, not command node (command would trigger recursive load)
-        self.set_oscquery_values({
-            '/engine/status/load': project_name
-        })
+        # Forward load command to NodeEngine via NNG (nodes will arm cues)
+        self._forward_load_to_nodes(project_name)
+
+        # Timecode starts on load; runs until next load or engine shutdown
+        self.start_timecode()
+        self.go_offset = 0  # Enable mtc_callback → on_timecode_change → broadcast
+        # armed=yes is NOT set here -- it's set when NodeEngine reports armed_ready
+        # via status_operation_callback, ensuring cues are actually armed before
+        # the UI shows GO as available
 
         # Confirm the project is loaded
         self.set_show_lock_file()
@@ -572,25 +538,68 @@ class ControllerEngine(BaseEngine):
         # Note: Don't clear editor_request here - handle_editor_command will clear it after confirmation
         return True
 
-    def deploy_project(self, project_name, context=None):
-        self.load_project(project_name, context=context)
+    def deploy_project(self, project_name):
+        self.load_project(project_name)
 
-    def go_script(self, value):
-        if self.get_status('running') == "yes":
-            Logger.info(f'Script already running.')
+    def go_script(self, value, context=None):
+        if self.get_status('armed') != "yes":
+            Logger.warning('Cues not armed. GO not available.')
             return
 
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
         
-        self.start_timecode()
-        
-        # Set both command (for NodeEngine HTTP polling) and status
-        self.set_oscquery_values({
-            '/engine/status/running': "yes",
-            '/engine/command/go': value if value else "go"
-        })
-        
+        self.set_status('running', "yes")
+
+        # Forward GO to NodeEngine via NNG (needed when called from editor;
+        # when called from WebSocket the comms layer also forwards, but the
+        # NodeEngine's run_command is idempotent so a double-call is harmless)
+        self._forward_command_to_nodes('/engine/command/go', value)
+
         Logger.info(f'GO command processed')
+        return True
+
+    def _forward_command_to_nodes(self, address: str, value) -> None:
+        """Forward a generic command to NodeEngine via NNG."""
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            Logger.warning("Cannot forward command to nodes: communications thread not available")
+            return
+
+        parts = address.strip('/').split('/')
+        command_name = parts[-1] if parts else address
+
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.cm.node_conf.get('uuid', 'controller') if hasattr(self, 'cm') and self.cm else 'controller',
+            target=command_name,
+            data={'value': value, 'address': address}
+        )
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(operation),
+                self.communications_thread.event_loop
+            )
+            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
+        except Exception as e:
+            Logger.error(f"Error forwarding command to nodes: {e}")
+
+    def stop_script(self, value):
+        """Handle STOP command - stop timecode, update status and forward to nodes."""
+        if self.get_status('running') != "yes":
+            Logger.info('Script not running, nothing to stop.')
+            return
+
+        self.go_offset = None
+        self.stop_timecode()
+        self._broadcast_status('timecode', 0)
+
+        self.set_status('running', "no")
+        self.set_status('armed', 'no')
+
+        self._forward_command_to_nodes('/engine/command/stop', value)
+
+        Logger.info('STOP command processed - timecode stopped; nodes will re-arm')
         return True

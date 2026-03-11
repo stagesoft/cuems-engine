@@ -1,7 +1,5 @@
 from functools import partial
-from threading import Thread
 from time import sleep
-import requests
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.MediaCue import MediaCue
@@ -10,13 +8,13 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .osc.OssiaClient import PlayerClient
-from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
-from .osc.helpers import add_callback_to_all, add_prefix_to_all
+from .osc.helpers import add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
+from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
+VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
 class NodeEngine(BaseEngine):
     """
@@ -38,10 +36,6 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.ocsquery_queue_loop = Thread(
-            target=self.oscquery_loop, name='OSCQueryQueueLoop'
-        )
-
         self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
@@ -63,18 +57,120 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
-        self.set_oscquery_comms()  # Creates client but NOT GMQ yet
-        self.set_players()  # Creates player devices (may iterate children())
-        self.start_oscquery_queue()  # Create GMQ AFTER all devices are set up
+        self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
+        self.set_players()  # Creates player devices - must be before NNG callback
+        self._setup_nng_command_callback()  # Set up NNG command receiving (after players ready)
         self.mtc_listener.start()
         super().start()
+    
+    def _setup_nng_command_callback(self):
+        """Set up the callback for receiving commands via NNG from ControllerEngine.
+        
+        This provides push-based command delivery as an alternative to HTTP polling.
+        Commands are received via the NNG bus and routed to the appropriate handlers.
+        """
+        if hasattr(CUE_HANDLER, 'communications_thread') and CUE_HANDLER.communications_thread:
+            CUE_HANDLER.communications_thread.set_command_callback(self._handle_nng_command)
+            Logger.info("NNG command callback registered for NodeEngine")
+        else:
+            Logger.warning("CUE_HANDLER communications thread not available for command callback")
+    
+    def _handle_nng_command(self, command_name: str, value, address: str = None):
+        """Handle a command received via NNG from ControllerEngine.
+        
+        Args:
+            command_name: The command name (e.g., 'go', 'load', 'stop', 'player_control')
+            value: The command value
+            address: The original OSC address (optional)
+        """
+        Logger.info(f"NNG command received: {command_name} = {repr(value)}")
+        
+        if command_name == 'player_control' and address:
+            # Handle player control messages (mixer volumes, video controls, etc.)
+            self._handle_player_control_message(address, value)
+        else:
+            # Handle standard commands (go, load, stop)
+            self.run_command(command_name, value)
+    
+    def _handle_player_control_message(self, address: str, value):
+        """Handle player control messages received via NNG.
+        
+        Routes to appropriate player handlers based on the OSC address.
+        Supports two formats:
+        1. Engine format: /engine/players/<uuid>/<type>/...
+        2. Direct format: /<uuid>/<type>/... (from UI)
+        
+        Args:
+            address: The OSC address
+            value: The value to set
+        """
+        parts = address.strip('/').split('/')
+        
+        # Determine format and extract node_uuid, player_type, path_parts
+        if len(parts) >= 4 and parts[0] == 'engine' and parts[1] == 'players':
+            # Engine format: /engine/players/<node_uuid>/<type>/...
+            node_uuid = parts[2]
+            player_type = parts[3]
+            path_parts = parts[4:] if len(parts) > 4 else []
+        elif len(parts) >= 2:
+            # Direct format: /<node_uuid>/<type>/...
+            node_uuid = parts[0]
+            player_type = parts[1]
+            path_parts = parts[2:] if len(parts) > 2 else []
+        else:
+            Logger.warning(f"Invalid player control address: {address}")
+            return
+        
+        # Only handle messages for this node
+        if node_uuid != self.cm.node_uuid:
+            Logger.debug(f"Ignoring player message for other node: {node_uuid}")
+            return
+        
+        Logger.debug(f"Handling player control: type={player_type}, path={path_parts}, value={value}")
+        
+        # Route to appropriate handler based on player type
+        if player_type == 'video':
+            redirect_video_cmd(path_parts, value)
+        elif player_type == 'audio':
+            CUE_HANDLER.route_audio_message(path_parts, value)
+        elif player_type == 'dmx':
+            CUE_HANDLER.route_dmx_message(path_parts, value)
+        elif player_type == 'audiomixer':
+            # Direct audiomixer command: /<uuid>/audiomixer/<channel>
+            # path_parts[0] is channel (e.g., '0', 'master')
+            self._handle_audiomixer_command(path_parts, value)
+        elif player_type == 'jadeo':
+            # Direct video command: /<uuid>/jadeo/<cmd>
+            redirect_video_cmd(['jadeo'] + path_parts, value)
+        else:
+            Logger.debug(f"Unknown player type in control message: {player_type}")
+    
+    def _handle_audiomixer_command(self, path_parts: list, value):
+        """Handle direct audiomixer OSC command.
+        
+        Args:
+            path_parts: Remaining path parts after /<uuid>/audiomixer/
+                       e.g., ['0'] for channel 0, ['master'] for master
+            value: Volume value (0.0 to 1.0)
+        """
+        if not path_parts:
+            Logger.warning("Empty audiomixer command path")
+            return
+        
+        channel = path_parts[0]
+        # jack-volume expects /audiomixer/<client_name>/<channel>
+        mixer_cmd = f'/audiomixer/0_mixer/{channel}'
+        
+        try:
+            PLAYER_HANDLER.get_audio_mixer_client().set_value(mixer_cmd, value)
+            Logger.debug(f"Audiomixer command: {mixer_cmd} = {value}")
+        except Exception as e:
+            Logger.error(f"Error sending audiomixer command: {e}")
         
     @logged
     def stop(self):
         self.stop_requested = True
         self.stop_node_engine()
-        if self.ocsquery_queue_loop.is_alive():
-            self.ocsquery_queue_loop.join(timeout=1)
         super().stop()
 
     def stop_node_engine(self):
@@ -85,12 +181,23 @@ class NodeEngine(BaseEngine):
     def stop_video_devs(self):
         try:
             self.unload_video_devs()
-            self.quit_video_devs()
-            self.disconnect_video_devs()
-            PLAYER_HANDLER.reset_video_players()
-            Logger.info('Quitted video devs')
+            Logger.info('Video devs stopped')
         except Exception as e:
-            Logger.warning(f'Exception raised when quitting video devs: {e}')
+            Logger.warning(f'Exception raised when stopping video devs: {e}')
+
+    def quit_video_devs(self):
+        try:
+            PLAYER_HANDLER.quit_videocomposer()
+            Logger.info('Videocomposer quit successfully')
+        except Exception as e:
+            Logger.exception(e)
+
+    def unload_video_devs(self):
+        try:
+            PLAYER_HANDLER.reset_video_layers()
+            Logger.info('Video layers unloaded successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     #########################
     # OSCQuery logic
@@ -127,10 +234,10 @@ class NodeEngine(BaseEngine):
             Logger.exception(e)
 
     def set_oscquery_comms(self):
-        """Set up the OSCQuery client for the NodeEngine.
+        """Set up the command dictionary for the NodeEngine.
         
-        NOTE: We use HTTP polling instead of pyossia's GlobalMessageQueue
-        because GMQ is unreliable with multiple devices.
+        Commands are received via NNG from ControllerEngine.
+        OSCQuery client is no longer used since pyossia server was removed.
         """
         self.commands_dict = {
             'deploy': self.ready_project,
@@ -140,88 +247,11 @@ class NodeEngine(BaseEngine):
             'gocue': self.go_script,
             'pause': None,
             'resetall': None,
-            'stop': None,
+            'stop': self.stop_playback,
             'test': None,
             'unload': None,
             'update': None,
         }
-        self.oscquery_client = self.set_oscquery_client()
-
-    def start_oscquery_queue(self):
-        """Start the HTTP polling loop for OSCQuery commands.
-        
-        This replaces the unreliable pyossia GlobalMessageQueue with
-        a simple HTTP polling mechanism that queries the OSCQuery server
-        directly for command values.
-        """
-        # Initialize last known values for change detection
-        self._last_load_value = None
-        self._last_go_value = None
-        self._oscquery_base_url = f"http://{self.controller_ip}:{self.cm.node_conf.get('oscquery_ws_port', 9190)}"
-        
-        self.ocsquery_queue_loop.start()
-        Logger.info(f"OSCQuery HTTP polling started - URL: {self._oscquery_base_url}")
-    
-    def _fetch_oscquery_value(self, path: str):
-        """Fetch a value from the OSCQuery server via HTTP.
-        
-        Args:
-            path: The OSC path to query (e.g., '/engine/command/load')
-            
-        Returns:
-            The VALUE from the OSCQuery response, or None on error
-        """
-        try:
-            url = f"{self._oscquery_base_url}{path}"
-            response = requests.get(url, timeout=0.5)
-            if response.status_code == 200:
-                data = response.json()
-                # OSCQuery returns {"VALUE": [...]} or {"VALUE": "string"}
-                if 'VALUE' in data:
-                    val = data['VALUE']
-                    # VALUE is typically an array, get first element
-                    if isinstance(val, list) and len(val) > 0:
-                        return val[0]
-                    return val
-            return None
-        except requests.exceptions.RequestException:
-            return None
-        except Exception as e:
-            Logger.debug(f"OSCQuery fetch error for {path}: {e}")
-            return None
-
-    def oscquery_loop(self):
-        """HTTP polling loop to detect OSCQuery command changes.
-        
-        Polls /engine/command/load and /engine/command/go every 100ms
-        and calls the appropriate handler when values change.
-        """
-        try:
-            while not self.stop_requested:
-                # Poll LOAD command
-                try:
-                    load_val = self._fetch_oscquery_value('/engine/command/load')
-                    if load_val and load_val != self._last_load_value and load_val != '':
-                        Logger.info(f"LOAD command detected via HTTP: {load_val}")
-                        self._last_load_value = load_val
-                        self.load_project(load_val)
-                except Exception as e:
-                    Logger.error(f"Error polling LOAD command: {e}")
-                
-                # Poll GO command
-                try:
-                    go_val = self._fetch_oscquery_value('/engine/command/go')
-                    if go_val and go_val != self._last_go_value and go_val != '':
-                        Logger.info(f"GO command detected via HTTP: {go_val}")
-                        self._last_go_value = go_val
-                        self.go_script(go_val)
-                except Exception as e:
-                    Logger.error(f"Error polling GO command: {e}")
-                
-                sleep(0.1)  # 100ms poll interval
-                
-        except Exception as e:
-            Logger.error(f"Fatal error in OSCQuery polling loop: {e}")
 
     def route_message(self, parameter, value):
         # Exclude 'engine' common node
@@ -290,12 +320,33 @@ class NodeEngine(BaseEngine):
                     args=self.cm.node_conf['audiomixer']['args']
                 )
                 Logger.info(f'Audio mixer started successfully for mixer {mixer_id}')
+                # Register mixer with Controller via NNG
+                try:
+                    CUE_HANDLER.communications_thread.add_player(f'audiomixer_{mixer_id}', None, timeout=0.1)
+                    Logger.info(f'Audio mixer {mixer_id} registered with Controller')
+                except Exception as e:
+                    Logger.warning(f'Could not register mixer with Controller: {e}')
             except Exception as e:
                 Logger.error(f'Error starting audio mixer: {e}')
                 Logger.exception(e)
         else:
             Logger.info('No audio outputs detected, skipping audio mixer initialization')
         
+        # Build audio output lookup keyed by <id> (mirrors video output pattern)
+        audio_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('audio', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else output_data['name']
+                        audio_outputs[output_id] = {
+                            'name': output_data['name'],
+                            'mapped_to': mapped_to,
+                        }
+        PLAYER_HANDLER.set_audio_outputs(audio_outputs)
+
         # Set the audio player generator
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
@@ -310,61 +361,35 @@ class NodeEngine(BaseEngine):
             Logger.info('No video outputs detected.')
             return
         
-        output_names = self.cm.node_hw_outputs['video_outputs']
-        output_ports = []
-        for index in range(len(output_names)):
-            ports = PORT_HANDLER.assign_ports([
-                f'video_player_{index}_0',
-                f'video_player_{index}_1'
-            ])
-            PORT_HANDLER.add_config_ports(ports)
-            output_ports.append(ports)
-
-        try:
-            PLAYER_HANDLER.start_video_outputs(
-                output_names,
-                output_ports,
-                self.cm.node_conf['videoplayer']['path'],
-                self.cm.node_conf['videoplayer']['args']
-            )
-        except Exception as e:
-            Logger.error(f'Error checking & starting video devices...')
-            Logger.error(e)
-            Logger.error(f'Exiting...')
-            exit(-1)
+        vc_conf = self.cm.node_conf.get('videoplayer', {})
+        osc_video_port = int(vc_conf.get('osc_port', VIDEOCOMPOSER_OSC_PORT_DEFAULT))
+        PLAYER_HANDLER.set_video_client(osc_video_port)
+        PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
         
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None, timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+        # Build video output configs from node_mappings
+        # Keys are <id> (stable integer, what cues reference via output_name)
+        # <name> is a human label, <mapped_to> is the DRM connector for videocomposer
+        video_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('video', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
+                        name = output_data['name']
+                        region = output_data.get('canvas_region', {})
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else name
+                        video_outputs[output_id] = {
+                            'name': name,
+                            'mapped_to': mapped_to,
+                            'x': region.get('x', 0),
+                            'y': region.get('y', 0),
+                            'width': region.get('width', 1920),
+                            'height': region.get('height', 1080),
+                            'canvas_region': region if region else None,
+                        }
+        PLAYER_HANDLER.start_video_outputs(video_outputs)
 
-    def quit_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'quit')
-            except Exception as e:
-                Logger.exception(e)
-
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}', timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
-
-    def disconnect_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'midi disconnect')
-            except Exception as e:
-                Logger.exception(e)
-
-    def unload_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/load', '')
-            except Exception as e:
-                Logger.exception(e)
 
     # DMX functions
     def set_dmx_players(self):
@@ -437,14 +462,36 @@ class NodeEngine(BaseEngine):
 
     def load_project(self, project):
         """Load the project files to the node"""
-        if self.get_status('load') == project:
-            Logger.info(f'Project {project} already loaded')
+        # Don't allow loading while script is running
+        if self.get_status('running') == "yes":
+            Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
 
-        # Obtain the project files
+        # DMX blackout and JACK volume reset before cleanup (clean outputs)
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f'DMX blackout failed: {e}')
+        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+        if mixer_client:
+            try:
+                mixer_client.reset_volumes()
+            except Exception as e:
+                Logger.warning(f'JACK volume reset failed: {e}')
+
+        # Clean up any existing audio players from the previous project
+        # This MUST happen BEFORE ready_project() which replaces self.script
+        # Otherwise the old cue objects are orphaned and their players never get killed
+        Logger.debug('Cleaning up previous project resources before loading new one')
+        PLAYER_HANDLER.kill_all_audio_players()
+        CUE_HANDLER.disarm_all()
+        
+        # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
         
-        # Prepare the script to be played
+        # Prepare the script to be played (arms new cues)
         self.ready_script()
 
         # Start cue dependencies
@@ -455,6 +502,22 @@ class NodeEngine(BaseEngine):
         self.script.unix_name = project
         self.set_status('load', project)
         Logger.info(f'Project {project} loaded')
+
+        # Notify Controller that arming is complete (GO button can go green)
+        try:
+            from .comms.NodesHub import NodeOperation, OperationType, ActionType
+            operation = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid,
+                target='armed_ready',
+                data={'armed': 'yes'}
+            )
+            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+            Logger.debug('Notified Controller that arming after load is complete')
+        except Exception as e:
+            Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+
         return True
 
     def deploy_project(self, project):
@@ -486,14 +549,16 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
+        
+        # Reset mixer volumes to default when preparing script
+        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+        if mixer_client:
+            mixer_client.reset_volumes()
+        
         self.initial_cuelist_process()
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def go_script(self, value):
-        if self.get_status('running') == "yes":
-            Logger.info(f'Script already running. Current cue: {self.ongoing_cue.id}')
-            return
-
         if not self.script:
             Logger.warning('No script loaded, cannot process GO command.')
             return
@@ -502,18 +567,19 @@ class NodeEngine(BaseEngine):
             Logger.warning('No MTC listener, cannot process GO command.')
             return
 
-        Logger.info(f'GO command received. Starting script {self.script.name}')
-        self.set_status('running', "yes")
-
-        # Get the cue to go
+        # Determine the cue to go
         if not self.ongoing_cue:
+            # First GO - start from beginning
             cue_to_go = self.script.cuelist.contents[0]
+            Logger.info(f'GO command received. Starting script {self.script.name}')
         else:
+            # Successive GO - advance to next cue
             if self.next_cue_pointer:
                 cue_to_go = self.next_cue_pointer
+                Logger.info(f'GO command received. Advancing to next cue: {cue_to_go.id}')
             else:
-                Logger.info(f'Reached end of script. Last cue was {self.ongoing_cue.__class__.__name__} {self.ongoing_cue.id}')
-                self.ready_script()
+                # No next cue - script has finished. Do not stop timecode or reset state.
+                Logger.info('No more cues. Press STOP to restart.')
                 return
 
         if not cue_to_go._local:
@@ -523,12 +589,18 @@ class NodeEngine(BaseEngine):
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
             return
+
+        # Update state
+        self.set_status('running', "yes")
         self.ongoing_cue = cue_to_go
-    #    self.oscquery_server.set_value('/engine/status/currentcue', self.ongoing_cue.id)
+        
+        # Start the cue
         main_thread = CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener
         )
+        
+        # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         self.go_offset = self.mtc_listener.main_tc.milliseconds
 
@@ -538,10 +610,56 @@ class NodeEngine(BaseEngine):
         else:
             next_cue = ""
 
-        CUE_HANDLER.wait_for_cue(main_thread)
+        Logger.info(f'Cue {cue_to_go.id} started. Next cue: {next_cue if next_cue else "none"}')
 
-        Logger.info(f'go_script reached end of script')
-    #    self.oscquery_server.set_value('/engine/status/nextcue', next_cue)
+    def stop_playback(self, value=None):
+        """Stop playback, full cleanup, then re-arm so GO is available again.
+        
+        Does the cleanup that ready_script() doesn't handle (DMX blackout,
+        disconnect video, kill audio), then delegates reset + re-arm to
+        ready_script(). Notifies Controller when armed (GO button green).
+        """
+        Logger.info('STOP command received. Stopping playback.')
+        
+        self.set_status('running', "no")
+        
+        # DMX blackout immediately (visual output goes dark ASAP)
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f'DMX blackout failed: {e}')
+        
+        # Unload all video layers (instant visual blackout)
+        self.unload_video_devs()
+        
+        # Kill all audio players (ready_script does not do this)
+        PLAYER_HANDLER.kill_all_audio_players()
+        
+        # Reset state + disarm + volume reset + re-arm cues
+        if self.script:
+            self.ready_script()
+            Logger.info(f'Project {self.script.name} reset and ready for GO.')
+            
+            # Notify Controller that re-arm is complete (GO button can go green)
+            try:
+                from .comms.NodesHub import NodeOperation, OperationType, ActionType
+                operation = NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target='armed_ready',
+                    data={'armed': 'yes'}
+                )
+                CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+                Logger.debug('Notified Controller that re-arm is complete')
+            except Exception as e:
+                Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+        else:
+            Logger.info('Playback stopped (no script loaded).')
+        
+        Logger.info('Playback stopped.')
 
 
 ## MISCELLANEOUS FUNCTIONS ##
@@ -605,24 +723,19 @@ def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
     if not cue:
         Logger.error(f'Cue {cue_uuid} not found')
         return
-    client: PlayerClient = cue._osc
+    client: AudioClient = cue._osc
     client.set_value(audio_cmd, value)
 
 def redirect_dmx_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the DMX command to the DMX player"""
     dmx_index = path_parts.index('mixer') + 1 # +1 to skip the 'mixer' keyword
     dmx_cmd = '/' + '/'.join(path_parts[dmx_index:])
-    PLAYER_HANDLER.get_dmx_player_client().set_value(dmx_cmd, value)
+    client: DmxClient = PLAYER_HANDLER.get_dmx_player_client()
+    client.set_value(dmx_cmd, value)
 
 def redirect_video_cmd(path_parts: list[str], value: str) -> None:
-    """Redirect the video command to the video player at front"""
-    jadeo_index = path_parts.index('jadeo')
-    jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
-    output_index = path_parts[jadeo_index - 1]
-    output_name = PLAYER_HANDLER.get_video_output_names(int(output_index))
-    output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
-    if not output_player:
-        Logger.error(f'No active video player found for output {output_name} at index {output_index}')
-        return None
-    client: PlayerClient = output_player['osc']
-    client.set_value(jadeo_cmd, value)
+    """Redirect the video command to the video client"""
+    videocomposer_index = path_parts.index('videocomposer')
+    videocomposer_cmd = '/' + '/'.join(path_parts[videocomposer_index:])
+    client: VideoClient = PLAYER_HANDLER.get_video_client()
+    client.set_value(videocomposer_cmd, value)

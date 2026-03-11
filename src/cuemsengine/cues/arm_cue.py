@@ -117,35 +117,42 @@ def arm_dmxCue(cue: DmxCue):
 @arm_cue.register
 def arm_videoCue(cue: VideoCue):
     try:
-        PLAYER_HANDLER.set_video_player(cue)
-    except ValueError as e:
-        Logger.error(f'Error arming video player for cue {cue.id}: {e}')
+        client = PLAYER_HANDLER.get_video_client()
+        if client is None:
+            Logger.error(f'No video client available for cue {cue.id}')
+            return
+        cue._osc = client
+    except Exception as e:
+        Logger.error(f'Error retrieving video client for cue {cue.id}: {e}')
         Logger.exception(e)
         return
-                
-    try:
-        key = '/jadeo/cmd'
-        cue._osc.set_value(key, 'midi disconnect')
-        Logger.info(
-            key + " " + str(cue._osc.get_node(key).parameter.value),
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error 1 (disconnect) in arm_callback {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
 
-    try:
-        key = '/jadeo/load'
-        value = PLAYER_HANDLER.media_path(cue.media['file_name'])
-        cue._osc.set_value(key, value)
-        Logger.info(
-            key + " " + str(cue._osc.get_node(key).parameter.value),
-            extra = {"caller": cue.__class__.__name__}
-        )
-    except KeyError:
-        Logger.debug(
-            f'Key error 2 (load) in arm_callback {key}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+    if not output_names:
+        Logger.error(f'No output names found for video cue {cue.id}')
+        return
+
+    video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
+    cue._layer_ids = []
+
+    for index, output_name in enumerate(output_names):
+        layer_id = f"{cue.id}_{index}"
+
+        client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+        client.create_layer_endpoints(layer_id)
+
+        layer_path = f'/videocomposer/layer/{layer_id}'
+        client.set_value(f'{layer_path}/visible', 0)
+        client.set_value(f'{layer_path}/autounload', 1)
+
+        try:
+            output = PLAYER_HANDLER.get_video_output(output_name)
+            x, y = output.get_layer_placement()
+            client.set_value(f'{layer_path}/position', [x, y])
+        except KeyError:
+            Logger.warning(f'Video output "{output_name}" not found, skipping position for layer {layer_id}')
+
+        PLAYER_HANDLER.register_layer(layer_id)
+        cue._layer_ids.append(layer_id)
+
+    Logger.info(f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for {video_path}")
