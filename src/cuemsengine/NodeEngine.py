@@ -8,13 +8,13 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .osc.OssiaClient import PlayerClient
-from .osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_DMXPLAYER_CONF
-from .osc.helpers import add_callback_to_all, add_prefix_to_all
+from .osc.helpers import add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
+from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
+VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
 class NodeEngine(BaseEngine):
     """
@@ -181,12 +181,23 @@ class NodeEngine(BaseEngine):
     def stop_video_devs(self):
         try:
             self.unload_video_devs()
-            self.quit_video_devs()
-            self.disconnect_video_devs()
-            PLAYER_HANDLER.reset_video_players()
-            Logger.info('Quitted video devs')
+            Logger.info('Video devs stopped')
         except Exception as e:
-            Logger.warning(f'Exception raised when quitting video devs: {e}')
+            Logger.warning(f'Exception raised when stopping video devs: {e}')
+
+    def quit_video_devs(self):
+        try:
+            PLAYER_HANDLER.quit_videocomposer()
+            Logger.info('Videocomposer quit successfully')
+        except Exception as e:
+            Logger.exception(e)
+
+    def unload_video_devs(self):
+        try:
+            PLAYER_HANDLER.reset_video_layers()
+            Logger.info('Video layers unloaded successfully')
+        except Exception as e:
+            Logger.exception(e)
 
     #########################
     # OSCQuery logic
@@ -321,6 +332,21 @@ class NodeEngine(BaseEngine):
         else:
             Logger.info('No audio outputs detected, skipping audio mixer initialization')
         
+        # Build audio output lookup keyed by <id> (mirrors video output pattern)
+        audio_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('audio', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else output_data['name']
+                        audio_outputs[output_id] = {
+                            'name': output_data['name'],
+                            'mapped_to': mapped_to,
+                        }
+        PLAYER_HANDLER.set_audio_outputs(audio_outputs)
+
         # Set the audio player generator
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
@@ -335,61 +361,35 @@ class NodeEngine(BaseEngine):
             Logger.info('No video outputs detected.')
             return
         
-        output_names = self.cm.node_hw_outputs['video_outputs']
-        output_ports = []
-        for index in range(len(output_names)):
-            ports = PORT_HANDLER.assign_ports([
-                f'video_player_{index}_0',
-                f'video_player_{index}_1'
-            ])
-            PORT_HANDLER.add_config_ports(ports)
-            output_ports.append(ports)
-
-        try:
-            PLAYER_HANDLER.start_video_outputs(
-                output_names,
-                output_ports,
-                self.cm.node_conf['videoplayer']['path'],
-                self.cm.node_conf['videoplayer']['args']
-            )
-        except Exception as e:
-            Logger.error(f'Error checking & starting video devices...')
-            Logger.error(e)
-            Logger.error(f'Exiting...')
-            exit(-1)
+        vc_conf = self.cm.node_conf.get('videoplayer', {})
+        osc_video_port = int(vc_conf.get('osc_port', VIDEOCOMPOSER_OSC_PORT_DEFAULT))
+        PLAYER_HANDLER.set_video_client(osc_video_port)
+        PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
         
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.add_player(f'videoplayer_{output}', None, timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+        # Build video output configs from node_mappings
+        # Keys are <id> (stable integer, what cues reference via output_name)
+        # <name> is a human label, <mapped_to> is the DRM connector for videocomposer
+        video_outputs = {}
+        for port_type_dict in self.cm.node_mappings.get('video', []):
+            for port_type_list in port_type_dict.values():
+                for port in port_type_list:
+                    for _, output_data in port.items():
+                        output_id = str(output_data.get('id', output_data['name']))
+                        name = output_data['name']
+                        region = output_data.get('canvas_region', {})
+                        mappings = output_data.get('mappings', [])
+                        mapped_to = mappings[0]['mapped_to'] if mappings else name
+                        video_outputs[output_id] = {
+                            'name': name,
+                            'mapped_to': mapped_to,
+                            'x': region.get('x', 0),
+                            'y': region.get('y', 0),
+                            'width': region.get('width', 1920),
+                            'height': region.get('height', 1080),
+                            'canvas_region': region if region else None,
+                        }
+        PLAYER_HANDLER.start_video_outputs(video_outputs)
 
-    def quit_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'quit')
-            except Exception as e:
-                Logger.exception(e)
-
-        for output in PLAYER_HANDLER._video_players.keys():
-            try:
-                CUE_HANDLER.communications_thread.remove_player(f'videoplayer_{output}', timeout=0.1)
-            except Exception:
-                pass  # Ignore - NNG is for distributed nodes
-
-    def disconnect_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/cmd', 'midi disconnect')
-            except Exception as e:
-                Logger.exception(e)
-
-    def unload_video_devs(self):
-        for dev in PLAYER_HANDLER.get_video_players():
-            try:
-                dev['osc'].set_value('/jadeo/load', '')
-            except Exception as e:
-                Logger.exception(e)
 
     # DMX functions
     def set_dmx_players(self):
@@ -441,8 +441,6 @@ class NodeEngine(BaseEngine):
         self.deploy_media(project)
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
-        # Reset video loaded tracking for new project (xjadeo workaround)
-        PLAYER_HANDLER.reset_video_loaded_outputs()
         PORT_HANDLER.clean_random_ports()
 
     def map_cue_outputs(self, cuelist: CueList = None):
@@ -633,8 +631,8 @@ class NodeEngine(BaseEngine):
             except Exception as e:
                 Logger.warning(f'DMX blackout failed: {e}')
         
-        # Disconnect video players from MIDI
-        self.disconnect_video_devs()
+        # Unload all video layers (instant visual blackout)
+        self.unload_video_devs()
         
         # Kill all audio players (ready_script does not do this)
         PLAYER_HANDLER.kill_all_audio_players()
@@ -725,24 +723,19 @@ def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
     if not cue:
         Logger.error(f'Cue {cue_uuid} not found')
         return
-    client: PlayerClient = cue._osc
+    client: AudioClient = cue._osc
     client.set_value(audio_cmd, value)
 
 def redirect_dmx_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the DMX command to the DMX player"""
     dmx_index = path_parts.index('mixer') + 1 # +1 to skip the 'mixer' keyword
     dmx_cmd = '/' + '/'.join(path_parts[dmx_index:])
-    PLAYER_HANDLER.get_dmx_player_client().set_value(dmx_cmd, value)
+    client: DmxClient = PLAYER_HANDLER.get_dmx_player_client()
+    client.set_value(dmx_cmd, value)
 
 def redirect_video_cmd(path_parts: list[str], value: str) -> None:
-    """Redirect the video command to the video player at front"""
-    jadeo_index = path_parts.index('jadeo')
-    jadeo_cmd = '/' + '/'.join(path_parts[jadeo_index:])
-    output_index = path_parts[jadeo_index - 1]
-    output_name = PLAYER_HANDLER.get_video_output_names(int(output_index))
-    output_player = PLAYER_HANDLER.get_active_videoplayer(output_name)
-    if not output_player:
-        Logger.error(f'No active video player found for output {output_name} at index {output_index}')
-        return None
-    client: PlayerClient = output_player['osc']
-    client.set_value(jadeo_cmd, value)
+    """Redirect the video command to the video client"""
+    videocomposer_index = path_parts.index('videocomposer')
+    videocomposer_cmd = '/' + '/'.join(path_parts[videocomposer_index:])
+    client: VideoClient = PLAYER_HANDLER.get_video_client()
+    client.set_value(videocomposer_cmd, value)

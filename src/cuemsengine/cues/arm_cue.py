@@ -117,51 +117,42 @@ def arm_dmxCue(cue: DmxCue):
 @arm_cue.register
 def arm_videoCue(cue: VideoCue):
     try:
-        PLAYER_HANDLER.set_video_player(cue)
-    except ValueError as e:
-        Logger.error(f'Error arming video player for cue {cue.id}: {e}')
+        client = PLAYER_HANDLER.get_video_client()
+        if client is None:
+            Logger.error(f'No video client available for cue {cue.id}')
+            return
+        cue._osc = client
+    except Exception as e:
+        Logger.error(f'Error retrieving video client for cue {cue.id}: {e}')
         Logger.exception(e)
         return
-    
-    # Get OSC clients for all outputs (set by set_video_player)
-    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
-    if not osc_list:
-        Logger.error(f'No OSC clients available for cue {cue.id}')
-        return
-    
-    # Send MIDI disconnect to all outputs
-    for osc_client in osc_list:
-        try:
-            key = '/jadeo/midi/disconnect'
-            osc_client.set_value(key, 1)
-            Logger.debug(f"midi disconnect sent to {osc_client.remote_port}", extra={"caller": cue.__class__.__name__})
-        except KeyError:
-            Logger.debug(f'Key error (disconnect) in arm_callback', extra={"caller": cue.__class__.__name__})
 
-    # TEMPORARY FIX for xjadeo: Only load the first video per output during arm.
-    # xjadeo can only display one video at a time per instance. Loading subsequent
-    # cues would overwrite the first one, breaking instant play.
-    # Subsequent videos are loaded on-demand in run_videoCue.
-    # TODO: Remove this check when migrating to multi-layer video player.
-    
-    # Get all output names for this cue
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+    if not output_names:
+        Logger.error(f'No output names found for video cue {cue.id}')
+        return
+
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    
-    # Load video on each output that hasn't been loaded yet
-    for i, output_name in enumerate(output_names):
-        if PLAYER_HANDLER.is_video_loaded_for_output(output_name):
-            Logger.debug(
-                f'Skipping video load during arm for cue {cue.id} - output {output_name} already has video loaded',
-                extra = {"caller": cue.__class__.__name__}
-            )
-            continue
-        
-        # Get the OSC client for this output (same index as output_names)
-        if i < len(osc_list):
-            try:
-                osc_list[i].set_value('/jadeo/load', video_path)
-                PLAYER_HANDLER.mark_video_loaded_for_output(output_name)
-                Logger.info(f"/jadeo/load {video_path} on output {output_name}", extra={"caller": cue.__class__.__name__})
-            except Exception as e:
-                Logger.error(f"Video load failed on output {output_name}: {e}", extra={"caller": cue.__class__.__name__})
+    cue._layer_ids = []
+
+    for index, output_name in enumerate(output_names):
+        layer_id = f"{cue.id}_{index}"
+
+        client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+        client.create_layer_endpoints(layer_id)
+
+        layer_path = f'/videocomposer/layer/{layer_id}'
+        client.set_value(f'{layer_path}/visible', 0)
+        client.set_value(f'{layer_path}/autounload', 1)
+
+        try:
+            output = PLAYER_HANDLER.get_video_output(output_name)
+            x, y = output.get_layer_placement()
+            client.set_value(f'{layer_path}/position', [x, y])
+        except KeyError:
+            Logger.warning(f'Video output "{output_name}" not found, skipping position for layer {layer_id}')
+
+        PLAYER_HANDLER.register_layer(layer_id)
+        cue._layer_ids.append(layer_id)
+
+    Logger.info(f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for {video_path}")

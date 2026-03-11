@@ -34,21 +34,37 @@ OSC_DMXPLAYER_CONF = {
 }
 
 OSC_VIDEOPLAYER_CONF = {
-    '/jadeo/xscale' : [ValueType.Float, None],
-    '/jadeo/yscale' : [ValueType.Float, None], 
-    '/jadeo/corners' : [ValueType.List, None],
-    '/jadeo/corner1' : [ValueType.List, None],
-    '/jadeo/corner2' : [ValueType.List, None],
-    '/jadeo/corner3' : [ValueType.List, None],
-    '/jadeo/corner4' : [ValueType.List, None],
-    '/jadeo/start' : [ValueType.Int, None],
-    '/jadeo/load' : [ValueType.String, None],
-    '/jadeo/cmd' : [ValueType.String, None],
-    '/jadeo/quit' : [ValueType.Int, None],
-    '/jadeo/offset' : [ValueType.Int, None],  # Changed to Int - xjadeo handles /jadeo/offset with "i" type
-    '/jadeo/midi/connect' : [ValueType.String, None],
-    '/jadeo/midi/disconnect' : [ValueType.Int, None],
-    '/jadeo/ontop' : [ValueType.Bool, None]
+    '/videocomposer/check' : [ValueType.Impulse, None],
+    '/videocomposer/quit' : [ValueType.Impulse, None],
+    '/videocomposer/display/list' : [ValueType.Impulse, None],
+    '/videocomposer/display/modes' : [ValueType.String, None],
+    '/videocomposer/display/resolution_mode' : [ValueType.String, None], # e.g. "1080p", "native", "maximum", "720p", "4k", "" empty string shows available modes
+    '/videocomposer/display/mode' : [ValueType.List, None], # [output_name, width, height, refresh_rate]
+    '/videocomposer/display/region' : [ValueType.List, None], # [output_name, x, y, width, height]
+    '/videocomposer/display/blend' : [ValueType.List, None], # [output_name, left, right, top, bottom, gamma]
+    '/videocomposer/display/warp' : [ValueType.List, None], # [output_name, mesh_path]
+    '/videocomposer/display/save' : [ValueType.String, None], # [file_path]
+    '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
+    '/videocomposer/layer/load' : [ValueType.List, None, None, False], # [file_path, layer_id] — no RepetitionFilter (command endpoint)
+    '/videocomposer/layer/unload' : [ValueType.String, None, None, False], # [layer_id] — no RepetitionFilter (command endpoint)
+    '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
+}
+
+OSC_VIDEOPLAYER_LAYER_CONF = {
+    '/videocomposer/layer/{}/play' : [ValueType.Impulse, None],
+    '/videocomposer/layer/{}/pause' : [ValueType.Impulse, None],
+    '/videocomposer/layer/{}/offset' : [ValueType.Int, None],
+    '/videocomposer/layer/{}/mtcfollow' : [ValueType.String, None],
+    '/videocomposer/layer/{}/visible' : [ValueType.Int, None, -1],
+    '/videocomposer/layer/{}/autounload' : [ValueType.Int, None], # 0 or 1
+    '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
+    '/videocomposer/layer/{}/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)
+    '/videocomposer/layer/{}/scale' : [ValueType.List, None], # [x, y] (x and y are scale ratio of the layer)
+    '/videocomposer/layer/{}/rotation' : [ValueType.Float, None], # rotation in degrees
+    '/videocomposer/layer/{}/zorder' : [ValueType.Int, None], # z-order of the layer (higher numbers are in front)
+    '/videocomposer/layer/{}/corner_deform' : [ValueType.List, None], # [x0, y0, offset0, ..., x3, y3, offset3] (x and y are pixel coordinates of the corner, offset is the deformation amount)
+    '/videocomposer/layer/{}/corner_deform_enable' : [ValueType.Int, None], # Enable / Disable corner deformation [0 or 1]
+    '/videocomposer/layer/{}/corner_deform_hq' : [ValueType.Int, None], # Enable / Disable high-quality mode [0 or 1]
 }
 
 OSC_PLAYERS_DICT = {

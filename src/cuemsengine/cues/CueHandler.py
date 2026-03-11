@@ -23,14 +23,22 @@ class CueHandler:
     Thread-safe: internal state mutations are guarded by a Lock.
     """
 
-    _instance = None
+    _instance: 'CueHandler | None' = None
+
+    # Instance attributes (declared for IDE/type checker support)
+    _armed_cues: list[Cue]
+    _armed_cues_set: set[str]
+    _video_players: dict
+    _front_video_player: VideoPlayer | None
+    _lock: Lock
+    communications_thread: NodeCommunications
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             # Initialize instance attributes
-            cls._instance._armed_cues: list[Cue] = []
-            cls._instance._armed_cues_set: set[str] = set()
+            cls._instance._armed_cues = []
+            cls._instance._armed_cues_set = set()
             cls._instance._video_players = {}
             cls._instance._front_video_player = None
             cls._instance._lock = Lock()
@@ -153,13 +161,27 @@ class CueHandler:
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
-            # Non-blocking NNG notifications (fire-and-forget)
             try:
                 if isinstance(cue, AudioCue):
                     self.communications_thread.remove_player(f'audioplayer_{cue.id}', timeout=0.1)
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
             except Exception:
-                pass  # Ignore - NNG is for distributed nodes
+                pass
+
+            if isinstance(cue, VideoCue):
+                layer_ids = getattr(cue, '_layer_ids', [])
+                client = getattr(cue, '_osc', None)
+                if client and layer_ids:
+                    for layer_id in layer_ids:
+                        try:
+                            client.set_value(f'/videocomposer/layer/{layer_id}/visible', 0)
+                            client.set_value('/videocomposer/layer/unload', layer_id)
+                            client.remove_layer_endpoints(layer_id)
+                            PLAYER_HANDLER.deregister_layer(layer_id)
+                        except Exception as e:
+                            Logger.debug(f'Error disarming video layer {layer_id}: {e}')
+                cue._layer_ids = []
+
             return True
 
         return False

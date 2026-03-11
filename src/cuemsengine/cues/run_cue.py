@@ -111,16 +111,18 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
             player_name = f'Audio_Player-{uuid_slug}'
             
-            # Parse cue.outputs to determine which mixer inputs to use
-            # Format: [{'output_name': 'uuid_system:playback_1', ...}, ...]
+            # Resolve JACK port names from cue output IDs via audio output lookup
             selected_outputs = []
             if hasattr(cue, 'outputs') and cue.outputs:
                 for output in cue.outputs:
                     output_name = output.get('output_name', '')
-                    # Extract port name after the UUID (36 chars + underscore)
                     if len(output_name) > 37:
-                        port_name = output_name[37:]  # e.g., 'system:playback_1'
-                        selected_outputs.append(port_name)
+                        output_id = output_name[37:]
+                        port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
+                        if port_name:
+                            selected_outputs.append(port_name)
+                        else:
+                            selected_outputs.append(output_id)
             
             Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
             
@@ -263,61 +265,49 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
 def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     """Run a VideoCue.
     
-    Args:
-        cue: The video cue to run
-        mtc: The MTC listener (for framerate info)
-        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
-    
-    Supports multiple video outputs - sends commands to all OSC clients in cue._osc_list.
+    Sends offset/visible/mtcfollow to all layers in cue._layer_ids
+    via the single VideoClient in cue._osc.
     """
-    Logger.info(f'Running video cue loop {cue.id}')
-    
-    # Get OSC clients for all outputs
-    osc_list = getattr(cue, '_osc_list', [cue._osc]) if hasattr(cue, '_osc') else []
-    if not osc_list:
-        Logger.error(f'No OSC clients available for video cue {cue.id}')
+    Logger.info(f'Running video cue {cue.id}')
+
+    layer_ids = getattr(cue, '_layer_ids', [])
+    if not layer_ids or cue._osc is None:
+        Logger.error(f'Video cue {cue.id} has no layers or no OSC client')
         return
-    
-    Logger.debug(f'Video cue {cue.id} has {len(osc_list)} output(s)')
-    
-    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
     else:
         mtc_ms = float(mtc.main_tc.milliseconds)
-    
-    # Calculate timing - create snapshot copy of current MTC (not a reference!)
+
     cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
-    # xjadeo formula: displayFrame = MTC + offset
-    # To show video frame 0 when MTC is at frame N, we need offset = -N
     offset_to_go = -cue._start_mtc.frame_number
-    
-    video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
-    
-    # Send commands to ALL video outputs
-    for i, osc_client in enumerate(osc_list):
-        # Load the video file via pyossia OSC
-        try:
-            osc_client.set_value('/jadeo/load', video_path)
-            Logger.info(f"load {video_path} on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"Video load failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
-        
-        Logger.info(f"Video cue output {i}: port={osc_client.remote_port}, offset={offset_to_go}", extra={"caller": cue.__class__.__name__})
-        
-        # Set offset via pyossia OSC (NEGATIVE value: xjadeo formula is displayFrame = MTC + offset)
-        try:
-            osc_client.set_value('/jadeo/offset', int(offset_to_go))
-            Logger.info(f"offset: {offset_to_go} on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"Offset set failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
-        
-        # Connect to MTC via pyossia OSC
-        try:
-            osc_client.set_value('/jadeo/cmd', 'midi connect Midi Through')
-            Logger.info(f"midi connect on output {i}", extra={"caller": cue.__class__.__name__})
-        except Exception as e:
-            Logger.error(f"MIDI connect failed on output {i}: {e}", extra={"caller": cue.__class__.__name__})
+
+    mtc_port = getattr(mtc, 'port_name', 'Midi Through Port-0')
+    client = cue._osc
+
+    # Re-apply position for each layer before making visible (layer may not have
+    # been ready when position was set during arm)
+    output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+
+    for index, layer_id in enumerate(layer_ids):
+        layer_path = f'/videocomposer/layer/{layer_id}'
+
+        # Re-apply canvas position from the output config
+        if index < len(output_names):
+            output_name = output_names[index]
+            try:
+                output = PLAYER_HANDLER.get_video_output(output_name)
+                x, y = output.get_layer_placement()
+                client.set_value(f'{layer_path}/position', [x, y])
+            except (KeyError, Exception) as e:
+                Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
+
+        client.set_value(f'{layer_path}/offset', int(offset_to_go))
+        client.set_value(f'{layer_path}/visible', 1)
+        client.set_value(f'{layer_path}/mtcfollow', mtc_port)
+
+    Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")
