@@ -32,12 +32,25 @@ class ControllerEngine(BaseEngine):
       - Handling the MTC master system
       - Handling the NodeConf system
     '''
+    # Controller→UI WebSocket throttle for cue percentage updates.
+    # State transitions (0, 1, 100) always bypass this and broadcast immediately.
+    # Only in-progress percentage values (2-99) are throttled.
+    # Two-tier throttle: Tier 1 is node-side (CUE_STATUS_UPDATE_HZ in loop_cue.py);
+    # Tier 2 is here, capping WS broadcasts even when multiple nodes send updates
+    # in quick succession.
+    CUE_BROADCAST_MIN_INTERVAL = 0.25  # seconds — max 4 Hz to UI per cue
+
     def __init__(self, **kwargs):
         # Must be set before super().__init__() because BaseEngine sets
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
         self._last_timecode_broadcast = 0.0
         self._timecode_broadcast_interval = 0.5  # 2 Hz max for timecode , for 20mhz set it to 0.05
+        # Per-cue status dict: maps cue uuid → int status value.
+        # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
+        self.cue_status: dict[str, int] = {}
+        # Per-cue last-broadcast timestamps for WS throttle (Tier 2).
+        self._cue_broadcast_timestamps: dict[str, float] = {}
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
@@ -286,19 +299,44 @@ class ControllerEngine(BaseEngine):
 
     def cue_operation_callback(self, operation: NodeOperation):
         """Callback invoked when cues are received from nodes.
-        
-        Updates internal status tracking for running cues.
+
+        Handles three action types:
+        - ADD:    cue started playing on a node → status 1, broadcast immediately
+        - REMOVE: cue finished playing on a node → status 100, broadcast immediately
+        - UPDATE: percentage progress from a node (future) → throttled broadcast
         """
         Logger.info(f'Cue operation received: {operation}')
+        cue_id = operation.data.get('id') if operation.data else None
+
         if operation.action == ActionType.ADD:
+            # Cue started playing: mark as playing (1) and broadcast immediately.
+            if cue_id:
+                self.cue_status[cue_id] = 1
+                self._broadcast_cue_status(cue_id, 1, force=True)
             try:
                 self.status.currentcue = [operation.data['id'], operation.data['offset']]
                 Logger.debug(f"Current cue updated: {self.status.currentcue}")
             except Exception as e:
                 Logger.error(f'Error updating currentcue: {e}')
+
         elif operation.action == ActionType.REMOVE:
+            # Cue finished playing: mark as played (100) and broadcast immediately.
+            if cue_id:
+                self.cue_status[cue_id] = 100
+                self._broadcast_cue_status(cue_id, 100, force=True)
             self.status.remove_currentcue(operation.data['id'])
             Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
+
+        elif operation.action == ActionType.UPDATE:
+            # Future: percentage progress updates from loop_cue() during playback.
+            # Throttled by _broadcast_cue_status (Tier 2 / controller-side).
+            # The node-side Tier 1 throttle (CUE_STATUS_UPDATE_HZ) limits NNG traffic.
+            if cue_id:
+                pct = operation.data.get('percentage', 1)
+                self.cue_status[cue_id] = pct
+                self._broadcast_cue_status(cue_id, pct)  # throttled
+            Logger.debug(f"Cue percentage update: {cue_id} = {operation.data.get('percentage')}")
+
         else:
             Logger.warning(f'Unknown cue action: {operation.action}')
 
@@ -452,6 +490,39 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             Logger.debug(f"Status update (no-op): {key} = {repr(value)}")
 
+    def _collect_cue_ids(self, cuelist) -> list[str]:
+        """Recursively collect all cue IDs from a cuelist (including nested CueLists)."""
+        from cuemsutils.cues import CueList
+        ids = []
+        if hasattr(cuelist, 'contents') and cuelist.contents:
+            for item in cuelist.contents:
+                if item is None:
+                    continue
+                ids.append(item.id)
+                if isinstance(item, CueList):
+                    ids.extend(self._collect_cue_ids(item))
+        return ids
+
+    def _broadcast_cue_status(self, cue_id: str, value: int, force: bool = False) -> None:
+        """Broadcast per-cue status to UI via WebSocket OSC at /engine/status/cue/{uuid}.
+
+        Values: 0=unplayed, 1-99=playing (1 until percentage is enabled), 100=played, -1=error.
+
+        State transitions (force=True: values 0, 1, 100) bypass throttle and broadcast
+        immediately. In-progress percentage updates (2-99) are throttled per-cue to
+        CUE_BROADCAST_MIN_INTERVAL to limit WS traffic even when multiple remote nodes
+        send updates in quick succession (Tier 2 of the two-tier throttle strategy).
+        """
+        if not force:
+            now = time.monotonic()
+            last = self._cue_broadcast_timestamps.get(cue_id, 0)
+            if now - last < self.CUE_BROADCAST_MIN_INTERVAL:
+                return
+            self._cue_broadcast_timestamps[cue_id] = now
+        if hasattr(self, 'communications_thread') and self.communications_thread \
+                and hasattr(self.communications_thread, 'broadcast_osc'):
+            self.communications_thread.broadcast_osc(f'/engine/status/cue/{cue_id}', value)
+
     def _broadcast_status(self, key: str, value) -> None:
         """Push status to UI via WebSocket OSC (realtime)."""
         if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
@@ -518,7 +589,15 @@ class ControllerEngine(BaseEngine):
 
         Logger.info(f'Script from {project_name} loaded')
         self.script.unix_name = project_name
-        
+
+        # Initialise per-cue status: every cue starts as unplayed (0).
+        # Broadcasts one WS message per cue so the UI can populate its cue list.
+        self.cue_status = {cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)}
+        self._cue_broadcast_timestamps.clear()
+        for cid in self.cue_status:
+            self._broadcast_cue_status(cid, 0, force=True)
+        Logger.info(f'Cue status initialised for {len(self.cue_status)} cues')
+
         # Update internal status
         self.set_status('load', project_name)
 
@@ -598,6 +677,12 @@ class ControllerEngine(BaseEngine):
 
         self.set_status('running', "no")
         self.set_status('armed', 'no')
+
+        # Reset all cue statuses to unplayed (0) and broadcast to UI.
+        for cid in self.cue_status:
+            self.cue_status[cid] = 0
+            self._broadcast_cue_status(cid, 0, force=True)
+        self._cue_broadcast_timestamps.clear()
 
         self._forward_command_to_nodes('/engine/command/stop', value)
 

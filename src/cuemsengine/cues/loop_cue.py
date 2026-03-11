@@ -1,3 +1,4 @@
+import time
 from functools import singledispatch
 from time import sleep
 
@@ -6,6 +7,17 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
 from ..tools.MtcListener import MtcListener, CTimecode
+
+# Node-side throttle constant for future cue percentage updates sent to the
+# Controller via NNG (Tier 1 of the two-tier throttle strategy).
+# Each cue independently limits its update rate to this value.
+# At 2 Hz with 5 concurrent cues across 2 remote nodes the Controller receives
+# ~20 NNG msg/s (~4 KB/s over LAN) -- well within the NNG receiver budget.
+# The Controller applies a second throttle (CUE_BROADCAST_MIN_INTERVAL in
+# ControllerEngine) before forwarding updates to the UI via WebSocket (Tier 2).
+# To enable percentage updates: uncomment the throttled block inside each
+# loop_*Cue polling loop and increase this value if smoother UI is needed.
+CUE_STATUS_UPDATE_HZ = 2
 
 @singledispatch
 def loop_cue(cue: Cue, mtc: MtcListener):
@@ -50,9 +62,20 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
         # cue.loop: -1 = infinite, 0 = infinite, positive = fixed count
         while cue.loop < 1 or loop_counter < cue.loop:
             Logger.info(f'Audio loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}')
-            
+
+            last_status_update = 0.0
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
+                # Future: uncomment to enable percentage progress updates.
+                # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
+                # _now = time.monotonic()
+                # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
+                #     last_status_update = _now
+                #     _elapsed = mtc.main_tc.milliseconds - cue._start_mtc.milliseconds
+                #     _total = cue._end_mtc.milliseconds - cue._start_mtc.milliseconds
+                #     if _total > 0:
+                #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
+                #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
 
             Logger.info(f'Audio iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1
@@ -103,8 +126,19 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
     """
     try:
         # Wait for the cue duration to elapse
+        last_status_update = 0.0
         while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
             sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
+            # Future: uncomment to enable percentage progress updates.
+            # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
+            # _now = time.monotonic()
+            # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
+            #     last_status_update = _now
+            #     _elapsed = mtc.main_tc.milliseconds - cue._start_mtc.milliseconds
+            #     _total = cue._end_mtc.milliseconds - cue._start_mtc.milliseconds
+            #     if _total > 0:
+            #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
+            #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
 
         if cue._local:
             # Reserved for future looping implementation
@@ -134,8 +168,19 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
         layer_ids = getattr(cue, '_layer_ids', [])
 
         while cue.loop < 1 or loop_counter < cue.loop:
+            last_status_update = 0.0
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
                 sleep(0.02)
+                # Future: uncomment to enable percentage progress updates.
+                # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
+                # _now = time.monotonic()
+                # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
+                #     last_status_update = _now
+                #     _elapsed = mtc.main_tc.milliseconds - cue._start_mtc.milliseconds
+                #     _total = cue._end_mtc.milliseconds - cue._start_mtc.milliseconds
+                #     if _total > 0:
+                #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
+                #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
 
             Logger.info(f'Video iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1

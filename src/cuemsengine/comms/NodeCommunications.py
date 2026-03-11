@@ -182,3 +182,28 @@ class NodeCommunications(AsyncCommsThread):
             data={'id': cue_id}
         )
         return self.send_operation(operation, timeout)
+
+    def update_cue(self, cue_id: str, percentage: int, timeout: Optional[float] = None):
+        """Send a cue percentage progress update to the controller (thread-safe).
+
+        Used during playback to report in-progress status (values 1-99).
+
+        Callers MUST throttle calls to CUE_STATUS_UPDATE_HZ (defined in loop_cue.py)
+        before invoking this method to limit NNG traffic over the network in
+        multi-node deployments (Tier 1 of the two-tier throttle strategy).
+        The controller applies a second throttle (CUE_BROADCAST_MIN_INTERVAL) before
+        forwarding to the UI via WebSocket (Tier 2).
+
+        Parameters:
+        - cue_id: Unique identifier of the cue being played
+        - percentage: Playback progress (1-99); 1 = started, 99 = almost done
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        operation = NodeOperation(
+            type=OperationType.CUE,
+            action=ActionType.UPDATE,
+            sender=self.node_id,
+            target=cue_id,
+            data={'id': cue_id, 'percentage': percentage}
+        )
+        return self.send_operation(operation, timeout)
