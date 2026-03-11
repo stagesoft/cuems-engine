@@ -11,6 +11,22 @@ case "$1" in
                 if systemctl is-enabled cuems-mock-videocomposer >/dev/null 2>&1; then
                     systemctl disable cuems-mock-videocomposer || true
                 fi
+
+                # jackd-dummy: headless/cloud JACK dummy driver service
+                if systemctl is-active --quiet jackd-dummy 2>/dev/null; then
+                    systemctl stop jackd-dummy || true
+                fi
+                if systemctl is-enabled jackd-dummy >/dev/null 2>&1; then
+                    systemctl disable jackd-dummy || true
+                fi
+
+                # Restore jackd-cuems.service if it exists on this node
+                # (was disabled by postinst to avoid conflict with jackd-dummy).
+                if systemctl cat jackd-cuems >/dev/null 2>&1; then
+                    echo "Restoring jackd-cuems.service..."
+                    systemctl enable jackd-cuems || true
+                    systemctl start jackd-cuems || true
+                fi
             fi
         fi
         ;;
