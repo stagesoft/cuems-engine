@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 
 import mido
+import os
 from typing import Callable
 from threading import Thread
 
 from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
+
+# HEADLESS/CLOUD: On servers without an ALSA sequencer (/dev/snd/seq absent)
+# switch mido to the JACK-backed rtmidi backend so virtual MIDI ports are
+# still accessible.  On hardware nodes with ALSA this block is a no-op.
+if not os.path.exists('/dev/snd/seq'):
+    mido.set_backend('mido.backends.rtmidi/UNIX_JACK')
 
 class MtcListener(Thread):
     def __init__(self, step_callback: Callable | None = None, reset_callback: Callable | None = None, port: str | None = None):
@@ -39,14 +46,33 @@ class MtcListener(Thread):
             self.step_callback(self.main_tc) 
 
     def __open_port(self, port):
-        if port == None:
+        # HEADLESS/CLOUD: get_input_names() can throw when no MIDI subsystem is
+        # present; catch and treat as empty list so the engine keeps running.
+        # port_name is left as None and re-detected later in ControllerEngine.start()
+        # once the timecode sender has created the virtual MIDI port.
+        try:
             ports = mido.get_input_names() # type: ignore[attr-defined]
-            mtc_ports = [s for s in ports if "mtc" in s.lower()]
-            self.port_name = mtc_ports[-1] if mtc_ports else ports[-1]
-            #Logger.info ('Listener MIDI port: ' + self.port_name)
-        else:
+        except Exception as e:
+            Logger.warning(f'Could not list MIDI input ports: {e}')
+            ports = []
+
+        if port is not None and port in ports:
             self.port_name = port
-            # print("hay port")
+        else:
+            if port is not None:
+                Logger.warning(f'MIDI port "{port}" not found, auto-detecting...')
+            mtc_ports = [s for s in ports if "mtc" in s.lower()]
+            if mtc_ports:
+                self.port_name = mtc_ports[-1]
+            elif ports:
+                self.port_name = ports[-1]
+            else:
+                # HEADLESS/CLOUD: no ports yet; caller must retry after the
+                # virtual MIDI sender port has been created.
+                self.port_name = None
+                Logger.warning('No MIDI input ports available')
+        if self.port_name:
+            Logger.info(f'MtcListener will use MIDI port: {self.port_name}')
 
     def run(self):
         Logger.debug('Starting MTC listener')
