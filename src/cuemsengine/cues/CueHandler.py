@@ -249,10 +249,17 @@ class CueHandler:
             Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
 
         if cue._local:
+            # Notify controller that cue has started playing (status → 1).
+            # Fire-and-forget; failure here must not block playback.
+            try:
+                self.communications_thread.add_cue(cue.id, str(frozen_mtc_ms), timeout=0.1)
+            except Exception:
+                pass
+
             # Run cue immediately - pass both live MTC (for framerate) and frozen timestamp
             run_cue(cue, mtc, frozen_mtc_ms)
-            
-            # Notify controller in background (fire-and-forget)
+
+            # Notify controller that cue finished playing (status → 100).
             try:
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
             except Exception:
