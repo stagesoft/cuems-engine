@@ -45,6 +45,12 @@ class ControllerEngine(BaseEngine):
     def start(self):
         self.create_timecode()
         self.set_comms()
+        # HEADLESS/CLOUD: on servers without hardware MIDI the port list is
+        # empty at __init__ time.  create_timecode() above creates the virtual
+        # ALSA sender port, so we retry detection here to pick it up.
+        if self.mtc_listener.port_name is None:
+            Logger.info('Re-detecting MIDI port after MTC sender creation...')
+            self.mtc_listener._MtcListener__open_port(None)
         self.mtc_listener.start()
         super().start()
 

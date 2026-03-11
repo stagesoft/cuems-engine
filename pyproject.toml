@@ -54,6 +54,10 @@ flake8 = "*"
 [tool.poetry.scripts]
 node-engine = "cuemsengine.scripts.node_engine:main"
 controller-engine = "cuemsengine.scripts.controller_engine:main"
+mock-audioplayer = "cuemsengine.scripts.mock_audioplayer:main"
+mock-jack-volume = "cuemsengine.scripts.mock_jack_volume:main"
+mock-dmxplayer = "cuemsengine.scripts.mock_dmxplayer:main"
+mock-videocomposer = "cuemsengine.scripts.mock_videocomposer:main"
 
 [[tool.poetry.packages]]
 include = "cuemsengine"
