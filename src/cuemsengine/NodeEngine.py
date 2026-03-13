@@ -379,14 +379,18 @@ class NodeEngine(BaseEngine):
                         region = output_data.get('canvas_region', {})
                         mappings = output_data.get('mappings', [])
                         mapped_to = mappings[0]['mapped_to'] if mappings else name
+                        x = region.get('x', 0)
+                        y = region.get('y', 0)
+                        width = region.get('width', 1920)
+                        height = region.get('height', 1080)
                         video_outputs[output_id] = {
                             'name': name,
                             'mapped_to': mapped_to,
-                            'x': region.get('x', 0),
-                            'y': region.get('y', 0),
-                            'width': region.get('width', 1920),
-                            'height': region.get('height', 1080),
-                            'canvas_region': region if region else None,
+                            'x': x,
+                            'y': y,
+                            'width': width,
+                            'height': height,
+                            'canvas_region': region if region else {'x': x, 'y': y, 'width': width, 'height': height},
                         }
         PLAYER_HANDLER.start_video_outputs(video_outputs)
 

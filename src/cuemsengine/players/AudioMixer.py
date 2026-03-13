@@ -231,25 +231,23 @@ class AudioMixer(Player):
             return
         
         Logger.info(f"Connecting {player_name} to outputs: {selected_outputs} -> {target_inputs}")
-        
-        if len(target_inputs) == 1:
-            # Single output: sum both channels to that input
-            mixer_input = target_inputs[0]
-            Logger.debug(f"Single output: connecting both player channels to {mixer_input}")
-            self.conn_man.connect_by_name(channel_0_output, mixer_input)
-            if is_stereo:
-                self.conn_man.connect_by_name(channel_1_output, mixer_input)
-        elif len(target_inputs) == 2:
-            # Stereo: normal L/R routing
-            Logger.debug(f"Stereo output: L to {target_inputs[0]}, R to {target_inputs[1]}")
-            self.conn_man.connect_by_name(channel_0_output, target_inputs[0])
-            if is_stereo:
-                self.conn_man.connect_by_name(channel_1_output, target_inputs[1])
+
+        # Fan-out routing: treat target_inputs as alternating L/R pairs.
+        # Even-indexed targets (0, 2, 4 …) receive outport 0 (L channel).
+        # Odd-indexed targets  (1, 3, 5 …) receive outport 1 (R channel)
+        #   or outport 0 again when the player is mono.
+        # This covers 1, 2 or any number of outputs uniformly.
+        for i, mixer_input in enumerate(target_inputs):
+            if i % 2 == 0:
+                Logger.debug(f"L → {mixer_input}")
+                self.conn_man.connect_by_name(channel_0_output, mixer_input)
             else:
-                # Mono player: connect to both for centered sound
-                self.conn_man.connect_by_name(channel_0_output, target_inputs[1])
-        else:
-            Logger.warning(f"Unexpected number of target inputs: {len(target_inputs)}")
+                if is_stereo:
+                    Logger.debug(f"R → {mixer_input}")
+                    self.conn_man.connect_by_name(channel_1_output, mixer_input)
+                else:
+                    Logger.debug(f"Mono → {mixer_input}")
+                    self.conn_man.connect_by_name(channel_0_output, mixer_input)
 
 
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:

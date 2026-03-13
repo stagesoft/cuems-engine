@@ -248,18 +248,32 @@ class PlayerHandler:
         
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
-            # Use the cue ID as the player name
-            # audioplayer-cuems creates JACK client as "Audio_Player-{uuid}" with ports "outport 0", "outport 1"
             uuid_slug = ''.join(str(cue.id).split('-'))
             player_name = f'Audio_Player-{uuid_slug}'
-            Logger.info(f'Connecting player {player_name} to audio mixer')
-            # Connect to mixer channel 0 by default (can be made configurable later)
-            # connect_player_to_mixer has built-in retry logic for JACK port availability
-            self._audio_mixer.connect_player_to_mixer(
-                player_name=player_name,
-                player_output_prefix='outport',  # audioplayer-cuems uses "outport 0", "outport 1"
-                mixer_channel=0
-            )
+
+            # Resolve each output_name to its JACK port via the ID in the mappings.
+            # output_name format: "{node_uuid}_{output_id}"  (e.g. "a3811d78-..._6")
+            # resolve_audio_port maps the numeric ID → JACK port name (e.g. "usb_audio:playback_1")
+            selected_outputs = []
+            for output in getattr(cue, 'outputs', []):
+                raw = output.get('output_name', '')
+                output_id = raw[37:] if len(raw) > 37 else None  # strip "{uuid}_"
+                if output_id is not None:
+                    jack_port = self.resolve_audio_port(output_id)
+                    if jack_port:
+                        selected_outputs.append(jack_port)
+                    else:
+                        Logger.warning(f'Cannot resolve audio output ID "{output_id}" to a JACK port')
+
+            if not selected_outputs:
+                Logger.warning(f'No valid audio outputs resolved for cue {cue.id}, skipping mixer connection')
+            else:
+                Logger.info(f'Connecting {player_name} to outputs: {selected_outputs}')
+                self._audio_mixer.connect_player_to_outputs(
+                    player_name=player_name,
+                    player_output_prefix='outport',
+                    selected_outputs=selected_outputs
+                )
 
 
     # ---------------------------

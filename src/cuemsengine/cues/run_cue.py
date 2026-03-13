@@ -286,7 +286,6 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
 
-    mtc_port = getattr(mtc, 'port_name', 'Midi Through Port-0')
     client = cue._osc
 
     # Re-apply position for each layer before making visible (layer may not have
@@ -308,6 +307,6 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
         client.set_value(f'{layer_path}/visible', 1)
-        client.set_value(f'{layer_path}/mtcfollow', mtc_port)
+        client.set_value(f'{layer_path}/mtcfollow', 1)
 
     Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")

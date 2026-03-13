@@ -54,7 +54,7 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     '/videocomposer/layer/{}/play' : [ValueType.Impulse, None],
     '/videocomposer/layer/{}/pause' : [ValueType.Impulse, None],
     '/videocomposer/layer/{}/offset' : [ValueType.Int, None],
-    '/videocomposer/layer/{}/mtcfollow' : [ValueType.String, None],
+    '/videocomposer/layer/{}/mtcfollow' : [ValueType.Int, None],  # 1 = enable, 0 = disable
     '/videocomposer/layer/{}/visible' : [ValueType.Int, None, -1],
     '/videocomposer/layer/{}/autounload' : [ValueType.Int, None], # 0 or 1
     '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
