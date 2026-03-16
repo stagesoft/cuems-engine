@@ -149,7 +149,7 @@ class CueHandler:
                 except Exception:
                     pass  # Ignore - NNG is for distributed nodes
 
-        if cue.post_go == 'go':
+        if cue.post_go == 'go' and cue._target_object:
             self.arm(cue._target_object, init)
 
         return True
@@ -280,7 +280,7 @@ class CueHandler:
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
 
-        if cue.post_go == 'go':
+        if cue.post_go == 'go' and cue._target_object:
             Logger.info(f'Running post go for next cue:{cue.target}')
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
@@ -300,7 +300,7 @@ class CueHandler:
         if cue.post_go == 'go_at_end':
             self.wait_for_cue(go_at_end_thread)
 
-        if cue.post_go == 'go':
+        if cue.post_go == 'go' and cue._target_object:
             self.wait_for_cue(post_go_thread)
 
     def wait_for_cue(self, thread: Thread) -> None:
