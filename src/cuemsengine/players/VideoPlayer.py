@@ -83,7 +83,7 @@ class VideoOutput:
         self.set_region(video_client)
 
     def set_region(self, video_client: VideoClient) -> None:
-        """Sets the display region using the DRM connector name (mapped_to)."""
+        """Sets the display region via pyossia."""
         if None in [self.x, self.y, self.width, self.height]:
             return
         video_client.set_value('/videocomposer/display/region', [self.mapped_to, self.x, self.y, self.width, self.height])

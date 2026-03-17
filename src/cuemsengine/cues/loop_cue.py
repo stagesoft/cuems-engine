@@ -167,6 +167,14 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
 
         layer_ids = getattr(cue, '_layer_ids', [])
 
+        # Tell the videocomposer this is a looping cue so it wraps frames at the
+        # loop boundary (instead of clamping to the last frame).
+        for layer_id in layer_ids:
+            try:
+                cue._osc.set_value(f'/videocomposer/layer/{layer_id}/loop', 1)
+            except Exception as e:
+                Logger.error(f'Loop enable failed for layer {layer_id}: {e}')
+
         while cue.loop < 1 or loop_counter < cue.loop:
             if cue._stop_requested:
                 Logger.info(f'Video loop {cue.id} cancelled by stop request')
