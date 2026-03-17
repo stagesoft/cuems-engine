@@ -1,5 +1,7 @@
 from functools import partial
 from time import sleep
+import os
+import subprocess
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.MediaCue import MediaCue
@@ -443,6 +445,7 @@ class NodeEngine(BaseEngine):
         self.cm.load_project_config(project)
         self.read_script(project)
         self.deploy_media(project)
+        self.ensure_video_indexes()
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
         PORT_HANDLER.clean_random_ports()
@@ -529,7 +532,7 @@ class NodeEngine(BaseEngine):
         self.deploy_manager.sync_files(project, 'project')
 
     def deploy_media(self, project):
-        """Deploy the media files to the node"""
+        """Deploy the media files (and their .idx sidecar indexes) to the node"""
         if not self.script:
             Logger.error('No script loaded')
             return
@@ -537,7 +540,44 @@ class NodeEngine(BaseEngine):
         if len(file_names) == 0:
             Logger.info('No media files to deploy')
             return
-        self.deploy_manager.sync_files(project, 'media', file_names)
+        # Also include .idx sidecar files for video assets (rsync silently
+        # skips any entry that does not exist on the source, so this is safe
+        # even when the index has not been created yet).
+        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
+        idx_names = [
+            f'indexes/{name}.idx'
+            for name in file_names
+            if os.path.splitext(name)[1].lower() in video_exts
+        ]
+        self.deploy_manager.sync_files(project, 'media', file_names + idx_names)
+
+    def ensure_video_indexes(self):
+        """Run cuems-videoindexer on any video files that are missing a .idx sidecar.
+
+        This is a safety net for files that were copied manually or deployed to a
+        node that never ran the editor upload hook. For normally-uploaded files the
+        index was already created by the editor and this is a no-op.
+        """
+        if not self.script:
+            return
+        file_names = self.script.get_own_media_filenames(config=self.cm)
+        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
+        unindexed = []
+        for name in file_names:
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in video_exts:
+                continue
+            full_path = PLAYER_HANDLER.media_path(name)
+            idx_dir = os.path.join(os.path.dirname(full_path), 'indexes')
+            idx_path = os.path.join(idx_dir, os.path.basename(full_path) + '.idx')
+            if not os.path.exists(idx_path):
+                unindexed.append(full_path)
+        if unindexed:
+            Logger.info(f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx')
+            try:
+                subprocess.run(['cuems-videoindexer'] + unindexed, timeout=600)
+            except Exception as e:
+                Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
 
     #########################
     # Script logic
