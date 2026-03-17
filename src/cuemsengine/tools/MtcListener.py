@@ -56,37 +56,31 @@ class MtcListener(Thread):
             Logger.warning(f'Could not list MIDI input ports: {e}')
             ports = []
 
-        if port is not None and port in ports:
-            # Exact match
-            self.port_name = port
-        elif port is not None:
-            # mido on ALSA reports ports as "Client:Name port_id" so the
-            # configured short name (e.g. "Midi Through Port-0") won't match
-            # exactly.  Try a substring match so the configured name still
-            # selects the right port.
-            matched = [p for p in ports if port in p]
-            if matched:
-                self.port_name = matched[0]
-                Logger.info(f'MIDI port "{port}" matched as "{self.port_name}"')
+        if port is not None:
+            # Exact match first; fall back to substring match because ALSA/JACK
+            # port names include the client name and ID suffix
+            # e.g. "Midi Through Port-0" → "Midi Through:Midi Through Port-0 14:0"
+            if port in ports:
+                self.port_name = port
             else:
-                Logger.warning(f'MIDI port "{port}" not found, auto-detecting...')
-                mtc_ports = [s for s in ports if "mtc" in s.lower()]
-                if mtc_ports:
-                    self.port_name = mtc_ports[-1]
-                elif ports:
-                    self.port_name = ports[-1]
+                matches = [p for p in ports if port in p]
+                if matches:
+                    self.port_name = matches[0]
+                    Logger.info(f'MIDI port "{port}" matched as "{self.port_name}"')
                 else:
-                    # HEADLESS/CLOUD: no ports yet; caller must retry after the
-                    # virtual MIDI sender port has been created.
-                    self.port_name = None
-                    Logger.warning('No MIDI input ports available')
-        else:
+                    Logger.warning(f'MIDI port "{port}" not found, auto-detecting...')
+                    port = None  # fall through to auto-detect
+
+        if port is None:
+            # Prefer ports whose name contains "mtc" (e.g. MtcMaster:MTCPort)
             mtc_ports = [s for s in ports if "mtc" in s.lower()]
             if mtc_ports:
                 self.port_name = mtc_ports[-1]
             elif ports:
                 self.port_name = ports[-1]
             else:
+                # HEADLESS/CLOUD: no ports yet; caller must retry after the
+                # virtual MIDI sender port has been created.
                 self.port_name = None
                 Logger.warning('No MIDI input ports available')
         if self.port_name:

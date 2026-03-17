@@ -141,7 +141,10 @@ class AsyncCommsThread(Thread):
         """
         Logger.info(f'Starting asyncio communications in {self.name}')
         tasks = self.create_all_tasks()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                Logger.error(f'{self.name} task {i} failed with {type(result).__name__}: {result}')
         Logger.info(f'{self.name} asyncio communications finished')
 
     def create_all_tasks(self) -> List[asyncio.Task]:

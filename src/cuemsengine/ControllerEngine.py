@@ -58,13 +58,13 @@ class ControllerEngine(BaseEngine):
     def start(self):
         self.create_timecode()
         self.set_comms()
-        # Always re-detect after create_timecode(): that call creates the
-        # MtcMaster ALSA virtual port, changing the available port list.
-        # Re-running with the configured port name (via substring match)
-        # ensures we bind to the correct port even when the initial detection
-        # picked a wrong fallback (e.g. rtpmidid:Announcements).
+        # Always re-detect after create_timecode(): the MtcMaster sender port
+        # ("MtcMaster:MTCPort") only appears in the ALSA port list AFTER the
+        # sender is created.  Connecting the listener directly to that port is
+        # the most reliable loopback path; any earlier detection would have
+        # picked a wrong/fallback port (e.g. rtpmidid:Announcements).
         Logger.info('Re-detecting MIDI port after MTC sender creation...')
-        self.mtc_listener._MtcListener__open_port(self.mtc_port)
+        self.mtc_listener._MtcListener__open_port(None)
         self.mtc_listener.start()
         super().start()
 
@@ -100,7 +100,10 @@ class ControllerEngine(BaseEngine):
             websocket_osc_port = 9190  # Take port 9190 for WebSocket OSC
             node_id = 'controller'
         
-        nng_hub_address = f"tcp://{osc_hub_host}:{nng_hub_port}"
+        # LISTENER binds to all interfaces (0.0.0.0) so it does not depend on the
+        # avahi link-local address (169.254.x.x) being assigned before startup.
+        # NodeEngine (DIALER) still targets the specific controller_url IP.
+        nng_hub_address = f"tcp://0.0.0.0:{nng_hub_port}"
         
         Logger.info(f'NNG Hub address: {nng_hub_address}')
         
