@@ -44,8 +44,7 @@ class ControllerEngine(BaseEngine):
         # Must be set before super().__init__() because BaseEngine sets
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
-        self._last_timecode_broadcast = 0.0
-        self._timecode_broadcast_interval = 1  # 2 Hz max for timecode , for 20mhz set it to 0.05
+        self._last_timecode_second: int = -1  # last whole-second value broadcast to UI
         # Per-cue status dict: maps cue uuid → int status value.
         # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
         self.cue_status: dict[str, int] = {}
@@ -551,17 +550,17 @@ class ControllerEngine(BaseEngine):
         if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
             self.communications_thread.broadcast_osc(f'/engine/status/{key}', value)
 
-    def on_timecode_change(self, value: str) -> None:
-        """Handle timecode changes - broadcast to UI (throttled to 20 Hz)."""
-        now = time.monotonic()
-        if now - self._last_timecode_broadcast >= self._timecode_broadcast_interval:
-            self._last_timecode_broadcast = now
-            try:
-                tc_int = int(value) if value is not None else 0
-                self._broadcast_status('timecode', tc_int)
-                Logger.debug(f'Timecode broadcast {tc_int}')
-            except (TypeError, ValueError):
-                pass
+    def on_timecode_change(self, value) -> None:
+        """Broadcast timecode to UI as integer ms (whole seconds only), once per second."""
+        try:
+            ms = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            return
+        current_second = ms // 1000
+        if current_second != self._last_timecode_second:
+            self._last_timecode_second = current_second
+            self._broadcast_status('timecode', current_second * 1000)
+            Logger.debug(f'Timecode broadcast {current_second}s')
 
     #########################
     # Project management
@@ -696,6 +695,7 @@ class ControllerEngine(BaseEngine):
 
         self.go_offset = None
         self.stop_timecode()
+        self._last_timecode_second = -1
         self._broadcast_status('timecode', 0)
 
         self.set_status('running', "no")
