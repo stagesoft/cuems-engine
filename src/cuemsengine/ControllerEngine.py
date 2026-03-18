@@ -45,7 +45,7 @@ class ControllerEngine(BaseEngine):
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
         self._last_timecode_broadcast = 0.0
-        self._timecode_broadcast_interval = 0.5  # 2 Hz max for timecode , for 20mhz set it to 0.05
+        self._timecode_broadcast_interval = 1  # 2 Hz max for timecode , for 20mhz set it to 0.05
         # Per-cue status dict: maps cue uuid → int status value.
         # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
         self.cue_status: dict[str, int] = {}
@@ -312,6 +312,14 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'Cue operation received: {operation}')
         cue_id = operation.data.get('id') if operation.data else None
 
+        # Drop operations for cues not belonging to the current project.
+        # This prevents stale REMOVE/ADD notifications from the NodeEngine
+        # (sent when it disarms the previous project) from being broadcast
+        # to the UI as unknown UUIDs.
+        if cue_id and cue_id not in self.cue_status:
+            Logger.debug(f'Ignoring cue operation for unknown/stale cue_id {cue_id} (action={operation.action})')
+            return
+
         if operation.action == ActionType.ADD:
             # Cue started playing: mark as playing (1) and broadcast immediately.
             if cue_id:
@@ -325,9 +333,15 @@ class ControllerEngine(BaseEngine):
 
         elif operation.action == ActionType.REMOVE:
             # Cue finished playing: mark as played (100) and broadcast immediately.
+            # Only transition to 100 if the cue was actually playing (status == 1).
+            # REMOVEs that arrive while status is 0 (e.g. NodeEngine disarming the
+            # previous project after a reload) are stale and must be silently dropped.
             if cue_id:
-                self.cue_status[cue_id] = 100
-                self._broadcast_cue_status(cue_id, 100, force=True)
+                if self.cue_status.get(cue_id) == 1:
+                    self.cue_status[cue_id] = 100
+                    self._broadcast_cue_status(cue_id, 100, force=True)
+                else:
+                    Logger.debug(f'Ignoring stale REMOVE for cue {cue_id} (status={self.cue_status.get(cue_id)}, expected 1)')
             self.status.remove_currentcue(operation.data['id'])
             Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
 

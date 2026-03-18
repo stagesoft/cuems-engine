@@ -271,12 +271,6 @@ class CueHandler:
 
             run_cue(cue, mtc, frozen_mtc_ms)
 
-            # Notify controller that cue finished playing (status → 100).
-            try:
-                self.communications_thread.remove_cue(cue.id, timeout=0.1)
-            except Exception:
-                pass  # Ignore - this is just for status tracking
-
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
 
@@ -290,6 +284,16 @@ class CueHandler:
         if getattr(cue, '_go_generation', 0) != go_gen:
             Logger.info(f'Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup')
             return
+
+        # Notify the controller that the cue finished playing (status → 100).
+        # Done here (after loop_cue) so the status only changes to 100 when the
+        # cue has actually completed its full duration, not just when playback started.
+        # Skipped if the cue was stopped (controller's stop_script already resets to 0).
+        if cue._local and not getattr(cue, '_stop_requested', False):
+            try:
+                self.communications_thread.remove_cue(cue.id, timeout=0.1)
+            except Exception:
+                pass
 
         if cue.post_go == 'go_at_end' and cue._target_object:
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
