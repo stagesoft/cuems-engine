@@ -58,7 +58,7 @@ class VideoOutput:
         self.y = kwargs.get('y', 0)
         self.width = kwargs.get('width', 1920)
         self.height = kwargs.get('height', 1080)
-        self.resolution = kwargs.get('resolution', "native")
+        self.resolution = kwargs.get('resolution', "1080p")
         self.canvas_region = kwargs.get('canvas_region', {
             'x': self.x, 'y': self.y,
             'width': self.width, 'height': self.height,
@@ -78,12 +78,12 @@ class VideoOutput:
         return (output_cx - canvas_cx, output_cy - canvas_cy)
 
     def apply_config(self, video_client: VideoClient) -> None:
-        """Applies the display configuration to the videocomposer."""
-        video_client.set_value('/videocomposer/display/resolution_mode', self.resolution)
-        self.set_region(video_client)
+        """No-op: videocomposer reads display config from display.conf at startup.
 
-    def set_region(self, video_client: VideoClient) -> None:
-        """Sets the display region via pyossia."""
-        if None in [self.x, self.y, self.width, self.height]:
-            return
-        video_client.set_value('/videocomposer/display/region', [self.mapped_to, self.x, self.y, self.width, self.height])
+        cuems-generate-display-conf (ExecStartPre) generates display.conf from
+        default_mappings.xml — the single source of truth for connector→region
+        mappings.  The engine must NOT send /display/region or resolution_mode
+        because that caused the MultiOutputRenderer to reconfigure (and sometimes
+        switch to native 4K resolution, corrupting the canvas layout).
+        """
+        Logger.info(f'VideoOutput {self.mapped_to}: region ({self.x},{self.y} {self.width}x{self.height})')
