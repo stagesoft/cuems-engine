@@ -71,9 +71,17 @@ def start_audio_output(
     )
     player.start(timeout=timeout)
 
-    client = AudioClient(
-        player_port = port,
-        name = f'audioplayer-{uuid}'
-    )
+    try:
+        client = AudioClient(
+            player_port = port,
+            name = f'audioplayer-{uuid}'
+        )
+    except Exception:
+        # OSC client creation failed (e.g. port conflict); kill the subprocess so it doesn't linger
+        try:
+            player.kill()
+        except Exception:
+            pass
+        raise
 
     return player, client

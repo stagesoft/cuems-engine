@@ -178,6 +178,11 @@ class PlayerHandler:
                 Logger.debug(f'Sent /quit command to audio player for cue {cue_id}')
             except Exception as e:
                 Logger.warning(f'Failed to send /quit to audio player: {e}')
+            
+            # Free the random OSC local port back into the pool
+            local_port = getattr(osc_client, 'local_port', None)
+            if local_port is not None:
+                PORT_HANDLER.remove_random_port(local_port)
         
         # Then kill the subprocess forcefully
         try:
