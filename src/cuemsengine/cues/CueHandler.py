@@ -1,16 +1,13 @@
-from threading import Thread, Lock
+from threading import Lock, Thread
 from time import sleep
 
-from cuemsutils.cues import VideoCue, AudioCue
+from cuemsutils.cues import ActionCue, AudioCue, VideoCue
 from cuemsutils.cues.Cue import Cue
-from cuemsutils.log import logged, Logger
+from cuemsutils.log import Logger, logged
 
 from ..comms.NodeCommunications import NodeCommunications
-from .run_cue import run_cue
-from .arm_cue import arm_cue
-from .loop_cue import loop_cue
 from ..osc.OssiaClient import PlayerClient
-from ..players import VideoPlayer, VideoClient
+from ..players import VideoClient, VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 
@@ -44,29 +41,29 @@ class CueHandler:
             cls._instance._lock = Lock()
         return cls._instance
 
-
     # ---------------------------
     # Communications To Controller
     # ---------------------------
     def set_nng_comms(self, hub_address: str, node_id: str):
         """Set the communications infrastructure"""
         from time import sleep
-        
+
         Logger.info(f"Starting communications for Node {node_id}")
         Logger.info(f"NNG Hub address: {hub_address}")
         self.communications_thread = NodeCommunications(
-            hub_address=hub_address,
-            node_id=node_id
+            hub_address=hub_address, node_id=node_id
         )
         self.communications_thread.start()
-        
+
         # Wait for NNG thread to initialize (prevents race condition in nni_random)
         max_wait = 5.0  # seconds
         wait_interval = 0.1
         waited = 0.0
         while waited < max_wait:
-            if (self.communications_thread.is_alive() and 
-                self.communications_thread.event_loop is not None):
+            if (
+                self.communications_thread.is_alive()
+                and self.communications_thread.event_loop is not None
+            ):
                 Logger.info(f"NNG communications thread ready after {waited:.1f}s")
                 break
             sleep(wait_interval)
@@ -116,7 +113,6 @@ class CueHandler:
             self._armed_cues = []
             self._armed_cues_set.clear()
 
-
     # ---------------------------
     # Cue Management
     # ---------------------------
@@ -127,7 +123,7 @@ class CueHandler:
             return False
         with self._lock:
             found = cue in self._armed_cues
-        if hasattr(cue, 'loaded') and cue.loaded:
+        if hasattr(cue, "loaded") and cue.loaded:
             if not cue.enabled:
                 _ = self.disarm(cue)
             return False
@@ -135,7 +131,7 @@ class CueHandler:
             if not found:
                 self.add_armed_cue(cue)
             return True
-        
+
         if cue._local and cue.enabled:
             Logger.info(f"Arming {type(cue).__name__} {cue.id}")
             arm_cue(cue)
@@ -145,39 +141,45 @@ class CueHandler:
             if isinstance(cue, AudioCue):
                 # Non-blocking NNG notification (fire-and-forget)
                 try:
-                    self.communications_thread.add_player(f'audioplayer_{cue.id}', None, timeout=0.1)
+                    self.communications_thread.add_player(
+                        f"audioplayer_{cue.id}", None, timeout=0.1
+                    )
                 except Exception:
                     pass  # Ignore - NNG is for distributed nodes
 
-        if cue.post_go == 'go' and cue._target_object:
+        if cue.post_go == "go" and cue._target_object:
             self.arm(cue._target_object, init)
 
         return True
 
     def disarm(self, cue: Cue) -> bool:
         """Disarms a cue by removing it from the armed_cues list."""
-        if hasattr(cue, 'loaded') and cue.loaded:
+        if hasattr(cue, "loaded") and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
             try:
                 if isinstance(cue, AudioCue):
-                    self.communications_thread.remove_player(f'audioplayer_{cue.id}', timeout=0.1)
+                    self.communications_thread.remove_player(
+                        f"audioplayer_{cue.id}", timeout=0.1
+                    )
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
             except Exception:
                 pass
 
             if isinstance(cue, VideoCue):
-                layer_ids = getattr(cue, '_layer_ids', [])
-                client = getattr(cue, '_osc', None)
+                layer_ids = getattr(cue, "_layer_ids", [])
+                client = getattr(cue, "_osc", None)
                 if client and layer_ids:
                     for layer_id in layer_ids:
                         try:
-                            client.set_value(f'/videocomposer/layer/{layer_id}/visible', 0)
-                            client.set_value('/videocomposer/layer/unload', layer_id)
+                            client.set_value(
+                                f"/videocomposer/layer/{layer_id}/visible", 0
+                            )
+                            client.set_value("/videocomposer/layer/unload", layer_id)
                             client.remove_layer_endpoints(layer_id)
                             PLAYER_HANDLER.deregister_layer(layer_id)
                         except Exception as e:
-                            Logger.debug(f'Error disarming video layer {layer_id}: {e}')
+                            Logger.debug(f"Error disarming video layer {layer_id}: {e}")
                 cue._layer_ids = []
 
             PLAYER_HANDLER.remove_cue_player(cue)
@@ -187,7 +189,7 @@ class CueHandler:
 
     def stop_all_cues(self) -> None:
         """Signal all armed cues to stop their playback loops.
-        
+
         Also bumps each cue's generation counter so that any still-running
         go_threaded threads will see a mismatch and skip post-loop cleanup
         (disarm), which would otherwise undo the re-arm that follows.
@@ -195,7 +197,7 @@ class CueHandler:
         with self._lock:
             for cue in self._armed_cues:
                 cue._stop_requested = True
-                cue._go_generation = getattr(cue, '_go_generation', 0) + 1
+                cue._go_generation = getattr(cue, "_go_generation", 0) + 1
 
     def disarm_all(self) -> None:
         """Disarms all cues."""
@@ -217,37 +219,39 @@ class CueHandler:
     @logged
     def go(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None) -> Thread:
         """Starts a cue in a thread.
-        
+
         Args:
             cue: The cue to start
             mtc: The MTC listener
             frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained cues
         """
-        Logger.info(f'GO command received. Starting cue {cue.id}')
-        if not hasattr(cue, 'loaded') or not cue.loaded:
-            raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
+        Logger.info(f"GO command received. Starting cue {cue.id}")
+        if not hasattr(cue, "loaded") or not cue.loaded:
+            raise Exception(f"{cue.__class__.__name__} {cue.id} not loaded to go")
 
         cue._stop_requested = False
-        go_gen = getattr(cue, '_go_generation', 0) + 1
+        go_gen = getattr(cue, "_go_generation", 0) + 1
         cue._go_generation = go_gen
 
         thread = Thread(
-            name=f'GO:{cue.__class__.__name__}:{cue.id}',
+            name=f"GO:{cue.__class__.__name__}:{cue.id}",
             target=self.go_threaded,
             args=[cue, mtc, frozen_mtc_ms, go_gen],
-            daemon=True
+            daemon=True,
         )
         thread.start()
 
         # Arm next target if needed
         if isinstance(cue._target_object, Cue):
-            if hasattr(cue._target_object, 'loaded') and not cue._target_object.loaded:
+            if hasattr(cue._target_object, "loaded") and not cue._target_object.loaded:
                 self.arm(cue._target_object)
         return thread
 
-    def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0):
+    def go_threaded(
+        self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0
+    ):
         """Runs a cue based on its properties.
-        
+
         Args:
             cue: The cue to run
             mtc: The MTC listener (for live MTC)
@@ -258,14 +262,16 @@ class CueHandler:
         """
         if cue.prewait > 0:
             sleep(cue.prewait.milliseconds / 1000)
-        
+
         if frozen_mtc_ms is None:
             frozen_mtc_ms = float(mtc.main_tc.milliseconds)
-            Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
+            Logger.debug(f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms")
 
         if cue._local:
             try:
-                self.communications_thread.add_cue(cue.id, str(frozen_mtc_ms), timeout=0.1)
+                self.communications_thread.add_cue(
+                    cue.id, str(frozen_mtc_ms), timeout=0.1
+                )
             except Exception:
                 pass
 
@@ -274,46 +280,49 @@ class CueHandler:
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
 
-        if cue.post_go == 'go' and cue._target_object:
-            Logger.info(f'Running post go for next cue:{cue.target}')
+        if cue.post_go == "go" and cue._target_object:
+            Logger.info(f"Running post go for next cue:{cue.target}")
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
-        Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
+        Logger.info(f"Going to loop for {cue.__class__.__name__}:{cue.id}")
         loop_cue(cue, mtc)
 
-        if getattr(cue, '_go_generation', 0) != go_gen:
-            Logger.info(f'Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup')
+        if getattr(cue, "_go_generation", 0) != go_gen:
+            Logger.info(
+                f"Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup"
+            )
             return
 
         # Notify the controller that the cue finished playing (status → 100).
         # Done here (after loop_cue) so the status only changes to 100 when the
         # cue has actually completed its full duration, not just when playback started.
         # Skipped if the cue was stopped (controller's stop_script already resets to 0).
-        if cue._local and not getattr(cue, '_stop_requested', False):
+        if cue._local and not getattr(cue, "_stop_requested", False):
             try:
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
             except Exception:
                 pass
 
-        if cue.post_go == 'go_at_end' and cue._target_object:
-            Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
+        if cue.post_go == "go_at_end" and cue._target_object:
+            Logger.info(f"Running go at end for {cue.__class__.__name__}:{cue.id}")
             go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
 
-        if cue.post_go == 'go_at_end':
+        if cue.post_go == "go_at_end":
             self.wait_for_cue(go_at_end_thread)
 
-        if cue.post_go == 'go' and cue._target_object:
+        if cue.post_go == "go" and cue._target_object:
             self.wait_for_cue(post_go_thread)
 
     def wait_for_cue(self, thread: Thread) -> None:
         """Waits for a cue to finish."""
-        Logger.info(f'Waiting for {thread.name} to finish')
+        Logger.info(f"Waiting for {thread.name} to finish")
         while thread.is_alive():
             sleep(1)
         thread.join()
-        Logger.info(f'{thread.name} finished')
+        Logger.info(f"{thread.name} finished")
+
 
     # ---------------------------
     # OSCQuery Message Routing
@@ -331,13 +340,13 @@ class CueHandler:
             Logger.warning("Empty audio path parts")
             return
 
-        if path_parts[0] == 'mixer':
+        if path_parts[0] == "mixer":
             # Route to audio mixer: ['mixer', '<output_index>', '<channel>', 'volume']
             # → /audiomixer/0_mixer/<channel>
             if len(path_parts) >= 3:
                 output_index = path_parts[1]
                 channel = path_parts[2]
-                mixer_cmd = f'/audiomixer/{output_index}_mixer/{channel}'
+                mixer_cmd = f"/audiomixer/{output_index}_mixer/{channel}"
                 mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
                 if mixer_client:
                     Logger.debug(f"Routing audio mixer: {mixer_cmd} = {value}")
@@ -347,19 +356,21 @@ class CueHandler:
             else:
                 Logger.warning(f"Invalid mixer path: {path_parts}")
 
-        elif path_parts[0] == 'cue':
+        elif path_parts[0] == "cue":
             # Route to cue player: ['cue', '<uuid>', '<channel>', 'volume']
             # → /vol<channel> on the armed cue's OSC client
             if len(path_parts) >= 3:
                 cue_uuid = path_parts[1]
                 channel = path_parts[2]
-                audio_cmd = f'/vol{channel}'
+                audio_cmd = f"/vol{channel}"
                 cue = self.get_armed_cue_by_id(cue_uuid)
-                if cue and hasattr(cue, '_osc') and cue._osc:
+                if cue and hasattr(cue, "_osc") and cue._osc:
                     # UI uses 0-100 percentage, audioplayer expects 0.0-1.0 gain
                     # Convert and clamp to valid range
                     vol_value = max(0.0, min(1.0, float(value) / 100.0))
-                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {value}% -> {vol_value}")
+                    Logger.debug(
+                        f"Routing audio cue {cue_uuid}: {audio_cmd} = {value}% -> {vol_value}"
+                    )
                     cue._osc.set_value(audio_cmd, vol_value)
                 else:
                     Logger.warning(f"Cue {cue_uuid} not found or has no OSC client")
@@ -380,9 +391,9 @@ class CueHandler:
             return
 
         # Build DMX command from path: find 'mixer' and use everything after it
-        if 'mixer' in path_parts:
-            mixer_index = path_parts.index('mixer') + 1  # +1 to skip 'mixer' keyword
-            dmx_cmd = '/' + '/'.join(path_parts[mixer_index:])
+        if "mixer" in path_parts:
+            mixer_index = path_parts.index("mixer") + 1  # +1 to skip 'mixer' keyword
+            dmx_cmd = "/" + "/".join(path_parts[mixer_index:])
             dmx_client = PLAYER_HANDLER.get_dmx_player_client()
             if dmx_client:
                 Logger.debug(f"Routing DMX: {dmx_cmd} = {value}")
