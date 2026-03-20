@@ -5,11 +5,11 @@
 
 ## Summary
 
-Implement executable `ActionCue` behavior so received action cues affect cue state and
-project runtime state through a single orchestration domain in `CueHandler`. The plan
+Implement executable `ActionCue` behavior so received action cues affect cue state
+within the running show through a single orchestration domain in `CueHandler`. The plan
 keeps cue execution routing centralized, provides deterministic handling for unsupported
-actions, and adds automated verification for cue-level and project-level transitions.
-Supported cue-level actions explicitly include `fade-in`, `fade-out`, and `go-to`.
+actions, and adds automated verification for cue-level transitions. Supported cue-level
+actions explicitly include `fade-in`, `fade-out`, and `go-to`.
 
 ## Technical Context
 
@@ -84,8 +84,7 @@ the existing cue orchestration path, with tests added under `tests/` in current 
 ## Phase 0 Research Outcomes
 
 See `research.md`. All technical unknowns were resolved: action handling remains in cue
-domain, project-level action propagation uses existing engine state/control interfaces,
-and unsupported actions fail safely with explicit logging.
+domain and unsupported actions fail safely with explicit logging.
 
 ## Phase 1 Design Outputs
 

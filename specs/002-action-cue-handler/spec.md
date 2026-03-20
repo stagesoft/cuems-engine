@@ -24,30 +24,13 @@ and verify the target cue state changes as expected without affecting unrelated 
    cue is received, **Then** the target cue begins playback and its runtime state updates.
 2. **Given** a running target cue, **When** a stop or disable action is received,
    **Then** the target cue stops or becomes inactive for subsequent playback.
+3. **Given** a loaded project, **When** any action from FR-002a (`play`, `pause`, `stop`,
+   `enable`, `disable`, `fade-in`, `fade-out`, `go-to`) targets a cue, **Then** the
+   expected state transition is applied and verifiable.
 
 ---
 
-### User Story 2 - Execute project-level actions (Priority: P2)
-
-As a show operator, I need project-wide actions to affect the running show state so I
-can pause and resume the full show flow safely.
-
-**Why this priority**: Project-level actions are critical for operational control but are
-secondary to basic cue action execution.
-
-**Independent Test**: Trigger each supported project-level action while cues are active
-and verify global show state transitions are applied and observable.
-
-**Acceptance Scenarios**:
-
-1. **Given** an active running show, **When** a project pause action is received,
-   **Then** the show enters a paused state and cue progression stops until resumed.
-2. **Given** a paused running show, **When** a project resume action is received,
-   **Then** playback progression continues from the paused state.
-
----
-
-### User Story 3 - Handle unsupported or invalid actions safely (Priority: P3)
+### User Story 2 - Handle unsupported or invalid actions safely (Priority: P2)
 
 As an operator, I need invalid action commands to fail safely so the running show
 remains stable and diagnosable.
@@ -67,7 +50,7 @@ logs a clear failure and leaves current valid playback state unchanged.
 
 ### Edge Cases
 
-- Action arrives before its target cue or project context is available.
+- Action arrives before its target cue is available.
 - Multiple action cues affecting the same target arrive in close succession.
 - Action is received for a target that is already in the desired state.
 - Action references a cue from a no-longer-active project.
@@ -82,15 +65,13 @@ logs a clear failure and leaves current valid playback state unchanged.
   changes are applied to the currently running show.
 - **FR-002a**: Supported cue-level actions MUST include `play`, `pause`, `stop`,
   `enable`, `disable`, `fade-in`, `fade-out`, and `go-to`.
-- **FR-003**: System MUST execute supported project-level actions so global show state
-  transitions are applied to the currently running project.
-- **FR-004**: System MUST resolve action targets against the active project context and
+- **FR-003**: System MUST resolve action targets against the active project context and
   MUST reject actions with invalid or unavailable targets.
-- **FR-005**: System MUST apply actions idempotently when possible (no harmful side
+- **FR-004**: System MUST apply actions idempotently when possible (no harmful side
   effects when repeating equivalent commands).
-- **FR-006**: System MUST record action processing outcomes (applied, ignored,
+- **FR-005**: System MUST record action processing outcomes (applied, ignored,
   rejected, failed) with enough detail for operator troubleshooting.
-- **FR-007**: System MUST leave unrelated cues and project state unchanged when
+- **FR-006**: System MUST leave unrelated cues and project state unchanged when
   processing an action that targets a specific cue or transition.
 
 ### Non-Functional Requirements *(mandatory)*
@@ -103,15 +84,15 @@ logs a clear failure and leaves current valid playback state unchanged.
   workflow.
 - **NFR-003 (UX Consistency)**: Action outcomes and error messaging MUST be
   consistent with existing show-control terminology and status semantics.
-- **NFR-004 (Performance)**: Action processing MUST complete quickly enough for live
-  operations and MUST not introduce observable playback jitter.
+- **NFR-004 (Performance)**: Action processing MUST reflect state changes within
+  1 second for at least 95% of commands under normal show load (SC-004) and MUST
+  not introduce observable playback jitter.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Action Command**: A received instruction describing action type, target, and timing
   intent for live show control.
-- **Action Target**: The cue or project-level state object that the action command
-  intends to modify.
+- **Action Target**: The cue state object that the action command intends to modify.
 - **Show Runtime State**: The current in-memory state of running cues and project
   playback mode used to apply and validate actions.
 
@@ -119,9 +100,8 @@ logs a clear failure and leaves current valid playback state unchanged.
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of supported action types produce the expected state transition in
-  acceptance tests for cue-level and project-level flows, including `fade-in`,
-  `fade-out`, and `go-to`.
+- **SC-001**: 100% of supported cue-level action types produce the expected state
+  transition in acceptance tests, including `fade-in`, `fade-out`, and `go-to`.
 - **SC-002**: 100% of invalid or unsupported actions are safely rejected without
   unintended changes to unrelated running cues.
 - **SC-003**: Action results (success or failure) are visible in operational logs for
@@ -136,5 +116,4 @@ logs a clear failure and leaves current valid playback state unchanged.
 - The active project is already loaded before action cues are processed.
 - A finite set of action types is defined by the cue data contract and treated as
   supported for this feature.
-- Existing operator workflows for running, pausing, and resuming shows remain the
-  baseline behavior model.
+- Existing operator workflows for cue control remain the baseline behavior model.

@@ -11,19 +11,7 @@
   - Keep action branching only in `run_cue`: rejected because behavior remains fragmented.
   - Move logic to `BaseEngine`: rejected because it breaks cue-domain separation.
 
-## Decision 2: Distinguish cue-level and project-level action targets
-
-- **Decision**: Define explicit handling paths:
-  - cue-level actions operate on `_action_target_object`
-  - project-level actions operate on engine/project runtime state through existing
-    runtime interfaces
-- **Rationale**: Prevents ambiguity when an action has no cue target and allows
-  predictable behavior for pause/resume project actions.
-- **Alternatives considered**:
-  - Treat all actions as cue-targeted: rejected because project actions need global scope.
-  - Infer scope implicitly from target type only: rejected due to inconsistent payloads.
-
-## Decision 2a: Supported cue-level action set
+## Decision 2: Supported cue-level action set
 
 - **Decision**: Supported cue-level actions include `play`, `pause`, `stop`, `enable`,
   `disable`, `fade-in`, `fade-out`, and `go-to`.
@@ -58,7 +46,6 @@
 - **Decision**: Add targeted Poetry-managed `pytest` coverage for:
   - supported cue-level actions
   - `fade-in`, `fade-out`, and `go-to` behavior
-  - supported project-level actions
   - invalid/unsupported actions
   - non-target side-effect protection
 - **Rationale**: Constitution requires testing evidence for behavior changes and

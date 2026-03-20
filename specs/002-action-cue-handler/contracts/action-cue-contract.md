@@ -18,13 +18,12 @@ received actions deterministically affect the running show project.
 
 - Cue-level: `play`, `pause`, `stop`, `enable`, `disable`, `fade-in`, `fade-out`,
   `go-to`
-- Project-level: `pause_project`, `resume_project`
 
 ## Processing Contract
 
 1. Action processing is initiated from cue execution flow and delegated to
    `CueHandler` orchestration.
-2. `CueHandler` resolves scope (cue-level vs project-level) and validates target.
+2. `CueHandler` validates action type and target.
 3. Execution returns a result status for each command.
 4. Unsupported or invalid actions are rejected safely with no unrelated state changes.
 
@@ -39,7 +38,7 @@ Each processed action produces one outcome:
 
 ## Error and Safety Guarantees
 
-- Unknown action types MUST NOT alter cue/project state.
+- Unknown action types MUST NOT alter cue state.
 - Missing targets for cue-level actions MUST NOT alter unrelated cues.
 - Failures MUST emit operator-diagnosable log messages.
 
