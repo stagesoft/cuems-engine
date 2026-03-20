@@ -19,6 +19,12 @@ When the engine is installed under `/usr/lib/cuems` (e.g. via the Debian package
 
 This replaces `/usr/lib/cuems/lib/python3.11/site-packages/cuemsengine` with a symlink to `src/cuemsengine`. Restart the controller-engine and node-engine services (or processes) to pick up changes. To restore the installed package, reinstall the cuems-engine deb.
 
+## Engineering governance
+
+Project principles for code quality, testing discipline, UX consistency, and performance
+requirements are defined in `.specify/memory/constitution.md`. Planning and delivery
+artifacts MUST satisfy those gates before merge.
+
 
 ## Release notes
 
