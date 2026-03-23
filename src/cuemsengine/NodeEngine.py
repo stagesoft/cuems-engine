@@ -250,6 +250,7 @@ class NodeEngine(BaseEngine):
             'pause': None,
             'resetall': None,
             'stop': self.stop_playback,
+            'setnextcue': self.set_next_cue,
             'test': None,
             'unload': None,
             'update': None,
@@ -525,6 +526,9 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f'Could not notify Controller of armed_ready: {e}')
 
+        # Broadcast initial nextcue to UI
+        self._broadcast_nextcue()
+
         return True
 
     def deploy_project(self, project):
@@ -580,6 +584,31 @@ class NodeEngine(BaseEngine):
                 Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
 
     #########################
+    # Nextcue
+    #########################
+    def _broadcast_nextcue(self):
+        """Send the current next_cue_pointer UUID to the Controller via NNG."""
+        cue_id = self.next_cue_pointer.id if self.next_cue_pointer else ""
+        try:
+            CUE_HANDLER.communications_thread.update_nextcue(cue_id, timeout=0.1)
+            Logger.debug(f'Broadcast nextcue: {cue_id or "(none)"}')
+        except Exception as e:
+            Logger.warning(f'Could not broadcast nextcue: {e}')
+
+    def set_next_cue(self, value):
+        """Handle setnextcue command from the UI — override next_cue_pointer."""
+        if not self.script:
+            Logger.warning('No script loaded, cannot set next cue.')
+            return
+        cue = self.script.find(value)
+        if cue:
+            self.next_cue_pointer = cue
+            self._broadcast_nextcue()
+            Logger.info(f'Next cue overridden by UI: {value}')
+        else:
+            Logger.warning(f'setnextcue: cue {value} not found in script')
+
+    #########################
     # Script logic
     #########################
     def ready_script(self):
@@ -600,6 +629,11 @@ class NodeEngine(BaseEngine):
             mixer_client.reset_volumes()
         
         self.initial_cuelist_process()
+
+        # Set initial nextcue to the first cue in the script
+        if self.script.cuelist.contents:
+            self.next_cue_pointer = self.script.cuelist.contents[0]
+
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
     def go_script(self, value):
@@ -648,13 +682,10 @@ class NodeEngine(BaseEngine):
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         self.go_offset = self.mtc_listener.main_tc.milliseconds
 
-        # OSCQuery status notification
-        if self.next_cue_pointer:
-            next_cue = self.next_cue_pointer.id
-        else:
-            next_cue = ""
+        # Broadcast nextcue to UI
+        self._broadcast_nextcue()
 
-        Logger.info(f'Cue {cue_to_go.id} started. Next cue: {next_cue if next_cue else "none"}')
+        Logger.info(f'Cue {cue_to_go.id} started. Next cue: {self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
 
     def stop_playback(self, value=None):
         """Stop playback, full cleanup, then re-arm so GO is available again.
@@ -700,6 +731,9 @@ class NodeEngine(BaseEngine):
                 Logger.debug('Notified Controller that re-arm is complete')
             except Exception as e:
                 Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+
+            # Broadcast nextcue (reset to first cue after stop)
+            self._broadcast_nextcue()
         else:
             Logger.info('Playback stopped (no script loaded).')
         
