@@ -399,8 +399,26 @@ class PlayerHandler:
         with self._lock:
             self._loaded_layer_ids.discard(layer_id)
 
+    def reset_videocomposer(self):
+        """Send atomic reset to videocomposer (removes all layers + resets master)."""
+        Logger.debug('Sending atomic reset to videocomposer')
+        if self._video_client is not None:
+            try:
+                self._video_client.set_value('/videocomposer/reset', None)
+            except Exception as e:
+                Logger.debug(f'Error sending reset to videocomposer: {e}')
+            # Remove all layer endpoints from the OSC client
+            with self._lock:
+                for layer_id in list(self._loaded_layer_ids):
+                    try:
+                        self._video_client.remove_layer_endpoints(layer_id)
+                    except Exception as e:
+                        Logger.debug(f'Error removing layer endpoints {layer_id}: {e}')
+        with self._lock:
+            self._loaded_layer_ids.clear()
+
     def reset_video_layers(self):
-        """Unload all tracked video layers (video blackout)."""
+        """Unload all tracked video layers (video blackout). Legacy per-layer method."""
         Logger.debug('Resetting video layers')
         with self._lock:
             if self._video_client is None:

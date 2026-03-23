@@ -196,8 +196,8 @@ class NodeEngine(BaseEngine):
 
     def unload_video_devs(self):
         try:
-            PLAYER_HANDLER.reset_video_layers()
-            Logger.info('Video layers unloaded successfully')
+            PLAYER_HANDLER.reset_videocomposer()
+            Logger.info('Videocomposer reset successfully')
         except Exception as e:
             Logger.exception(e)
 

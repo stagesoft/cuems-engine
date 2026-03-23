@@ -45,6 +45,7 @@ OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/display/warp' : [ValueType.List, None], # [output_name, mesh_path]
     '/videocomposer/display/save' : [ValueType.String, None], # [file_path]
     '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
+    '/videocomposer/reset' : [ValueType.Impulse, None],  # Remove all layers, cancel loads, reset master
     '/videocomposer/layer/load' : [ValueType.List, None, None, False], # [file_path, layer_id] — no RepetitionFilter (command endpoint)
     '/videocomposer/layer/unload' : [ValueType.String, None, None, False], # [layer_id] — no RepetitionFilter (command endpoint)
     '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
