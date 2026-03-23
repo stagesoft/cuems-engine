@@ -117,19 +117,22 @@ class AudioMixer(Player):
         Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
         
         # First, disconnect any existing connections from player outputs
-        Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
-        channel_0_connections = self.conn_man.get_connections(channel_0_output)
-        for connection in channel_0_connections:
-            Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
-            self.conn_man.disconnect_by_name(channel_0_output, connection)
-        
-        if is_stereo:
+        # Guard with port_exists to avoid sending disconnect requests for
+        # ports that were destroyed by a concurrent /quit.
+        if self.conn_man.port_exists(channel_0_output):
+            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+            channel_0_connections = self.conn_man.get_connections(channel_0_output)
+            for connection in channel_0_connections:
+                Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
+                self.conn_man.disconnect_by_name(channel_0_output, connection)
+
+        if is_stereo and self.conn_man.port_exists(channel_1_output):
             Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
             channel_1_connections = self.conn_man.get_connections(channel_1_output)
             for connection in channel_1_connections:
                 Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
-        
+
         # Connect to mixer inputs
         # For mono: connect output_0 to both input_1 and input_2 (if available)
         # For stereo: connect output_0 → input_1, output_1 → input_2
@@ -206,12 +209,14 @@ class AudioMixer(Player):
         Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
         
         # First, disconnect any existing connections from player outputs
-        Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
-        channel_0_connections = self.conn_man.get_connections(channel_0_output)
-        for connection in channel_0_connections:
-            self.conn_man.disconnect_by_name(channel_0_output, connection)
-        
-        if is_stereo:
+        # Guard with port_exists to avoid operating on destroyed ports.
+        if self.conn_man.port_exists(channel_0_output):
+            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+            channel_0_connections = self.conn_man.get_connections(channel_0_output)
+            for connection in channel_0_connections:
+                self.conn_man.disconnect_by_name(channel_0_output, connection)
+
+        if is_stereo and self.conn_man.port_exists(channel_1_output):
             channel_1_connections = self.conn_man.get_connections(channel_1_output)
             for connection in channel_1_connections:
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
@@ -248,6 +253,30 @@ class AudioMixer(Player):
                 else:
                     Logger.debug(f"Mono → {mixer_input}")
                     self.conn_man.connect_by_name(channel_0_output, mixer_input)
+
+
+    @logged
+    def disconnect_player(self, player_name: str, player_output_prefix: str = 'outport'):
+        """Disconnect a player's outputs from the mixer.
+
+        Must be called BEFORE the player's JACK client is destroyed (i.e. before
+        sending /quit), otherwise JACK receives disconnect requests for ports
+        that no longer exist, which can corrupt its shared memory registry.
+
+        Args:
+            player_name: Name of the player JACK client
+            player_output_prefix: Prefix for player's output ports
+        """
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
+
+        for port_name in (channel_0_output, channel_1_output):
+            if not self.conn_man.port_exists(port_name):
+                continue
+            connections = self.conn_man.get_connections(port_name)
+            for connection in connections:
+                Logger.debug(f"Disconnecting {port_name} from {connection}")
+                self.conn_man.disconnect_by_name(port_name, connection)
 
 
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
