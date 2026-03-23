@@ -70,7 +70,7 @@ class ControllerEngine(BaseEngine):
     def set_status(self, property: str, value: str, strict: bool = False) -> None:
         """Set status and push to UI via WebSocket when running, armed, or load."""
         super().set_status(property, value, strict)
-        if property in ('running', 'armed', 'load'):
+        if property in ('running', 'armed', 'load', 'nextcue'):
             self._broadcast_status(property, value)
     
     @logged
@@ -158,6 +158,9 @@ class ControllerEngine(BaseEngine):
         )
         self.communications_thread.register_command_handler(
             '/engine/command/stop', self.stop_script, forward_to_nodes=False
+        )
+        self.communications_thread.register_command_handler(
+            '/engine/command/setnextcue', self._setnextcue_handler, forward_to_nodes=False
         )
         
         # Register wildcard handler for player messages (engine format)
@@ -376,6 +379,10 @@ class ControllerEngine(BaseEngine):
                 else:
                     Logger.info('Re-arm complete from node - enabling GO')
                 self.set_status('armed', 'yes')
+        elif operation.target == 'nextcue':
+            nextcue_id = operation.data.get('nextcue', '') if operation.data else ''
+            self.set_status('nextcue', nextcue_id)
+            Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
         else:
             Logger.debug(f'Unknown status target: {operation.target}')
 
@@ -661,6 +668,10 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'GO command processed')
         return True
 
+    def _setnextcue_handler(self, value):
+        """Handle setnextcue from UI — forward to NodeEngine which owns the pointer."""
+        self._forward_command_to_nodes('/engine/command/setnextcue', value)
+
     def _forward_command_to_nodes(self, address: str, value) -> None:
         """Forward a generic command to NodeEngine via NNG."""
         if not hasattr(self, 'communications_thread') or not self.communications_thread:
@@ -706,6 +717,9 @@ class ControllerEngine(BaseEngine):
             self.cue_status[cid] = 0
             self._broadcast_cue_status(cid, 0, force=True)
         self._cue_broadcast_timestamps.clear()
+
+        # Reset nextcue immediately; NodeEngine will send the correct value after re-arm
+        self.set_status('nextcue', '')
 
         self._forward_command_to_nodes('/engine/command/stop', value)
 
