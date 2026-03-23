@@ -167,31 +167,47 @@ class PlayerHandler:
         return self._audio_mixer_client
 
     def _kill_audio_player(self, player: AudioPlayer, osc_client: AudioClient, cue_id: str) -> None:
-        """Helper method to kill an audio player process"""
+        """Helper method to kill an audio player process.
+
+        The order is critical: disconnect JACK ports first, THEN send /quit.
+        If /quit is sent first the player destroys its JACK client immediately,
+        and subsequent disconnect calls hit non-existent ports which can corrupt
+        JACK's shared-memory semaphore registry.
+        """
         if player is None:
             return
-        
-        # First, try to send /quit OSC command to gracefully stop the player
+
+        # 1. Disconnect player from the mixer BEFORE destroying its JACK client
+        if self._audio_mixer is not None:
+            try:
+                uuid_slug = ''.join(cue_id.split('-'))
+                player_name = f'Audio_Player-{uuid_slug}'
+                self._audio_mixer.disconnect_player(player_name)
+                Logger.debug(f'Disconnected {player_name} from mixer')
+            except Exception as e:
+                Logger.warning(f'Failed to disconnect audio player from mixer: {e}')
+
+        # 2. Send /quit OSC command to gracefully stop the player
         if osc_client is not None:
             try:
                 osc_client.set_value('/quit', True)
                 Logger.debug(f'Sent /quit command to audio player for cue {cue_id}')
             except Exception as e:
                 Logger.warning(f'Failed to send /quit to audio player: {e}')
-            
+
             # Free the random OSC local port back into the pool
             local_port = getattr(osc_client, 'local_port', None)
             if local_port is not None:
                 PORT_HANDLER.remove_random_port(local_port)
-        
-        # Then kill the subprocess forcefully
+
+        # 3. Kill the subprocess forcefully
         try:
             if player.p is not None:
                 player.p.kill()
                 Logger.debug(f'Killed audio player subprocess for cue {cue_id}')
         except Exception as e:
             Logger.warning(f'Failed to kill audio player subprocess: {e}')
-        
+
         # Wait for thread to finish
         try:
             player.join(timeout=2.0)
