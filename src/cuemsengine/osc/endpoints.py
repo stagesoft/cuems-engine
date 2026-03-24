@@ -58,6 +58,7 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     '/videocomposer/layer/{}/mtcfollow' : [ValueType.Int, None],  # 1 = enable, 0 = disable
     '/videocomposer/layer/{}/visible' : [ValueType.Int, None, -1],
     '/videocomposer/layer/{}/autounload' : [ValueType.Int, None], # 0 or 1
+    '/videocomposer/layer/{}/loop' : [ValueType.Int, None], # 1 = enable loop, 0 = disable
     '/videocomposer/layer/{}/opacity' : [ValueType.Float, None], # opacity (0.0 to 1.0)
     '/videocomposer/layer/{}/position' : [ValueType.List, None], # [x, y] (x and y are pixel coordinates of the screen)
     '/videocomposer/layer/{}/scale' : [ValueType.List, None], # [x, y] (x and y are scale ratio of the layer)
