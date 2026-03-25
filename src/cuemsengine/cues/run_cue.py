@@ -41,10 +41,10 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """Run an ActionCue by delegating to CueHandler.execute_action."""
-    from .CueHandler import CUE_HANDLER
+    """Run an ActionCue by delegating to ActionHandler.execute_action."""
+    from .ActionHandler import ACTION_HANDLER
 
-    CUE_HANDLER.execute_action(cue, mtc)
+    ACTION_HANDLER.execute_action(cue, mtc)
 
 
 @run_cue.register

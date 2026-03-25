@@ -20,19 +20,6 @@ from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from .run_cue import run_cue
 
-SUPPORTED_CUE_ACTIONS = frozenset(
-    {
-        "play",
-        "pause",
-        "stop",
-        "enable",
-        "disable",
-        "fade-in",
-        "fade-out",
-        "go-to",
-    }
-)
-
 
 class CueHandler:
     """
@@ -336,144 +323,29 @@ class CueHandler:
         Logger.info(f"{thread.name} finished")
 
     # ---------------------------
-    # Action Cue Execution
+    # ---------------------------
+    # Action Cue Execution (delegates to ActionHandler)
     # ---------------------------
 
     def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
-        """Execute an ActionCue against the running show.
+        """Execute an ActionCue against the running show (see ActionHandler)."""
+        from .ActionHandler import ACTION_HANDLER
 
-        Returns a result dict with keys: status, action_type, target_id, reason.
-        Status is one of: applied, applied_no_change, rejected, failed.
-        """
-        action_type = cue.action_type
-        target = cue._action_target_object
+        return ACTION_HANDLER.execute_action(cue, mtc)
 
-        if action_type not in SUPPORTED_CUE_ACTIONS:
-            reason = f"Unsupported action_type: {action_type!r}"
-            Logger.warning(reason)
-            return self._action_result("rejected", action_type, None, reason)
+    def register_action_hook(
+        self,
+        phase: str,
+        fn,
+        *,
+        action_types: frozenset | None = None,
+    ) -> None:
+        """Register a cue-layer extension hook; forwards to ``ACTION_HANDLER``."""
+        from .ActionHandler import ACTION_HANDLER
 
-        if target is None:
-            reason = f"Missing target for {action_type} (action_target={cue.action_target!r})"
-            Logger.warning(reason)
-            return self._action_result("rejected", action_type, None, reason)
-
-        target_id = getattr(target, "id", None)
-
-        handler = self._ACTION_HANDLERS.get(action_type)
-        if handler is None:
-            reason = f"No handler registered for {action_type}"
-            Logger.error(reason)
-            return self._action_result("failed", action_type, target_id, reason)
-
-        try:
-            result = handler(self, target, mtc)
-            Logger.info(
-                f'Action {action_type} on {target_id}: {result["status"]}'
-                + (f' ({result["reason"]})' if result.get("reason") else "")
-            )
-            return result
-        except Exception as exc:
-            reason = f"{action_type} on {target_id} raised {type(exc).__name__}: {exc}"
-            Logger.error(reason)
-            return self._action_result("failed", action_type, target_id, reason)
-
-    # --- per-action handlers (target is guaranteed non-None) ---
-
-    def _handle_play(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if not getattr(target, "loaded", False):
-            self.arm(target, init=True)
-        if not getattr(target, "loaded", False):
-            return self._action_result(
-                "failed", "play", target_id, "Target could not be armed"
-            )
-        target._stop_requested = False
-        self.go(target, mtc)
-        return self._action_result("applied", "play", target_id)
-
-    def _handle_pause(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if getattr(target, "_stop_requested", False):
-            return self._action_result(
-                "applied_no_change", "pause", target_id, "Already stopped/paused"
-            )
-        target._stop_requested = True
-        return self._action_result("applied", "pause", target_id)
-
-    def _handle_stop(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if getattr(target, "_stop_requested", False):
-            return self._action_result(
-                "applied_no_change", "stop", target_id, "Already stopped"
-            )
-        target._stop_requested = True
-        target._go_generation = getattr(target, "_go_generation", 0) + 1
-        return self._action_result("applied", "stop", target_id)
-
-    def _handle_enable(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if target.enabled:
-            return self._action_result(
-                "applied_no_change", "enable", target_id, "Already enabled"
-            )
-        target.enabled = True
-        return self._action_result("applied", "enable", target_id)
-
-    def _handle_disable(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if not target.enabled:
-            return self._action_result(
-                "applied_no_change", "disable", target_id, "Already disabled"
-            )
-        target.enabled = False
-        return self._action_result("applied", "disable", target_id)
-
-    def _handle_fade_in(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if not getattr(target, "loaded", False):
-            self.arm(target, init=True)
-        if not getattr(target, "loaded", False):
-            return self._action_result(
-                "failed", "fade-in", target_id, "Target could not be armed"
-            )
-        target._stop_requested = False
-        self.go(target, mtc)
-        return self._action_result("applied", "fade-in", target_id)
-
-    def _handle_fade_out(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        target._stop_requested = True
-        target._go_generation = getattr(target, "_go_generation", 0) + 1
-        return self._action_result("applied", "fade-out", target_id)
-
-    def _handle_go_to(self, target: Cue, mtc: MtcListener) -> dict:
-        target_id = target.id
-        if not getattr(target, "loaded", False):
-            self.arm(target, init=True)
-        return self._action_result("applied", "go-to", target_id)
-
-    _ACTION_HANDLERS: dict[str, callable] = {
-        "play": _handle_play,
-        "pause": _handle_pause,
-        "stop": _handle_stop,
-        "enable": _handle_enable,
-        "disable": _handle_disable,
-        "fade-in": _handle_fade_in,
-        "fade-out": _handle_fade_out,
-        "go-to": _handle_go_to,
-    }
-
-    @staticmethod
-    def _action_result(
-        status: str, action_type: str, target_id: str | None, reason: str | None = None
-    ) -> dict:
-        return {
-            "status": status,
-            "action_type": action_type,
-            "target_id": target_id,
-            "reason": reason,
-        }
+        ACTION_HANDLER.register_action_hook(
+            phase, fn, source="cue_layer", action_types=action_types
+        )
 
     # ---------------------------
     # OSCQuery Message Routing
@@ -566,3 +438,7 @@ class CueHandler:
 # ---------------------------
 
 CUE_HANDLER = CueHandler()
+
+from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
+
+_ACTION_HANDLER_SINGLETON.bind_cue_handler(CUE_HANDLER)
