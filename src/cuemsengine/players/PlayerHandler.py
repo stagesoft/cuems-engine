@@ -251,19 +251,27 @@ class PlayerHandler:
         with self._lock:
             players_to_kill = list(self._audio_players_by_id.items())
             self._audio_players_by_id.clear()
-            
-            # Also clear audio players from _cue_players
+
+            # Also clear audio players from _cue_players, saving the OSC
+            # client so _kill_audio_player can free the random port.
             cue_players_to_remove = []
             for cue, player in self._cue_players.items():
                 if isinstance(player, AudioPlayer):
-                    cue_players_to_remove.append((cue, player))
-            for cue, player in cue_players_to_remove:
+                    osc_client = getattr(cue, '_osc', None)
+                    cue._osc = None
+                    cue_players_to_remove.append((cue, player, osc_client))
+            for cue, player, osc_client in cue_players_to_remove:
                 self._cue_players.pop(cue, None)
-                players_to_kill.append((str(cue.id), player))
-        
+                players_to_kill.append((str(cue.id), player, osc_client))
+
         Logger.info(f'Killing {len(players_to_kill)} audio players during cleanup')
-        for cue_id, player in players_to_kill:
-            self._kill_audio_player(player, None, cue_id)
+        for entry in players_to_kill:
+            if len(entry) == 3:
+                cue_id, player, osc_client = entry
+            else:
+                cue_id, player = entry
+                osc_client = None
+            self._kill_audio_player(player, osc_client, cue_id)
 
     def cleanup_zombie_jack_clients(self) -> int:
         """Scan for JACK Audio_Player clients whose processes have died.
