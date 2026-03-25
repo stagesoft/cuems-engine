@@ -27,17 +27,47 @@ via NNG.
 - **FR-008**: Same hook + same filter + same phase: **last registration wins**;
   optional explicit `unregister(id)` in implementation.
 
-### Callable signature (informative)
+### Callable signature
 
-```text
-fn(context) -> None | modified_outcome
+```python
+def hook(ctx: ActionHookContext) -> None:
+    ...
 ```
 
-Where `context` includes: action cue, resolved target, MTC listener reference, current
-outcome (for `after_dispatch`), and a read-only view of cue handler.
+`ActionHookContext` fields (stable):
 
-Exact Python types are implementation details; names and fields MUST remain stable once
-released.
+| Field | Type | Populated when |
+|-------|------|---------------|
+| `cue` | `ActionCue` | always |
+| `target` | `Cue \| None` | always (None if missing target) |
+| `mtc` | `MtcListener` | always |
+| `action_type` | `str` | always |
+| `target_id` | `str \| None` | always |
+| `outcome` | `dict \| None` | `after_dispatch` only |
+| `cue_handler` | `Any` | always (bound CueHandler instance) |
+
+### `wrap_dispatch` replacement rule
+
+```python
+def wrap_hook(ctx: ActionHookContext, run_default: Callable[[], dict]) -> dict:
+    ...
+```
+
+- The wrapper **must** call `run_default()` to invoke the default handler.
+- Returning without calling `run_default()` skips the default handler entirely.
+- Only one `wrap_dispatch` per (source, filter_key) is active (last-wins).
+- Wraps are applied outer-to-inner: cue_layer wraps node_layer wraps default.
+
+### Invocation order
+
+- `before_dispatch`: cue_layer hooks first, then node_layer hooks.
+- `after_dispatch`: cue_layer hooks first, then node_layer hooks. **Skipped** if the
+  default handler raised an exception.
+
+### Regression baseline
+
+No intentional behavioral deviations from the original `CueHandler` action handlers.
+Identical action semantics, idempotency, and logging behavior are preserved.
 
 ## Result delivery contract
 

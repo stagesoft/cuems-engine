@@ -1,13 +1,15 @@
-"""Unit tests for ActionCue execution through CueHandler.
+"""Unit tests for ActionCue execution through ActionHandler.
 
 Tests cover all supported cue-level actions (FR-002a), idempotency (FR-004),
-non-target isolation (FR-006), rapid succession, and invalid-action safety (US2).
+non-target isolation (FR-006), rapid succession, invalid-action safety (US2),
+hooks, dual registration, result sink (003 US2), and regression guards.
 """
 
 from __future__ import annotations
 
-import copy
-from unittest.mock import MagicMock, PropertyMock, patch
+import logging
+import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 from cuemsutils.cues import ActionCue, AudioCue
@@ -45,9 +47,10 @@ def _make_action_cue(action_type: str, target: Cue) -> ActionCue:
 def handler():
     """Return a fresh CueHandler with mocked infrastructure.
 
-    We patch the singleton so each test gets isolated state.
+    ``ACTION_HANDLER`` is bound to this instance so ``arm`` / ``go`` patches apply.
     """
-    from cuemsengine.cues.CueHandler import CueHandler
+    from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+    from cuemsengine.cues.CueHandler import CUE_HANDLER, CueHandler
 
     h = object.__new__(CueHandler)
     h._armed_cues = []
@@ -56,7 +59,13 @@ def handler():
     h._front_video_player = None
     h._lock = __import__("threading").Lock()
     h.communications_thread = MagicMock()
-    return h
+    ACTION_HANDLER.bind_cue_handler(h)
+    ACTION_HANDLER.clear_action_extensions()
+    ACTION_HANDLER.set_emit_enabled(False)
+    yield h
+    ACTION_HANDLER.bind_cue_handler(CUE_HANDLER)
+    ACTION_HANDLER.clear_action_extensions()
+    ACTION_HANDLER.set_emit_enabled(True)
 
 
 @pytest.fixture
@@ -301,10 +310,6 @@ class TestRapidSuccession:
 # US2: Invalid / unsupported actions
 # ===========================================================================
 
-# ---------------------------------------------------------------------------
-# T026: unknown action_type — rejected with no state mutation
-# ---------------------------------------------------------------------------
-
 
 class TestUnknownAction:
     def test_unknown_action_rejected(self, handler, mtc):
@@ -334,11 +339,6 @@ class TestUnknownAction:
         ) == snapshot
 
 
-# ---------------------------------------------------------------------------
-# T027: missing _action_target_object — rejected safely
-# ---------------------------------------------------------------------------
-
-
 class TestMissingTarget:
     def test_missing_target_rejected(self, handler, mtc):
         cue = ActionCue()
@@ -351,11 +351,6 @@ class TestMissingTarget:
         assert "Missing target" in result["reason"]
 
 
-# ---------------------------------------------------------------------------
-# T028: action targeting cue from inactive project — rejected safely
-# ---------------------------------------------------------------------------
-
-
 class TestInactiveProjectTarget:
     def test_inactive_project_target_rejected(self, handler, mtc):
         cue = ActionCue()
@@ -366,3 +361,186 @@ class TestInactiveProjectTarget:
         result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "rejected"
+
+
+# ===========================================================================
+# US2 (003): hooks, dual registration, result sink (T012–T016a)
+# ===========================================================================
+
+
+class TestActionHookDispatchOrder:
+    def test_dispatch_order_before_default_after_hooks(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        order = []
+
+        def before(ctx):
+            order.append("before")
+
+        def after(ctx):
+            order.append("after")
+            assert ctx.outcome is not None
+            assert ctx.outcome["status"] == "applied"
+
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch", before, source="cue_layer"
+        )
+        ACTION_HANDLER.register_action_hook("after_dispatch", after, source="cue_layer")
+        target = _make_target(enabled=False)
+        cue = _make_action_cue("enable", target)
+        handler.execute_action(cue, mtc)
+
+        assert order == ["before", "after"]
+        assert target.enabled is True
+
+    def test_duplicate_hook_registration_last_wins(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        seen = []
+
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch",
+            lambda ctx: seen.append("first"),
+            source="cue_layer",
+        )
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch",
+            lambda ctx: seen.append("second"),
+            source="cue_layer",
+        )
+        target = _make_target(enabled=False)
+        handler.execute_action(_make_action_cue("enable", target), mtc)
+
+        assert seen == ["second"]
+
+    def test_cue_layer_before_node_layer_same_phase(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        order = []
+
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch",
+            lambda ctx: order.append("cue"),
+            source="cue_layer",
+        )
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch",
+            lambda ctx: order.append("node"),
+            source="node_layer",
+        )
+        target = _make_target(enabled=False)
+        handler.execute_action(_make_action_cue("enable", target), mtc)
+
+        assert order == ["cue", "node"]
+
+
+class TestActionResultSink:
+    def test_injectable_sink_records_outcome(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        recorded = []
+        ACTION_HANDLER.set_emit_enabled(True)
+        ACTION_HANDLER.set_result_sink(lambda o: recorded.append(dict(o)))
+        try:
+            target = _make_target(enabled=False)
+            handler.execute_action(_make_action_cue("enable", target), mtc)
+            assert len(recorded) == 1
+            assert recorded[0]["status"] == "applied"
+            assert recorded[0]["action_type"] == "enable"
+        finally:
+            ACTION_HANDLER.set_result_sink(None)
+            ACTION_HANDLER.set_emit_enabled(False)
+
+    def test_default_path_calls_send_operation_when_sink_unset(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        ACTION_HANDLER.set_emit_enabled(True)
+        ACTION_HANDLER.set_result_sink(None)
+        handler.communications_thread.send_operation = MagicMock()
+        try:
+            target = _make_target(enabled=False)
+            handler.execute_action(_make_action_cue("enable", target), mtc)
+            handler.communications_thread.send_operation.assert_called()
+            call_kw = handler.communications_thread.send_operation.call_args
+            op = call_kw[0][0]
+            assert op.target == "action_cue_outcome"
+        finally:
+            ACTION_HANDLER.set_emit_enabled(False)
+
+
+class TestActionHookExceptions:
+    def test_before_dispatch_raises_failed_and_isolates_other_cues(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        def boom(ctx):
+            raise RuntimeError("hook boom")
+
+        ACTION_HANDLER.register_action_hook("before_dispatch", boom, source="cue_layer")
+        target = _make_target(enabled=True)
+        bystander = _make_target(enabled=True, _stop_requested=False)
+        snap = (
+            bystander.enabled,
+            bystander._stop_requested,
+            getattr(bystander, "_go_generation", 0),
+        )
+
+        result = handler.execute_action(_make_action_cue("disable", target), mtc)
+
+        assert result["status"] == "failed"
+        assert target.enabled is True
+        assert (
+            bystander.enabled,
+            bystander._stop_requested,
+            getattr(bystander, "_go_generation", 0),
+        ) == snap
+
+
+class TestActionMidTransitionWithHook:
+    def test_pause_while_already_paused_deterministic_with_hook(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        order = []
+
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch",
+            lambda ctx: order.append("hook"),
+            source="cue_layer",
+        )
+        target = _make_target(_stop_requested=True)
+        result = handler.execute_action(_make_action_cue("pause", target), mtc)
+
+        assert result["status"] == "applied_no_change"
+        assert order == ["hook"]
+
+
+# ---------------------------------------------------------------------------
+# Regression: outcome dict shape (003 T010)
+# ---------------------------------------------------------------------------
+
+EXPECTED_ACTION_OUTCOME_KEYS = frozenset(
+    {"status", "action_type", "target_id", "reason"}
+)
+
+
+def test_action_outcome_dict_keys_stable(handler, mtc):
+    target = _make_target()
+    with patch.object(handler, "go"), patch.object(handler, "arm"):
+        result = handler.execute_action(_make_action_cue("play", target), mtc)
+    assert set(result.keys()) == EXPECTED_ACTION_OUTCOME_KEYS
+
+
+def test_action_hot_path_regression_budget(handler, mtc):
+    """SC-009 smoke: many dispatches stay within a loose wall-clock budget."""
+    target = _make_target(enabled=True)
+    t0 = time.perf_counter()
+    for _ in range(100):
+        handler.execute_action(_make_action_cue("enable", target), mtc)
+    assert time.perf_counter() - t0 < 1.0
+
+
+def test_rejected_action_warning_text_unchanged(handler, mtc, caplog):
+    """NFR-003 / SC-008: operator-visible rejection wording for unknown actions."""
+    target = _make_target()
+    with caplog.at_level(logging.WARNING):
+        handler.execute_action(_make_action_cue("explode", target), mtc)
+    assert any("Unsupported action_type" in r.getMessage() for r in caplog.records)

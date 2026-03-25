@@ -82,6 +82,10 @@ class NodeEngine(BaseEngine):
             Logger.warning(
                 "CUE_HANDLER communications thread not available for command callback"
             )
+        from .cues.ActionHandler import ACTION_HANDLER
+
+        ACTION_HANDLER.finalize_node_layer_bindings()
+
     def _handle_nng_command(self, command_name: str, value, address: str = None):
         """Handle a command received via NNG from ControllerEngine.
 
