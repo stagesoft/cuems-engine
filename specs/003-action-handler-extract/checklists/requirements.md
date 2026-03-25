@@ -36,5 +36,12 @@
   identifier (ActionHandler) only as discoverability note, not as a requirement on
   language or framework.
 - FR-008 resolves ambiguity for duplicate hook registration.
-- NFR-002/SC-006 align with repository expectation of automated verification without
+- NFR-002/SC-007 align with repository expectation of automated verification without
   naming a test framework in success criteria.
+- 2026-03-25 (plan): Added FR-009/FR-010, SC-005, dual-registration acceptance, and edge
+  case for cross-layer registration; plan/research encode `CueHandler` + `NodeEngine` and
+  NNG/`NodeCommunications`/`AsyncCommsThread` as implementation bindings.
+- 2026-03-25 (analyze): Added T018 (contract detail for callable signature, context fields,
+  wrap_dispatch replacement rule — FR-004/SC-004 + edge case §3) and T028 (UX consistency
+  wording review — NFR-003/SC-008). Tightened T027 (perf) from "optional; skip with
+  comment" to "justify with measured evidence". Total tasks: 29 (T001–T029).

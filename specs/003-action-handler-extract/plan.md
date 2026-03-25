@@ -26,7 +26,7 @@ current action-cue baseline (feature `002-action-cue-handler`).
 **Target Platform**: Linux node runtime  
 **Project Type**: Single Python package (`cuemsengine`)  
 **Performance Goals**: No regression vs prior action path; retain ≤1s / ≥95% reflection
-budget where applicable (see spec NFR-004 / SC-008).  
+budget where applicable (see spec NFR-004 / SC-009).  
 **Constraints**: Thread-safe registration; NNG sends must remain on the comms thread’s
 event loop (`run_coroutine`); no blocking the NNG receiver.  
 **Scale/Scope**: One node, many action commands per show; dual registration sources and

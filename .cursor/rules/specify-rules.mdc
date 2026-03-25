@@ -6,9 +6,11 @@ alwaysApply: true
 
 # cuems-engine Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-20
+Auto-generated from all feature plans. Last updated: 2026-03-25
 
 ## Active Technologies
+- Python 3.11 + `cuemsutils` cue types, existing `CueHandler`, `NodeEngine`, (003-action-handler-extract)
+- N/A (in-memory runtime) (003-action-handler-extract)
 
 - Python 3.11 + `cuemsutils` cue types, `pytest`, existing engine runtime (002-action-cue-handler)
 
@@ -28,6 +30,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 003-action-handler-extract: Added Python 3.11 + `cuemsutils` cue types, existing `CueHandler`, `NodeEngine`,
 
 - 002-action-cue-handler: Added Python 3.11 + `cuemsutils` cue types, `pytest`, existing engine runtime
 

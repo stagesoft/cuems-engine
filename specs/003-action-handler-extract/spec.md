@@ -171,16 +171,17 @@ and playback orchestration no longer list per-action-type branching for action c
   node runtime) when both are required by the contract.
 - **SC-004**: Documented hook contract (order, replace vs augment, error handling) is
   complete and referenced from the action-handling component’s public contract.
-- **SC-009**: Automated verification demonstrates that a substitute result-delivery sink
+- **SC-005**: Automated verification demonstrates that a substitute result-delivery sink
   receives at least one emitted action outcome when configured, and that the default
-  path uses the standard node NNG client when no substitute is configured.
-- **SC-005**: No new mandatory quality-gate violations are introduced in the modified
+  path uses the standard node-to-controller messaging client when no substitute is
+  configured.
+- **SC-006**: No new mandatory quality-gate violations are introduced in the modified
   scope (lint, format, static analysis as defined for the repository).
-- **SC-006**: All required automated verification for this change passes in the
+- **SC-007**: All required automated verification for this change passes in the
   standard pre-merge workflow.
-- **SC-007**: Operator-facing action outcome wording remains aligned with existing
+- **SC-008**: Operator-facing action outcome wording remains aligned with existing
   show-control vocabulary in a documented review (no unexplained renames).
-- **SC-008**: Action-path latency under normal show load stays within the same agreed
+- **SC-009**: Action-path latency under normal show load stays within the same agreed
   live-operation budget as before this change, verified by a defined sampling or timing
   method documented for the release.
 
