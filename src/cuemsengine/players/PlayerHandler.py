@@ -1,3 +1,5 @@
+import subprocess
+
 from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -102,8 +104,12 @@ class PlayerHandler:
                 osc_client = getattr(cue, '_osc', None)
                 cue._osc = None
             if isinstance(player, AudioPlayer):
-                PORT_HANDLER.remove_ports(cue)
-                self._kill_audio_player(player, osc_client, cue_id)
+                killed = self._kill_audio_player(player, osc_client, cue_id)
+                # Free port AFTER process is dead to prevent concurrent arm
+                # from getting a port the OS still has bound (Bug 2 fix).
+                # Skip if kill failed — process still holds the port.
+                if killed:
+                    PORT_HANDLER.remove_ports(cue)
 
     def reset_all(self):
         """Complete reset of PlayerHandler for testing"""
@@ -166,16 +172,20 @@ class PlayerHandler:
         """Returns the audio mixer client instance."""
         return self._audio_mixer_client
 
-    def _kill_audio_player(self, player: AudioPlayer, osc_client: AudioClient, cue_id: str) -> None:
+    def _kill_audio_player(self, player: AudioPlayer, osc_client: AudioClient, cue_id: str) -> bool:
         """Helper method to kill an audio player process.
 
         The order is critical: disconnect JACK ports first, THEN send /quit.
         If /quit is sent first the player destroys its JACK client immediately,
         and subsequent disconnect calls hit non-existent ports which can corrupt
         JACK's shared-memory semaphore registry.
+
+        Returns:
+            True if the process was successfully killed (or was already dead),
+            False if the process could not be killed (still alive after timeout).
         """
         if player is None:
-            return
+            return True
 
         # 1. Disconnect player from the mixer BEFORE destroying its JACK client
         if self._audio_mixer is not None:
@@ -200,19 +210,27 @@ class PlayerHandler:
             if local_port is not None:
                 PORT_HANDLER.remove_random_port(local_port)
 
-        # 3. Kill the subprocess forcefully
+        # 3. Kill the subprocess and wait for the OS to release its resources.
+        #    SIGKILL is near-instant; 1s timeout handles edge cases (D state).
+        process_dead = True
         try:
             if player.p is not None:
                 player.p.kill()
+                player.p.wait(timeout=1.0)
                 Logger.debug(f'Killed audio player subprocess for cue {cue_id}')
+        except subprocess.TimeoutExpired:
+            Logger.error(f'Audio player process for cue {cue_id} did not die after SIGKILL — port may still be bound')
+            process_dead = False
         except Exception as e:
             Logger.warning(f'Failed to kill audio player subprocess: {e}')
 
         # Wait for thread to finish
         try:
-            player.join(timeout=2.0)
+            player.join(timeout=0.5)
         except Exception as e:
             Logger.warning(f'Failed to join audio player thread: {e}')
+
+        return process_dead
 
     def kill_all_audio_players(self):
         """Kill ALL tracked audio players - used during project cleanup"""
@@ -253,6 +271,29 @@ class PlayerHandler:
         Logger.debug(f'Creating new audio output for cue {cue.id}')
         if self._audio_output_generator is None:
             raise ValueError("Audio output generator not set")
+
+        # Kill any existing player for this cue before spawning a new one.
+        # This prevents orphaned audioplayer processes when a cue is re-armed
+        # without being disarmed first (the old process would keep running,
+        # holding its JACK client and OSC port, while its reference is silently
+        # overwritten in _audio_players_by_id).
+        cue_id = str(cue.id)
+        with self._lock:
+            existing_player = self._audio_players_by_id.pop(cue_id, None)
+            self._cue_players.pop(cue, None)
+        if existing_player is not None:
+            Logger.warning(f'Killing existing audio player for cue {cue_id} before re-arm')
+            # Save and clear OSC client so loop_audioCue stops sending to the
+            # dying player (it will hit AttributeError, caught by its blanket
+            # except AttributeError handler and exit silently).
+            existing_osc = getattr(cue, '_osc', None)
+            cue._osc = None
+            killed = self._kill_audio_player(existing_player, existing_osc, cue_id)
+            # Free assigned port AFTER process is dead to avoid Bug 2's race.
+            # Skip if kill failed — process still holds the port.
+            if killed:
+                PORT_HANDLER.remove_ports(cue)
+
         ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
         player, client = self._audio_output_generator(
             port=ports['audio_output'],
