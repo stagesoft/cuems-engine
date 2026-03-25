@@ -494,6 +494,7 @@ class NodeEngine(BaseEngine):
         # Otherwise the old cue objects are orphaned and their players never get killed
         Logger.debug('Cleaning up previous project resources before loading new one')
         PLAYER_HANDLER.kill_all_audio_players()
+        PLAYER_HANDLER.cleanup_zombie_jack_clients()
         CUE_HANDLER.disarm_all()
         
         # Obtain the project files (this replaces self.script with new project)
@@ -711,7 +712,8 @@ class NodeEngine(BaseEngine):
         
         # Kill all audio players (ready_script does not do this)
         PLAYER_HANDLER.kill_all_audio_players()
-        
+        PLAYER_HANDLER.cleanup_zombie_jack_clients()
+
         # Reset state + disarm + volume reset + re-arm cues
         if self.script:
             self.ready_script()

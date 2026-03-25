@@ -1,4 +1,5 @@
 import subprocess
+from time import sleep
 
 from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
@@ -230,6 +231,19 @@ class PlayerHandler:
         except Exception as e:
             Logger.warning(f'Failed to join audio player thread: {e}')
 
+        # 4. Verify JACK has removed the dead client's ports.
+        #    wait() reaps the process, which triggers JACK to unregister the
+        #    client. Poll briefly to confirm ports are gone before returning.
+        if process_dead and self._audio_mixer is not None:
+            uuid_slug = ''.join(cue_id.split('-'))
+            player_name = f'Audio_Player-{uuid_slug}'
+            for _ in range(10):
+                if not self._audio_mixer.conn_man.port_exists(f'{player_name}:outport 0'):
+                    break
+                sleep(0.1)
+            else:
+                Logger.warning(f'JACK client {player_name} still has ports after kill')
+
         return process_dead
 
     def kill_all_audio_players(self):
@@ -250,6 +264,54 @@ class PlayerHandler:
         Logger.info(f'Killing {len(players_to_kill)} audio players during cleanup')
         for cue_id, player in players_to_kill:
             self._kill_audio_player(player, None, cue_id)
+
+    def cleanup_zombie_jack_clients(self) -> int:
+        """Scan for JACK Audio_Player clients whose processes have died.
+
+        Enumerates all JACK ports matching Audio_Player-* and cross-references
+        with tracked players in _audio_players_by_id. Unmatched ports are
+        zombies left by crashed processes — disconnect them from the mixer.
+
+        Called on project load to clear stale state from previous runs.
+
+        Returns:
+            Number of zombie clients found and cleaned up.
+        """
+        if self._audio_mixer is None:
+            return 0
+
+        all_ports = self._audio_mixer.conn_man.get_ports(
+            pattern='Audio_Player-.*', is_audio=True, is_output=True
+        )
+        if not all_ports:
+            return 0
+
+        # Extract unique client names from port names (e.g. "Audio_Player-abc123:outport 0" → "Audio_Player-abc123")
+        jack_clients = set()
+        for port_name in all_ports:
+            client_name = port_name.split(':')[0]
+            jack_clients.add(client_name)
+
+        # Build set of tracked player client names
+        with self._lock:
+            tracked_slugs = set()
+            for cue_id in self._audio_players_by_id:
+                slug = ''.join(cue_id.split('-'))
+                tracked_slugs.add(f'Audio_Player-{slug}')
+
+        zombies = jack_clients - tracked_slugs
+        if not zombies:
+            return 0
+
+        Logger.warning(f'Found {len(zombies)} zombie JACK audio clients: {zombies}')
+        for client_name in zombies:
+            try:
+                self._audio_mixer.disconnect_player(client_name)
+                Logger.info(f'Disconnected zombie JACK client {client_name}')
+            except Exception as e:
+                Logger.warning(f'Failed to disconnect zombie {client_name}: {e}')
+
+        return len(zombies)
 
 
     # ---------------------------
