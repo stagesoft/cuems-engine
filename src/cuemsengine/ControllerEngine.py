@@ -424,17 +424,20 @@ class ControllerEngine(BaseEngine):
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery,
             'nodeconf': self.nodeconf,
-            'go_script': self.go_script
+            'go_script': self.go_script,
+            'project_status': self.get_project_status,
+            'project_unload': self.unload_project,
         }
         if action in command_dict.keys():
-            success  = command_dict[action](value, context)
-            if success:
+            result = command_dict[action](value, context)
+            if result:
+                reply_value = result if isinstance(result, dict) else 'OK'
                 self.confirm_to_editor(
-                    context, type=action, value='OK'
+                    context, type=action, value=reply_value
                 )
                 # Clear the editor request after successful confirmation
                 self.set_editor_request('')
-            
+
         else:
             raise ValueError(f'Command {action} not recognized')
         
@@ -569,6 +572,15 @@ class ControllerEngine(BaseEngine):
             self._broadcast_status('timecode', current_second * 1000)
             Logger.debug(f'Timecode broadcast {current_second}s')
 
+    def _clear_playback_state(self):
+        """Clear runtime playback tracking: timestamps, timecode, armed, nextcue."""
+        self._cue_broadcast_timestamps.clear()
+        self._last_timecode_second = -1
+        self._broadcast_status('timecode', 0)
+        self.set_status('armed', 'no')
+        self.set_status('nextcue', '')
+        self.stop_timecode()
+
     #########################
     # Project management
     #########################
@@ -580,9 +592,8 @@ class ControllerEngine(BaseEngine):
             return False
 
         Logger.info(f'Loading project {project_name}')
-        self.set_status('armed', 'no')
+        self._clear_playback_state()
         self.reset_script()
-        self.stop_timecode()
         
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -622,7 +633,6 @@ class ControllerEngine(BaseEngine):
         # Initialise per-cue status: every cue starts as unplayed (0).
         # Broadcasts one WS message per cue so the UI can populate its cue list.
         self.cue_status = {cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)}
-        self._cue_broadcast_timestamps.clear()
         for cid in self.cue_status:
             self._broadcast_cue_status(cid, 0, force=True)
         Logger.info(f'Cue status initialised for {len(self.cue_status)} cues')
@@ -706,23 +716,35 @@ class ControllerEngine(BaseEngine):
             return
 
         self.go_offset = None
-        self.stop_timecode()
-        self._last_timecode_second = -1
-        self._broadcast_status('timecode', 0)
-
         self.set_status('running', "no")
-        self.set_status('armed', 'no')
+        self._clear_playback_state()
 
         # Reset all cue statuses to unplayed (0) and broadcast to UI.
         for cid in self.cue_status:
             self.cue_status[cid] = 0
             self._broadcast_cue_status(cid, 0, force=True)
-        self._cue_broadcast_timestamps.clear()
-
-        # Reset nextcue immediately; NodeEngine will send the correct value after re-arm
-        self.set_status('nextcue', '')
 
         self._forward_command_to_nodes('/engine/command/stop', value)
 
         Logger.info('STOP command processed - timecode stopped; nodes will re-arm')
+        return True
+
+    def get_project_status(self, value, context=None):
+        """Return current project playback status."""
+        running = self.get_status('running') == "yes"
+        return {
+            "status": "running" if running else "none",
+            "project_uuid": str(self.script.id) if running and self.script else ""
+        }
+
+    def unload_project(self, value, context=None):
+        """Unload the current project. Rejects if playback is running."""
+        if self.get_status('running') == "yes":
+            raise RuntimeError("Cannot unload while running. Stop playback first.")
+        self._clear_playback_state()
+        self.reset_script()
+        self.cue_status = {}
+        self.set_status('load', '')
+        self._forward_command_to_nodes('/engine/command/stop', value)
+        Logger.info('Project unloaded')
         return True
