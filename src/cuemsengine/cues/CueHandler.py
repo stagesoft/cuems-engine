@@ -295,13 +295,14 @@ class CueHandler:
             except Exception:
                 pass
 
+        go_at_end_thread = None
         if cue.post_go == 'go_at_end' and cue._target_object:
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
             go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
 
-        if cue.post_go == 'go_at_end':
+        if cue.post_go == 'go_at_end' and go_at_end_thread:
             self.wait_for_cue(go_at_end_thread)
 
         if cue.post_go == 'go' and cue._target_object:

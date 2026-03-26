@@ -432,6 +432,8 @@ class BaseEngine(SignalEngine):
                             item._target_object = None
                 else:
                     item._target_object = self.script.find(item.target)
+                    if item._target_object is None:
+                        Logger.warning(f'{type(item).__name__} {item.id} has target {item.target} that could not be found in the script (deleted?)')
 
                 if item._local and (not hasattr(item, 'loaded') or not item.loaded):
                     Logger.info(f'Arming item: {type(item).__name__} {item.id}')
@@ -440,6 +442,8 @@ class BaseEngine(SignalEngine):
                 Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')
                 if isinstance(item, ActionCue):
                     item._action_target_object = self.script.find(item.action_target)
+                    if item._action_target_object is None and item.action_target:
+                        Logger.warning(f'ActionCue {item.id} has action_target {item.action_target} that could not be found in the script (deleted?)')
 
             except Exception as e:
                 Logger.error(f'Error processing item at index {index} in cuelist {cuelist.id}: {e}')

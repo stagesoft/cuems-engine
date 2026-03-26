@@ -44,8 +44,12 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     """
     Run an ActionCue
     """
-    pass
-
+    if cue._action_target_object is None:
+        Logger.warning(
+            f'ActionCue {cue.id} has no valid action target (target {getattr(cue, "action_target", None)} may have been deleted), skipping',
+            extra={"caller": cue.__class__.__name__}
+        )
+        return
 
     # TODO: Implement this
     if cue.action_type == 'load':
