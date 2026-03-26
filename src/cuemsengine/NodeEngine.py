@@ -2,6 +2,7 @@ from functools import partial
 from time import sleep
 import os
 import subprocess
+import threading
 
 from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
 from cuemsutils.cues.MediaCue import MediaCue
@@ -38,6 +39,7 @@ class NodeEngine(BaseEngine):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._command_lock = threading.Lock()
         self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
@@ -280,18 +282,19 @@ class NodeEngine(BaseEngine):
             return
 
     def run_command(self, command, value):
-        Logger.debug(f'NodeEngine executing command: {command}({repr(value)})')
-        if command in self.commands_dict.keys():
-            handler = self.commands_dict[command]
-            if handler is not None:
-                handler(value)
-                return True
+        with self._command_lock:
+            Logger.debug(f'NodeEngine executing command: {command}({repr(value)})')
+            if command in self.commands_dict.keys():
+                handler = self.commands_dict[command]
+                if handler is not None:
+                    handler(value)
+                    return True
+                else:
+                    Logger.warning(f'Command {command} has no handler')
+                    return False
             else:
-                Logger.warning(f'Command {command} has no handler')
+                Logger.error(f'Command {command} not found')
                 return False
-        else:
-            Logger.error(f'Command {command} not found')
-            return False
 
     #########################
     # Player logic
@@ -604,6 +607,9 @@ class NodeEngine(BaseEngine):
         cue = self.script.find(value)
         if cue:
             self.next_cue_pointer = cue
+            if not CUE_HANDLER.find_armed_cue(cue):
+                Logger.info(f'Re-arming cue {cue.id} selected as next cue')
+                CUE_HANDLER.arm(cue, init=True)
             self._broadcast_nextcue()
             Logger.info(f'Next cue overridden by UI: {value}')
         else:
@@ -648,8 +654,8 @@ class NodeEngine(BaseEngine):
 
         # Determine the cue to go
         if not self.ongoing_cue:
-            # First GO - start from beginning
-            cue_to_go = self.script.cuelist.contents[0]
+            # First GO - use next_cue_pointer (may have been overridden by setnextcue)
+            cue_to_go = self.next_cue_pointer or self.script.cuelist.contents[0]
             Logger.info(f'GO command received. Starting script {self.script.name}')
         else:
             # Successive GO - advance to next cue
@@ -666,8 +672,11 @@ class NodeEngine(BaseEngine):
             return
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
-            Logger.error(f'Trying to go a cue that is not yet loaded. CUE : {cue_to_go.id}')
-            return
+            Logger.info(f'Cue {cue_to_go.id} not armed, re-arming before GO')
+            CUE_HANDLER.arm(cue_to_go, init=True)
+            if not CUE_HANDLER.find_armed_cue(cue_to_go):
+                Logger.error(f'Failed to re-arm cue {cue_to_go.id}, cannot GO')
+                return
 
         # Update state
         self.set_status('running', "yes")

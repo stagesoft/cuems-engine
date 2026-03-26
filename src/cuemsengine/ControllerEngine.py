@@ -628,6 +628,7 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'Cue status initialised for {len(self.cue_status)} cues')
 
         # Update internal status
+        # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
 
         # Forward load command to NodeEngine via NNG (nodes will arm cues)
