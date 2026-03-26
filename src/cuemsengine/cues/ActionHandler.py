@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
@@ -14,6 +15,9 @@ from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
 from ..tools.MtcListener import MtcListener
 
+# Actions supported by the engine runtime.
+# The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
+# actions: load, unload, wait, pause_project, resume_project.
 SUPPORTED_CUE_ACTIONS = frozenset(
     {
         "play",
@@ -21,9 +25,9 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "stop",
         "enable",
         "disable",
-        "fade-in",
-        "fade-out",
-        "go-to",
+        "fade_in",
+        "fade_out",
+        "go_to",
     }
 )
 
@@ -331,6 +335,10 @@ class ActionHandler:
 
 def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     target_id = target.id
+    if not target.enabled:
+        return ActionHandler._action_result(
+            "failed", "play", target_id, "Target is disabled"
+        )
     if not getattr(target, "loaded", False):
         ch.arm(target, init=True)
     if not getattr(target, "loaded", False):
@@ -338,7 +346,12 @@ def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
             "failed", "play", target_id, "Target could not be armed"
         )
     target._stop_requested = False
-    ch.go(target, mtc)
+    try:
+        ch.go(target, mtc)
+    except Exception as exc:
+        return ActionHandler._action_result(
+            "failed", "play", target_id, str(exc)
+        )
     return ActionHandler._action_result("applied", "play", target_id)
 
 
@@ -360,6 +373,9 @@ def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
         )
     target._stop_requested = True
     target._go_generation = getattr(target, "_go_generation", 0) + 1
+    # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
+    time.sleep(0.1)
+    ch.disarm(target)
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
@@ -384,30 +400,39 @@ def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
 
 
 def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+    # TODO: implement fade envelope; currently identical to play
+    Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
     if not getattr(target, "loaded", False):
         ch.arm(target, init=True)
     if not getattr(target, "loaded", False):
         return ActionHandler._action_result(
-            "failed", "fade-in", target_id, "Target could not be armed"
+            "failed", "fade_in", target_id, "Target could not be armed"
         )
     target._stop_requested = False
     ch.go(target, mtc)
-    return ActionHandler._action_result("applied", "fade-in", target_id)
+    return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
 def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+    # TODO: implement fade envelope; currently identical to stop.
+    # Also has the same zombie-process bug as the old stop handler:
+    # bumps _go_generation but does not call disarm(), so player processes
+    # are not cleaned up. Fix when implementing real fade behavior.
+    Logger.info("fade_out treated as stop (fade envelope not yet implemented)")
     target_id = target.id
     target._stop_requested = True
     target._go_generation = getattr(target, "_go_generation", 0) + 1
-    return ActionHandler._action_result("applied", "fade-out", target_id)
+    return ActionHandler._action_result("applied", "fade_out", target_id)
 
 
 def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+    # TODO: implement seek/position navigation; currently only arms the target
+    Logger.info("go_to only arms target (seek not yet implemented)")
     target_id = target.id
     if not getattr(target, "loaded", False):
         ch.arm(target, init=True)
-    return ActionHandler._action_result("applied", "go-to", target_id)
+    return ActionHandler._action_result("applied", "go_to", target_id)
 
 
 _ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
@@ -416,9 +441,9 @@ _ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
     "stop": _handle_stop,
     "enable": _handle_enable,
     "disable": _handle_disable,
-    "fade-in": _handle_fade_in,
-    "fade-out": _handle_fade_out,
-    "go-to": _handle_go_to,
+    "fade_in": _handle_fade_in,
+    "fade_out": _handle_fade_out,
+    "go_to": _handle_go_to,
 }
 
 ACTION_HANDLER = ActionHandler()

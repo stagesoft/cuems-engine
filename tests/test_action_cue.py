@@ -91,6 +91,17 @@ class TestPlayAction:
         mock_go.assert_called_once()
         assert target._stop_requested is False
 
+    def test_play_disabled_target_fails(self, handler, mtc):
+        target = _make_target(enabled=False)
+        cue = _make_action_cue("play", target)
+
+        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "failed"
+        assert "disabled" in result["reason"]
+        mock_go.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # T007: pause — target enters paused state
@@ -119,12 +130,14 @@ class TestStopAction:
         target = _make_target(_stop_requested=False, _go_generation=1)
         cue = _make_action_cue("stop", target)
 
-        result = handler.execute_action(cue, mtc)
+        with patch.object(handler, "disarm") as mock_disarm:
+            result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
         assert result["action_type"] == "stop"
         assert target._stop_requested is True
         assert target._go_generation == 2
+        mock_disarm.assert_called_once_with(target)
 
 
 # ---------------------------------------------------------------------------
@@ -160,56 +173,56 @@ class TestDisableAction:
 
 
 # ---------------------------------------------------------------------------
-# T011: fade-in — target ramps into active state
+# T011: fade_in — target ramps into active state
 # ---------------------------------------------------------------------------
 
 
 class TestFadeInAction:
     def test_fade_in_starts_target(self, handler, mtc):
         target = _make_target()
-        cue = _make_action_cue("fade-in", target)
+        cue = _make_action_cue("fade_in", target)
 
         with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
-        assert result["action_type"] == "fade-in"
+        assert result["action_type"] == "fade_in"
         mock_go.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# T012: fade-out — target ramps down and exits active state
+# T012: fade_out — target ramps down and exits active state
 # ---------------------------------------------------------------------------
 
 
 class TestFadeOutAction:
     def test_fade_out_stops_target(self, handler, mtc):
         target = _make_target(_stop_requested=False, _go_generation=0)
-        cue = _make_action_cue("fade-out", target)
+        cue = _make_action_cue("fade_out", target)
 
         result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
-        assert result["action_type"] == "fade-out"
+        assert result["action_type"] == "fade_out"
         assert target._stop_requested is True
         assert target._go_generation == 1
 
 
 # ---------------------------------------------------------------------------
-# T013: go-to — execution pointer navigates to target cue
+# T013: go_to — execution pointer navigates to target cue
 # ---------------------------------------------------------------------------
 
 
 class TestGoToAction:
     def test_go_to_arms_target(self, handler, mtc):
         target = _make_target(loaded=False)
-        cue = _make_action_cue("go-to", target)
+        cue = _make_action_cue("go_to", target)
 
         with patch.object(handler, "arm") as mock_arm:
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
-        assert result["action_type"] == "go-to"
+        assert result["action_type"] == "go_to"
         mock_arm.assert_called_once()
 
 
@@ -297,10 +310,12 @@ class TestRapidSuccession:
     def test_rapid_stop_play_cycle(self, handler, mtc):
         target = _make_target()
 
-        with patch.object(handler, "go"), patch.object(handler, "arm"):
+        with patch.object(handler, "go"), patch.object(handler, "arm"), \
+             patch.object(handler, "disarm"):
             for _ in range(20):
                 handler.execute_action(_make_action_cue("stop", target), mtc)
                 target._stop_requested = False
+                target.loaded = True
                 handler.execute_action(_make_action_cue("play", target), mtc)
 
         assert target._stop_requested is False
