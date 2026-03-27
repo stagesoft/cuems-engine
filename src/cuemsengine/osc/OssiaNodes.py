@@ -129,7 +129,7 @@ class OssiaNodes(object):
                 raise ValueError("Node not found")
         node.parameter.push_value(value)
         # Impulse parameters are fire-and-forget — no stored value to verify
-        if node.parameter.type == ValueType.Impulse:
+        if node.parameter.value_type == ValueType.Impulse:
             return
         stored = node.parameter.value
         # Float parameters go through float32 (OSC wire format), so an exact
