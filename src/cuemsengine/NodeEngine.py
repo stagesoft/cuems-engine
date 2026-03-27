@@ -40,6 +40,8 @@ class NodeEngine(BaseEngine):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
+        self._loading_lock = threading.Lock()
+        self._loading = False
         self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
@@ -478,6 +480,19 @@ class NodeEngine(BaseEngine):
 
     def load_project(self, project):
         """Load the project files to the node"""
+        with self._loading_lock:
+            if self._loading:
+                Logger.warning(f'Load already in progress, ignoring duplicate load of {project}')
+                return
+            self._loading = True
+
+        try:
+            return self._load_project_inner(project)
+        finally:
+            with self._loading_lock:
+                self._loading = False
+
+    def _load_project_inner(self, project):
         # Don't allow loading while script is running
         if self.get_status('running') == "yes":
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
@@ -502,6 +517,7 @@ class NodeEngine(BaseEngine):
         # Otherwise the old cue objects are orphaned and their players never get killed
         Logger.debug('Cleaning up previous project resources before loading new one')
         PLAYER_HANDLER.kill_all_audio_players()
+        PLAYER_HANDLER.kill_orphaned_audio_processes()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
         CUE_HANDLER.disarm_all()
         
