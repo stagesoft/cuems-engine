@@ -321,6 +321,38 @@ class PlayerHandler:
 
         return len(zombies)
 
+    def kill_orphaned_audio_processes(self):
+        """Kill audioplayer-cuems OS processes not tracked by this engine.
+
+        On engine restart, previously spawned audioplayer processes survive
+        because they are independent subprocesses. The new engine has no
+        reference to them, so they steal JACK client names and cause silence.
+        """
+        import os
+        import signal
+        result = subprocess.run(
+            ['pgrep', '-f', 'audioplayer-cuems'],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return
+
+        tracked_pids = set()
+        with self._lock:
+            for player in self._audio_players_by_id.values():
+                if player and player.p:
+                    tracked_pids.add(player.p.pid)
+
+        for pid_str in result.stdout.strip().split('\n'):
+            if not pid_str:
+                continue
+            pid = int(pid_str)
+            if pid not in tracked_pids:
+                Logger.warning(f'Killing orphaned audioplayer process {pid}')
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     # ---------------------------
     # Audio Cue Management
