@@ -1,5 +1,8 @@
-from threading import Thread, Lock
+from __future__ import annotations
+
+from threading import Lock, Thread
 from time import sleep
+from typing import TYPE_CHECKING
 
 from cuemsutils.cues import VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
@@ -13,6 +16,9 @@ from ..osc.OssiaClient import PlayerClient
 from ..players import VideoPlayer, VideoClient
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
+from .arm_cue import arm_cue
+from .loop_cue import loop_cue
+from .run_cue import run_cue
 
 
 class CueHandler:
@@ -23,7 +29,7 @@ class CueHandler:
     Thread-safe: internal state mutations are guarded by a Lock.
     """
 
-    _instance: 'CueHandler | None' = None
+    _instance: "CueHandler | None" = None
 
     # Instance attributes (declared for IDE/type checker support)
     _armed_cues: list[Cue]
@@ -314,7 +320,32 @@ class CueHandler:
         while thread.is_alive():
             sleep(1)
         thread.join()
-        Logger.info(f'{thread.name} finished')
+        Logger.info(f"{thread.name} finished")
+
+    # ---------------------------
+    # ---------------------------
+    # Action Cue Execution (delegates to ActionHandler)
+    # ---------------------------
+
+    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+        """Execute an ActionCue against the running show (see ActionHandler)."""
+        from .ActionHandler import ACTION_HANDLER
+
+        return ACTION_HANDLER.execute_action(cue, mtc)
+
+    def register_action_hook(
+        self,
+        phase: str,
+        fn,
+        *,
+        action_types: frozenset | None = None,
+    ) -> None:
+        """Register a cue-layer extension hook; forwards to ``ACTION_HANDLER``."""
+        from .ActionHandler import ACTION_HANDLER
+
+        ACTION_HANDLER.register_action_hook(
+            phase, fn, source="cue_layer", action_types=action_types
+        )
 
     # ---------------------------
     # OSCQuery Message Routing
@@ -407,3 +438,7 @@ class CueHandler:
 # ---------------------------
 
 CUE_HANDLER = CueHandler()
+
+from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
+
+_ACTION_HANDLER_SINGLETON.bind_cue_handler(CUE_HANDLER)

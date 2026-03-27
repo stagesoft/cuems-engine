@@ -41,44 +41,11 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """
-    Run an ActionCue
-    """
-    if cue._action_target_object is None:
-        Logger.warning(
-            f'ActionCue {cue.id} has no valid action target (target {getattr(cue, "action_target", None)} may have been deleted), skipping',
-            extra={"caller": cue.__class__.__name__}
-        )
-        return
+    """Run an ActionCue by delegating to ActionHandler.execute_action."""
+    from .ActionHandler import ACTION_HANDLER
 
-    # TODO: Implement this
-    if cue.action_type == 'load':
-        cue._action_target_object.arm(cue._conf, cue._armed_list)
-    elif cue.action_type == 'unload':
-        cue._action_target_object.disarm()
-    elif cue.action_type == 'play':
-        cue._action_target_object.go(mtc)
-    elif cue.action_type == 'pause':
-        pass
-    elif cue.action_type == 'stop':
-        pass
-    elif cue.action_type == 'enable':
-        cue._action_target_object.enabled = True
-    elif cue.action_type == 'disable':
-        cue._action_target_object.enabled = False
-    # DEV: To be implemented
-    elif cue.action_type == 'fade_in':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'fade_out':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'wait':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'go_to':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'pause_project':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'resume_project':
-        cue._action_target_object.enabled = False
+    ACTION_HANDLER.execute_action(cue, mtc)
+
 
 @run_cue.register
 def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
