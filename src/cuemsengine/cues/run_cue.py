@@ -277,7 +277,10 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
-        client.set_value(f'{layer_path}/visible', 1)
+        # Send mtcfollow before visible so the videocomposer loads the
+        # correct frame (using offset + MTC position) while the layer is
+        # still invisible. This prevents rendering a stale frame.
         client.set_value(f'{layer_path}/mtcfollow', 1)
+        client.set_value(f'{layer_path}/visible', 1)
 
     Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")
