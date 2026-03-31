@@ -273,6 +273,9 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 output = PLAYER_HANDLER.get_video_output(output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f'{layer_path}/position', [x, y])
+                sx, sy = output.get_layer_scale()
+                if sx != 1.0 or sy != 1.0:
+                    client.set_value(f'{layer_path}/scale', [sx, sy])
             except (KeyError, Exception) as e:
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
 

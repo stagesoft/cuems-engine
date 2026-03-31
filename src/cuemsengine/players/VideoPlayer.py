@@ -70,12 +70,28 @@ class VideoOutput:
         """Returns (x, y) offset from canvas center to this output's center.
 
         The videocomposer uses center-relative coordinates: (0, 0) = canvas center.
+        The renderer negates Y (glTranslatef(x, -y, 0)) because OpenGL Y points
+        up while screen Y points down.  The canvas FBO also has Y=0 at the
+        bottom, so we negate Y here to compensate — positive Y in the returned
+        value means "below canvas center" in screen coords, which maps to the
+        correct FBO position after the renderer's negation.
         """
         output_cx = self.canvas_region['x'] + self.canvas_region['width'] // 2
         output_cy = self.canvas_region['y'] + self.canvas_region['height'] // 2
         canvas_cx = self.canvas_width // 2
         canvas_cy = self.canvas_height // 2
-        return (output_cx - canvas_cx, output_cy - canvas_cy)
+        return (output_cx - canvas_cx, canvas_cy - output_cy)
+
+    def get_layer_scale(self) -> tuple[float, float]:
+        """Returns (scaleX, scaleY) to fit the video layer within this output's region.
+
+        The videocomposer renders layers at full canvas size with letterboxing.
+        For typical setups (ultra-wide canvas, 16:9 video), the video fills the
+        canvas height and is letterboxed horizontally.  The height ratio therefore
+        determines the correct uniform scale to fit the output region.
+        """
+        s = self.canvas_region['height'] / self.canvas_height if self.canvas_height else 1.0
+        return (s, s)
 
     def apply_config(self, video_client: VideoClient) -> None:
         """No-op: videocomposer reads display config from display.conf at startup.
