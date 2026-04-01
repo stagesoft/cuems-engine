@@ -388,10 +388,9 @@ class CueHandler:
                 audio_cmd = f'/vol{channel}'
                 cue = self.get_armed_cue_by_id(cue_uuid)
                 if cue and hasattr(cue, '_osc') and cue._osc:
-                    # UI uses 0-100 percentage, audioplayer expects 0.0-1.0 gain
-                    # Convert and clamp to valid range
-                    vol_value = max(0.0, min(1.0, float(value) / 100.0))
-                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {value}% -> {vol_value}")
+                    # UI already sends 0.0-1.0 via sliderToFloat(); just clamp
+                    vol_value = max(0.0, min(1.0, float(value)))
+                    Logger.debug(f"Routing audio cue {cue_uuid}: {audio_cmd} = {vol_value}")
                     cue._osc.set_value(audio_cmd, vol_value)
                 else:
                     Logger.warning(f"Cue {cue_uuid} not found or has no OSC client")
