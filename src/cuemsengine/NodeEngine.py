@@ -729,9 +729,14 @@ class NodeEngine(BaseEngine):
         
         self.set_status('running', "no")
         
-        # DMX blackout immediately (visual output goes dark ASAP)
+        # DMX: disable MTC following first (freezes the playhead so queued
+        # scenes can't fire), then blackout via OLA for instant visual reset.
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()
         if dmx_client:
+            try:
+                dmx_client.disable_mtcfollow()
+            except Exception as e:
+                Logger.warning(f'DMX disable mtcfollow failed: {e}')
             try:
                 dmx_client.send_blackout()
             except Exception as e:

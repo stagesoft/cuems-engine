@@ -212,6 +212,10 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
         
+        # Enable MTC following so the dmxplayer tracks timecode and stops
+        # advancing when MTC stops (e.g. on STOP command).
+        cue._osc.enable_mtcfollow()
+
         # Send DMX scene bundle to local player (mtc_time absolute so no overlap/loss)
         cue._osc.send_dmx_scene(
             universe_frames=universe_frames,

@@ -68,6 +68,17 @@ class DmxClient(PlayerClient):
         self._mtc_time_param = root.add_node("/mtc_time").create_parameter(ossia.ValueType.String)
         self._start_offset_param = root.add_node("/start_offset").create_parameter(ossia.ValueType.Int)
         self._fade_time_param = root.add_node("/fade_time").create_parameter(ossia.ValueType.Float)
+        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(ossia.ValueType.Int)
+
+    def enable_mtcfollow(self) -> None:
+        """Enable MTC following so the dmxplayer tracks timecode."""
+        self._mtcfollow_param.push_value(1)
+        Logger.debug("DMX mtcfollow enabled")
+
+    def disable_mtcfollow(self) -> None:
+        """Disable MTC following so the dmxplayer stops advancing its playhead."""
+        self._mtcfollow_param.push_value(0)
+        Logger.debug("DMX mtcfollow disabled")
 
     @logged
     def send_dmx_scene(
