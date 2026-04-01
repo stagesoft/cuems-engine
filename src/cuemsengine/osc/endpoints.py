@@ -47,6 +47,7 @@ OSC_VIDEOPLAYER_CONF = {
     '/videocomposer/display/load' : [ValueType.String, None], # [file_path]
     '/videocomposer/reset' : [ValueType.Impulse, None],  # Remove all layers, cancel loads, reset master
     '/videocomposer/layer/load' : [ValueType.List, None, None, False], # [file_path, layer_id] — no RepetitionFilter (command endpoint)
+    '/videocomposer/layer/load_shared' : [ValueType.List, None, None, False], # [file_path, layer_id, driver_layer_id] — shared decoder (same cue, multiple outputs)
     '/videocomposer/layer/unload' : [ValueType.String, None, None, False], # [layer_id] — no RepetitionFilter (command endpoint)
     '/videocomposer/output/capture' : [ValueType.List, None], # [ status|disable|[enable width height] ]
 }

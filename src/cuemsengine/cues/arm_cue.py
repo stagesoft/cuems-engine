@@ -135,10 +135,18 @@ def arm_videoCue(cue: VideoCue):
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
     cue._layer_ids = []
 
+    driver_layer_id = None
     for index, output_name in enumerate(output_names):
         layer_id = f"{cue.id}_{index}"
 
-        client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+        if index == 0:
+            # First output: normal load (creates decoder)
+            client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+            driver_layer_id = layer_id
+        else:
+            # Subsequent outputs: share decoder from first layer
+            client.set_value('/videocomposer/layer/load_shared',
+                             [video_path, layer_id, driver_layer_id])
         client.create_layer_endpoints(layer_id)
 
         layer_path = f'/videocomposer/layer/{layer_id}'
