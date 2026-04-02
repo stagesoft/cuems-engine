@@ -4,9 +4,10 @@ from threading import Lock, Thread
 from time import sleep
 from typing import TYPE_CHECKING
 
-from cuemsutils.cues import VideoCue, AudioCue
+from cuemsutils.cues import ActionCue, CueList, DmxCue, VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import logged, Logger
+from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
 from .run_cue import run_cue
@@ -127,36 +128,145 @@ class CueHandler:
     # Cue Management
     # ---------------------------
 
+    # Minimum effective duration (ms) for a cue to "count" as providing
+    # enough time to arm subsequent cues during its playback.
+    # Configurable per deployment. Default 1000ms covers 4K video decode.
+    _ARM_WINDOW_THRESHOLD_MS = 1000
+
+    # Maximum cues to walk ahead. Prevents runaway on pathological chains.
+    _MAX_LOOKAHEAD_DEPTH = 15
+
+    @staticmethod
+    def _effective_duration_ms(cue: Cue) -> float:
+        """Effective time a cue occupies: prewait + body + postwait.
+
+        prewait/postwait are always CTimecode (format_timecode returns
+        CTimecode() for None/empty). CTimecode(0) is truthy but
+        .milliseconds returns 0.
+        """
+        pre = cue.prewait.milliseconds
+        post = cue.postwait.milliseconds
+
+        if isinstance(cue, CueList):
+            body = 0  # container — duration is its contents
+        elif isinstance(cue, (AudioCue, VideoCue)):
+            try:
+                body = CTimecode(cue.media.duration).milliseconds if cue.media else 0
+            except Exception:
+                body = 0
+        elif isinstance(cue, DmxCue):
+            # fadein_time/fadeout_time stored as float seconds.
+            # fadeout_time exists in model but not yet implemented (always 0.0).
+            fadein = getattr(cue, 'fadein_time', 0) or 0
+            fadeout = getattr(cue, 'fadeout_time', 0) or 0
+            body = (fadein + fadeout) * 1000  # convert seconds → ms
+        elif isinstance(cue, ActionCue):
+            # play/stop/enable/disable/go_to = instant
+            # TODO: use fade duration once fade_in/fade_out implemented
+            body = 0
+        else:
+            body = 0
+
+        return pre + body + post
+
+    def _arm_ahead(self, start_cue: Cue) -> None:
+        """Arm ahead in the target chain until 2 cues with meaningful
+        duration are armed. Short/zero-duration cues are armed but don't
+        count. CueList targets are skipped (handled by initial_cuelist_process).
+        """
+        target = getattr(start_cue, '_target_object', None)
+        counted = 0
+        walked = 0
+
+        while (isinstance(target, Cue)
+               and counted < 2
+               and walked < self._MAX_LOOKAHEAD_DEPTH):
+            if isinstance(target, CueList):
+                # CueLists are containers — skip, don't count
+                target = getattr(target, '_target_object', None)
+                walked += 1
+                continue
+            if not getattr(target, 'loaded', False):
+                self.arm(target, init=True)
+            if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
+                counted += 1
+            target = getattr(target, '_target_object', None)
+            walked += 1
+
+        if walked >= self._MAX_LOOKAHEAD_DEPTH and counted < 2:
+            Logger.warning(
+                f'_arm_ahead hit depth limit ({self._MAX_LOOKAHEAD_DEPTH}) '
+                f'from cue {start_cue.id} with only {counted}/2 real-duration '
+                f'cues found. Remaining cues will rely on safety-net re-arm.')
+
     def arm(self, cue: Cue, init=False) -> bool:
         """Arms a cue by appending it to the armed_cues list."""
         if cue is None:
             return False
+
+        needs_disarm = False
+        do_arm = False
+
         with self._lock:
-            found = cue in self._armed_cues
-        if hasattr(cue, 'loaded') and cue.loaded:
-            if not cue.enabled:
-                _ = self.disarm(cue)
+            found = cue.id in self._armed_cues_set  # O(1) set lookup
+            if hasattr(cue, 'loaded') and cue.loaded:
+                if not cue.enabled:
+                    needs_disarm = True
+            elif getattr(cue, '_loading', False):
+                # Another thread or recursive call is already arming this cue
+                return False
+            elif not init:
+                if not found:
+                    self._armed_cues.append(cue)
+                    self._armed_cues_set.add(cue.id)
+            elif cue._local and cue.enabled:
+                # Mark as loading inside the lock to block concurrent arm
+                # attempts. Cleared in finally below (outside lock —
+                # intentional: avoids holding lock during arm_cue(). The
+                # sentinel is set atomically here, so no other thread can
+                # enter this branch for the same cue until _loading is
+                # cleared.)
+                cue._loading = True
+                do_arm = True
+
+        # Disarm disabled-but-loaded cues outside lock (disarm acquires lock)
+        if needs_disarm:
+            self.disarm(cue)
             return False
-        elif not init:
-            if not found:
-                self.add_armed_cue(cue)
-            return True
-        
-        if cue._local and cue.enabled:
+
+        if not do_arm:
+            return not needs_disarm
+
+        try:
             Logger.info(f"Arming {type(cue).__name__} {cue.id}")
             arm_cue(cue)
-            cue.loaded = True
-            if not found:
-                self.add_armed_cue(cue)
+            with self._lock:
+                cue.loaded = True
+                if not found:
+                    self._armed_cues.append(cue)
+                    self._armed_cues_set.add(cue.id)
             if isinstance(cue, AudioCue):
-                # Non-blocking NNG notification (fire-and-forget)
                 try:
-                    self.communications_thread.add_player(f'audioplayer_{cue.id}', None, timeout=0.1)
+                    self.communications_thread.add_player(
+                        f'audioplayer_{cue.id}', None, timeout=0.1)
                 except Exception:
-                    pass  # Ignore - NNG is for distributed nodes
+                    pass
+        finally:
+            cue._loading = False
 
+        # Recursive arms — only reached if cue was actually armed.
+        # _loading sentinel prevents cycles; loaded guard prevents re-arm.
         if cue.post_go == 'go' and cue._target_object:
             self.arm(cue._target_object, init)
+
+        # ActionCue(play) + target = 1 unit. Arm target so it's ready
+        # when the action fires (ActionCue has zero duration).
+        # NOTE: fade_in/fade_out are being implemented and will target
+        # already-playing cues — no pre-arm needed yet. Revisit if
+        # fade_in semantics change to start-from-zero like play.
+        if isinstance(cue, ActionCue) and cue._action_target_object:
+            if cue.action_type == 'play':
+                self.arm(cue._action_target_object, init)
 
         return True
 
@@ -231,7 +341,11 @@ class CueHandler:
         """
         Logger.info(f'GO command received. Starting cue {cue.id}')
         if not hasattr(cue, 'loaded') or not cue.loaded:
-            raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go')
+            Logger.warning(f'Cue {cue.id} not loaded at go() time — this should not happen, '
+                           f'pre-arm may have failed. Re-arming as fallback.')
+            self.arm(cue, init=True)
+            if not hasattr(cue, 'loaded') or not cue.loaded:
+                raise Exception(f'{cue.__class__.__name__} {cue.id} not loaded to go (re-arm failed)')
 
         cue._stop_requested = False
         go_gen = getattr(cue, '_go_generation', 0) + 1
@@ -245,10 +359,9 @@ class CueHandler:
         )
         thread.start()
 
-        # Arm next target if needed
-        if isinstance(cue._target_object, Cue):
-            if hasattr(cue._target_object, 'loaded') and not cue._target_object.loaded:
-                self.arm(cue._target_object)
+        # Duration-aware lookahead: arm ahead until 2 cues with
+        # meaningful playback duration are ready.
+        self._arm_ahead(cue)
         return thread
 
     def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0):
@@ -283,6 +396,14 @@ class CueHandler:
         if cue.post_go == 'go' and cue._target_object:
             Logger.info(f'Running post go for next cue:{cue.target}')
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
+
+        # Pre-arm go_at_end targets during playback. Runs after
+        # run_cue() so current cue is already playing. The arm happens
+        # in parallel with the media. go() also calls _arm_ahead but
+        # that fires before run_cue — this call catches cues that were
+        # disarmed between go() and here (loop passes).
+        if cue.post_go == 'go_at_end':
+            self._arm_ahead(cue)
 
         Logger.info(f'Going to loop for {cue.__class__.__name__}:{cue.id}')
         loop_cue(cue, mtc)

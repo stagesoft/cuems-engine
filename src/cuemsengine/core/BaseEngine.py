@@ -435,10 +435,6 @@ class BaseEngine(SignalEngine):
                     if item._target_object is None:
                         Logger.warning(f'{type(item).__name__} {item.id} has target {item.target} that could not be found in the script (deleted?)')
 
-                if item._local and (not hasattr(item, 'loaded') or not item.loaded):
-                    Logger.info(f'Arming item: {type(item).__name__} {item.id}')
-                    CUE_HANDLER.arm(item, True)
-
                 Logger.debug(f'Target object for {type(item)} {item.id} is {item._target_object}')
                 if isinstance(item, ActionCue):
                     item._action_target_object = self.script.find(item.action_target)
@@ -448,3 +444,15 @@ class BaseEngine(SignalEngine):
             except Exception as e:
                 Logger.error(f'Error processing item at index {index} in cuelist {cuelist.id}: {e}')
                 continue
+
+        # Arm first cue + duration-aware lookahead. The sliding window
+        # (_arm_ahead in go/go_threaded) arms subsequent cues during
+        # playback. For post_go='go' chains, arm() recursively arms the
+        # entire chain. For go_at_end chains, only 2 cues with meaningful
+        # duration are armed, saving resources for large projects.
+        if cuelist.contents:
+            first_cue = cuelist.contents[0]
+            if first_cue and getattr(first_cue, '_local', False):
+                Logger.info(f'Arming first cue + lookahead for {type(cuelist).__name__}: {cuelist.id}')
+                CUE_HANDLER.arm(first_cue, True)
+                CUE_HANDLER._arm_ahead(first_cue)

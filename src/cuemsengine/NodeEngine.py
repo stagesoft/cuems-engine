@@ -631,6 +631,7 @@ class NodeEngine(BaseEngine):
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f'Re-arming cue {cue.id} selected as next cue')
                 CUE_HANDLER.arm(cue, init=True)
+            CUE_HANDLER._arm_ahead(cue)  # extend window from selected cue
             self._broadcast_nextcue()
             Logger.info(f'Next cue overridden by UI: {value}')
         else:
