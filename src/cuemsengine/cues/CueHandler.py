@@ -376,8 +376,18 @@ class CueHandler:
                     go/stop cycle occurred and this thread must not touch the cue.
         """
         if cue.prewait > 0:
+            # Notify controller before pre-wait so UI shows "playing" immediately
+            if cue._local and not cue._stop_requested:
+                try:
+                    offset = frozen_mtc_ms if frozen_mtc_ms is not None else 0
+                    self.communications_thread.add_cue(cue.id, str(offset), timeout=0.1)
+                except Exception:
+                    pass
             sleep(cue.prewait.milliseconds / 1000)
-        
+            # Bail out if stop arrived during pre-wait
+            if cue._stop_requested:
+                return
+
         if frozen_mtc_ms is None:
             frozen_mtc_ms = float(mtc.main_tc.milliseconds)
             Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
