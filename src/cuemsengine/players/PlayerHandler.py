@@ -96,7 +96,8 @@ class PlayerHandler:
                     # Try to find by ID in _audio_players_by_id
                     player = self._audio_players_by_id.pop(cue_id, None)
                     if player is None:
-                        Logger.error(f'Cue player not found for cue {cue.id}')
+                        Logger.debug(f'Cue player not found for cue {cue.id}')
+                        return
                 
                 # Also remove from ID-based tracking
                 self._audio_players_by_id.pop(cue_id, None)
