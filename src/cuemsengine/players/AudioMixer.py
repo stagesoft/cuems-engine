@@ -61,10 +61,23 @@ class AudioMixer(Player):
         self.call_subprocess(process_call_list)
 
     @logged
-    def connect_to_jack(self):
-        """Connect mixer outputs to the configured playback ports."""
+    def connect_to_jack(self, max_retries: int = 10, retry_delay: float = 0.5):
+        """Connect mixer outputs to the configured playback ports.
+
+        Retries if ports are not yet registered (race with jack-volume startup).
+        """
         for i, playback_port in enumerate(self.audio_outputs):
             output_port = f"{self.client_name}:output_{i+1}"
+            # Wait for both ports to be available
+            for attempt in range(max_retries):
+                if self.conn_man.port_exists(output_port) and self.conn_man.port_exists(playback_port):
+                    break
+                if attempt < max_retries - 1:
+                    Logger.debug(f"Waiting for JACK ports {output_port} / {playback_port} (attempt {attempt + 1}/{max_retries})")
+                    sleep(retry_delay)
+            else:
+                Logger.warning(f"JACK ports not available after {max_retries} attempts: {output_port} -> {playback_port}")
+                continue
             Logger.debug(f"Connecting {output_port} to {playback_port}")
             self.conn_man.connect_by_name(output_port, playback_port)
 
