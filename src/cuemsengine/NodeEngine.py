@@ -498,8 +498,11 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
 
-        # Full cleanup of all players before loading a new project.
-        # DMX: stop following MTC and blackout all universes.
+        # Stop any running cue threads from the previous project first,
+        # so they can't interfere with cleanup (same logic as stop_playback).
+        CUE_HANDLER.stop_all_cues()
+
+        # DMX: stop following MTC, blackout all universes.
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()
         if dmx_client:
             try:
@@ -514,7 +517,7 @@ class NodeEngine(BaseEngine):
         # Video: reset videocomposer (remove all layers, cancel loads, reset master).
         self.unload_video_devs()
 
-        # Audio: reset mixer volumes and kill all players.
+        # Audio: reset mixer volumes, kill all players, clean up JACK.
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
         if mixer_client:
             try:
@@ -524,6 +527,8 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.kill_all_audio_players()
         PLAYER_HANDLER.kill_orphaned_audio_processes()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
+
+        # Disarm all cues from the previous project.
         CUE_HANDLER.disarm_all()
         
         # Obtain the project files (this replaces self.script with new project)

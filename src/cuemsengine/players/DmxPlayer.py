@@ -130,13 +130,12 @@ class DmxClient(PlayerClient):
 
     @logged
     def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
-        """Send a blackout (all channels to 0) directly to OLA.
+        """Send blackout: clear dmxplayer fades + direct OLA backup.
 
-        Bypasses the dmxplayer's scene mechanism entirely by calling
-        ola_set_dmx for each universe. This avoids race conditions between
-        the OSC receiver thread and the OLA timer thread in dmxplayer-cuems
-        (the scene's mtcStart can capture a stale playHead value when MTC
-        has just stopped).
+        Sends /blackout to the dmxplayer which clears all queued scenes,
+        active fades, and writes zeros to OLA. The direct ola_set_dmx
+        backup covers the case where the dmxplayer hasn't processed
+        the command yet.
 
         Args:
             universe_ids: DMX universe(s) to black out.
@@ -146,6 +145,13 @@ class DmxClient(PlayerClient):
         if isinstance(universe_ids, int):
             universe_ids = (universe_ids,)
 
+        # Tell the dmxplayer to clear all scenes/fades and send zeros to OLA.
+        try:
+            self.set_value('/blackout', None)
+        except Exception as e:
+            Logger.warning(f'Blackout command to dmxplayer failed: {e}')
+
+        # Backup: write zeros directly to OLA.
         zeros = ','.join(['0'] * 512)
         for uid in universe_ids:
             try:
@@ -157,7 +163,7 @@ class DmxClient(PlayerClient):
             except Exception as e:
                 Logger.error(f"Blackout ola_set_dmx failed for universe {uid}: {e}")
 
-        Logger.info(f"Sent DMX blackout via ola_set_dmx for universe(s) {universe_ids}")
+        Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
 
 @logged
 def start_dmx_player(

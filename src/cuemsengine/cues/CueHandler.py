@@ -403,7 +403,7 @@ class CueHandler:
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds / 1000)
 
-        if cue.post_go == 'go' and cue._target_object:
+        if cue.post_go == 'go' and cue._target_object and not cue._stop_requested:
             Logger.info(f'Running post go for next cue:{cue.target}')
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
@@ -433,7 +433,7 @@ class CueHandler:
                 pass
 
         go_at_end_thread = None
-        if cue.post_go == 'go_at_end' and cue._target_object:
+        if cue.post_go == 'go_at_end' and cue._target_object and not cue._stop_requested:
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
             go_at_end_thread = self.go(cue._target_object, mtc)
 
@@ -442,7 +442,7 @@ class CueHandler:
         if cue.post_go == 'go_at_end' and go_at_end_thread:
             self.wait_for_cue(go_at_end_thread)
 
-        if cue.post_go == 'go' and cue._target_object:
+        if cue.post_go == 'go' and cue._target_object and not cue._stop_requested:
             self.wait_for_cue(post_go_thread)
 
     def wait_for_cue(self, thread: Thread) -> None:

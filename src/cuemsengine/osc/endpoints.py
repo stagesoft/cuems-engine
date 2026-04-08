@@ -25,6 +25,7 @@ OSC_AUDIOMIXER_CONF = {
 OSC_DMXPLAYER_CONF = { 
     '/quit' : [ValueType.Impulse, None],
     '/check' : [ValueType.Impulse, None],
+    '/blackout' : [ValueType.Impulse, None],  # Clear all scenes/fades, send zeros to OLA
     '/stoponlost' : [ValueType.Bool, None],
     '/mtcfollow' : [ValueType.Bool, None],
     '/frame' : [ValueType.List, None],        # [universe_id, ch0, val0, ch1, val1, ...]
