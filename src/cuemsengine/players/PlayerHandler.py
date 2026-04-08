@@ -550,7 +550,7 @@ class PlayerHandler:
             try:
                 self._video_client.set_value('/videocomposer/reset', None)
             except Exception as e:
-                Logger.debug(f'Error sending reset to videocomposer: {e}')
+                Logger.warning(f'Error sending reset to videocomposer: {e}')
             # Remove all layer endpoints from the OSC client
             with self._lock:
                 for layer_id in list(self._loaded_layer_ids):

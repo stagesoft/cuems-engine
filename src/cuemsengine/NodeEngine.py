@@ -498,24 +498,29 @@ class NodeEngine(BaseEngine):
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
 
-        # DMX blackout and JACK volume reset before cleanup (clean outputs)
+        # Full cleanup of all players before loading a new project.
+        # DMX: stop following MTC and blackout all universes.
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()
         if dmx_client:
+            try:
+                dmx_client.disable_mtcfollow()
+            except Exception as e:
+                Logger.warning(f'DMX disable mtcfollow failed: {e}')
             try:
                 dmx_client.send_blackout()
             except Exception as e:
                 Logger.warning(f'DMX blackout failed: {e}')
+
+        # Video: reset videocomposer (remove all layers, cancel loads, reset master).
+        self.unload_video_devs()
+
+        # Audio: reset mixer volumes and kill all players.
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
         if mixer_client:
             try:
                 mixer_client.reset_volumes()
             except Exception as e:
                 Logger.warning(f'JACK volume reset failed: {e}')
-
-        # Clean up any existing audio players from the previous project
-        # This MUST happen BEFORE ready_project() which replaces self.script
-        # Otherwise the old cue objects are orphaned and their players never get killed
-        Logger.debug('Cleaning up previous project resources before loading new one')
         PLAYER_HANDLER.kill_all_audio_players()
         PLAYER_HANDLER.kill_orphaned_audio_processes()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
@@ -729,7 +734,13 @@ class NodeEngine(BaseEngine):
         Logger.info('STOP command received. Stopping playback.')
         
         self.set_status('running', "no")
-        
+
+        # Signal all running cue threads to stop immediately.
+        # Must happen BEFORE blackout/reset so loop_cue threads don't
+        # re-push DMX frames or send /visible after cleanup.
+        CUE_HANDLER.stop_all_cues()
+        sleep(0.05)  # 50ms — loop_cue polls every 20ms
+
         # DMX: disable MTC following first (freezes the playhead so queued
         # scenes can't fire), then blackout via OLA for instant visual reset.
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()
