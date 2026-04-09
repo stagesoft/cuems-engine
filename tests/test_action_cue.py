@@ -701,15 +701,52 @@ class TestArmPlayTarget:
         assert not getattr(cue, 'loaded', False)
         assert not getattr(play_target, 'loaded', False)
 
-    def test_arm_loading_sentinel_prevents_double_arm(self, handler, mtc):
-        """A cue with _loading=True should be skipped by concurrent arm calls."""
+    def test_arm_loading_waits_for_in_progress_arm(self, handler, mtc):
+        """An init=True arm on a cue being armed should wait and succeed."""
+        from threading import Event, Thread
+
         cue = _make_action_target(loaded=False)
-        cue._loading = True  # simulate in-progress arm
+        event = Event()
+        cue._loading = event  # simulate in-progress arm
+
+        def _finish_arm():
+            time.sleep(0.1)
+            cue.loaded = True
+            event.set()
+
+        t = Thread(target=_finish_arm, daemon=True)
+        t.start()
 
         result = handler.arm(cue, init=True)
+        t.join(timeout=2)
+
+        assert result is True
+        assert cue.loaded is True
+
+    def test_arm_loading_timeout_returns_false(self, handler, mtc):
+        """An init=True arm should return False if the in-progress arm times out."""
+        from threading import Event
+
+        cue = _make_action_target(loaded=False)
+        cue._loading = Event()  # never signalled
+
+        # Patch timeout to avoid 5s wait in tests
+        with patch.object(cue._loading, 'wait', return_value=False):
+            result = handler.arm(cue, init=True)
 
         assert result is False
         assert not getattr(cue, 'loaded', False)
+
+    def test_arm_loading_non_init_returns_false(self, handler, mtc):
+        """A non-init arm on a cue being armed should return False immediately."""
+        from threading import Event
+
+        cue = _make_action_target(loaded=False)
+        cue._loading = Event()  # simulate in-progress arm
+
+        result = handler.arm(cue, init=False)
+
+        assert result is False
 
     def test_arm_found_uses_set(self, handler, mtc):
         """arm() should use _armed_cues_set for O(1) membership check."""

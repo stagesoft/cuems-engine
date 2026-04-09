@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from time import sleep
 from typing import TYPE_CHECKING
 
@@ -206,15 +206,20 @@ class CueHandler:
 
         needs_disarm = False
         do_arm = False
+        pending_event = None
 
         with self._lock:
             found = cue.id in self._armed_cues_set  # O(1) set lookup
             if hasattr(cue, 'loaded') and cue.loaded:
                 if not cue.enabled:
                     needs_disarm = True
-            elif getattr(cue, '_loading', False):
-                # Another thread or recursive call is already arming this cue
-                return False
+            elif isinstance(getattr(cue, '_loading', None), Event):
+                if init:
+                    # Another thread is arming — wait for it outside the lock
+                    pending_event = cue._loading
+                else:
+                    # Non-init callers just register; no need to wait
+                    return False
             elif not init:
                 if not found:
                     self._armed_cues.append(cue)
@@ -223,11 +228,19 @@ class CueHandler:
                 # Mark as loading inside the lock to block concurrent arm
                 # attempts. Cleared in finally below (outside lock —
                 # intentional: avoids holding lock during arm_cue(). The
-                # sentinel is set atomically here, so no other thread can
+                # Event is set atomically here, so no other thread can
                 # enter this branch for the same cue until _loading is
-                # cleared.)
-                cue._loading = True
+                # cleared. Waiting threads block on the Event.)
+                cue._loading = Event()
                 do_arm = True
+
+        # Another thread is arming this cue — wait for it to finish
+        if pending_event is not None:
+            Logger.debug(f'Waiting for in-progress arm of {type(cue).__name__} {cue.id}')
+            armed = pending_event.wait(timeout=5.0)
+            if not armed:
+                Logger.warning(f'Timed out waiting for arm of {cue.id}')
+            return getattr(cue, 'loaded', False)
 
         # Disarm disabled-but-loaded cues outside lock (disarm acquires lock)
         if needs_disarm:
@@ -252,7 +265,10 @@ class CueHandler:
                 except Exception:
                     pass
         finally:
-            cue._loading = False
+            loading_event = cue._loading
+            cue._loading = None
+            if isinstance(loading_event, Event):
+                loading_event.set()
 
         # Recursive arms — only reached if cue was actually armed.
         # _loading sentinel prevents cycles; loaded guard prevents re-arm.
