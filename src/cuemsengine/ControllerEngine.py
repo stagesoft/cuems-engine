@@ -48,6 +48,10 @@ class ControllerEngine(BaseEngine):
         # Per-cue status dict: maps cue uuid → int status value.
         # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
         self.cue_status: dict[str, int] = {}
+        # Per-cue enabled status: maps cue uuid → bool.
+        # Initialised from XML on load_project, updated by show-time toggles.
+        # Resets to XML values on reload; persists across stop/go.
+        self.cue_enabled_status: dict[str, bool] = {}
         # Per-cue last-broadcast timestamps for WS throttle (Tier 2).
         self._cue_broadcast_timestamps: dict[str, float] = {}
         super().__init__(**kwargs)
@@ -125,7 +129,8 @@ class ControllerEngine(BaseEngine):
         
         # Register command handlers for WebSocket OSC
         self._register_osc_command_handlers()
-        
+        self.communications_thread.set_on_client_connect(self._on_ws_client_connect)
+
         self.communications_thread.start()
         
         # Wait for NNG thread to initialize (prevents race condition in nni_random)
@@ -162,7 +167,10 @@ class ControllerEngine(BaseEngine):
         self.communications_thread.register_command_handler(
             '/engine/command/setnextcue', self._setnextcue_handler, forward_to_nodes=False
         )
-        
+        self.communications_thread.register_command_handler(
+            '/engine/command/cue_enabled', self._cue_enabled_handler, forward_to_nodes=False
+        )
+
         # Register wildcard handler for player messages (engine format)
         self.communications_thread.register_osc_handler(
             '/engine/players/*', self._handle_player_osc_message
@@ -383,6 +391,13 @@ class ControllerEngine(BaseEngine):
             nextcue_id = operation.data.get('nextcue', '') if operation.data else ''
             self.set_status('nextcue', nextcue_id)
             Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
+        elif operation.target == 'cue_enabled':
+            cue_id = operation.data.get('cue_id') if operation.data else None
+            enabled = operation.data.get('enabled', True) if operation.data else True
+            if cue_id and cue_id in self.cue_enabled_status:
+                self.cue_enabled_status[cue_id] = enabled
+                self._broadcast_cue_enabled(cue_id, enabled)
+                Logger.info(f'Cue {cue_id} enabled status updated from node: {enabled}')
         else:
             Logger.debug(f'Unknown status target: {operation.target}')
 
@@ -535,6 +550,26 @@ class ControllerEngine(BaseEngine):
                     ids.extend(self._collect_cue_ids(item))
         return ids
 
+    def _collect_cue_enabled(self, cuelist) -> dict[str, bool]:
+        """Recursively collect cue enabled states from a cuelist."""
+        from cuemsutils.cues import CueList
+        result = {}
+        if hasattr(cuelist, 'contents') and cuelist.contents:
+            for item in cuelist.contents:
+                if item is None:
+                    continue
+                result[item.id] = item.enabled
+                if isinstance(item, CueList):
+                    result.update(self._collect_cue_enabled(item))
+        return result
+
+    def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
+        """Broadcast per-cue enabled status to UI at /engine/status/cue_enabled/{uuid}."""
+        if hasattr(self, 'communications_thread') and self.communications_thread \
+                and hasattr(self.communications_thread, 'broadcast_osc'):
+            self.communications_thread.broadcast_osc(
+                f'/engine/status/cue_enabled/{cue_id}', 1 if enabled else 0)
+
     def _broadcast_cue_status(self, cue_id: str, value: int, force: bool = False) -> None:
         """Broadcast per-cue status to UI via WebSocket OSC at /engine/status/cue/{uuid}.
 
@@ -559,6 +594,33 @@ class ControllerEngine(BaseEngine):
         """Push status to UI via WebSocket OSC (realtime)."""
         if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
             self.communications_thread.broadcast_osc(f'/engine/status/{key}', value)
+
+    async def _on_ws_client_connect(self, websocket) -> None:
+        """Send full state dump to a newly connected WebSocket client."""
+        from .osc.WebSocketOscHandler import build_osc_message
+
+        # Engine status
+        for key in ('running', 'armed', 'load', 'nextcue'):
+            val = self.get_status(key)
+            if val is not None:
+                data = build_osc_message(f'/engine/status/{key}', val)
+                if data:
+                    await websocket.send(data)
+
+        # Per-cue playback status
+        for cid, status in self.cue_status.items():
+            data = build_osc_message(f'/engine/status/cue/{cid}', status)
+            if data:
+                await websocket.send(data)
+
+        # Per-cue enabled status
+        for cid, enabled in self.cue_enabled_status.items():
+            data = build_osc_message(
+                f'/engine/status/cue_enabled/{cid}', 1 if enabled else 0)
+            if data:
+                await websocket.send(data)
+
+        Logger.info(f'Late-join state dump sent to new WebSocket client')
 
     def on_timecode_change(self, value) -> None:
         """Broadcast timecode to UI as integer ms (whole seconds only), once per second."""
@@ -637,6 +699,12 @@ class ControllerEngine(BaseEngine):
             self._broadcast_cue_status(cid, 0, force=True)
         Logger.info(f'Cue status initialised for {len(self.cue_status)} cues')
 
+        # Initialise per-cue enabled status from XML (resets show-time overrides).
+        self.cue_enabled_status = self._collect_cue_enabled(self.script.cuelist)
+        for cid, enabled in self.cue_enabled_status.items():
+            self._broadcast_cue_enabled(cid, enabled)
+        Logger.info(f'Cue enabled status initialised for {len(self.cue_enabled_status)} cues')
+
         # Update internal status
         # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
@@ -682,6 +750,32 @@ class ControllerEngine(BaseEngine):
     def _setnextcue_handler(self, value):
         """Handle setnextcue from UI — forward to NodeEngine which owns the pointer."""
         self._forward_command_to_nodes('/engine/command/setnextcue', value)
+
+    def _cue_enabled_handler(self, value):
+        """Handle cue_enabled toggle from UI.
+
+        Value format: "<cue_id> <0|1>" (space-separated UUID and enabled flag).
+        """
+        if not value or not isinstance(value, str):
+            Logger.warning(f'Invalid cue_enabled value: {repr(value)}')
+            return
+
+        parts = value.split(' ', 1)
+        if len(parts) != 2 or parts[1] not in ('0', '1'):
+            Logger.warning(f'Invalid cue_enabled format (expected "uuid 0|1"): {repr(value)}')
+            return
+
+        cue_id, enabled_str = parts
+        enabled = enabled_str == '1'
+
+        if cue_id not in self.cue_enabled_status:
+            Logger.warning(f'cue_enabled: unknown cue_id {cue_id}')
+            return
+
+        self.cue_enabled_status[cue_id] = enabled
+        self._broadcast_cue_enabled(cue_id, enabled)
+        self._forward_command_to_nodes('/engine/command/cue_enabled', value)
+        Logger.info(f'Cue {cue_id} {"enabled" if enabled else "disabled"}')
 
     def _forward_command_to_nodes(self, address: str, value) -> None:
         """Forward a generic command to NodeEngine via NNG."""
@@ -744,6 +838,7 @@ class ControllerEngine(BaseEngine):
         self._clear_playback_state()
         self.reset_script()
         self.cue_status = {}
+        self.cue_enabled_status = {}
         self.set_status('load', '')
         self._forward_command_to_nodes('/engine/command/stop', value)
         Logger.info('Project unloaded')

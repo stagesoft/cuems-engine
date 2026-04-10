@@ -77,6 +77,9 @@ class ControllerCommunications(AsyncCommsThread):
         # Command handlers (set by ControllerEngine)
         self._command_handlers: dict[str, Callable] = {}
 
+        # Optional callback for new WebSocket client connections (late-join state dump)
+        self._on_client_connect: Optional[Callable] = None
+
     def create_all_tasks(self):
         Logger.info('Starting all tasks in ControllerCommunications')
         tasks = [
@@ -177,6 +180,14 @@ class ControllerCommunications(AsyncCommsThread):
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
     
+    def set_on_client_connect(self, callback: Callable) -> None:
+        """Set callback for new WebSocket client connections.
+
+        The callback receives the websocket object and is awaited
+        inside the connection handler (runs on the comms event loop).
+        """
+        self._on_client_connect = callback
+
     async def _websocket_osc_task(self) -> None:
         """Async task that runs the WebSocket OSC listener."""
         await websocket_osc_listener(
@@ -184,7 +195,8 @@ class ControllerCommunications(AsyncCommsThread):
             port=self._ws_osc_port,
             message_handler=self._osc_router.route,
             stop_check=lambda: self.stop_requested,
-            client_set=self._ws_clients
+            client_set=self._ws_clients,
+            on_connect=self._on_client_connect
         )
 
     def broadcast_osc(self, address: str, value: Any) -> None:

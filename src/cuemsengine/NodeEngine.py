@@ -42,6 +42,7 @@ class NodeEngine(BaseEngine):
         self._command_lock = threading.Lock()
         self._loading_lock = threading.Lock()
         self._loading = False
+        self._project_generation: int = 0
         self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
         PORT_HANDLER.add_system_ports()
         if hasattr(self, 'cm'):
@@ -84,6 +85,7 @@ class NodeEngine(BaseEngine):
         from .cues.ActionHandler import ACTION_HANDLER
 
         ACTION_HANDLER.finalize_node_layer_bindings()
+        ACTION_HANDLER.set_result_sink(self._action_result_sink)
 
 
     def _handle_nng_command(self, command_name: str, value, address: str = None):
@@ -260,6 +262,7 @@ class NodeEngine(BaseEngine):
             'resetall': None,
             'stop': self.stop_playback,
             'setnextcue': self.set_next_cue,
+            'cue_enabled': self._handle_cue_enabled,
             'test': None,
             'unload': None,
             'update': None,
@@ -630,6 +633,58 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f'Could not broadcast nextcue: {e}')
 
+    def _arm_with_enabled_guard(self, cue, project_gen: int):
+        """Arm a cue and disarm if it was disabled or project changed while arming.
+
+        Runs in a daemon thread. After arm() completes, re-checks
+        cue.enabled and project generation to handle races where:
+        - A disable command arrived while arm_cue() was loading media
+        - A stop/reload invalidated this project's cues
+        """
+        if self._project_generation != project_gen:
+            Logger.info(f'Aborting arm of {cue.id} — project generation changed')
+            return
+        CUE_HANDLER.arm(cue, init=True)
+        # If project changed during arm, disarm the stale cue.
+        if self._project_generation != project_gen:
+            if CUE_HANDLER.find_armed_cue(cue):
+                CUE_HANDLER.disarm(cue)
+            Logger.info(f'Disarmed cue {cue.id} — project changed during async arm')
+            return
+        # If cue was disabled while we were arming, disarm now.
+        if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
+            CUE_HANDLER.disarm(cue)
+            Logger.info(f'Disarmed cue {cue.id} — disabled during async arm')
+
+    def _action_result_sink(self, outcome: dict):
+        """Custom result sink for ActionHandler — extends default with cue_enabled sync."""
+        from .cues.ActionHandler import ACTION_HANDLER
+        # Always run default behavior (sends action_cue_outcome via NNG)
+        ACTION_HANDLER._default_result_sink(outcome)
+
+        # If an enable/disable action was applied, notify Controller
+        action_type = outcome.get('action_type')
+        status = outcome.get('status')
+        if action_type in ('enable', 'disable') and status == 'applied':
+            target_id = outcome.get('target_id')
+            if target_id:
+                self._notify_cue_enabled(target_id, action_type == 'enable')
+
+    def _notify_cue_enabled(self, cue_id: str, enabled: bool):
+        """Send cue enabled status to Controller via NNG."""
+        from .comms.NodesHub import NodeOperation, OperationType, ActionType
+        try:
+            operation = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid if hasattr(self, 'cm') and self.cm else 'node',
+                target='cue_enabled',
+                data={'cue_id': cue_id, 'enabled': enabled}
+            )
+            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+        except Exception as e:
+            Logger.warning(f'Could not notify cue_enabled: {e}')
+
     def set_next_cue(self, value):
         """Handle setnextcue command from the UI — override next_cue_pointer."""
         if not self.script:
@@ -647,6 +702,58 @@ class NodeEngine(BaseEngine):
         else:
             Logger.warning(f'setnextcue: cue {value} not found in script')
 
+    def _handle_cue_enabled(self, value):
+        """Handle cue_enabled toggle from Controller.
+
+        Value format: "<cue_id> <0|1>" (space-separated UUID and enabled flag).
+        """
+        if not self.script:
+            Logger.warning('No script loaded, cannot toggle cue enabled')
+            return
+
+        if not value or not isinstance(value, str):
+            Logger.warning(f'Invalid cue_enabled value: {repr(value)}')
+            return
+
+        parts = value.split(' ', 1)
+        if len(parts) != 2 or parts[1] not in ('0', '1'):
+            Logger.warning(f'Invalid cue_enabled format: {repr(value)}')
+            return
+
+        cue_id, enabled_str = parts
+        enabled = enabled_str == '1'
+
+        cue = self.script.find(cue_id)
+        if not cue:
+            Logger.warning(f'cue_enabled: cue {cue_id} not found in script')
+            return
+
+        cue.enabled = enabled
+
+        if not enabled:
+            # Disarm only if armed and NOT currently playing.
+            # A playing cue has a running go thread (_go_generation > 0 and loaded).
+            is_playing = (getattr(cue, '_go_generation', 0) > 0
+                          and not getattr(cue, '_stop_requested', True))
+            if CUE_HANDLER.find_armed_cue(cue) and not is_playing:
+                CUE_HANDLER.disarm(cue)
+                Logger.info(f'Disarmed disabled cue {cue_id}')
+        else:
+            # Re-arm in a daemon thread to avoid blocking _command_lock
+            # (arm() is slow — media loading, process spawning).
+            if cue._local and not CUE_HANDLER.find_armed_cue(cue):
+                gen = self._project_generation
+                threading.Thread(
+                    target=self._arm_with_enabled_guard,
+                    args=(cue, gen),
+                    daemon=True,
+                    name=f'ReArm:{cue_id}'
+                ).start()
+                Logger.info(f'Re-arming enabled cue {cue_id} (async)')
+
+        self._notify_cue_enabled(cue_id, enabled)
+        Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
+
     #########################
     # Script logic
     #########################
@@ -659,6 +766,7 @@ class NodeEngine(BaseEngine):
         self.ongoing_cue = None
         self.next_cue_pointer = None
         self.go_offset = 0
+        self._project_generation += 1  # Abort in-flight daemon arm threads
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
         
@@ -701,6 +809,10 @@ class NodeEngine(BaseEngine):
 
         if not cue_to_go._local:
             Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
+            return
+
+        if not cue_to_go.enabled:
+            Logger.info(f'Cue {cue_to_go.id} is disabled, skipping GO')
             return
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):

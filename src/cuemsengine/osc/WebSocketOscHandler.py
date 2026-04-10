@@ -122,10 +122,11 @@ async def handle_websocket_connection(
     websocket,
     message_handler: Callable[[str, list[Any]], None],
     stop_check: Callable[[], bool],
-    client_set: Optional[set] = None
+    client_set: Optional[set] = None,
+    on_connect: Optional[Callable] = None
 ) -> None:
     """Handle a single WebSocket connection.
-    
+
     Args:
         websocket: The WebSocket connection
         message_handler: Callback function to handle parsed OSC messages.
@@ -133,12 +134,20 @@ async def handle_websocket_connection(
         stop_check: Function that returns True when the listener should stop
         client_set: Optional set to track connected clients for broadcast. If provided,
                     websocket is added on connect and removed on disconnect.
+        on_connect: Optional async callback called with the websocket after connection
+                    is established. Used for sending initial state to new clients.
     """
     if client_set is not None:
         client_set.add(websocket)
     client_info = f"{websocket.remote_address}" if hasattr(websocket, 'remote_address') else "unknown"
     Logger.info(f"WebSocket OSC client connected: {client_info}")
-    
+
+    if on_connect is not None:
+        try:
+            await on_connect(websocket)
+        except Exception as e:
+            Logger.error(f"Error in on_connect callback: {e}")
+
     try:
         async for message in websocket:
             if stop_check():
@@ -208,7 +217,8 @@ async def websocket_osc_listener(
     message_handler: Callable[[str, list[Any]], None],
     stop_check: Callable[[], bool],
     existing_server_check: Optional[Callable[[], bool]] = None,
-    client_set: Optional[set] = None
+    client_set: Optional[set] = None,
+    on_connect: Optional[Callable] = None
 ) -> None:
     """Async WebSocket OSC listener.
     
@@ -248,7 +258,7 @@ async def websocket_osc_listener(
     
     try:
         async with websocket_serve(
-            lambda ws: handle_websocket_connection(ws, message_handler, stop_check, client_set),
+            lambda ws: handle_websocket_connection(ws, message_handler, stop_check, client_set, on_connect),
             host,
             port,
             # Allow concurrent connections
