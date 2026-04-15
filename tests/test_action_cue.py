@@ -601,13 +601,13 @@ class TestGoRearm:
         # If go() didn't re-arm, it would have raised an exception
         assert True  # reaching here means go() succeeded
 
-    def test_go_rearm_failure_raises(self, handler, mtc):
-        """A disabled non-local cue cannot be re-armed — go() must raise."""
+    def test_go_disabled_returns_none(self, handler, mtc):
+        """A disabled cue should not be executed — go() must return None."""
         cue = _make_action_target(loaded=False, enabled=False, _local=False)
         cue._target_object = None
 
-        with pytest.raises(Exception, match="not loaded to go"):
-            handler.go(cue, mtc)
+        result = handler.go(cue, mtc)
+        assert result is None
 
     def test_go_already_loaded_skips_rearm(self, handler, mtc):
         """A cue with loaded=True should NOT trigger a re-arm."""

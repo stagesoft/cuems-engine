@@ -25,19 +25,11 @@ def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """
-    Run a CueList
-
-    This function will run the fist cue in the list
-    """
-    try:
-        if cue.contents:
-            cue.contents[0].go(mtc)
-    except Exception as e:
-        Logger.error(
-            f'GO failed for content {cue.contents[0].id}: {e}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    """Run a CueList by dispatching its first enabled child."""
+    if cue.contents:
+        first_enabled = next((c for c in cue.contents if c.enabled), None)
+        if first_enabled:
+            run_cue(first_enabled, mtc, frozen_mtc_ms)
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):

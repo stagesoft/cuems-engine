@@ -732,12 +732,17 @@ class NodeEngine(BaseEngine):
 
         if not enabled:
             # Disarm only if armed and NOT currently playing.
-            # A playing cue has a running go thread (_go_generation > 0 and loaded).
+            # A playing cue has a running go thread (_go_generation > 0) and is still loaded.
             is_playing = (getattr(cue, '_go_generation', 0) > 0
-                          and not getattr(cue, '_stop_requested', True))
+                          and getattr(cue, 'loaded', False))
             if CUE_HANDLER.find_armed_cue(cue) and not is_playing:
                 CUE_HANDLER.disarm(cue)
                 Logger.info(f'Disarmed disabled cue {cue_id}')
+            # Recalculate next_cue_pointer if the disabled cue was next
+            if self.next_cue_pointer and self.next_cue_pointer.id == cue_id:
+                self.next_cue_pointer = cue.get_next_cue()
+                self._broadcast_nextcue()
+                Logger.info(f'Next cue was disabled, advanced to {self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
         else:
             # Re-arm in a daemon thread to avoid blocking _command_lock
             # (arm() is slow — media loading, process spawning).
@@ -777,9 +782,14 @@ class NodeEngine(BaseEngine):
         
         self.initial_cuelist_process()
 
-        # Set initial nextcue to the first cue in the script
+        # Set initial nextcue to the first enabled cue in the script
         if self.script.cuelist.contents:
-            self.next_cue_pointer = self.script.cuelist.contents[0]
+            first_enabled = None
+            for c in self.script.cuelist.contents:
+                if c.enabled:
+                    first_enabled = c
+                    break
+            self.next_cue_pointer = first_enabled
 
         Logger.info(f'Script {self.script.name} loaded and ready to be played')
 
@@ -812,7 +822,9 @@ class NodeEngine(BaseEngine):
             return
 
         if not cue_to_go.enabled:
-            Logger.info(f'Cue {cue_to_go.id} is disabled, skipping GO')
+            Logger.info(f'Cue {cue_to_go.id} is disabled, advancing to next enabled cue')
+            self.next_cue_pointer = cue_to_go.get_next_cue()
+            self._broadcast_nextcue()
             return
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):

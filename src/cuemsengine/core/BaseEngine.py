@@ -451,8 +451,12 @@ class BaseEngine(SignalEngine):
         # entire chain. For go_at_end chains, only 2 cues with meaningful
         # duration are armed, saving resources for large projects.
         if cuelist.contents:
-            first_cue = cuelist.contents[0]
+            first_cue = None
+            for c in cuelist.contents:
+                if c.enabled:
+                    first_cue = c
+                    break
             if first_cue and getattr(first_cue, '_local', False):
-                Logger.info(f'Arming first cue + lookahead for {type(cuelist).__name__}: {cuelist.id}')
+                Logger.info(f'Arming first enabled cue + lookahead for {type(cuelist).__name__}: {cuelist.id}')
                 CUE_HANDLER.arm(first_cue, True)
                 CUE_HANDLER._arm_ahead(first_cue)

@@ -186,6 +186,10 @@ class CueHandler:
                 target = getattr(target, '_target_object', None)
                 walked += 1
                 continue
+            if not target.enabled:
+                target = getattr(target, '_target_object', None)
+                walked += 1
+                continue
             if not getattr(target, 'loaded', False):
                 self.arm(target, init=True)
             if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
@@ -273,7 +277,8 @@ class CueHandler:
         # Recursive arms — only reached if cue was actually armed.
         # _loading sentinel prevents cycles; loaded guard prevents re-arm.
         if cue.post_go == 'go' and cue._target_object:
-            self.arm(cue._target_object, init)
+            if cue._target_object.enabled:
+                self.arm(cue._target_object, init)
 
         # ActionCue(play) + target = 1 unit. Arm target so it's ready
         # when the action fires (ActionCue has zero duration).
@@ -347,14 +352,20 @@ class CueHandler:
     # ---------------------------
 
     @logged
-    def go(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None) -> Thread:
+    def go(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None) -> Thread | None:
         """Starts a cue in a thread.
-        
+
         Args:
             cue: The cue to start
             mtc: The MTC listener
             frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained cues
+
+        Returns:
+            Thread running the cue, or None if the cue is disabled.
         """
+        if not cue.enabled:
+            Logger.info(f'Cue {cue.id} is disabled, skipping execution')
+            return None
         Logger.info(f'GO command received. Starting cue {cue.id}')
         if not hasattr(cue, 'loaded') or not cue.loaded:
             Logger.warning(f'Cue {cue.id} not loaded at go() time — this should not happen, '
@@ -459,7 +470,8 @@ class CueHandler:
             self.wait_for_cue(go_at_end_thread)
 
         if cue.post_go == 'go' and cue._target_object and not cue._stop_requested:
-            self.wait_for_cue(post_go_thread)
+            if post_go_thread:
+                self.wait_for_cue(post_go_thread)
 
     def wait_for_cue(self, thread: Thread) -> None:
         """Waits for a cue to finish."""
