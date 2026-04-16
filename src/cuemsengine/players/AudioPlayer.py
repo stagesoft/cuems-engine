@@ -16,7 +16,7 @@ class AudioPlayer(Player):
 
     @logged
     def run(self):
-        # Calling audioplayer-cuems in a subprocess
+        # Calling cuems-audioplayer in a subprocess
         process_call_list = [self.path]
         if self.args:
             Logger.debug(f"Running audio player with args: {self.args}")
@@ -71,9 +71,17 @@ def start_audio_output(
     )
     player.start(timeout=timeout)
 
-    client = AudioClient(
-        player_port = port,
-        name = f'audioplayer-{uuid}'
-    )
+    try:
+        client = AudioClient(
+            player_port = port,
+            name = f'audioplayer-{uuid}'
+        )
+    except Exception:
+        # OSC client creation failed (e.g. port conflict); kill the subprocess so it doesn't linger
+        try:
+            player.kill()
+        except Exception:
+            pass
+        raise
 
     return player, client

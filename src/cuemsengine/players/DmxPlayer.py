@@ -8,7 +8,7 @@ from ..osc.endpoints import OSC_DMXPLAYER_CONF
 class DmxPlayer(Player):
     """DMX player process wrapper.
     
-    Manages a single dmxplayer-cuems process per node and exposes OSC control.
+    Manages a single cuems-dmxplayer process per node and exposes OSC control.
     """
 
     def __init__(self, port, node_uuid, path=None, args: str | None = None):
@@ -17,7 +17,7 @@ class DmxPlayer(Player):
         Args:
             port: OSC port for dmxplayer communication
             node_uuid: Unique identifier for this player node
-            path: Path to dmxplayer-cuems binary
+            path: Path to cuems-dmxplayer binary
         """
         super().__init__()
         self.node_uuid = node_uuid
@@ -30,7 +30,7 @@ class DmxPlayer(Player):
 
     @logged
     def run(self):
-        """Call dmxplayer-cuems in a subprocess"""
+        """Call cuems-dmxplayer in a subprocess"""
         process_call_list = [self.path]
         if self.args:
             for arg in self.args.split():
@@ -68,6 +68,17 @@ class DmxClient(PlayerClient):
         self._mtc_time_param = root.add_node("/mtc_time").create_parameter(ossia.ValueType.String)
         self._start_offset_param = root.add_node("/start_offset").create_parameter(ossia.ValueType.Int)
         self._fade_time_param = root.add_node("/fade_time").create_parameter(ossia.ValueType.Float)
+        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(ossia.ValueType.Int)
+
+    def enable_mtcfollow(self) -> None:
+        """Enable MTC following so the dmxplayer tracks timecode."""
+        self._mtcfollow_param.push_value(1)
+        Logger.debug("DMX mtcfollow enabled")
+
+    def disable_mtcfollow(self) -> None:
+        """Disable MTC following so the dmxplayer stops advancing its playhead."""
+        self._mtcfollow_param.push_value(0)
+        Logger.debug("DMX mtcfollow disabled")
 
     @logged
     def send_dmx_scene(
@@ -119,13 +130,12 @@ class DmxClient(PlayerClient):
 
     @logged
     def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
-        """Send a blackout (all channels to 0) directly to OLA.
+        """Send blackout: clear dmxplayer fades + direct OLA backup.
 
-        Bypasses the dmxplayer's scene mechanism entirely by calling
-        ola_set_dmx for each universe. This avoids race conditions between
-        the OSC receiver thread and the OLA timer thread in dmxplayer-cuems
-        (the scene's mtcStart can capture a stale playHead value when MTC
-        has just stopped).
+        Sends /blackout to the dmxplayer which clears all queued scenes,
+        active fades, and writes zeros to OLA. The direct ola_set_dmx
+        backup covers the case where the dmxplayer hasn't processed
+        the command yet.
 
         Args:
             universe_ids: DMX universe(s) to black out.
@@ -135,6 +145,13 @@ class DmxClient(PlayerClient):
         if isinstance(universe_ids, int):
             universe_ids = (universe_ids,)
 
+        # Tell the dmxplayer to clear all scenes/fades and send zeros to OLA.
+        try:
+            self.set_value('/blackout', None)
+        except Exception as e:
+            Logger.warning(f'Blackout command to dmxplayer failed: {e}')
+
+        # Backup: write zeros directly to OLA.
         zeros = ','.join(['0'] * 512)
         for uid in universe_ids:
             try:
@@ -146,7 +163,7 @@ class DmxClient(PlayerClient):
             except Exception as e:
                 Logger.error(f"Blackout ola_set_dmx failed for universe {uid}: {e}")
 
-        Logger.info(f"Sent DMX blackout via ola_set_dmx for universe(s) {universe_ids}")
+        Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
 
 @logged
 def start_dmx_player(
@@ -158,14 +175,14 @@ def start_dmx_player(
 ) -> tuple[DmxPlayer, DmxClient]:
     """Start a DMX player and its OSC client.
     
-    This function creates and starts a dmxplayer-cuems process and
+    This function creates and starts a cuems-dmxplayer process and
     sets up an OSC client to control it.
     
     Args:
         port: OSC port for dmxplayer communication
         node_uuid: Unique identifier for this player node
-        path: Path to dmxplayer-cuems binary
-        args: Additional arguments for dmxplayer-cuems
+        path: Path to cuems-dmxplayer binary
+        args: Additional arguments for cuems-dmxplayer
         timeout: Maximum time to wait for player to start (seconds)
     
     Returns:

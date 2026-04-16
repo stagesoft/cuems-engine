@@ -55,17 +55,21 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
     
     try:
         loop_counter = 0
-        # Convert duration to MTC framerate to prevent drift when looping (same as video)
         duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
         Logger.info(f'Audio duration: {duration}, _end_mtc: {cue._end_mtc.milliseconds}ms, current MTC: {mtc.main_tc.milliseconds}ms')
 
-        # cue.loop: -1 = infinite, 0 = infinite, positive = fixed count
         while cue.loop < 1 or loop_counter < cue.loop:
+            if cue._stop_requested:
+                Logger.info(f'Audio loop {cue.id} cancelled by stop request')
+                return
             Logger.info(f'Audio loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}')
 
             last_status_update = 0.0
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-                sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
+                if cue._stop_requested:
+                    Logger.info(f'Audio loop {cue.id} cancelled by stop request (inner)')
+                    return
+                sleep(0.02)
                 # Future: uncomment to enable percentage progress updates.
                 # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
                 # _now = time.monotonic()
@@ -80,17 +84,13 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             Logger.info(f'Audio iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds}ms reached _end_mtc={cue._end_mtc.milliseconds}ms)')
             loop_counter += 1
             
-            # Only update offset if we're going to loop again (cue.loop < 1 means infinite)
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             Logger.info(f'After increment: loop_counter={loop_counter}, will_loop_again={will_loop_again}')
             
             if cue._local and will_loop_again:
-                # Update timing for next iteration (same pattern as video)
                 cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=cue._end_mtc.milliseconds/1000)
                 cue._end_mtc = cue._start_mtc + duration
                 
-                # Audio player formula: file_position = MTC + offset
-                # To restart from position 0, offset = -start_mtc
                 offset_to_go = float(-cue._start_mtc.milliseconds)
                 
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_to_go} (MTC={mtc.main_tc.milliseconds}ms, _start_mtc={cue._start_mtc.milliseconds}ms, _end_mtc={cue._end_mtc.milliseconds}ms)')
@@ -125,10 +125,12 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
         mtc: The MIDI Time Code interface
     """
     try:
-        # Wait for the cue duration to elapse
         last_status_update = 0.0
         while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
-            sleep(0.02)  # 50Hz polling - responsive but CPU-friendly
+            if cue._stop_requested:
+                Logger.info(f'DMX loop {cue.id} cancelled by stop request')
+                return
+            sleep(0.02)
             # Future: uncomment to enable percentage progress updates.
             # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
             # _now = time.monotonic()
@@ -141,8 +143,6 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
             #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
 
         if cue._local:
-            # Reserved for future looping implementation
-            # Currently DMX scenes are sent once in run_dmxCue
             pass
 
         Logger.debug(f'DMX cue {cue.id} duration elapsed')
@@ -167,9 +167,23 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
 
         layer_ids = getattr(cue, '_layer_ids', [])
 
+        # Tell the videocomposer this is a looping cue so it wraps frames at the
+        # loop boundary (instead of clamping to the last frame).
+        for layer_id in layer_ids:
+            try:
+                cue._osc.set_value(f'/videocomposer/layer/{layer_id}/loop', 1)
+            except Exception as e:
+                Logger.error(f'Loop enable failed for layer {layer_id}: {e}')
+
         while cue.loop < 1 or loop_counter < cue.loop:
+            if cue._stop_requested:
+                Logger.info(f'Video loop {cue.id} cancelled by stop request')
+                return
             last_status_update = 0.0
             while mtc.main_tc.milliseconds < cue._end_mtc.milliseconds:
+                if cue._stop_requested:
+                    Logger.info(f'Video loop {cue.id} cancelled by stop request (inner)')
+                    return
                 sleep(0.02)
                 # Future: uncomment to enable percentage progress updates.
                 # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).

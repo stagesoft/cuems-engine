@@ -135,10 +135,18 @@ def arm_videoCue(cue: VideoCue):
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
     cue._layer_ids = []
 
+    driver_layer_id = None
     for index, output_name in enumerate(output_names):
         layer_id = f"{cue.id}_{index}"
 
-        client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+        if index == 0:
+            # First output: normal load (creates decoder)
+            client.set_value('/videocomposer/layer/load', [video_path, layer_id])
+            driver_layer_id = layer_id
+        else:
+            # Subsequent outputs: share decoder from first layer
+            client.set_value('/videocomposer/layer/load_shared',
+                             [video_path, layer_id, driver_layer_id])
         client.create_layer_endpoints(layer_id)
 
         layer_path = f'/videocomposer/layer/{layer_id}'
@@ -149,8 +157,11 @@ def arm_videoCue(cue: VideoCue):
             output = PLAYER_HANDLER.get_video_output(output_name)
             x, y = output.get_layer_placement()
             client.set_value(f'{layer_path}/position', [x, y])
-        except KeyError:
-            Logger.warning(f'Video output "{output_name}" not found, skipping position for layer {layer_id}')
+            sx, sy = output.get_layer_scale()
+            if sx != 1.0 or sy != 1.0:
+                client.set_value(f'{layer_path}/scale', [sx, sy])
+        except Exception as e:
+            Logger.warning(f'Video output "{output_name}" placement/scale failed ({type(e).__name__}: {e}), skipping for layer {layer_id}')
 
         PLAYER_HANDLER.register_layer(layer_id)
         cue._layer_ids.append(layer_id)

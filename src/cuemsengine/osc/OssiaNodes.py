@@ -84,6 +84,10 @@ class OssiaNodes(object):
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
+        # Impulse parameters are fire-and-forget triggers — RepetitionFilter
+        # must always be OFF, otherwise ossia silently drops repeated sends.
+        if value_type == ValueType.Impulse:
+            repetition_filter = False
         _.repetition_filter = ossia.RepetitionFilter.On if repetition_filter else ossia.RepetitionFilter.Off
         _.access_mode = ossia.AccessMode.Bi
         if callback:
@@ -127,8 +131,19 @@ class OssiaNodes(object):
                 node = self.nodes[node]
             except KeyError:
                 raise ValueError("Node not found")
+        # Impulse parameters: pyossia rejects None — use True to trigger the send
+        if node.parameter.value_type == ValueType.Impulse:
+            node.parameter.push_value(True)
+            return
         node.parameter.push_value(value)
-        if node.parameter.value != value:
+        stored = node.parameter.value
+        # Float parameters go through float32 (OSC wire format), so an exact
+        # Python float64 equality check produces false negatives (e.g. 0.66).
+        # Use a tolerance-based comparison for floats; strict equality for all others.
+        if isinstance(value, float):
+            if abs(stored - value) > 1e-5:
+                raise ValueError(f"Could not set {str(node)} to {value} (got {stored})")
+        elif stored != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
     @logged

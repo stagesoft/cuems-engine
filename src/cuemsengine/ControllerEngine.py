@@ -44,11 +44,14 @@ class ControllerEngine(BaseEngine):
         # Must be set before super().__init__() because BaseEngine sets
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
-        self._last_timecode_broadcast = 0.0
-        self._timecode_broadcast_interval = 0.5  # 2 Hz max for timecode , for 20mhz set it to 0.05
+        self._last_timecode_second: int = -1  # last whole-second value broadcast to UI
         # Per-cue status dict: maps cue uuid → int status value.
         # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
         self.cue_status: dict[str, int] = {}
+        # Per-cue enabled status: maps cue uuid → bool.
+        # Initialised from XML on load_project, updated by show-time toggles.
+        # Resets to XML values on reload; persists across stop/go.
+        self.cue_enabled_status: dict[str, bool] = {}
         # Per-cue last-broadcast timestamps for WS throttle (Tier 2).
         self._cue_broadcast_timestamps: dict[str, float] = {}
         super().__init__(**kwargs)
@@ -58,19 +61,20 @@ class ControllerEngine(BaseEngine):
     def start(self):
         self.create_timecode()
         self.set_comms()
-        # HEADLESS/CLOUD: on servers without hardware MIDI the port list is
-        # empty at __init__ time.  create_timecode() above creates the virtual
-        # ALSA sender port, so we retry detection here to pick it up.
-        if self.mtc_listener.port_name is None:
-            Logger.info('Re-detecting MIDI port after MTC sender creation...')
-            self.mtc_listener._MtcListener__open_port(None)
+        # Always re-detect after create_timecode(): the MtcMaster sender port
+        # ("MtcMaster:MTCPort") only appears in the ALSA port list AFTER the
+        # sender is created.  Connecting the listener directly to that port is
+        # the most reliable loopback path; any earlier detection would have
+        # picked a wrong/fallback port (e.g. rtpmidid:Announcements).
+        Logger.info('Re-detecting MIDI port after MTC sender creation...')
+        self.mtc_listener._MtcListener__open_port(None)
         self.mtc_listener.start()
         super().start()
 
     def set_status(self, property: str, value: str, strict: bool = False) -> None:
         """Set status and push to UI via WebSocket when running, armed, or load."""
         super().set_status(property, value, strict)
-        if property in ('running', 'armed', 'load'):
+        if property in ('running', 'armed', 'load', 'nextcue'):
             self._broadcast_status(property, value)
     
     @logged
@@ -99,7 +103,10 @@ class ControllerEngine(BaseEngine):
             websocket_osc_port = 9190  # Take port 9190 for WebSocket OSC
             node_id = 'controller'
         
-        nng_hub_address = f"tcp://{osc_hub_host}:{nng_hub_port}"
+        # LISTENER binds to all interfaces (0.0.0.0) so it does not depend on the
+        # avahi link-local address (169.254.x.x) being assigned before startup.
+        # NodeEngine (DIALER) still targets the specific controller_url IP.
+        nng_hub_address = f"tcp://0.0.0.0:{nng_hub_port}"
         
         Logger.info(f'NNG Hub address: {nng_hub_address}')
         
@@ -122,7 +129,8 @@ class ControllerEngine(BaseEngine):
         
         # Register command handlers for WebSocket OSC
         self._register_osc_command_handlers()
-        
+        self.communications_thread.set_on_client_connect(self._on_ws_client_connect)
+
         self.communications_thread.start()
         
         # Wait for NNG thread to initialize (prevents race condition in nni_random)
@@ -156,7 +164,13 @@ class ControllerEngine(BaseEngine):
         self.communications_thread.register_command_handler(
             '/engine/command/stop', self.stop_script, forward_to_nodes=False
         )
-        
+        self.communications_thread.register_command_handler(
+            '/engine/command/setnextcue', self._setnextcue_handler, forward_to_nodes=False
+        )
+        self.communications_thread.register_command_handler(
+            '/engine/command/cue_enabled', self._cue_enabled_handler, forward_to_nodes=False
+        )
+
         # Register wildcard handler for player messages (engine format)
         self.communications_thread.register_osc_handler(
             '/engine/players/*', self._handle_player_osc_message
@@ -308,6 +322,14 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'Cue operation received: {operation}')
         cue_id = operation.data.get('id') if operation.data else None
 
+        # Drop operations for cues not belonging to the current project.
+        # This prevents stale REMOVE/ADD notifications from the NodeEngine
+        # (sent when it disarms the previous project) from being broadcast
+        # to the UI as unknown UUIDs.
+        if cue_id and cue_id not in self.cue_status:
+            Logger.debug(f'Ignoring cue operation for unknown/stale cue_id {cue_id} (action={operation.action})')
+            return
+
         if operation.action == ActionType.ADD:
             # Cue started playing: mark as playing (1) and broadcast immediately.
             if cue_id:
@@ -321,9 +343,15 @@ class ControllerEngine(BaseEngine):
 
         elif operation.action == ActionType.REMOVE:
             # Cue finished playing: mark as played (100) and broadcast immediately.
+            # Only transition to 100 if the cue was actually playing (status == 1).
+            # REMOVEs that arrive while status is 0 (e.g. NodeEngine disarming the
+            # previous project after a reload) are stale and must be silently dropped.
             if cue_id:
-                self.cue_status[cue_id] = 100
-                self._broadcast_cue_status(cue_id, 100, force=True)
+                if self.cue_status.get(cue_id) == 1:
+                    self.cue_status[cue_id] = 100
+                    self._broadcast_cue_status(cue_id, 100, force=True)
+                else:
+                    Logger.debug(f'Ignoring stale REMOVE for cue {cue_id} (status={self.cue_status.get(cue_id)}, expected 1)')
             self.status.remove_currentcue(operation.data['id'])
             Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
 
@@ -352,8 +380,24 @@ class ControllerEngine(BaseEngine):
                 self.set_status('running', 'no')
         elif operation.target == 'armed_ready':
             if operation.data and operation.data.get('armed') == 'yes':
-                Logger.info('Re-arm complete from node - GO available')
+                if self.go_offset is None:
+                    Logger.info('Re-arm after stop - restarting timecode and enabling GO')
+                    self.start_timecode()
+                    self.go_offset = 0
+                else:
+                    Logger.info('Re-arm complete from node - enabling GO')
                 self.set_status('armed', 'yes')
+        elif operation.target == 'nextcue':
+            nextcue_id = operation.data.get('nextcue', '') if operation.data else ''
+            self.set_status('nextcue', nextcue_id)
+            Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
+        elif operation.target == 'cue_enabled':
+            cue_id = operation.data.get('cue_id') if operation.data else None
+            enabled = operation.data.get('enabled', True) if operation.data else True
+            if cue_id and cue_id in self.cue_enabled_status:
+                self.cue_enabled_status[cue_id] = enabled
+                self._broadcast_cue_enabled(cue_id, enabled)
+                Logger.info(f'Cue {cue_id} enabled status updated from node: {enabled}')
         else:
             Logger.debug(f'Unknown status target: {operation.target}')
 
@@ -395,17 +439,20 @@ class ControllerEngine(BaseEngine):
             'project_ready': self.load_project,
             'hw_discovery': self.hwdiscovery,
             'nodeconf': self.nodeconf,
-            'go_script': self.go_script
+            'go_script': self.go_script,
+            'project_status': self.get_project_status,
+            'project_unload': self.unload_project,
         }
         if action in command_dict.keys():
-            success  = command_dict[action](value, context)
-            if success:
+            result = command_dict[action](value, context)
+            if result:
+                reply_value = result if isinstance(result, dict) else 'OK'
                 self.confirm_to_editor(
-                    context, type=action, value='OK'
+                    context, type=action, value=reply_value
                 )
                 # Clear the editor request after successful confirmation
                 self.set_editor_request('')
-            
+
         else:
             raise ValueError(f'Command {action} not recognized')
         
@@ -503,6 +550,26 @@ class ControllerEngine(BaseEngine):
                     ids.extend(self._collect_cue_ids(item))
         return ids
 
+    def _collect_cue_enabled(self, cuelist) -> dict[str, bool]:
+        """Recursively collect cue enabled states from a cuelist."""
+        from cuemsutils.cues import CueList
+        result = {}
+        if hasattr(cuelist, 'contents') and cuelist.contents:
+            for item in cuelist.contents:
+                if item is None:
+                    continue
+                result[item.id] = item.enabled
+                if isinstance(item, CueList):
+                    result.update(self._collect_cue_enabled(item))
+        return result
+
+    def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
+        """Broadcast per-cue enabled status to UI at /engine/status/cue_enabled/{uuid}."""
+        if hasattr(self, 'communications_thread') and self.communications_thread \
+                and hasattr(self.communications_thread, 'broadcast_osc'):
+            self.communications_thread.broadcast_osc(
+                f'/engine/status/cue_enabled/{cue_id}', 1 if enabled else 0)
+
     def _broadcast_cue_status(self, cue_id: str, value: int, force: bool = False) -> None:
         """Broadcast per-cue status to UI via WebSocket OSC at /engine/status/cue/{uuid}.
 
@@ -528,17 +595,53 @@ class ControllerEngine(BaseEngine):
         if hasattr(self, 'communications_thread') and self.communications_thread and hasattr(self.communications_thread, 'broadcast_osc'):
             self.communications_thread.broadcast_osc(f'/engine/status/{key}', value)
 
-    def on_timecode_change(self, value: str) -> None:
-        """Handle timecode changes - broadcast to UI (throttled to 20 Hz)."""
-        now = time.monotonic()
-        if now - self._last_timecode_broadcast >= self._timecode_broadcast_interval:
-            self._last_timecode_broadcast = now
-            try:
-                tc_int = int(value) if value is not None else 0
-                self._broadcast_status('timecode', tc_int)
-                Logger.debug(f'Timecode broadcast {tc_int}')
-            except (TypeError, ValueError):
-                pass
+    async def _on_ws_client_connect(self, websocket) -> None:
+        """Send full state dump to a newly connected WebSocket client."""
+        from .osc.WebSocketOscHandler import build_osc_message
+
+        # Engine status
+        for key in ('running', 'armed', 'load', 'nextcue'):
+            val = self.get_status(key)
+            if val is not None:
+                data = build_osc_message(f'/engine/status/{key}', val)
+                if data:
+                    await websocket.send(data)
+
+        # Per-cue playback status
+        for cid, status in self.cue_status.items():
+            data = build_osc_message(f'/engine/status/cue/{cid}', status)
+            if data:
+                await websocket.send(data)
+
+        # Per-cue enabled status
+        for cid, enabled in self.cue_enabled_status.items():
+            data = build_osc_message(
+                f'/engine/status/cue_enabled/{cid}', 1 if enabled else 0)
+            if data:
+                await websocket.send(data)
+
+        Logger.info(f'Late-join state dump sent to new WebSocket client')
+
+    def on_timecode_change(self, value) -> None:
+        """Broadcast timecode to UI as integer ms (whole seconds only), once per second."""
+        try:
+            ms = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            return
+        current_second = ms // 1000
+        if current_second != self._last_timecode_second:
+            self._last_timecode_second = current_second
+            self._broadcast_status('timecode', current_second * 1000)
+            Logger.debug(f'Timecode broadcast {current_second}s')
+
+    def _clear_playback_state(self):
+        """Clear runtime playback tracking: timestamps, timecode, armed, nextcue."""
+        self._cue_broadcast_timestamps.clear()
+        self._last_timecode_second = -1
+        self._broadcast_status('timecode', 0)
+        self.set_status('armed', 'no')
+        self.set_status('nextcue', '')
+        self.stop_timecode()
 
     #########################
     # Project management
@@ -551,9 +654,8 @@ class ControllerEngine(BaseEngine):
             return False
 
         Logger.info(f'Loading project {project_name}')
-        self.set_status('armed', 'no')
+        self._clear_playback_state()
         self.reset_script()
-        self.stop_timecode()
         
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -593,12 +695,18 @@ class ControllerEngine(BaseEngine):
         # Initialise per-cue status: every cue starts as unplayed (0).
         # Broadcasts one WS message per cue so the UI can populate its cue list.
         self.cue_status = {cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)}
-        self._cue_broadcast_timestamps.clear()
         for cid in self.cue_status:
             self._broadcast_cue_status(cid, 0, force=True)
         Logger.info(f'Cue status initialised for {len(self.cue_status)} cues')
 
+        # Initialise per-cue enabled status from XML (resets show-time overrides).
+        self.cue_enabled_status = self._collect_cue_enabled(self.script.cuelist)
+        for cid, enabled in self.cue_enabled_status.items():
+            self._broadcast_cue_enabled(cid, enabled)
+        Logger.info(f'Cue enabled status initialised for {len(self.cue_enabled_status)} cues')
+
         # Update internal status
+        # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
 
         # Forward load command to NodeEngine via NNG (nodes will arm cues)
@@ -639,6 +747,36 @@ class ControllerEngine(BaseEngine):
         Logger.info(f'GO command processed')
         return True
 
+    def _setnextcue_handler(self, value):
+        """Handle setnextcue from UI — forward to NodeEngine which owns the pointer."""
+        self._forward_command_to_nodes('/engine/command/setnextcue', value)
+
+    def _cue_enabled_handler(self, value):
+        """Handle cue_enabled toggle from UI.
+
+        Value format: "<cue_id> <0|1>" (space-separated UUID and enabled flag).
+        """
+        if not value or not isinstance(value, str):
+            Logger.warning(f'Invalid cue_enabled value: {repr(value)}')
+            return
+
+        parts = value.split(' ', 1)
+        if len(parts) != 2 or parts[1] not in ('0', '1'):
+            Logger.warning(f'Invalid cue_enabled format (expected "uuid 0|1"): {repr(value)}')
+            return
+
+        cue_id, enabled_str = parts
+        enabled = enabled_str == '1'
+
+        if cue_id not in self.cue_enabled_status:
+            Logger.warning(f'cue_enabled: unknown cue_id {cue_id}')
+            return
+
+        self.cue_enabled_status[cue_id] = enabled
+        self._broadcast_cue_enabled(cue_id, enabled)
+        self._forward_command_to_nodes('/engine/command/cue_enabled', value)
+        Logger.info(f'Cue {cue_id} {"enabled" if enabled else "disabled"}')
+
     def _forward_command_to_nodes(self, address: str, value) -> None:
         """Forward a generic command to NodeEngine via NNG."""
         if not hasattr(self, 'communications_thread') or not self.communications_thread:
@@ -672,19 +810,36 @@ class ControllerEngine(BaseEngine):
             return
 
         self.go_offset = None
-        self.stop_timecode()
-        self._broadcast_status('timecode', 0)
-
         self.set_status('running', "no")
-        self.set_status('armed', 'no')
+        self._clear_playback_state()
 
         # Reset all cue statuses to unplayed (0) and broadcast to UI.
         for cid in self.cue_status:
             self.cue_status[cid] = 0
             self._broadcast_cue_status(cid, 0, force=True)
-        self._cue_broadcast_timestamps.clear()
 
         self._forward_command_to_nodes('/engine/command/stop', value)
 
         Logger.info('STOP command processed - timecode stopped; nodes will re-arm')
+        return True
+
+    def get_project_status(self, value, context=None):
+        """Return current project playback status."""
+        running = self.get_status('running') == "yes"
+        return {
+            "status": "running" if running else "none",
+            "project_uuid": str(self.script.id) if running and self.script else ""
+        }
+
+    def unload_project(self, value, context=None):
+        """Unload the current project. Rejects if playback is running."""
+        if self.get_status('running') == "yes":
+            raise RuntimeError("Cannot unload while running. Stop playback first.")
+        self._clear_playback_state()
+        self.reset_script()
+        self.cue_status = {}
+        self.cue_enabled_status = {}
+        self.set_status('load', '')
+        self._forward_command_to_nodes('/engine/command/stop', value)
+        Logger.info('Project unloaded')
         return True

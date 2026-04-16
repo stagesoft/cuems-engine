@@ -97,6 +97,7 @@ class CuemsDeploy():
             bool: True if the log file was created successfully, False otherwise
         """
         try:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
             with open(log_file, 'w') as f:
                 f.writelines(file_names)
         except Exception as e:

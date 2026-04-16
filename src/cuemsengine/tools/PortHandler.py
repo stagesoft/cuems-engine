@@ -82,19 +82,14 @@ class PortHandler(object):
                 new_ports = set(self._all_used_ports) - set(p.values())
                 self._all_used_ports = list(new_ports)
 
-    def get_all_used_ports(self) -> list:
+    def get_all_used_ports(self) -> set:
         """
-        Get the list of all used ports
+        Get the set of all used ports (assigned ports + random ports combined)
         """
         with self._lock:
             Logger.debug(f"All used ports: {self._all_used_ports}")
             Logger.debug(f'Random ports: {self._random_ports}')
-            result = self._all_used_ports.extend(self._random_ports)
-            if result is None:
-                Logger.warning("get_all_used_ports is returning None")
-                return set()
-            else:
-                return result
+            return set(self._all_used_ports) | set(self._random_ports)
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
         """
@@ -192,6 +187,17 @@ class PortHandler(object):
         """
         with self._lock:
             self._random_ports.append(port)
+
+    def remove_random_port(self, port: int):
+        """
+        Remove a specific port from the random ports list, freeing it for reuse.
+        Called when an OSC client that owned the port is closed.
+        """
+        with self._lock:
+            try:
+                self._random_ports.remove(port)
+            except ValueError:
+                pass
 
     def clean_random_ports(self):
         """

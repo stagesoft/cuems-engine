@@ -183,6 +183,22 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
+    def update_nextcue(self, cue_id: str, timeout: Optional[float] = None):
+        """Send a nextcue status update to the controller (thread-safe).
+
+        Parameters:
+        - cue_id: UUID of the next cue (or empty string when no next cue)
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        operation = NodeOperation(
+            type=OperationType.STATUS,
+            action=ActionType.UPDATE,
+            sender=self.node_id,
+            target='nextcue',
+            data={'nextcue': cue_id}
+        )
+        return self.send_operation(operation, timeout)
+
     def update_cue(self, cue_id: str, percentage: int, timeout: Optional[float] = None):
         """Send a cue percentage progress update to the controller (thread-safe).
 

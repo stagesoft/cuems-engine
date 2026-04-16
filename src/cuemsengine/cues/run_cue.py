@@ -25,56 +25,19 @@ def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """
-    Run a CueList
-
-    This function will run the fist cue in the list
-    """
-    try:
-        if cue.contents:
-            cue.contents[0].go(mtc)
-    except Exception as e:
-        Logger.error(
-            f'GO failed for content {cue.contents[0].id}: {e}',
-            extra = {"caller": cue.__class__.__name__}
-        )
+    """Run a CueList by dispatching its first enabled child."""
+    if cue.contents:
+        first_enabled = next((c for c in cue.contents if c.enabled), None)
+        if first_enabled:
+            run_cue(first_enabled, mtc, frozen_mtc_ms)
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """
-    Run an ActionCue
-    """
-    pass
+    """Run an ActionCue by delegating to ActionHandler.execute_action."""
+    from .ActionHandler import ACTION_HANDLER
 
+    ACTION_HANDLER.execute_action(cue, mtc)
 
-    # TODO: Implement this
-    if cue.action_type == 'load':
-        cue._action_target_object.arm(cue._conf, cue._armed_list)
-    elif cue.action_type == 'unload':
-        cue._action_target_object.disarm()
-    elif cue.action_type == 'play':
-        cue._action_target_object.go(mtc)
-    elif cue.action_type == 'pause':
-        pass
-    elif cue.action_type == 'stop':
-        pass
-    elif cue.action_type == 'enable':
-        cue._action_target_object.enabled = True
-    elif cue.action_type == 'disable':
-        cue._action_target_object.enabled = False
-    # DEV: To be implemented
-    elif cue.action_type == 'fade_in':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'fade_out':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'wait':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'go_to':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'pause_project':
-        cue._action_target_object.enabled = False
-    elif cue.action_type == 'resume_project':
-        cue._action_target_object.enabled = False
 
 @run_cue.register
 def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
@@ -241,6 +204,10 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
         
+        # Enable MTC following so the dmxplayer tracks timecode and stops
+        # advancing when MTC stops (e.g. on STOP command).
+        cue._osc.enable_mtcfollow()
+
         # Send DMX scene bundle to local player (mtc_time absolute so no overlap/loss)
         cue._osc.send_dmx_scene(
             universe_frames=universe_frames,
@@ -286,7 +253,6 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
 
-    mtc_port = getattr(mtc, 'port_name', 'Midi Through Port-0')
     client = cue._osc
 
     # Re-apply position for each layer before making visible (layer may not have
@@ -303,11 +269,17 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 output = PLAYER_HANDLER.get_video_output(output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f'{layer_path}/position', [x, y])
+                sx, sy = output.get_layer_scale()
+                if sx != 1.0 or sy != 1.0:
+                    client.set_value(f'{layer_path}/scale', [sx, sy])
             except (KeyError, Exception) as e:
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
+        # Send mtcfollow before visible so the videocomposer loads the
+        # correct frame (using offset + MTC position) while the layer is
+        # still invisible. This prevents rendering a stale frame.
+        client.set_value(f'{layer_path}/mtcfollow', 1)
         client.set_value(f'{layer_path}/visible', 1)
-        client.set_value(f'{layer_path}/mtcfollow', mtc_port)
 
     Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")

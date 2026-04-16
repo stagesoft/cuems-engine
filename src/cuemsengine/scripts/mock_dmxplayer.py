@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Mock dmxplayer-cuems replacement for headless/cloud deployments.
+Mock cuems-dmxplayer replacement for headless/cloud deployments.
 
-Accepts the same CLI as dmxplayer-cuems, starts an OSC UDP server on the
+Accepts the same CLI as cuems-dmxplayer, starts an OSC UDP server on the
 assigned port, logs all received DMX commands, and stays alive until /quit or SIGTERM.
 """
 
@@ -19,7 +19,7 @@ from cuemsutils.log import Logger
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Mock dmxplayer-cuems for headless deployments"
+        description="Mock cuems-dmxplayer for headless deployments"
     )
     parser.add_argument("--port", type=int, required=True, help="OSC UDP port")
     parser.add_argument("--uuid", type=str, required=True, help="Player node UUID")
