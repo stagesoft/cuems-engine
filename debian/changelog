@@ -1,3 +1,18 @@
+cuems-engine (0.1.0rc3-1) bookworm; urgency=medium
+
+  * merge rc_1 into debian/bookworm (47 commits):
+    - rename player binary references: audioplayer-cuems -> cuems-audioplayer
+      and dmxplayer-cuems -> cuems-dmxplayer (kill scripts, PlayerHandler
+      pgrep filter, mock wrappers, docstrings, dev test settings.xml)
+    - remove stale dev/cuems-node-engine.service (production unit in
+      cuems-common is the single source of truth)
+    - cue enable/disable toggle via WebSocket OSC; skip disabled cues in
+      nextcue/GO/arming/auto-chains
+    - arm: wait for in-progress arm instead of failing on concurrent access
+    - plus additional bug fixes and test coverage improvements from rc_1
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 16 Apr 2026 20:35:00 +0200
+
 cuems-engine (0.1.0rc2-2) bookworm; urgency=medium
 
   * cuems-engine-mock: fix wrapper install path from /usr/local/bin to /usr/bin
