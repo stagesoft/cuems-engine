@@ -30,12 +30,12 @@
                 <args></args>
             </videoplayer>
             <audioplayer>
-                <path>/usr/bin/audioplayer-cuems</path>
+                <path>/usr/bin/cuems-audioplayer</path>
                 <args>-w -1</args>
                 <audio_cards>1</audio_cards>
             </audioplayer>
             <dmxplayer>
-                <path>/usr/bin/dmxplayer</path>
+                <path>/usr/bin/cuems-dmxplayer</path>
                 <args></args>
                 <universes>1</universes>
             </dmxplayer>

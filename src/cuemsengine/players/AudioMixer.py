@@ -107,7 +107,7 @@ class AudioMixer(Player):
             return
             
         # Define player output ports
-        # audioplayer-cuems uses space format: "outport 0", "outport 1"
+        # cuems-audioplayer uses space format: "outport 0", "outport 1"
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
         mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
@@ -195,7 +195,7 @@ class AudioMixer(Player):
             selected_outputs = ['system:playback_1', 'system:playback_2']
             Logger.debug(f"No outputs specified, defaulting to stereo: {selected_outputs}")
         
-        # Define player output ports - audioplayer-cuems uses "outport 0", "outport 1"
+        # Define player output ports - cuems-audioplayer uses "outport 0", "outport 1"
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
         

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Mock audioplayer-cuems replacement for headless/cloud deployments.
+Mock cuems-audioplayer replacement for headless/cloud deployments.
 
-Accepts the same CLI as audioplayer-cuems, starts an OSC UDP server on the
+Accepts the same CLI as cuems-audioplayer, starts an OSC UDP server on the
 assigned port, logs all received commands, and stays alive until /quit or SIGTERM.
 """
 
@@ -32,7 +32,7 @@ def _quit_handler(server_ref: list, address, *args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Mock audioplayer-cuems for headless deployments"
+        description="Mock cuems-audioplayer for headless deployments"
     )
     parser.add_argument("--port", type=int, required=True, help="OSC UDP port")
     parser.add_argument("--uuid", type=str, default=None, help="Player UUID")

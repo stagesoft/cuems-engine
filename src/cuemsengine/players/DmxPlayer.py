@@ -8,7 +8,7 @@ from ..osc.endpoints import OSC_DMXPLAYER_CONF
 class DmxPlayer(Player):
     """DMX player process wrapper.
     
-    Manages a single dmxplayer-cuems process per node and exposes OSC control.
+    Manages a single cuems-dmxplayer process per node and exposes OSC control.
     """
 
     def __init__(self, port, node_uuid, path=None, args: str | None = None):
@@ -17,7 +17,7 @@ class DmxPlayer(Player):
         Args:
             port: OSC port for dmxplayer communication
             node_uuid: Unique identifier for this player node
-            path: Path to dmxplayer-cuems binary
+            path: Path to cuems-dmxplayer binary
         """
         super().__init__()
         self.node_uuid = node_uuid
@@ -30,7 +30,7 @@ class DmxPlayer(Player):
 
     @logged
     def run(self):
-        """Call dmxplayer-cuems in a subprocess"""
+        """Call cuems-dmxplayer in a subprocess"""
         process_call_list = [self.path]
         if self.args:
             for arg in self.args.split():
@@ -175,14 +175,14 @@ def start_dmx_player(
 ) -> tuple[DmxPlayer, DmxClient]:
     """Start a DMX player and its OSC client.
     
-    This function creates and starts a dmxplayer-cuems process and
+    This function creates and starts a cuems-dmxplayer process and
     sets up an OSC client to control it.
     
     Args:
         port: OSC port for dmxplayer communication
         node_uuid: Unique identifier for this player node
-        path: Path to dmxplayer-cuems binary
-        args: Additional arguments for dmxplayer-cuems
+        path: Path to cuems-dmxplayer binary
+        args: Additional arguments for cuems-dmxplayer
         timeout: Maximum time to wait for player to start (seconds)
     
     Returns:

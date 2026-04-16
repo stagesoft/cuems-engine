@@ -16,7 +16,7 @@ class AudioPlayer(Player):
 
     @logged
     def run(self):
-        # Calling audioplayer-cuems in a subprocess
+        # Calling cuems-audioplayer in a subprocess
         process_call_list = [self.path]
         if self.args:
             Logger.debug(f"Running audio player with args: {self.args}")

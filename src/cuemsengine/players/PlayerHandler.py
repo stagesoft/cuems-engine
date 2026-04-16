@@ -323,7 +323,7 @@ class PlayerHandler:
         return len(zombies)
 
     def kill_orphaned_audio_processes(self):
-        """Kill audioplayer-cuems OS processes not tracked by this engine.
+        """Kill cuems-audioplayer OS processes not tracked by this engine.
 
         On engine restart, previously spawned audioplayer processes survive
         because they are independent subprocesses. The new engine has no
@@ -332,7 +332,7 @@ class PlayerHandler:
         import os
         import signal
         result = subprocess.run(
-            ['pgrep', '-f', 'audioplayer-cuems'],
+            ['pgrep', '-f', 'cuems-audioplayer'],
             capture_output=True, text=True
         )
         if result.returncode != 0:
@@ -451,7 +451,7 @@ class PlayerHandler:
         Args:
             port: OSC port for dmxplayer communication
             node_uuid: Unique identifier for this player node
-            path: Path to dmxplayer-cuems binary
+            path: Path to cuems-dmxplayer binary
             
         Returns:
             Tuple containing the DmxPlayer and DmxClient instances
