@@ -38,10 +38,10 @@ Package: cuems-engine-mock
 Architecture: all
 Depends: ${misc:Depends},
          cuems-engine (>= 0.1.0rc2)
-Conflicts: cuems-audioplayer
+Conflicts: cuems-audioplayer, cuems-dmxplayer
 Description: CUEMS Engine Mock Players
- Mock replacement binaries for audioplayer-cuems, jack-volume,
- dmxplayer-cuems and videocomposer. Install alongside cuems-engine
+ Mock replacement binaries for cuems-audioplayer, jack-volume,
+ cuems-dmxplayer and videocomposer. Install alongside cuems-engine
  on headless or cloud servers where audio and video hardware is absent.
  .
  Installs log-only OSC services at the binary paths configured in

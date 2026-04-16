@@ -17,12 +17,12 @@ override_dh_install:
 	dh_install
 	# Stage mock wrapper scripts for cuems-engine-mock package
 	install -d debian/cuems-engine-mock/usr/bin
-	install -m 755 debian/mock-scripts/audioplayer-cuems \
-	    debian/cuems-engine-mock/usr/bin/audioplayer-cuems
+	install -m 755 debian/mock-scripts/cuems-audioplayer \
+	    debian/cuems-engine-mock/usr/bin/cuems-audioplayer
 	install -m 755 debian/mock-scripts/jack-volume \
 	    debian/cuems-engine-mock/usr/bin/jack-volume
-	install -m 755 debian/mock-scripts/dmxplayer-cuems \
-	    debian/cuems-engine-mock/usr/bin/dmxplayer-cuems
+	install -m 755 debian/mock-scripts/cuems-dmxplayer \
+	    debian/cuems-engine-mock/usr/bin/cuems-dmxplayer
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info

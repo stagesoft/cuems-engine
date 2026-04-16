@@ -51,7 +51,7 @@ case "$1" in
         fi
 
         echo "cuems-engine-mock installed."
-        echo "Mock wrappers installed to /usr/local/bin/: audioplayer-cuems, jack-volume, dmxplayer-cuems"
+        echo "Mock wrappers installed to /usr/bin/: cuems-audioplayer, jack-volume, cuems-dmxplayer"
         echo "Mock videocomposer service: cuems-mock-videocomposer (port 7000)"
         echo "JACK dummy service: jackd-dummy (dummy driver, no sound hardware required)"
         ;;
