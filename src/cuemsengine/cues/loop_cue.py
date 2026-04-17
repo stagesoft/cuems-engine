@@ -8,6 +8,22 @@ from cuemsutils.log import Logger
 
 from ..tools.MtcListener import MtcListener, CTimecode
 
+# #region DEBUG
+import os as _dbg_os
+from datetime import datetime as _dbg_dt
+_DBG_LOG = '/tmp/.claude/debug.log'
+try:
+    _dbg_os.makedirs(_dbg_os.path.dirname(_DBG_LOG), exist_ok=True)
+except Exception:
+    pass
+def _dbg(msg):
+    try:
+        with open(_DBG_LOG, 'a') as _f:
+            _f.write(f"[{_dbg_dt.now().isoformat()}] [ENGINE] [DEBUG H3 H4 H6 H7] {msg}\n")
+    except Exception:
+        pass
+# #endregion DEBUG
+
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).
 # Each cue independently limits its update rate to this value.
@@ -88,13 +104,16 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             Logger.info(f'After increment: loop_counter={loop_counter}, will_loop_again={will_loop_again}')
             
             if cue._local and will_loop_again:
-                cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=cue._end_mtc.milliseconds/1000)
+                cue._start_mtc = CTimecode(framerate=cue._end_mtc.framerate, frames=cue._end_mtc.frames)
                 cue._end_mtc = cue._start_mtc + duration
-                
+
                 offset_to_go = float(-cue._start_mtc.milliseconds)
                 
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_to_go} (MTC={mtc.main_tc.milliseconds}ms, _start_mtc={cue._start_mtc.milliseconds}ms, _end_mtc={cue._end_mtc.milliseconds}ms)')
                 
+                # #region DEBUG
+                _dbg(f"AUDIO send /offset cue={cue.id} loop={loop_counter} mtc_ms={mtc.main_tc.milliseconds} start_mtc_ms={cue._start_mtc.milliseconds} offset_ms={offset_to_go}")
+                # #endregion DEBUG
                 try:
                     cue._osc.set_value('/offset', offset_to_go)
                     Logger.info(f"Audio offset sent: {offset_to_go}", extra={"caller": cue.__class__.__name__})
@@ -202,12 +221,15 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             
             if cue._local and will_loop_again:
-                cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=cue._end_mtc.milliseconds/1000)
+                cue._start_mtc = CTimecode(framerate=cue._end_mtc.framerate, frames=cue._end_mtc.frames)
                 cue._end_mtc = cue._start_mtc + duration
                 offset_change_frames = -cue._start_mtc.frame_number
                 
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_change_frames}')
                 
+                # #region DEBUG
+                _dbg(f"VIDEO send /offset cue={cue.id} loop={loop_counter} mtc_ms={mtc.main_tc.milliseconds} start_mtc_ms={cue._start_mtc.milliseconds} start_mtc_frame={cue._start_mtc.frame_number} offset_frames={int(offset_change_frames)} fr={mtc.main_tc.framerate} layers={layer_ids}")
+                # #endregion DEBUG
                 for layer_id in layer_ids:
                     try:
                         cue._osc.set_value(f'/videocomposer/layer/{layer_id}/offset', int(offset_change_frames))
