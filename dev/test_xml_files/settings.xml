@@ -28,6 +28,7 @@
             <videoplayer>
                 <path>/usr/bin/videocomposer</path>
                 <args></args>
+                <outputs>2</outputs>
             </videoplayer>
             <audioplayer>
                 <path>/usr/bin/cuems-audioplayer</path>
