@@ -533,6 +533,64 @@ class PlayerHandler:
         """Returns the VideoOutput object for a given output name."""
         return self._video_outputs[output_name]
 
+    def _resolve_canvas_dimensions(self) -> tuple[int, int]:
+        """Return the node's canvas (width, height) in pixels.
+
+        All alias VideoOutputs on a node share the same canvas totals,
+        written by start_video_outputs. Raises if no aliases exist yet —
+        custom outputs have no independent canvas dimensions.
+        """
+        for vo in self._video_outputs.values():
+            return vo.canvas_width, vo.canvas_height
+        raise RuntimeError(
+            "Cannot resolve canvas dimensions: no named video outputs "
+            "are registered. Custom outputs require at least one alias "
+            "on the same node."
+        )
+
+    def make_custom_video_output(self, cue_output) -> VideoOutput:
+        """Build a VideoOutput for a per-cue custom region.
+
+        cue_output is a dict-like VideoCueOutput with a canvas_region
+        holding normalized floats in [0, 1]. Converts to pixel integers
+        so VideoOutput.get_layer_placement / get_layer_scale work the
+        same way they do for alias outputs.
+        """
+        region_norm = cue_output["canvas_region"]
+        canvas_w, canvas_h = self._resolve_canvas_dimensions()
+        region_px = {
+            "x": int(region_norm["x"] * canvas_w),
+            "y": int(region_norm["y"] * canvas_h),
+            "width": int(region_norm["width"] * canvas_w),
+            "height": int(region_norm["height"] * canvas_h),
+        }
+        return VideoOutput(
+            name=cue_output.get("output_name", "custom"),
+            canvas_region=region_px,
+            canvas_width=canvas_w,
+            canvas_height=canvas_h,
+            width=region_px["width"],
+            height=region_px["height"],
+        )
+
+    def resolve_video_output_for_cue(self, cue, output_name: str) -> VideoOutput:
+        """Resolve an output_name suffix to a VideoOutput.
+
+        For alias suffixes (<int>) looks up the cached VideoOutput.
+        For custom suffixes (custom_<n>) synthesizes a VideoOutput from
+        the matching VideoCueOutput's inline canvas_region.
+        """
+        if output_name.startswith("custom_"):
+            full = f"{self._node_uuid}_{output_name}"
+            cue_output = next(
+                (o for o in cue.outputs if o.get("output_name") == full),
+                None,
+            )
+            if cue_output is None:
+                raise KeyError(f"No VideoCueOutput match for {full}")
+            return self.make_custom_video_output(cue_output)
+        return self._video_outputs[output_name]
+
     def register_layer(self, layer_id: str) -> None:
         """Track a layer as active in the videocomposer."""
         with self._lock:
@@ -671,6 +729,11 @@ class PlayerHandler:
     def add_node_uuid(self, uuid: str):
         """Adds a node uuid to the player handler"""
         self._node_uuid = uuid
+
+    @property
+    def node_uuid(self) -> str | None:
+        """Public read-only accessor for the node uuid."""
+        return self._node_uuid
 
 
 # ---------------------------

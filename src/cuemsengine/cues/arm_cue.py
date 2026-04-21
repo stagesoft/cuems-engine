@@ -154,7 +154,7 @@ def arm_videoCue(cue: VideoCue):
         client.set_value(f'{layer_path}/autounload', 1)
 
         try:
-            output = PLAYER_HANDLER.get_video_output(output_name)
+            output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
             x, y = output.get_layer_placement()
             client.set_value(f'{layer_path}/position', [x, y])
             sx, sy = output.get_layer_scale()
