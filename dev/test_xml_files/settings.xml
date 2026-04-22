@@ -29,16 +29,42 @@
                 <path>/usr/bin/videocomposer</path>
                 <args></args>
                 <outputs>2</outputs>
+                <!-- output_latency_ms: "auto" = use videocomposer's
+                     hard-coded 33 ms default; integer 0-500 = explicit
+                     override. NOTE: videocomposer runs as a systemd
+                     service (not spawned by the engine), so this value
+                     is NOT forwarded via CLI today. Set via a systemd
+                     drop-in override on each node (see
+                     cuems-common cuems-videocomposer.service for the
+                     snippet). This element is kept for schema-
+                     completeness and forward-compatibility. -->
+                <output_latency_ms>auto</output_latency_ms>
             </videoplayer>
             <audioplayer>
                 <path>/usr/bin/cuems-audioplayer</path>
                 <args>-w -1</args>
                 <audio_cards>1</audio_cards>
+                <!-- output_latency_ms: "auto" = use JACK-queried value
+                     (recommended on most rigs; JACK knows its own
+                     latency best); integer 0-500 = explicit override. -->
+                <output_latency_ms>auto</output_latency_ms>
             </audioplayer>
             <dmxplayer>
                 <path>/usr/bin/cuems-dmxplayer</path>
                 <args></args>
                 <universes>1</universes>
+                <!-- output_latency_ms: integer 0-500. DMX has no auto
+                     measurement path (schema rejects "auto"). Absent
+                     element = 35 ms hard-coded default (midpoint of
+                     ENTTEC and ArtNet typicals).
+                     Recommended per-adapter starting points:
+                       ENTTEC USB Pro / DMXKing  ~30 ms
+                       OpenDMX (FTDI bit-banged) ~35 ms
+                       ArtNet (dedicated 1GbE)   ~44 ms
+                       ArtNet (shared/wireless)  ~60-80 ms
+                     Measure with a phone camera at 120 fps pointed at
+                     a fixture + click-track audio, tune per node. -->
+                <output_latency_ms>35</output_latency_ms>
             </dmxplayer>
         </node>
     </Settings>
