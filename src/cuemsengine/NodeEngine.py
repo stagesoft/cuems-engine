@@ -19,6 +19,23 @@ from .players.PlayerHandler import PLAYER_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
+
+def _append_output_latency_flag(args: str, player_conf: dict) -> str:
+    """Append --output-latency-ms <int> to args when the player's
+    settings.xml config has an explicit integer value.
+
+    settings.xml accepts integer (override) or the literal string
+    "auto" (use the binary's built-in default or auto-calibration).
+    xmlschema decodes integers as Python int and "auto" as str.
+    isinstance(value, int) distinguishes reliably; "auto" and None
+    both mean "don't emit the flag". See cuems-utils
+    test_output_latency_ms_type_round_trip for the typing contract.
+    """
+    value = player_conf.get('output_latency_ms')
+    if isinstance(value, int):
+        return f'{args} --output-latency-ms {value}'
+    return args
+
 class NodeEngine(BaseEngine):
     """
     This engine manages players for each node
@@ -363,10 +380,17 @@ class NodeEngine(BaseEngine):
                         }
         PLAYER_HANDLER.set_audio_outputs(audio_outputs)
 
-        # Set the audio player generator
+        # Set the audio player generator. Append --output-latency-ms
+        # from settings.xml when the operator supplied an integer
+        # override (isinstance int); "auto" or absent ⇒ audioplayer
+        # runs its Phase-3 JACK-latency query path.
+        audio_args = _append_output_latency_flag(
+            self.cm.node_conf['audioplayer']['args'],
+            self.cm.node_conf['audioplayer'],
+        )
         PLAYER_HANDLER.set_audio_output_generator(
             self.cm.node_conf['audioplayer']['path'],
-            self.cm.node_conf['audioplayer']['args']
+            audio_args,
         )
 
     # Video functions
@@ -423,11 +447,18 @@ class NodeEngine(BaseEngine):
 
         # Start the DMX player
         try:
+            # Append --output-latency-ms from settings.xml when an
+            # integer override is present. Dmx has no "auto" form —
+            # absent ⇒ dmxplayer's 35 ms Phase-5A default stands.
+            dmx_args = _append_output_latency_flag(
+                self.cm.node_conf['dmxplayer']['args'],
+                self.cm.node_conf['dmxplayer'],
+            )
             PLAYER_HANDLER.start_dmx_player(
                 port=dmx_ports['dmx_player'],
                 node_uuid=node_uuid,
                 path=self.cm.node_conf['dmxplayer']['path'],
-                args=self.cm.node_conf['dmxplayer']['args']
+                args=dmx_args,
             )
             try:
                 CUE_HANDLER.communications_thread.add_player(f'dmxplayer_{node_uuid}', None, timeout=0.1)
