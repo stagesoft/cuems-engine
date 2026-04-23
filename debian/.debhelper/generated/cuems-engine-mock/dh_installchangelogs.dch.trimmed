@@ -1,0 +1,65 @@
+cuems-engine (0.1.0rc3-2) bookworm; urgency=medium
+
+  * cuems-engine-mock: rename drop-in wrapper binaries to match the new
+    cuems-<component> convention (audioplayer-cuems -> cuems-audioplayer,
+    dmxplayer-cuems -> cuems-dmxplayer); the mock package now ships
+    /usr/bin/cuems-audioplayer and /usr/bin/cuems-dmxplayer
+  * cuems-engine-mock: Conflicts: now covers cuems-dmxplayer as well
+    (previously only cuems-audioplayer, so dmxplayer conflict was missing)
+  * cuems-engine-mock.postinst: correct install-path message (/usr/bin/ not
+    /usr/local/bin/) and use the new binary names
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 16 Apr 2026 20:55:00 +0200
+
+cuems-engine (0.1.0rc3-1) bookworm; urgency=medium
+
+  * merge rc_1 into debian/bookworm (47 commits):
+    - rename player binary references: audioplayer-cuems -> cuems-audioplayer
+      and dmxplayer-cuems -> cuems-dmxplayer (kill scripts, PlayerHandler
+      pgrep filter, mock wrappers, docstrings, dev test settings.xml)
+    - remove stale dev/cuems-node-engine.service (production unit in
+      cuems-common is the single source of truth)
+    - cue enable/disable toggle via WebSocket OSC; skip disabled cues in
+      nextcue/GO/arming/auto-chains
+    - arm: wait for in-progress arm instead of failing on concurrent access
+    - plus additional bug fixes and test coverage improvements from rc_1
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 16 Apr 2026 20:35:00 +0200
+
+cuems-engine (0.1.0rc2-2) bookworm; urgency=medium
+
+  * cuems-engine-mock: fix wrapper install path from /usr/local/bin to /usr/bin
+    - /etc/cuems/settings.xml configures player paths under /usr/bin/
+    - wrappers at /usr/local/bin/ were never found by the node engine
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 11 Mar 2026 13:00:00 +0100
+
+cuems-engine (0.1.0rc2-1) bookworm; urgency=medium
+
+  * Fixed EngineStatus initialization order bug
+    - Initialize _recieved before test property to prevent AttributeError
+  * Fixed OSCQuery GIL crashes
+    - Disabled ALL OSCQuery callbacks to prevent GIL crashes from C++ threads
+    - Implemented polling loop for safe command value change detection (100ms)
+    - Python thread safely checks for command value changes
+    - Commands auto-reset after execution for next trigger
+  * Added comprehensive OSCQuery debugging
+    - Enhanced logging for endpoint creation and node management
+    - Debug output for status endpoint building process
+  * JACK/PipeWire compatibility
+    - Maintains no_start_server=True for proper systemd/PipeWire integration
+    - Requires PipeWire JACK libraries via LD_LIBRARY_PATH
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 22 Jan 2026 17:50:00 +0100
+
+cuems-engine (0.1.0rc1-1) bookworm; urgency=medium
+
+  * Initial Debian package release
+  * Engine infrastructure for CUEMS system
+  * Controller and node engines for media playback
+  * MIDI and OSC communication support
+  * Integration with cuems-utils virtual environment
+  * Systemd service support
+  * Console scripts: node-engine, controller-engine, system-ports
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 11 Dec 2025 00:00:00 +0000
