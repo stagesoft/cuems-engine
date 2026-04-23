@@ -1,6 +1,0 @@
-6eaf5c7b996c36d8731c73813d943c3c  lib/systemd/system/cuems-mock-videocomposer.service
-2788a4125cbdba46cc30f221abed748b  lib/systemd/system/jackd-dummy.service
-0f101a18967f273430353cd37509f3fd  usr/bin/cuems-audioplayer
-8cb1b2d99b08e61fc26daaac737d0326  usr/bin/cuems-dmxplayer
-369e77ee278cff3611ae06ffc06629f7  usr/bin/jack-volume
-487076d98471a26ffc11a86039593091  usr/share/doc/cuems-engine-mock/changelog.Debian.gz

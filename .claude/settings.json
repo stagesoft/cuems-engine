@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(pip show:*)",
-      "Bash(/usr/lib/cuems/bin/python3 -m pytest tests/ -v)"
-    ]
-  }
-}
