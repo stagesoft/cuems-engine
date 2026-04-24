@@ -50,6 +50,22 @@ class JackConnectionManager:
         if self._client is None:
             self._initialize_client()
         return self._client
+
+    def _reset_client(self):
+        """Discard the current client so the next access reinitializes.
+
+        Needed because jackd can deregister our client after a process-graph
+        error (e.g. an audioplayer XRun that trips ProcessGraphAsyncMaster).
+        Python still holds a reference to a dead handle; every subsequent
+        connect/disconnect silently returns -1. Calling this on a JackError
+        lets the retry path get a fresh, registered client.
+        """
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
     
     @logged
     def get_ports(self, pattern: str = None, is_audio: bool = True, 
@@ -116,27 +132,28 @@ class JackConnectionManager:
         Returns:
             True if connection successful, False otherwise
         """
-        if self.client is None:
-            Logger.error("JACK client not initialized")
-            return False
-        
-        try:
-            # Check if already connected
-            if self.is_connected(source_port, destination_port):
-                Logger.debug(f"Ports already connected: {source_port} -> {destination_port}")
+        for attempt in (0, 1):
+            if self.client is None:
+                Logger.error("JACK client not initialized")
+                return False
+            try:
+                if self.is_connected(source_port, destination_port):
+                    Logger.debug(f"Ports already connected: {source_port} -> {destination_port}")
+                    return True
+                self.client.connect(source_port, destination_port)
+                Logger.info(f"Connected {source_port} -> {destination_port}")
                 return True
-            
-            # Make the connection
-            self.client.connect(source_port, destination_port)
-            Logger.info(f"Connected {source_port} -> {destination_port}")
-            return True
-                
-        except jack.JackError as e:
-            Logger.warning(f"Failed to connect {source_port} -> {destination_port}: {e}")
-            return False
-        except Exception as e:
-            Logger.error(f"Unexpected error connecting JACK ports: {e}")
-            return False
+            except jack.JackError as e:
+                if attempt == 0:
+                    Logger.warning(f"connect failed, retrying with fresh client: {source_port} -> {destination_port}: {e}")
+                    self._reset_client()
+                    continue
+                Logger.warning(f"Failed to connect {source_port} -> {destination_port}: {e}")
+                return False
+            except Exception as e:
+                Logger.error(f"Unexpected error connecting JACK ports: {e}")
+                return False
+        return False
     
     @logged
     def disconnect_by_name(self, source_port: str, destination_port: str) -> bool:
@@ -149,21 +166,25 @@ class JackConnectionManager:
         Returns:
             True if disconnection successful, False otherwise
         """
-        if self.client is None:
-            Logger.error("JACK client not initialized")
-            return False
-        
-        try:
-            self.client.disconnect(source_port, destination_port)
-            Logger.info(f"Disconnected {source_port} -> {destination_port}")
-            return True
-                
-        except jack.JackError as e:
-            Logger.warning(f"Failed to disconnect {source_port} -> {destination_port}: {e}")
-            return False
-        except Exception as e:
-            Logger.error(f"Unexpected error disconnecting JACK ports: {e}")
-            return False
+        for attempt in (0, 1):
+            if self.client is None:
+                Logger.error("JACK client not initialized")
+                return False
+            try:
+                self.client.disconnect(source_port, destination_port)
+                Logger.info(f"Disconnected {source_port} -> {destination_port}")
+                return True
+            except jack.JackError as e:
+                if attempt == 0:
+                    Logger.warning(f"disconnect failed, retrying with fresh client: {source_port} -> {destination_port}: {e}")
+                    self._reset_client()
+                    continue
+                Logger.warning(f"Failed to disconnect {source_port} -> {destination_port}: {e}")
+                return False
+            except Exception as e:
+                Logger.error(f"Unexpected error disconnecting JACK ports: {e}")
+                return False
+        return False
     
     @logged
     def get_connections(self, port_name: str) -> list[str]:
