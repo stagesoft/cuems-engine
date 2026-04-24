@@ -266,14 +266,16 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         if index < len(output_names):
             output_name = output_names[index]
             try:
-                output = PLAYER_HANDLER.get_video_output(output_name)
+                output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f'{layer_path}/position', [x, y])
                 sx, sy = output.get_layer_scale()
                 if sx != 1.0 or sy != 1.0:
                     client.set_value(f'{layer_path}/scale', [sx, sy])
-            except (KeyError, Exception) as e:
+            except (KeyError, RuntimeError, ValueError) as e:
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
+            except Exception:
+                Logger.exception(f'Unexpected error re-applying position for layer {layer_id} (output "{output_name}")')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
         # Send mtcfollow before visible so the videocomposer loads the
