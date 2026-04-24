@@ -376,7 +376,8 @@ class NodeEngine(BaseEngine):
         if not self.cm.node_hw_outputs['video_outputs']:
             Logger.info('No video outputs detected.')
             return
-        
+
+        PLAYER_HANDLER.add_node_uuid(self.cm.node_uuid)
         vc_conf = self.cm.node_conf.get('videoplayer', {})
         osc_video_port = int(vc_conf.get('osc_port', VIDEOCOMPOSER_OSC_PORT_DEFAULT))
         PLAYER_HANDLER.set_video_client(osc_video_port)
@@ -386,28 +387,54 @@ class NodeEngine(BaseEngine):
         # Keys are <id> (stable integer, what cues reference via output_name)
         # <name> is a human label, <mapped_to> is the DRM connector for videocomposer
         video_outputs = {}
+        aliases_needing_default_layout = []
         for port_type_dict in self.cm.node_mappings.get('video', []):
             for port_type_list in port_type_dict.values():
                 for port in port_type_list:
                     for _, output_data in port.items():
                         output_id = str(output_data.get('id', output_data['name']))
                         name = output_data['name']
-                        region = output_data.get('canvas_region', {})
+                        region = output_data.get('canvas_region') or {}
                         mappings = output_data.get('mappings', [])
                         mapped_to = mappings[0]['mapped_to'] if mappings else name
-                        x = region.get('x', 0)
-                        y = region.get('y', 0)
-                        width = region.get('width', 1920)
-                        height = region.get('height', 1080)
+                        has_pixel_region = bool(region) and all(
+                            isinstance(region.get(k), int)
+                            for k in ('x', 'y', 'width', 'height')
+                        )
+                        if has_pixel_region:
+                            canvas_region = dict(region)
+                        else:
+                            # Either missing (alias — filled in the second pass) or
+                            # normalized-float (custom template — left as-is; not a
+                            # physical output).
+                            canvas_region = dict(region) if region else None
                         video_outputs[output_id] = {
                             'name': name,
                             'mapped_to': mapped_to,
-                            'x': x,
-                            'y': y,
-                            'width': width,
-                            'height': height,
-                            'canvas_region': region if region else {'x': x, 'y': y, 'width': width, 'height': height},
+                            'x': (canvas_region or {}).get('x', 0),
+                            'y': (canvas_region or {}).get('y', 0),
+                            'width': (canvas_region or {}).get('width', 1920),
+                            'height': (canvas_region or {}).get('height', 1080),
+                            'canvas_region': canvas_region,
                         }
+                        if canvas_region is None:
+                            aliases_needing_default_layout.append(output_id)
+
+        # Aliases without an explicit canvas_region lay out side-by-side in <id>
+        # order, 1920x1080 each. Matches physical monitor layout by default.
+        try:
+            aliases_needing_default_layout.sort(key=lambda oid: int(oid))
+        except ValueError:
+            aliases_needing_default_layout.sort()
+        for index, output_id in enumerate(aliases_needing_default_layout):
+            region = {'x': index * 1920, 'y': 0, 'width': 1920, 'height': 1080}
+            video_outputs[output_id].update({
+                'x': region['x'],
+                'y': region['y'],
+                'width': region['width'],
+                'height': region['height'],
+                'canvas_region': region,
+            })
         PLAYER_HANDLER.start_video_outputs(video_outputs)
 
 
