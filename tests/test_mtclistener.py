@@ -118,3 +118,130 @@ class TestMtcListener:
         
         with pytest.raises(NotImplementedError):
             mtc_listener._MtcListener__handle_message(message) 
+
+
+# ----------------------------------------------------------------------
+# 869cyndtv PR #10: 24h rollover detection (closes 869cpdbzy)
+# ----------------------------------------------------------------------
+class TestMtcListener24hRollover:
+    """Layer 2 of PR #10: MtcListener accumulates a 24h offset on each
+    detected MIDI MTC rollover so main_tc stays monotonic past 24h.
+
+    MIDI MTC encodes hours in a 5-bit field (max 23) and real SMPTE senders
+    reset to 00:00:00:00 after 24h. Without this fix, mtc.main_tc would
+    reset to ~frames=1 every 24h regardless of cuemsutils 0.1.0rc7's
+    CTimecode-side monotonicity.
+    """
+
+    @pytest.fixture
+    def mock_mido(self):
+        with patch('mido.get_input_names') as mock_get_names, \
+             patch('mido.open_input') as mock_open_input:
+            mock_get_names.return_value = ['MTC Port 1']
+            mock_open_input.return_value = MagicMock()
+            yield None
+
+    @pytest.fixture
+    def listener(self, mock_mido):
+        listener = MtcListener(port='MTC Port 1')
+        yield listener
+
+    def test_initial_state_no_offset(self, listener):
+        assert listener._24h_offset_frames == 0
+        assert listener._last_decoded_frames is None
+
+    def test_normal_advance_no_offset_accumulated(self, listener):
+        # Simulate normal forward MTC progression — no wrap.
+        tc1 = CTimecode(framerate=25, frames=1000)
+        tc2 = CTimecode(framerate=25, frames=1500)
+        adjusted1 = listener._apply_24h_offset(tc1)
+        adjusted2 = listener._apply_24h_offset(tc2)
+        assert listener._24h_offset_frames == 0
+        assert adjusted1.frames == 1000
+        assert adjusted2.frames == 1500
+
+    def test_24h_wrap_accumulates_offset_at_25fps(self, listener):
+        # Just before the wrap: MTC near 24h.
+        FRAMES_24H_25 = 25 * 3600 * 24  # 2_160_000
+        pre_wrap = CTimecode(framerate=25, frames=FRAMES_24H_25 - 1)
+        listener._apply_24h_offset(pre_wrap)
+
+        # Real MTC senders wrap to 00:00:00:00 after 24h. The MIDI bytes
+        # decode to a CTimecode at frames ≈ 1.
+        post_wrap_decoded = CTimecode(framerate=25, frames=1)
+        adjusted = listener._apply_24h_offset(post_wrap_decoded)
+
+        assert listener._24h_offset_frames == FRAMES_24H_25
+        # The adjusted main_tc should land just past 24h, monotonic with
+        # the pre-wrap value.
+        assert adjusted.frames == 1 + FRAMES_24H_25
+        assert adjusted.milliseconds_exact > pre_wrap.milliseconds_exact
+
+    def test_two_24h_wraps_double_offset(self, listener):
+        # Walk: just-before-wrap → wrap1 → just-before-wrap → wrap2.
+        FRAMES_24H_25 = 25 * 3600 * 24
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=FRAMES_24H_25 - 1))
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=1))  # wrap 1
+        # The previous decoded frames (per heuristic) is the raw decoded
+        # frames=1, NOT the offset-adjusted frames. Walk forward to ~24h.
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=FRAMES_24H_25 - 1))
+        adjusted = listener._apply_24h_offset(CTimecode(framerate=25, frames=1))  # wrap 2
+
+        assert listener._24h_offset_frames == 2 * FRAMES_24H_25
+        assert adjusted.frames == 1 + 2 * FRAMES_24H_25
+
+    def test_small_backward_jump_not_treated_as_wrap(self, listener):
+        # A manual seek backward by less than 1 hour must not trigger the
+        # 24h offset accumulation. Seek behavior is preserved (existing
+        # reset detection in __update_timecode handles seek-to-zero).
+        tc1 = CTimecode(framerate=25, frames=10000)  # ~6:40 in
+        tc2 = CTimecode(framerate=25, frames=100)    # seek back to ~4s
+        listener._apply_24h_offset(tc1)
+        listener._apply_24h_offset(tc2)
+        # delta = -9900 frames = -396s = -0.11h, less than 1 hour
+        assert listener._24h_offset_frames == 0
+
+    def test_large_backward_jump_just_under_threshold(self, listener):
+        # delta of exactly -1 hour at 25fps = -90000 frames; the threshold
+        # is `delta < -frames_per_hour` (strict less-than), so a delta of
+        # exactly -90000 should NOT trigger.
+        tc1 = CTimecode(framerate=25, frames=100000)
+        tc2 = CTimecode(framerate=25, frames=100000 - 90000)  # exactly 1h back
+        listener._apply_24h_offset(tc1)
+        listener._apply_24h_offset(tc2)
+        assert listener._24h_offset_frames == 0
+
+    def test_wrap_at_29_97fps(self, listener):
+        # At 29.97 NTSC, _int_framerate=30, frames_per_24h = 30 * 86400 = 2_592_000.
+        FRAMES_24H_30 = 30 * 86400
+        listener._apply_24h_offset(CTimecode(framerate=29.97, frames=FRAMES_24H_30 - 1))
+        adjusted = listener._apply_24h_offset(CTimecode(framerate=29.97, frames=1))
+        assert listener._24h_offset_frames == FRAMES_24H_30
+        assert adjusted.frames == 1 + FRAMES_24H_30
+
+    def test_wrap_preserves_polling_loop_termination(self, listener):
+        # Bug 869cpdbzy symptom: `while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded`
+        # would never exit after MTC wrapped (mtc reset to ~0, end_mtc still
+        # at large value). With Layer 2 fix, main_tc stays monotonic.
+        FRAMES_24H = 25 * 3600 * 24
+        # Cue starts just before 24h, runs 30s past 24h.
+        cue_start = listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=FRAMES_24H - 100)
+        )
+        cue_end_frames = cue_start.frames + 750  # +30s nominal
+        cue_end = CTimecode(framerate=25, frames=cue_end_frames)
+
+        # MTC walks past 24h boundary; we simulate the wrap.
+        # Just before wrap.
+        mtc_at_wrap_minus_1 = listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=FRAMES_24H - 1)
+        )
+        assert mtc_at_wrap_minus_1.milliseconds_rounded < cue_end.milliseconds_rounded
+
+        # MIDI wraps; raw decoded is ~1; after offset it's at ~24h+1.
+        mtc_post_wrap = listener._apply_24h_offset(CTimecode(framerate=25, frames=1))
+        assert mtc_post_wrap.milliseconds_rounded > mtc_at_wrap_minus_1.milliseconds_rounded
+
+        # MTC continues to walk; eventually exceeds cue_end → loop terminates.
+        mtc_past_end = listener._apply_24h_offset(CTimecode(framerate=25, frames=800))
+        assert mtc_past_end.milliseconds_rounded > cue_end.milliseconds_rounded
