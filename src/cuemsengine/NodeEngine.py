@@ -909,7 +909,9 @@ class NodeEngine(BaseEngine):
         
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
-        self.go_offset = self.mtc_listener.main_tc.milliseconds
+        # Drift baseline; consumed by BaseEngine.timecode = mtc - go_offset.
+        # _exact for sub-ms precision at NTSC framerates.
+        self.go_offset = self.mtc_listener.main_tc.milliseconds_exact
 
         # Broadcast nextcue to UI
         self._broadcast_nextcue()
