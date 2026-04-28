@@ -3,6 +3,7 @@ import time
 from functools import partial
 
 from cuemsutils.log import Logger, logged
+from cuemsutils.xml.Settings import NetworkMap
 
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
@@ -176,16 +177,32 @@ class ControllerEngine(BaseEngine):
             '/engine/players/*', self._handle_player_osc_message
         )
         
-        # Register handler for direct node/player messages from UI
-        # UI sends: /<node_uuid>/audiomixer/<channel> or /<node_uuid>/jadeo/<cmd>
-        # We need to catch these and forward to NodeEngine
-        node_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
-        if node_uuid:
+        # Register direct player handler for every adopted node in the network map.
+        # UI sends /{node_uuid}/<type>/... for both controller and worker nodes;
+        # without per-node registration the WS dispatcher silently drops the
+        # message and the NNG forward never happens.
+        # The set deduplicates so the controller's own UUID isn't registered
+        # twice (it appears in both node_conf and network_map['node_list']).
+        node_uuids: set[str] = set()
+        own_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
+        if own_uuid:
+            node_uuids.add(own_uuid)
+        try:
+            if self.cm and self.cm.network_map:
+                adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
+                for entry in adopted:
+                    nuuid = (entry.get('node') or {}).get('uuid')
+                    if nuuid:
+                        node_uuids.add(nuuid)
+        except Exception as e:
+            Logger.warning(f"Could not enumerate node UUIDs from network_map: {e}")
+
+        for nuuid in node_uuids:
             self.communications_thread.register_osc_handler(
-                f'/{node_uuid}/*', self._handle_direct_player_osc_message
+                f'/{nuuid}/*', self._handle_direct_player_osc_message
             )
-            Logger.info(f"Registered direct player OSC handler for /{node_uuid}/*")
-        
+            Logger.info(f"Registered direct player OSC handler for /{nuuid}/*")
+
         Logger.info("OSC command handlers registered for WebSocket receiving")
     
     def _handle_direct_player_osc_message(self, address: str, args: list):
