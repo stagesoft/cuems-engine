@@ -149,6 +149,11 @@ class NodeEngine(BaseEngine):
         elif player_type == 'dmx':
             CUE_HANDLER.route_dmx_message(path_parts, value)
         elif player_type == 'audiomixer':
+            # Legacy: pre-2026 OSC format /{uuid}/audiomixer/{channel}.
+            # The current UI sends /{uuid}/audio/mixer/{output_index}/{channel}/volume,
+            # which routes via player_type == 'audio' → CueHandler.route_audio_message().
+            # Kept for backwards compatibility with any external tool still using
+            # the old format; new code should not target this path.
             # Direct audiomixer command: /<uuid>/audiomixer/<channel>
             # path_parts[0] is channel (e.g., '0', 'master')
             self._handle_audiomixer_command(path_parts, value)
