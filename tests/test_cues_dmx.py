@@ -347,7 +347,7 @@ class TestLoopDmxCue:
     def test_loop_dmx_cue_local_guard(self, mock_dmx_cue, mock_mtc):
         """Test that loop_dmxCue has cue._local guard for future use."""
         # Set MTC to already be past end time
-        mock_mtc.main_tc.milliseconds = 20000
+        mock_mtc.main_tc.milliseconds_rounded = 20000
         
         with patch('cuemsengine.cues.loop_cue.sleep'):
             loop_dmxCue(mock_dmx_cue, mock_mtc)
@@ -359,7 +359,7 @@ class TestLoopDmxCue:
     def test_loop_dmx_cue_remote(self, mock_dmx_cue, mock_mtc):
         """Test loop_dmxCue with remote cue (cue._local = False)."""
         mock_dmx_cue._local = False
-        mock_mtc.main_tc.milliseconds = 20000  # Past end time
+        mock_mtc.main_tc.milliseconds_rounded = 20000  # Past end time
         
         with patch('cuemsengine.cues.loop_cue.sleep'):
             loop_dmxCue(mock_dmx_cue, mock_mtc)
