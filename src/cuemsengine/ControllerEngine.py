@@ -1,8 +1,10 @@
 import asyncio
+import math
 import time
 from functools import partial
 
 from cuemsutils.log import Logger, logged
+from cuemsutils.xml.Settings import NetworkMap
 
 from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
 from .core.libmtc import libmtcmaster
@@ -54,6 +56,12 @@ class ControllerEngine(BaseEngine):
         self.cue_enabled_status: dict[str, bool] = {}
         # Per-cue last-broadcast timestamps for WS throttle (Tier 2).
         self._cue_broadcast_timestamps: dict[str, float] = {}
+        # Per-mixer-channel volume state: maps "{node_uuid}/{output_index}/{channel}"
+        # to float 0.0-1.0. Channel is "master" or a stringified index. Persists
+        # across project loads; resets only on engine restart. All access is on
+        # the asyncio event loop (WS receive handler + _on_ws_client_connect),
+        # so no lock is needed — keep it that way.
+        self.mixer_status: dict[str, float] = {}
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
@@ -176,16 +184,32 @@ class ControllerEngine(BaseEngine):
             '/engine/players/*', self._handle_player_osc_message
         )
         
-        # Register handler for direct node/player messages from UI
-        # UI sends: /<node_uuid>/audiomixer/<channel> or /<node_uuid>/jadeo/<cmd>
-        # We need to catch these and forward to NodeEngine
-        node_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
-        if node_uuid:
+        # Register direct player handler for every adopted node in the network map.
+        # UI sends /{node_uuid}/<type>/... for both controller and worker nodes;
+        # without per-node registration the WS dispatcher silently drops the
+        # message and the NNG forward never happens.
+        # The set deduplicates so the controller's own UUID isn't registered
+        # twice (it appears in both node_conf and network_map['node_list']).
+        node_uuids: set[str] = set()
+        own_uuid = self.cm.node_conf.get('uuid', '') if hasattr(self, 'cm') and self.cm else ''
+        if own_uuid:
+            node_uuids.add(own_uuid)
+        try:
+            if self.cm and self.cm.network_map:
+                adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
+                for entry in adopted:
+                    nuuid = (entry.get('node') or {}).get('uuid')
+                    if nuuid:
+                        node_uuids.add(nuuid)
+        except Exception as e:
+            Logger.warning(f"Could not enumerate node UUIDs from network_map: {e}")
+
+        for nuuid in node_uuids:
             self.communications_thread.register_osc_handler(
-                f'/{node_uuid}/*', self._handle_direct_player_osc_message
+                f'/{nuuid}/*', self._handle_direct_player_osc_message
             )
-            Logger.info(f"Registered direct player OSC handler for /{node_uuid}/*")
-        
+            Logger.info(f"Registered direct player OSC handler for /{nuuid}/*")
+
         Logger.info("OSC command handlers registered for WebSocket receiving")
     
     def _handle_direct_player_osc_message(self, address: str, args: list):
@@ -203,9 +227,30 @@ class ControllerEngine(BaseEngine):
         
         # parts[0] is node_uuid, parts[1] is type (audiomixer, jadeo, etc.)
         player_type = parts[1]
-        
+
         Logger.debug(f"Direct player OSC: {address} = {repr(value)}")
-        
+
+        # Shadow audio mixer volume so /realtime clients can recover state on
+        # reconnect or page reload. Address shape:
+        #   /{node_uuid}/audio/mixer/{output_index}/{channel}/volume
+        # NaN/Inf are dropped to avoid polluting the dict.
+        if (len(parts) >= 6
+                and parts[1] == 'audio' and parts[2] == 'mixer'
+                and parts[-1] == 'volume'
+                and value is not None):
+            try:
+                vol = float(value)
+            except (TypeError, ValueError):
+                vol = None
+            if vol is not None and math.isfinite(vol):
+                node_uuid_part, output_index, channel = parts[0], parts[3], parts[4]
+                key = f'{node_uuid_part}/{output_index}/{channel}'
+                self.mixer_status[key] = vol
+                self._broadcast_status(
+                    f'audio/mixer/{node_uuid_part}/{output_index}/{channel}/volume',
+                    vol,
+                )
+
         # Forward to NodeEngine via NNG as player_control
         operation = NodeOperation(
             type=OperationType.COMMAND,
@@ -617,6 +662,16 @@ class ControllerEngine(BaseEngine):
         for cid, enabled in self.cue_enabled_status.items():
             data = build_osc_message(
                 f'/engine/status/cue_enabled/{cid}', 1 if enabled else 0)
+            if data:
+                await websocket.send(data)
+
+        # Per-mixer-channel volume status.
+        # Scale note: each entry is one ~80-byte WS message. Acceptable up to
+        # ~500 entries (~40 KB / ~500 ms over LAN). If a deployment ever
+        # exceeds that (e.g. 8 nodes × 64 channels), switch to a single OSC
+        # bundle via build_osc_bundle() instead of per-message sends.
+        for key, vol in self.mixer_status.items():
+            data = build_osc_message(f'/engine/status/audio/mixer/{key}/volume', vol)
             if data:
                 await websocket.send(data)
 
