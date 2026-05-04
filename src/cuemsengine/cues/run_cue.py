@@ -33,10 +33,16 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """Run an ActionCue by delegating to ActionHandler.execute_action."""
+    """Run an ActionCue by delegating to ActionHandler.execute_action.
+
+    Forwards frozen_mtc_ms so a chained 'play' action triggered inside a
+    post_go='go' chain preserves the chain's MTC snapshot — without it,
+    ActionCue-mediated chains capture live MTC inside CueHandler.go and
+    drift relative to the chain's other cues.
+    """
     from .ActionHandler import ACTION_HANDLER
 
-    ACTION_HANDLER.execute_action(cue, mtc)
+    ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
 
 
 @run_cue.register
