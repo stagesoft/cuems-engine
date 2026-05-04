@@ -268,6 +268,55 @@ class AudioMixer(Player):
                     self.conn_man.connect_by_name(channel_0_output, mixer_input)
 
 
+    def player_connections_correct(self, player_name: str,
+                                   player_output_prefix: str = 'outport',
+                                   selected_outputs: list = None) -> bool:
+        """Verify the player's outputs are wired exactly as connect_player_to_outputs would wire them.
+
+        Mirrors the routing in connect_player_to_outputs: same output_to_input
+        mapping (built from audio_outputs), same alternating L/R fan-out walk,
+        same mono branch (outport 0 → both pair members when channel_1 absent).
+
+        Returns False if any expected edge is missing, points elsewhere, or if
+        outport 0 itself does not exist (subprocess gone). Caller decides
+        whether to repair via connect_player_to_outputs or abort the cue.
+        """
+        if not selected_outputs:
+            selected_outputs = ['system:playback_1', 'system:playback_2']
+
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
+
+        if not self.conn_man.port_exists(channel_0_output):
+            return False
+
+        is_stereo = self.conn_man.port_exists(channel_1_output)
+
+        output_to_input = {
+            name: f"{self.client_name}:input_{i+1}"
+            for i, name in enumerate(self.audio_outputs)
+        }
+
+        target_inputs = []
+        for output in selected_outputs:
+            if output in output_to_input:
+                mixer_input = output_to_input[output]
+                if self.conn_man.port_exists(mixer_input):
+                    target_inputs.append(mixer_input)
+
+        if not target_inputs:
+            return False
+
+        for i, mixer_input in enumerate(target_inputs):
+            if i % 2 == 0 or not is_stereo:
+                expected_src = channel_0_output
+            else:
+                expected_src = channel_1_output
+            if not self.conn_man.is_connected(expected_src, mixer_input):
+                return False
+
+        return True
+
     @logged
     def disconnect_player(self, player_name: str, player_output_prefix: str = 'outport'):
         """Disconnect a player's outputs from the mixer.

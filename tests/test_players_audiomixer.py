@@ -181,6 +181,210 @@ class TestAudioMixer:
         assert len(connect_calls) == 2
 
 
+class TestPlayerConnectionsCorrect:
+    """Pin the routing equivalence between player_connections_correct and
+    connect_player_to_outputs. If connect_player_to_outputs is refactored
+    and these diverge, run_audioCue will silently choose the wrong branch
+    on every GO."""
+
+    @staticmethod
+    def _build_mixer(audio_outputs, conn_man):
+        """Create a minimal AudioMixer with only the attributes that
+        player_connections_correct touches. Bypasses __init__ to avoid
+        the broken legacy test fixtures and any subprocess wiring."""
+        m = AudioMixer.__new__(AudioMixer)
+        m.conn_man = conn_man
+        m.audio_outputs = audio_outputs
+        m.client_name = 'test_mixer'
+        return m
+
+    @staticmethod
+    def _make_conn_man(existing_ports, edges):
+        """edges: dict[source_port] -> list[destination_port]."""
+        cm = Mock()
+        cm.port_exists.side_effect = lambda p: p in existing_ports
+        cm.is_connected.side_effect = lambda src, dst: dst in edges.get(src, [])
+        return cm
+
+    def test_stereo_all_edges_correct_returns_true(self):
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                'Audio_Player-X:outport 1',
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={
+                'Audio_Player-X:outport 0': ['test_mixer:input_1'],
+                'Audio_Player-X:outport 1': ['test_mixer:input_2'],
+            },
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        ) is True
+
+    def test_stereo_one_edge_missing_returns_false(self):
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                'Audio_Player-X:outport 1',
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={
+                'Audio_Player-X:outport 0': ['test_mixer:input_1'],
+                # outport 1 not connected
+            },
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        ) is False
+
+    def test_stereo_wrong_destination_returns_false(self):
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                'Audio_Player-X:outport 1',
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={
+                'Audio_Player-X:outport 0': ['test_mixer:input_1'],
+                'Audio_Player-X:outport 1': ['test_mixer:input_3'],  # wrong
+            },
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        ) is False
+
+    def test_mono_uses_outport_0_for_both_pair_members(self):
+        # Mono player: outport 1 absent. connect_player_to_outputs wires
+        # outport 0 to both input_1 and input_2 (centred mono). The check
+        # must agree.
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                # NOTE: no 'outport 1' → is_stereo=False
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={
+                'Audio_Player-X:outport 0': [
+                    'test_mixer:input_1',
+                    'test_mixer:input_2',
+                ],
+            },
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        ) is True
+
+    def test_mono_does_not_check_outport_1(self):
+        # Regression guard: a naive impl that always probes outport 1 for
+        # odd-indexed targets would return False here even though the graph
+        # is wired exactly as connect_player_to_outputs left it.
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={
+                'Audio_Player-X:outport 0': [
+                    'test_mixer:input_1',
+                    'test_mixer:input_2',
+                ],
+            },
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        )
+        # is_connected must never be called with outport 1 as source on a mono player.
+        for c in cm.is_connected.call_args_list:
+            assert c.args[0] != 'Audio_Player-X:outport 1', \
+                f"mono check leaked an outport 1 probe: {c}"
+
+    def test_mono_with_4_outputs(self):
+        # 4 fan-out targets, mono player: outport 0 → all 4 inputs.
+        cm = self._make_conn_man(
+            existing_ports={
+                'Audio_Player-X:outport 0',
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+                'test_mixer:input_3',
+                'test_mixer:input_4',
+            },
+            edges={
+                'Audio_Player-X:outport 0': [
+                    'test_mixer:input_1',
+                    'test_mixer:input_2',
+                    'test_mixer:input_3',
+                    'test_mixer:input_4',
+                ],
+            },
+        )
+        audio_outputs = [
+            'system:playback_1', 'system:playback_2',
+            'system:playback_3', 'system:playback_4',
+        ]
+        m = self._build_mixer(audio_outputs, cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport', audio_outputs,
+        ) is True
+
+    def test_subprocess_crashed_returns_false_immediately(self):
+        # outport 0 missing → return False without probing edges.
+        cm = self._make_conn_man(
+            existing_ports={
+                'test_mixer:input_1',
+                'test_mixer:input_2',
+            },
+            edges={},
+        )
+        m = self._build_mixer(['system:playback_1', 'system:playback_2'], cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport',
+            ['system:playback_1', 'system:playback_2'],
+        ) is False
+        # No edge probes when port is gone.
+        cm.is_connected.assert_not_called()
+
+    def test_query_count_is_linear_in_selected_outputs(self):
+        # 8 outputs → at most 8 is_connected calls. Quadratic blowup
+        # under refactor would push this over the bound.
+        n = 8
+        audio_outputs = [f'system:playback_{i+1}' for i in range(n)]
+        existing_ports = {f'test_mixer:input_{i+1}' for i in range(n)}
+        existing_ports.update({
+            'Audio_Player-X:outport 0',
+            'Audio_Player-X:outport 1',
+        })
+        edges = {
+            'Audio_Player-X:outport 0': [
+                f'test_mixer:input_{i+1}' for i in range(0, n, 2)
+            ],
+            'Audio_Player-X:outport 1': [
+                f'test_mixer:input_{i+1}' for i in range(1, n, 2)
+            ],
+        }
+        cm = self._make_conn_man(existing_ports, edges)
+        m = self._build_mixer(audio_outputs, cm)
+        assert m.player_connections_correct(
+            'Audio_Player-X', 'outport', audio_outputs,
+        ) is True
+        assert cm.is_connected.call_count == n
+
+
 class TestMixerClient:
     """Test cases for MixerClient class."""
     
