@@ -66,14 +66,16 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
     offset_to_go = float(-cue._start_mtc.milliseconds)
     
-    # Try to connect player to mixer based on cue output settings
+    # Verify mixer graph; only repair if drifted. Arm already wired it; the
+    # unconditional reconnect at GO costs ~21-28 ms (measured) without
+    # touching the audio path.
     try:
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
             uuid_slug = ''.join(str(cue.id).split('-'))
             # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
             player_name = f'Audio_Player-{uuid_slug}'
-            
+
             # Resolve JACK port names from cue output IDs via audio output lookup
             selected_outputs = []
             if hasattr(cue, 'outputs') and cue.outputs:
@@ -86,17 +88,39 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                             selected_outputs.append(port_name)
                         else:
                             selected_outputs.append(output_id)
-            
+
             Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
-            
-            # Connect based on selected outputs
-            mixer.connect_player_to_outputs(
+
+            # If the player's outport 0 is missing, the subprocess died between
+            # arm and GO. connect_player_to_outputs would block 15 s in its
+            # port-wait loop before failing; abort fast instead.
+            channel_0 = f'{player_name}:outport 0'
+            if not mixer.conn_man.port_exists(channel_0):
+                Logger.error(
+                    f"Audio cue {cue.id}: player JACK ports missing at GO "
+                    f"({channel_0}); subprocess likely crashed between arm "
+                    f"and GO. Aborting cue."
+                )
+                return
+
+            if mixer.player_connections_correct(
                 player_name=player_name,
                 player_output_prefix='outport',
-                selected_outputs=selected_outputs
-            )
+                selected_outputs=selected_outputs,
+            ):
+                Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
+            else:
+                Logger.warning(
+                    f"Audio cue {cue.id}: graph not wired correctly at GO; "
+                    f"repairing via connect_player_to_outputs"
+                )
+                mixer.connect_player_to_outputs(
+                    player_name=player_name,
+                    player_output_prefix='outport',
+                    selected_outputs=selected_outputs,
+                )
     except Exception as e:
-        Logger.warning(f"Could not connect player to mixer: {e}")
+        Logger.warning(f"Could not validate/connect player to mixer: {e}")
     
     # Define the offset - use MTC framerate for consistent timing with video
     try:
