@@ -60,17 +60,22 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'AudioCue {cue.id} using frozen MTC: {mtc_ms}ms')
+        # Frozen path: only have a float ms snapshot (CueHandler captured it
+        # before this point); reconstruct via canonicalized __init__ which
+        # routes through HMSF + tc_to_frames, drop-frame correct.
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds)
-    
-    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
+        # Live MTC path: frame-domain construction skips the lossy
+        # ms→seconds→frames round-trip entirely (mirrors loop_cue.py:107,224).
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+
     # Convert duration to MTC framerate to prevent drift when looping
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
-    
+
     # Audio player formula: file_position = MTC + offset
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-    offset_to_go = float(-cue._start_mtc.milliseconds)
+    offset_to_go = -cue._start_mtc.milliseconds_exact
     
     # Verify mixer graph; only repair if drifted. Arm already wired it; the
     # unconditional reconnect at GO costs ~21-28 ms (measured) without
@@ -191,26 +196,27 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         if frozen_mtc_ms is not None:
             mtc_ms = frozen_mtc_ms
             Logger.debug(f'DmxCue {cue.id} using frozen MTC: {mtc_ms}ms')
+            # Frozen path: only have a float ms snapshot; canonicalized
+            # __init__ routes through HMSF + tc_to_frames.
+            cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
         else:
-            mtc_ms = float(mtc.main_tc.milliseconds)
-        
-        # Calculate MTC timing - use explicit framerate for consistency
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
-        
+            # Live MTC path: frame-domain construction (no round-trip loss).
+            cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+
         # DMX cues have no media - duration is inferred from fade times
         # Duration = fadein_time + fadeout_time (both in milliseconds)
         fadein_ms = getattr(cue, 'fadein_time', 0)
         fadeout_ms = getattr(cue, 'fadeout_time', 0)
         duration_ms = fadein_ms + fadeout_ms
-        
+
         # Convert duration to timecode format with explicit framerate
         duration_seconds = duration_ms / 1000.0
         duration = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=duration_seconds)
         cue._end_mtc = cue._start_mtc + duration
-        
+
         # Absolute MTC time for this cue (ms). DMX player expects mtc_time as absolute
         # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead, time).
-        offset_milliseconds = cue._start_mtc.milliseconds
+        offset_milliseconds = cue._start_mtc.milliseconds_exact
         mtc_time_str = f"0:0:{offset_milliseconds / 1000.0}"
         
         # Get DMX frame data from the cue
@@ -275,10 +281,12 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
+        # Frozen path: float ms snapshot; canonicalized __init__ handles it.
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds)
+        # Live MTC path: frame-domain construction (no round-trip loss).
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
 
-    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
