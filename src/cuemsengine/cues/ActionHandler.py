@@ -54,6 +54,7 @@ class ActionHookContext:
     target_id: str | None
     outcome: dict | None = None
     cue_handler: Any = None
+    frozen_mtc_ms: float | None = None
 
 
 class ActionHandler:
@@ -194,7 +195,12 @@ class ActionHandler:
 
     # ---- main dispatch ----
 
-    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+    def execute_action(
+        self,
+        cue: ActionCue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float | None = None,
+    ) -> dict:
         action_type = cue.action_type
         target = cue._action_target_object
 
@@ -224,6 +230,7 @@ class ActionHandler:
             target_id=target_id,
             outcome=None,
             cue_handler=self._cue_handler,
+            frozen_mtc_ms=frozen_mtc_ms,
         )
 
         # before_dispatch hooks
@@ -248,7 +255,7 @@ class ActionHandler:
         ch = self._cue_handler
 
         def run_default() -> dict:
-            return handler(ch, target, mtc)
+            return handler(ch, target, mtc, frozen_mtc_ms)
 
         def apply_wraps() -> dict:
             inner: Callable[[], dict] = run_default
@@ -333,7 +340,12 @@ class ActionHandler:
 # ---------------------------------------------------------------------------
 
 
-def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_play(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(
@@ -347,7 +359,7 @@ def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
         )
     target._stop_requested = False
     try:
-        ch.go(target, mtc)
+        ch.go(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result(
             "failed", "play", target_id, str(exc)
@@ -355,7 +367,12 @@ def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "play", target_id)
 
 
-def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_pause(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -365,7 +382,12 @@ def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "pause", target_id)
 
 
-def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_stop(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -379,7 +401,12 @@ def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
-def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_enable(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if target.enabled:
         return ActionHandler._action_result(
@@ -389,7 +416,12 @@ def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "enable", target_id)
 
 
-def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_disable(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(
@@ -399,7 +431,12 @@ def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "disable", target_id)
 
 
-def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_in(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
@@ -410,11 +447,16 @@ def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
             "failed", "fade_in", target_id, "Target could not be armed"
         )
     target._stop_requested = False
-    ch.go(target, mtc)
+    ch.go(target, mtc, frozen_mtc_ms)
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
-def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_out(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to stop.
     # Also has the same zombie-process bug as the old stop handler:
     # bumps _go_generation but does not call disarm(), so player processes
@@ -426,7 +468,12 @@ def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "fade_out", target_id)
 
 
-def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_go_to(
+    ch: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement seek/position navigation; currently only arms the target
     Logger.info("go_to only arms target (seek not yet implemented)")
     target_id = target.id
@@ -435,7 +482,9 @@ def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
-_ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
+_ACTION_HANDLERS: dict[
+    str, Callable[[Any, Cue, MtcListener, float | None], dict]
+] = {
     "play": _handle_play,
     "pause": _handle_pause,
     "stop": _handle_stop,

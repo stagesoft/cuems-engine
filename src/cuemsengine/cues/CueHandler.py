@@ -486,11 +486,16 @@ class CueHandler:
     # Action Cue Execution (delegates to ActionHandler)
     # ---------------------------
 
-    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+    def execute_action(
+        self,
+        cue: ActionCue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float | None = None,
+    ) -> dict:
         """Execute an ActionCue against the running show (see ActionHandler)."""
         from .ActionHandler import ACTION_HANDLER
 
-        return ACTION_HANDLER.execute_action(cue, mtc)
+        return ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
 
     def register_action_hook(
         self,

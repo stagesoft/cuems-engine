@@ -102,6 +102,29 @@ class TestPlayAction:
         assert "disabled" in result["reason"]
         mock_go.assert_not_called()
 
+    def test_play_threads_frozen_mtc_ms(self, handler, mtc):
+        # When an ActionCue 'play' fires inside a post_go='go' chain, the
+        # chain's frozen_mtc_ms must reach CueHandler.go so the target shares
+        # the chain's snapshot. Otherwise the target reads live MTC and
+        # drifts relative to the chain's other cues.
+        target = _make_target()
+        cue = _make_action_cue("play", target)
+
+        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+            handler.execute_action(cue, mtc, 1234.5)
+
+        mock_go.assert_called_once_with(target, mtc, 1234.5)
+
+    def test_play_without_frozen_mtc_passes_none(self, handler, mtc):
+        # Standalone ActionCue (no chain) → frozen_mtc_ms defaults to None.
+        target = _make_target()
+        cue = _make_action_cue("play", target)
+
+        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+            handler.execute_action(cue, mtc)
+
+        mock_go.assert_called_once_with(target, mtc, None)
+
 
 # ---------------------------------------------------------------------------
 # T007: pause — target enters paused state
