@@ -436,29 +436,64 @@ def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
-def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
-    """Execute a FadeCue: arm target, start playback, dispatch FadeCommand to gradient-motiond."""
+def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int) -> dict:
+    """Build the body of a FadeCommand from target_cue + fade_cue.
+
+    Envelope fields (command, fade_id, osc_host, curve_params) are added by
+    NodeCommunications.send_fade_command — keep them out of this body so the
+    helper stays pure data construction.
+    """
     from cuemsutils.cues import AudioCue, VideoCue
+
+    if isinstance(target_cue, AudioCue):
+        osc_port = target_cue._osc.remote_port
+        osc_path = "/volmaster"
+    elif isinstance(target_cue, VideoCue):
+        # TODO: resolve videocomposer OSC port from configuration
+        osc_port = 7000
+        osc_path = f"/videocomposer/layer/{target_cue._layer_ids[0]}/opacity"
+    else:
+        raise ValueError(
+            f"FadeCue target is not an AudioCue or VideoCue: "
+            f"{type(target_cue).__name__}"
+        )
+
+    start_value = target_cue._osc.get_value(osc_path)
+
+    curve_type = fade_cue.curve_type
+    curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+
+    return {
+        "osc_port": osc_port,
+        "osc_path": osc_path,
+        "start_value": start_value,
+        "target_value": fade_cue.target_value,
+        "start_time": start_time,
+        "duration_ms": fade_cue.duration.milliseconds_rounded,
+        "curve_type": curve_type_str,
+    }
+
+
+def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
+    """Execute a FadeCue: arm target_cue if needed, dispatch FadeCommand, set _end_mtc.
+
+    The handler MUST NOT disarm target_cue, set _fade_initial_volume, or call
+    ch.go(target_cue, mtc) — the target_cue is expected to be already playing.
+    The FadeCue itself is held in the cue runner by loop_fadeCue until _end_mtc.
+    """
+    from cuemsutils.tools.CTimecode import CTimecode
 
     target_cue = cue._action_target_object
     target_id = getattr(target_cue, "id", None)
     fade_id = str(cue.id)
-    target_value = cue.target_value
-    is_fade_down = (target_value == 0)
 
-    # US2 scenario 4: fade-down on a non-playing target is a no-op.
-    # Do NOT arm it — the target must already be playing for a fade-down to make sense.
-    if is_fade_down and not getattr(target_cue, "loaded", False):
-        Logger.warning(
-            f"FadeCue {fade_id}: fade-down requested but target_cue {target_id} "
-            "is not playing — ignoring"
-        )
+    if target_cue is None:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id,
-            "fade-down target is not playing"
+            f"FadeCue {fade_id} has no resolved action_target_object"
         )
 
-    # Arm target_cue if not ready (fade-up only — fade-down requires target already playing).
+    # Arm target_cue via general cue logic (no envelope-from-silence here).
     if not getattr(target_cue, "loaded", False):
         ch.arm(target_cue, init=True)
     if not getattr(target_cue, "loaded", False):
@@ -467,71 +502,39 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
             f"Target cue {target_id} could not be armed"
         )
 
-    # Resolve OSC endpoint from target_cue.
-    if isinstance(target_cue, AudioCue):
-        osc_port = target_cue._osc.remote_port
-        osc_path = "/volmaster"
-    elif isinstance(target_cue, VideoCue):
-        osc_port = 7000
-        osc_path = f"/videocomposer/layer/{target_cue._layer_ids[0]}/opacity"
-    else:
-        return ActionHandler._action_result(
-            "failed", "fade_action", target_id,
-            f"Unsupported target_cue type: {type(target_cue).__name__}"
-        )
-
-    # Recover start_value from the Ossia cache:
-    # - fade-up: 0.0 — player will start from silence (go() fires after NNG dispatch)
-    # - fade-down: current cached OSC value — player is already at some level
-    if is_fade_down:
-        try:
-            start_value = float(target_cue._osc.get_value(osc_path))
-        except Exception:
-            start_value = 1.0  # safe default: assume full volume
-    else:
-        start_value = 0.0
-
-    end_value = max(0.0, min(1.0, target_value / 100.0))
-    duration_ms = int(cue.duration.milliseconds)
-    start_mtc_ms = int(mtc.timecode.milliseconds)
-    curve_type = str(cue.curve_type)
-
-    payload = {
-        "command": "start_fade",
-        "fade_id": fade_id,
-        "osc_host": "127.0.0.1",
-        "osc_port": osc_port,
-        "osc_path": osc_path,
-        "start_value": start_value,
-        "end_value": end_value,
-        "start_mtc_ms": start_mtc_ms,
-        "duration_ms": duration_ms,
-        "curve_type": curve_type,
-        "curve_params": {},
-    }
+    start_time = mtc.timecode.milliseconds_rounded
 
     try:
-        ch.communications_thread.send_fade_command(payload)
+        payload = _build_fade_payload(target_cue, cue, start_time)
+    except ValueError as exc:
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, str(exc)
+        )
+
+    # Dispatch FIRST. If NNG fails the target_cue state must remain unchanged.
+    try:
+        ch.communications_thread.send_fade_command(payload, fade_id=fade_id)
     except Exception as exc:
         Logger.error(
-            f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed: {exc}"
+            f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed "
+            f"(target_cue={target_id}): {exc}"
         )
         return ActionHandler._action_result(
             "failed", "fade_action", target_id,
             f"NNG dispatch failed: {exc}"
         )
 
-    # FR-004/FR-013: for fade-up, start playback at vol=0 AFTER successful NNG dispatch.
-    # Ordering is critical — if NNG fails, the target_cue state must remain unchanged.
-    if not is_fade_down:
-        target_cue._fade_initial_volume = 0.0
-        ch.go(target_cue, mtc)
+    # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
+    # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
+    framerate = mtc.main_tc.framerate
+    cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_time / 1000.0)
+    cue._end_mtc = cue._start_mtc + cue.duration.return_in_other_framerate(framerate)
 
     Logger.info(
         f"FadeCue {fade_id}: dispatched start_fade "
-        f"target_cue={target_id} osc={osc_path} "
-        f"start={start_value:.3f} end={end_value:.3f} "
-        f"duration={duration_ms}ms curve={curve_type}"
+        f"target_cue={target_id} osc={payload['osc_path']} "
+        f"start={payload['start_value']} target={payload['target_value']} "
+        f"duration={payload['duration_ms']}ms curve={payload['curve_type']}"
     )
     return ActionHandler._action_result("applied", "fade_action", target_id)
 

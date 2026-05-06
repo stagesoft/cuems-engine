@@ -4,6 +4,7 @@ from time import sleep
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
+from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
 from ..tools.MtcListener import MtcListener, CTimecode
@@ -55,6 +56,27 @@ def loop_actionCue(cue: ActionCue, mtc: MtcListener):
     Loop an ActionCue
     """
     pass
+
+@loop_cue.register
+def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
+    """Hold a FadeCue in the cue runner for its full duration.
+
+    The actual fade is driven by gradient-motiond over OSC; this loop simply
+    blocks until the FadeCue's _end_mtc is reached so general cue lifecycle
+    (auto-disarm of the FadeCue itself in go_threaded's end-of-cue path) only
+    fires after the fade has elapsed. _start_mtc / _end_mtc are set by
+    ActionHandler._handle_fade_action at dispatch time.
+    """
+    end_mtc = getattr(cue, '_end_mtc', None)
+    if end_mtc is None:
+        Logger.warning(f'FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting immediately')
+        return
+
+    while mtc.main_tc.milliseconds < end_mtc.milliseconds:
+        if getattr(cue, '_stop_requested', False):
+            Logger.info(f'FadeCue {cue.id} loop cancelled by stop request')
+            return
+        sleep(0.02)
 
 @loop_cue.register
 def loop_audioCue(cue: AudioCue, mtc: MtcListener):

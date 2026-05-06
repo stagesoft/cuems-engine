@@ -2,17 +2,14 @@
 
 Covers:
 - gradientengine-targeted COMMAND messages are swallowed (not forwarded to callback).
-- STATUS messages with event="fade_complete" call CUE_HANDLER.on_fade_complete.
-- send_fade_command / send_cancel_all build correct NodeOperation payloads.
-
-Tests are written BEFORE implementation (TDD — Red phase).
+- STATUS messages from gradient-motiond are log-discarded (no Python state mutation).
+- send_fade_command wraps a body payload with envelope fields and sends a COMMAND.
+- send_cancel_all sends COMMAND with command='cancel_all'.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from cuemsengine.comms.NodesHub import (
     ActionType,
@@ -114,20 +111,19 @@ class TestStatusCallbackRegistration:
                 hub_address="tcp://127.0.0.1:5555",
                 node_id="test-node",
             )
-            # set_receive_callbacks must have been called with STATUS key
             hub.set_receive_callbacks.assert_called_once()
             registered = hub.set_receive_callbacks.call_args[0][0]
             assert OperationType.STATUS in registered
 
 
 # ---------------------------------------------------------------------------
-# fade_complete STATUS dispatch
+# gradient-motiond STATUS log-and-discard
 # ---------------------------------------------------------------------------
 
 
-class TestFadeCompleteStatusDispatch:
-    def test_fade_complete_calls_cue_handler(self):
-        """fade_complete STATUS triggers CUE_HANDLER.on_fade_complete(fade_id)."""
+class TestGradientStatusDiscarded:
+    def test_gradientengine_status_does_not_raise(self):
+        """STATUS messages with target='gradientengine' are silently log-discarded."""
         comms, _ = _build_comms()
         op = _make_operation(
             OperationType.STATUS,
@@ -135,28 +131,11 @@ class TestFadeCompleteStatusDispatch:
             sender="gradientengine_node1",
             data={"event": "fade_complete", "fade_id": "my-fade-uuid"},
         )
-        mock_handler = MagicMock()
-        # Patch the source of truth — the lazy import reads from this namespace.
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER", mock_handler):
-            comms._handle_status_operation(op)
-            mock_handler.on_fade_complete.assert_called_once_with("my-fade-uuid")
+        # Must not raise; must not touch CUE_HANDLER (no on_fade_complete in scope).
+        comms._handle_status_operation(op)
 
-    def test_other_status_event_ignored(self):
-        """STATUS messages with target='gradientengine' but other events are ignored."""
-        comms, _ = _build_comms()
-        op = _make_operation(
-            OperationType.STATUS,
-            target="gradientengine",
-            sender="gradientengine_node1",
-            data={"event": "some_other_event", "fade_id": "x"},
-        )
-        mock_handler = MagicMock()
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER", mock_handler):
-            comms._handle_status_operation(op)
-            mock_handler.on_fade_complete.assert_not_called()
-
-    def test_non_gradientengine_status_ignored(self):
-        """STATUS with target != 'gradientengine' does not call on_fade_complete."""
+    def test_non_gradientengine_status_no_op(self):
+        """STATUS with target != 'gradientengine' is a no-op in this handler."""
         comms, _ = _build_comms()
         op = _make_operation(
             OperationType.STATUS,
@@ -164,10 +143,7 @@ class TestFadeCompleteStatusDispatch:
             sender="node_1",
             data={"nextcue": "some-cue-id"},
         )
-        mock_handler = MagicMock()
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER", mock_handler):
-            comms._handle_status_operation(op)
-            mock_handler.on_fade_complete.assert_not_called()
+        comms._handle_status_operation(op)
 
 
 # ---------------------------------------------------------------------------
@@ -176,33 +152,39 @@ class TestFadeCompleteStatusDispatch:
 
 
 class TestGradientEngineSendMethods:
-    def test_send_fade_command_builds_correct_operation(self):
-        """send_fade_command sends COMMAND/UPDATE NodeOperation with target='gradientengine'."""
-        comms, hub = _build_comms()
-        payload = {
-            "command": "start_fade",
-            "fade_id": "abc",
-            "osc_host": "127.0.0.1",
+    def test_send_fade_command_wraps_body_with_envelope(self):
+        """send_fade_command injects command, fade_id, osc_host, curve_params."""
+        comms, _ = _build_comms()
+        body = {
             "osc_port": 12345,
             "osc_path": "/volmaster",
-            "start_value": 0.0,
-            "end_value": 1.0,
-            "start_mtc_ms": 0,
+            "start_value": 0.5,
+            "target_value": 80,
+            "start_time": 1234,
             "duration_ms": 3000,
             "curve_type": "linear",
-            "curve_params": {},
         }
         with patch.object(comms, "send_operation") as mock_send:
-            comms.send_fade_command(payload)
+            comms.send_fade_command(body, fade_id="my-fade-uuid")
             mock_send.assert_called_once()
             op: NodeOperation = mock_send.call_args[0][0]
             assert op.type == OperationType.COMMAND
             assert op.target == "gradientengine"
-            assert op.data == payload
+            assert op.data["command"] == "start_fade"
+            assert op.data["fade_id"] == "my-fade-uuid"
+            assert op.data["osc_host"] == "127.0.0.1"
+            assert op.data["curve_params"] == {}
+            # body fields preserved
+            assert op.data["osc_port"] == 12345
+            assert op.data["osc_path"] == "/volmaster"
+            assert op.data["target_value"] == 80
+            assert op.data["start_time"] == 1234
+            assert op.data["duration_ms"] == 3000
+            assert op.data["curve_type"] == "linear"
 
     def test_send_cancel_all_builds_correct_operation(self):
         """send_cancel_all sends COMMAND/UPDATE with command='cancel_all'."""
-        comms, hub = _build_comms()
+        comms, _ = _build_comms()
         with patch.object(comms, "send_operation") as mock_send:
             comms.send_cancel_all()
             mock_send.assert_called_once()

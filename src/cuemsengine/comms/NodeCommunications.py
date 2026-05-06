@@ -106,47 +106,55 @@ class NodeCommunications(AsyncCommsThread):
     def _handle_status_operation(self, operation: NodeOperation) -> None:
         """Handle STATUS operations on the NNG bus.
 
-        Currently only processes fade_complete events from gradient-motiond.
-        All other STATUS messages (e.g. nextcue updates) are not handled here
-        — they originate from NodeEngine itself and do not arrive inbound.
+        gradient-motiond STATUS broadcasts (e.g. fade_complete) are logged at
+        debug level and discarded — the Python engine no longer mutates state
+        in response to them (general cue lifecycle handles all disarm). All
+        other STATUS messages (e.g. nextcue updates) are not handled here —
+        they originate from NodeEngine itself and do not arrive inbound.
 
         Args:
             operation: The received NodeOperation of type STATUS.
         """
-        if operation.target != "gradientengine":
+        if operation.target == "gradientengine":
+            data = operation.data or {}
+            event = data.get("event")
+            fade_id = data.get("fade_id", "")
+            Logger.debug(
+                f"gradient-motiond STATUS discarded: event={event} fade_id={fade_id}"
+            )
             return
-        data = operation.data or {}
-        if data.get("event") != "fade_complete":
-            return
-        fade_id = data.get("fade_id")
-        if not fade_id:
-            Logger.warning("Received fade_complete STATUS with no fade_id")
-            return
-        Logger.info(f"Received fade_complete for fade_id={fade_id}")
-        try:
-            from ..cues.CueHandler import CUE_HANDLER
-            CUE_HANDLER.on_fade_complete(fade_id)
-        except Exception as e:
-            Logger.error(f"Error handling fade_complete for {fade_id}: {e}")
 
     ###############################
     # gradient-motiond NNG dispatch
     ###############################
 
-    def send_fade_command(self, payload: dict,
+    def send_fade_command(self, payload: dict, fade_id: str,
                           timeout: Optional[float] = None) -> None:
         """Send a start_fade command to gradient-motiond via NNG.
 
+        Wraps the body returned by ActionHandler._build_fade_payload with the
+        four envelope fields (command, fade_id, osc_host, curve_params) and
+        sends as a COMMAND/UPDATE operation targeting gradientengine.
+
         Args:
-            payload: FadeCommand dict matching the fade_command.json contract.
+            payload: FadeCommand body (osc_port, osc_path, start_value,
+                target_value, start_time, duration_ms, curve_type).
+            fade_id: Correlation key (FadeCue.uuid as string).
             timeout: Optional send timeout in seconds.
         """
+        wrapped = {
+            "command": "start_fade",
+            "fade_id": fade_id,
+            "osc_host": "127.0.0.1",
+            "curve_params": {},
+            **payload,
+        }
         operation = NodeOperation(
             type=OperationType.COMMAND,
             action=ActionType.UPDATE,
             sender=self.node_id,
             target="gradientengine",
-            data=payload,
+            data=wrapped,
         )
         self.send_operation(operation, timeout)
 

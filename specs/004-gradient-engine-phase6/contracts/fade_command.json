@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "fade_command",
   "title": "FadeCommand NNG payload",
-  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope.",
+  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope. The payload is built in two layers: ActionHandler._build_payload returns the body fields; NodeCommunications.send_fade_command injects the envelope fields (command, fade_id, osc_host, curve_params).",
   "type": "object",
   "required": [
     "command",
@@ -11,8 +11,8 @@
     "osc_port",
     "osc_path",
     "start_value",
-    "end_value",
-    "start_mtc_ms",
+    "target_value",
+    "start_time",
     "duration_ms",
     "curve_type",
     "curve_params"
@@ -21,60 +21,58 @@
     "command": {
       "type": "string",
       "const": "start_fade",
-      "description": "Discriminator: gradient-motiond dispatches on this field."
+      "description": "Envelope. Discriminator: gradient-motiond dispatches on this field. Injected by send_fade_command."
     },
     "fade_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Controller-assigned unique identifier. Equals FadeCue.uuid (UUID string). Returned in fade_complete STATUS."
+      "description": "Envelope. Controller-assigned unique identifier. Equals str(FadeCue.uuid). Injected by send_fade_command."
     },
     "osc_host": {
       "type": "string",
       "const": "127.0.0.1",
-      "description": "OSC target host. Always localhost for node-side players."
+      "description": "Envelope. OSC target host — always localhost for node-side players. Injected by send_fade_command."
     },
     "osc_port": {
       "type": "integer",
       "minimum": 1024,
       "maximum": 65535,
-      "description": "OSC target port. AudioCue: target_cue._osc.remote_port. VideoCue: 7000."
+      "description": "Body. OSC target port. AudioCue: target_cue._osc.remote_port. VideoCue: 7000."
     },
     "osc_path": {
       "type": "string",
       "minLength": 1,
       "examples": ["/volmaster", "/videocomposer/layer/0/opacity"],
-      "description": "OSC address. AudioCue: '/volmaster'. VideoCue: '/videocomposer/layer/{layer_id}/opacity'."
+      "description": "Body. OSC address. AudioCue: '/volmaster'. VideoCue: '/videocomposer/layer/{layer_id}/opacity'."
     },
     "start_value": {
       "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0,
-      "description": "Initial level as 0.0–1.0 float. Read from target_cue's Ossia node cache at dispatch time, or 0.0 if target_cue is not yet playing."
+      "description": "Body. Initial level read from target_cue's Ossia node cache at dispatch time via target_cue._osc.get_value(osc_path). Native scale (0.0–1.0 for /volmaster and opacity)."
     },
-    "end_value": {
-      "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0,
-      "description": "Target level as 0.0–1.0 float. Derived from FadeCue.target_value / 100.0."
-    },
-    "start_mtc_ms": {
+    "target_value": {
       "type": "integer",
       "minimum": 0,
-      "description": "MTC clock value in integer milliseconds at the moment of dispatch. Used by gradient-motiond to synchronise curve evaluation to the show timecode."
+      "maximum": 100,
+      "description": "Body. Target level on the FadeCue's UI scale (0–100). NOT normalised to 0.0–1.0; gradient-motiond is responsible for any unit conversion."
+    },
+    "start_time": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Body. MTC clock value in integer milliseconds at the moment of dispatch. Computed as mtc.main_tc.milliseconds_rounded. Used by gradient-motiond to synchronise curve evaluation to the show timecode."
     },
     "duration_ms": {
       "type": "integer",
       "minimum": 1,
-      "description": "Fade duration in integer milliseconds. Derived from FadeCue.duration (CTimecode) via .milliseconds property."
+      "description": "Body. Fade duration in integer milliseconds. Computed as FadeCue.duration.milliseconds_rounded."
     },
     "curve_type": {
       "type": "string",
       "enum": ["linear", "exponential", "logarithmic", "sigmoid"],
-      "description": "Lowercase string encoding of FadeCurveType enum value. Consumed by gradient-motiond's CurveFactory."
+      "description": "Body. Lowercase string encoding of FadeCurveType enum value. Consumed by gradient-motiond's CurveFactory."
     },
     "curve_params": {
       "type": "object",
-      "description": "Reserved for future curve parameterisation. Always empty object {} in Phase 6.",
+      "description": "Envelope. Reserved for future curve parameterisation. Always empty object {} in Phase 6. Injected by send_fade_command.",
       "additionalProperties": true,
       "default": {}
     }

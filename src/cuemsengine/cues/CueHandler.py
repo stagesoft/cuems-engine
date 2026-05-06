@@ -278,13 +278,11 @@ class CueHandler:
             if cue._target_object.enabled:
                 self.arm(cue._target_object, init)
 
-        # ActionCue(play) + target = 1 unit. Arm target so it's ready
-        # when the action fires (ActionCue has zero duration).
-        # NOTE: fade_in/fade_out are being implemented and will target
-        # already-playing cues — no pre-arm needed yet. Revisit if
-        # fade_in semantics change to start-from-zero like play.
+        # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm target
+        # so it's ready when the action fires (ActionCue has zero duration; FadeCue
+        # expects target_cue already armed before reading its OSC cache).
         if isinstance(cue, ActionCue) and cue._action_target_object:
-            if cue.action_type == 'play':
+            if cue.action_type in ('play', 'fade_action'):
                 self.arm(cue._action_target_object, init)
 
         return True
