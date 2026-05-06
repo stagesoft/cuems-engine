@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from threading import Event, Lock, Thread
 from time import sleep
-from typing import TYPE_CHECKING
 
 from cuemsutils.cues import ActionCue, CueList, DmxCue, VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
@@ -13,8 +12,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from .run_cue import run_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
-from ..osc.OssiaClient import PlayerClient
-from ..players import VideoPlayer, VideoClient
+from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 from .arm_cue import arm_cue
