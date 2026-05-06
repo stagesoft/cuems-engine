@@ -241,7 +241,7 @@ class BaseEngine(SignalEngine):
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset is not None:
-            self.timecode = mtc.milliseconds - self.go_offset
+            self.timecode = mtc.milliseconds_rounded - self.go_offset
 
     ### CONFIG MANAGER ###
     def set_config_manager(self) -> None:

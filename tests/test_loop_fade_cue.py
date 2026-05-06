@@ -2,7 +2,7 @@
 
 Per FR-019: a FadeCue MUST occupy the cue runner for its `duration` so general
 cue lifecycle (auto-disarm of the FadeCue itself) fires only after gradient-motiond
-finishes. loop_fadeCue blocks until mtc.main_tc.milliseconds >= cue._end_mtc.milliseconds.
+finishes. loop_fadeCue blocks until mtc.main_tc.milliseconds_rounded >= cue._end_mtc.milliseconds_rounded.
 """
 
 from __future__ import annotations
@@ -23,15 +23,15 @@ def _make_fade_cue() -> FadeCue:
 
 
 class _AdvancingMtc:
-    """Mock MTC whose .main_tc.milliseconds advances over wall time."""
+    """Mock MTC whose .main_tc.milliseconds_rounded advances over wall time."""
     def __init__(self, start_ms: int, ms_per_second: float = 1000.0):
         self._start_wall = time.monotonic()
         self._start_ms = start_ms
         self._rate = ms_per_second
-        self.main_tc = self  # so mtc.main_tc.milliseconds works
+        self.main_tc = self  # so mtc.main_tc.milliseconds_rounded works
 
     @property
-    def milliseconds(self) -> int:
+    def milliseconds_rounded(self) -> int:
         return int(self._start_ms + (time.monotonic() - self._start_wall) * self._rate)
 
 
@@ -47,13 +47,13 @@ def test_fade_cue_registered_in_loop_cue_dispatch():
 
 
 def test_loop_fade_cue_blocks_until_end_mtc():
-    """loop_fadeCue MUST block until mtc.main_tc.milliseconds >= cue._end_mtc.milliseconds."""
+    """loop_fadeCue MUST block until mtc.main_tc.milliseconds_rounded >= cue._end_mtc.milliseconds_rounded."""
     from cuemsengine.cues.loop_cue import loop_cue
 
     cue = _make_fade_cue()
     cue._stop_requested = False
     end_mtc = MagicMock()
-    end_mtc.milliseconds = 200
+    end_mtc.milliseconds_rounded = 200
     cue._end_mtc = end_mtc
 
     mtc = _AdvancingMtc(start_ms=0, ms_per_second=1000.0)
@@ -74,7 +74,7 @@ def test_loop_fade_cue_returns_early_on_stop_requested():
     cue = _make_fade_cue()
     cue._stop_requested = False
     end_mtc = MagicMock()
-    end_mtc.milliseconds = 10_000  # 10 seconds — would block forever otherwise
+    end_mtc.milliseconds_rounded = 10_000  # 10 seconds — would block forever otherwise
     cue._end_mtc = end_mtc
 
     mtc = _AdvancingMtc(start_ms=0, ms_per_second=1.0)  # MTC barely advances

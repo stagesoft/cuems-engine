@@ -39,7 +39,7 @@ class MtcListener(Thread):
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
-        if (self.main_tc.milliseconds == 0):
+        if (self.main_tc.milliseconds_rounded == 0):
             if self.step_callback != None and self.reset_callback != None:
                 self.reset_callback()
         if self.step_callback != None:

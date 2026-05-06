@@ -45,7 +45,7 @@ class TestMtcListener:
         mtc_listener.main_tc = test_tc
         
         assert mtc_listener.timecode() == test_tc
-        assert mtc_listener.milliseconds() == int(test_tc.frames * (1000 / float(test_tc._framerate)))
+        assert mtc_listener.milliseconds_rounded() == int(test_tc.frames * (1000 / float(test_tc._framerate)))
 
     def test_quarter_frame_handling(self, mtc_listener):
         """Test handling of quarter frame messages"""

@@ -140,16 +140,16 @@ class CueHandler:
 
         prewait/postwait are always CTimecode (format_timecode returns
         CTimecode() for None/empty). CTimecode(0) is truthy but
-        .milliseconds returns 0.
+        .milliseconds_rounded returns 0.
         """
-        pre = cue.prewait.milliseconds
-        post = cue.postwait.milliseconds
+        pre = cue.prewait.milliseconds_rounded
+        post = cue.postwait.milliseconds_rounded
 
         if isinstance(cue, CueList):
             body = 0  # container — duration is its contents
         elif isinstance(cue, (AudioCue, VideoCue)):
             try:
-                body = CTimecode(cue.media.duration).milliseconds if cue.media else 0
+                body = CTimecode(cue.media.duration).milliseconds_rounded if cue.media else 0
             except Exception:
                 body = 0
         elif isinstance(cue, DmxCue):
@@ -406,13 +406,13 @@ class CueHandler:
                     self.communications_thread.add_cue(cue.id, str(offset), timeout=0.1)
                 except Exception:
                     pass
-            sleep(cue.prewait.milliseconds / 1000)
+            sleep(cue.prewait.milliseconds_rounded / 1000)
             # Bail out if stop arrived during pre-wait
             if cue._stop_requested:
                 return
 
         if frozen_mtc_ms is None:
-            frozen_mtc_ms = float(mtc.main_tc.milliseconds)
+            frozen_mtc_ms = float(mtc.main_tc.milliseconds_rounded)
             Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
 
         if cue._local:
@@ -424,7 +424,7 @@ class CueHandler:
             run_cue(cue, mtc, frozen_mtc_ms)
 
         if cue.postwait > 0:
-            sleep(cue.postwait.milliseconds / 1000)
+            sleep(cue.postwait.milliseconds_rounded / 1000)
 
         if cue.post_go == 'go' and cue._target_object and not cue._stop_requested:
             Logger.info(f'Running post go for next cue:{cue.target}')

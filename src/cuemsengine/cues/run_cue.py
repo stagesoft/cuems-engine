@@ -55,7 +55,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'AudioCue {cue.id} using frozen MTC: {mtc_ms}ms')
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds)
+        mtc_ms = float(mtc.main_tc.milliseconds_rounded)
     
     cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     # Convert duration to MTC framerate to prevent drift when looping
@@ -64,7 +64,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     
     # Audio player formula: file_position = MTC + offset
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-    offset_to_go = float(-cue._start_mtc.milliseconds)
+    offset_to_go = float(-cue._start_mtc.milliseconds_rounded)
     
     # Try to connect player to mixer based on cue output settings
     try:
@@ -162,7 +162,7 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             mtc_ms = frozen_mtc_ms
             Logger.debug(f'DmxCue {cue.id} using frozen MTC: {mtc_ms}ms')
         else:
-            mtc_ms = float(mtc.main_tc.milliseconds)
+            mtc_ms = float(mtc.main_tc.milliseconds_rounded)
         
         # Calculate MTC timing - use explicit framerate for consistency
         cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
@@ -180,7 +180,7 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         
         # Absolute MTC time for this cue (ms). DMX player expects mtc_time as absolute
         # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead, time).
-        offset_milliseconds = cue._start_mtc.milliseconds
+        offset_milliseconds = cue._start_mtc.milliseconds_rounded
         mtc_time_str = f"0:0:{offset_milliseconds / 1000.0}"
         
         # Get DMX frame data from the cue
@@ -246,7 +246,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds)
+        mtc_ms = float(mtc.main_tc.milliseconds_rounded)
 
     cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)

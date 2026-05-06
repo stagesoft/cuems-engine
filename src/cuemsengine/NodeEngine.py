@@ -882,7 +882,7 @@ class NodeEngine(BaseEngine):
         
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
-        self.go_offset = self.mtc_listener.main_tc.milliseconds
+        self.go_offset = self.mtc_listener.main_tc.milliseconds_rounded
 
         # Broadcast nextcue to UI
         self._broadcast_nextcue()
