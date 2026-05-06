@@ -370,9 +370,14 @@ class ControllerEngine(BaseEngine):
 
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
-        
+
         Handles script_finished and armed_ready notifications.
         """
+        # gradient-motiond broadcasts STATUS on the NNG bus (all peers receive it).
+        # ControllerEngine must silently discard these to avoid processing errors.
+        if operation.sender and operation.sender.startswith("gradientengine_"):
+            return
+
         Logger.info(f'Status operation received: {operation}')
         if operation.target == 'script_finished':
             if operation.data and operation.data.get('running') == 'no':
@@ -709,6 +714,8 @@ class ControllerEngine(BaseEngine):
         # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
 
+        # Cancel any fades from a previous project before nodes start new players.
+        self._send_gradient_cancel_all()
         # Forward load command to NodeEngine via NNG (nodes will arm cues)
         self._forward_load_to_nodes(project_name)
 
@@ -803,6 +810,24 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
+    def _send_gradient_cancel_all(self) -> None:
+        """Send CANCEL_ALL to gradient-motiond via NNG (non-blocking, errors swallowed)."""
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            return
+        try:
+            sender = (self.cm.node_conf.get('uuid', 'controller')
+                      if hasattr(self, 'cm') and self.cm else 'controller')
+            operation = NodeOperation(
+                type=OperationType.COMMAND,
+                action=ActionType.UPDATE,
+                sender=sender,
+                target="gradientengine",
+                data={"command": "cancel_all"},
+            )
+            self.communications_thread.send_operation(operation, timeout=0.1)
+        except Exception as e:
+            Logger.warning(f"Failed to send CANCEL_ALL to gradient-motiond: {e}")
+
     def stop_script(self, value):
         """Handle STOP command - stop timecode, update status and forward to nodes."""
         if self.get_status('running') != "yes":
@@ -818,6 +843,9 @@ class ControllerEngine(BaseEngine):
             self.cue_status[cid] = 0
             self._broadcast_cue_status(cid, 0, force=True)
 
+        # Cancel all active gradient-motiond fades before stopping players so
+        # stale OSC messages do not reach dead player ports.
+        self._send_gradient_cancel_all()
         self._forward_command_to_nodes('/engine/command/stop', value)
 
         Logger.info('STOP command processed - timecode stopped; nodes will re-arm')

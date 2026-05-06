@@ -31,9 +31,10 @@ class NodeCommunications(AsyncCommsThread):
         self.node_id = node_id
         self._command_callback = command_callback
         
-        # Set up receive callback for COMMAND operations
+        # Set up receive callbacks: COMMAND for local dispatch, STATUS for fade_complete.
         self.nng_hub.set_receive_callbacks({
-            OperationType.COMMAND: self._handle_command_operation
+            OperationType.COMMAND: self._handle_command_operation,
+            OperationType.STATUS: self._handle_status_operation,
         })
 
     def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:
@@ -69,7 +70,12 @@ class NodeCommunications(AsyncCommsThread):
         """
         if operation.type != OperationType.COMMAND:
             return
-        
+
+        # gradient-motiond commands are forwarded over NNG but must not be executed
+        # locally — the target field discriminates them from Python engine commands.
+        if operation.target == "gradientengine":
+            return
+
         command_name = operation.target
         data = operation.data or {}
         value = data.get('value')
@@ -96,6 +102,68 @@ class NodeCommunications(AsyncCommsThread):
             Logger.debug(f"Started command thread: {thread.name}")
         else:
             Logger.warning(f"No command callback set for NodeCommunications")
+
+    def _handle_status_operation(self, operation: NodeOperation) -> None:
+        """Handle STATUS operations on the NNG bus.
+
+        Currently only processes fade_complete events from gradient-motiond.
+        All other STATUS messages (e.g. nextcue updates) are not handled here
+        — they originate from NodeEngine itself and do not arrive inbound.
+
+        Args:
+            operation: The received NodeOperation of type STATUS.
+        """
+        if operation.target != "gradientengine":
+            return
+        data = operation.data or {}
+        if data.get("event") != "fade_complete":
+            return
+        fade_id = data.get("fade_id")
+        if not fade_id:
+            Logger.warning("Received fade_complete STATUS with no fade_id")
+            return
+        Logger.info(f"Received fade_complete for fade_id={fade_id}")
+        try:
+            from ..cues.CueHandler import CUE_HANDLER
+            CUE_HANDLER.on_fade_complete(fade_id)
+        except Exception as e:
+            Logger.error(f"Error handling fade_complete for {fade_id}: {e}")
+
+    ###############################
+    # gradient-motiond NNG dispatch
+    ###############################
+
+    def send_fade_command(self, payload: dict,
+                          timeout: Optional[float] = None) -> None:
+        """Send a start_fade command to gradient-motiond via NNG.
+
+        Args:
+            payload: FadeCommand dict matching the fade_command.json contract.
+            timeout: Optional send timeout in seconds.
+        """
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.node_id,
+            target="gradientengine",
+            data=payload,
+        )
+        self.send_operation(operation, timeout)
+
+    def send_cancel_all(self, timeout: Optional[float] = None) -> None:
+        """Send a cancel_all command to gradient-motiond via NNG.
+
+        Args:
+            timeout: Optional send timeout in seconds.
+        """
+        operation = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=self.node_id,
+            target="gradientengine",
+            data={"command": "cancel_all"},
+        )
+        self.send_operation(operation, timeout)
 
     #########################
     # Nng comms to Controller

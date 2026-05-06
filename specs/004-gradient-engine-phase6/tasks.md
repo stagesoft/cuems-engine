@@ -7,19 +7,19 @@
 
 ## Phase 1: Foundational (Shared Infrastructure — blocks all stories)
 
-**Purpose**: New module, Ossia helper, and NNG routing filter that every user story depends on.
+**Purpose**: NNG routing filter and STATUS handler that every user story depends on.
 
 > **TDD**: Write tests FIRST and confirm FAIL before implementing.
 
-- [ ] T005 Write failing tests for `NodeCommunications` gradient filter and STATUS registration in `tests/test_node_communications_gradient.py` — verify `gradientengine`-targeted COMMAND is swallowed; verify STATUS with `event="fade_complete"` calls `CUE_HANDLER.on_fade_complete`
-- [ ] T006 Implement `NodeCommunications` changes in `src/cuemsengine/comms/NodeCommunications.py`:
+- [x] T005 Write failing tests for `NodeCommunications` gradient filter and STATUS registration in `tests/test_node_communications_gradient.py` — verify `gradientengine`-targeted COMMAND is swallowed; verify STATUS with `event="fade_complete"` calls `CUE_HANDLER.on_fade_complete`
+- [x] T006 Implement `NodeCommunications` changes in `src/cuemsengine/comms/NodeCommunications.py`:
   - Early return in `_handle_command_operation` when `operation.target == "gradientengine"`
   - Add `OperationType.STATUS: self._handle_status_operation` to `set_receive_callbacks` dict
   - New `_handle_status_operation(self, operation: NodeOperation)` that calls `CUE_HANDLER.on_fade_complete(fade_id)` for `event=="fade_complete"` on `target=="gradientengine"`
   - New `send_fade_command(self, payload: dict)` method
   - New `send_cancel_all(self)` method
 
-**Checkpoint**: Foundation ready — T005–T006 green before Phase 2 begins.
+**Checkpoint**: Foundation ready — T005–T006 green ✅
 
 ---
 
@@ -31,33 +31,33 @@
 
 > **TDD**: Write tests FIRST.
 
-- [ ] T007 Write failing test for ControllerEngine sender guard in `tests/test_controller_engine_gradient.py` — STATUS with `sender="gradientengine_node1"` triggers no state change and no error log
-- [ ] T008 [P] [US4] Implement sender guard in `ControllerEngine.status_operation_callback` in `src/cuemsengine/ControllerEngine.py`:
+- [x] T007 Write failing test for ControllerEngine sender guard in `tests/test_controller_engine_gradient.py` — STATUS with `sender="gradientengine_node1"` triggers no state change and no error log
+- [x] T008 [P] [US4] Implement sender guard in `ControllerEngine.status_operation_callback` in `src/cuemsengine/ControllerEngine.py`:
   ```python
   if operation.sender and operation.sender.startswith("gradientengine_"):
       return
   ```
 
-**Checkpoint**: US4 acceptance scenarios 1, 3 pass.
+**Checkpoint**: US4 acceptance scenarios 1, 3 pass ✅
 
 ---
 
 ## Phase 3: US1 — Fade-Up FadeCue (Priority: P1) 🎯 MVP
 
-**Goal**: Firing a FadeCue with `target_value > 0` starts playback at 0, dispatches `FadeCommand`, and on `fade_complete` updates the Ossia cache.
+**Goal**: Firing a FadeCue with `target_value > 0` starts playback at 0 and dispatches `FadeCommand`.
 
 **Independent Test**: Unit-test `_handle_fade_action` with a mock `CueHandler` and stub `NodeCommunications`; verify FadeCommand payload fields, start_value=0.0, end_value=target_value/100, MTC ms, curve_type string.
 
 > **TDD**: Write tests FIRST.
 
-- [ ] T009 Write failing tests for `_handle_fade_action` (fade-up path) in `tests/test_fade_action_handler.py`:
+- [x] T009 Write failing tests for `_handle_fade_action` (fade-up path) in `tests/test_fade_action_handler.py`:
   - AudioCue target: correct osc_port, osc_path `/volmaster`, start_value=0.0, end_value from target_value, curve_type lowercase string
   - VideoCue target: port 7000, osc_path pattern, start_value, end_value
   - NNG send failure → returns `"failed"` result, target_cue not mutated
   - Arm failure → FadeCommand NOT dispatched
-- [ ] T010 Write failing test for `run_cue.py` FadeCue singledispatch branch in `tests/test_fade_action_handler.py` — `run_cue(FadeCue(...), mtc)` resolves to `run_actionCue`
-- [ ] T012 [US1] Add `"fade_action"` to `SUPPORTED_CUE_ACTIONS` in `src/cuemsengine/cues/ActionHandler.py`
-- [ ] T013 [US1] Implement `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` (fade-up path):
+- [x] T010 Write failing test for `run_cue.py` FadeCue singledispatch branch in `tests/test_fade_action_handler.py` — `run_cue(FadeCue(...), mtc)` resolves to `run_actionCue`
+- [x] T012 [US1] Add `"fade_action"` to `SUPPORTED_CUE_ACTIONS` in `src/cuemsengine/cues/ActionHandler.py`
+- [x] T013 [US1] Implement `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` (fade-up path):
   - Resolve `target_cue = cue._action_target_object`
   - Arm target_cue if not armed; return `"failed"` on arm failure
   - Set `target_cue._fade_initial_volume = 0.0`; call `ch.go(target_cue, mtc)`
@@ -67,7 +67,7 @@
   - Build FadeCommand dict (all fields from data-model.md)
   - Call `ch.communications_thread.send_fade_command(payload)`; on error return `"failed"`, no target mutation
   - Return `ActionHandler._action_result("applied", "fade_action", target_id)`
-- [ ] T014 [US1] Register `_handle_fade_action` in `_ACTION_HANDLERS` dict in `src/cuemsengine/cues/ActionHandler.py`
+- [x] T014 [US1] Register `_handle_fade_action` in `_ACTION_HANDLERS` dict in `src/cuemsengine/cues/ActionHandler.py`
 - [ ] T015 [US1] Add `FadeCue` singledispatch branch to `src/cuemsengine/cues/run_cue.py`
 - [ ] T016 [US1] Implement `CueHandler.on_fade_complete(fade_id: str)` in `src/cuemsengine/cues/CueHandler.py`:
   - Log receipt of fade_complete with fade_id; for fade-down: call `self.disarm(target_cue)` (resolution mechanism TBD)
@@ -81,7 +81,7 @@
 
 **Goal**: Firing a FadeCue with `target_value=0` dispatches a fade-down command; on `fade_complete` the target is disarmed.
 
-**Independent Test**: Unit-test `_handle_fade_action` with `target_value=0`; verify `start_value` from Ossia cache, `end_value=0.0`, watchdog armed, disarm called on completion.
+**Independent Test**: Unit-test `_handle_fade_action` with `target_value=0`; verify `start_value` from Ossia cache, `end_value=0.0`, disarm called on completion.
 
 > **TDD**: Write tests FIRST.
 
@@ -89,7 +89,7 @@
   - `target_value=0`: start_value from Ossia cache (not 0.0), end_value=0.0
   - Target not playing → logs warning, returns `"failed"`
 - [ ] T020 Write failing tests for `CueHandler.on_fade_complete` (fade-down path) — `disarm` is called on target_cue
-- [ ] T022 [US2] Extend `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` — fade-down path:
+- [x] T022 [US2] Extend `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` — fade-down path:
   - If `target_value == 0` and target_cue not playing: log warning, return `"failed"`
   - `start_value = target_cue._osc.get_value(osc_path)` (from live cache)
   - `end_value = 0.0`
@@ -106,11 +106,11 @@
 
 > **TDD**: Write tests FIRST.
 
-- [ ] T024 Write failing tests for `ControllerEngine` CANCEL_ALL in `tests/test_controller_engine_gradient.py`:
+- [x] T024 Write failing tests for `ControllerEngine` CANCEL_ALL in `tests/test_controller_engine_gradient.py`:
   - `stop_script`: `_send_gradient_cancel_all()` called before `_forward_command_to_nodes`
   - `load_project`: `_send_gradient_cancel_all()` called before `_forward_load_to_nodes`
   - No fades in progress: call still succeeds without error
-- [ ] T025 [US3] Implement `ControllerEngine._send_gradient_cancel_all()` in `src/cuemsengine/ControllerEngine.py`:
+- [x] T025 [US3] Implement `ControllerEngine._send_gradient_cancel_all()` in `src/cuemsengine/ControllerEngine.py`:
   ```python
   def _send_gradient_cancel_all(self):
       try:
@@ -121,10 +121,10 @@
       except Exception as e:
           Logger.warning(f"Failed to send CANCEL_ALL to gradient-motiond: {e}")
   ```
-- [ ] T026 [US3] Call `self._send_gradient_cancel_all()` at the correct point in `stop_script` (before `_forward_command_to_nodes`)
-- [ ] T027 [US3] Call `self._send_gradient_cancel_all()` at the correct point in `load_project` (before `_forward_load_to_nodes`)
+- [x] T026 [US3] Call `self._send_gradient_cancel_all()` at the correct point in `stop_script` (before `_forward_command_to_nodes`)
+- [x] T027 [US3] Call `self._send_gradient_cancel_all()` at the correct point in `load_project` (before `_forward_load_to_nodes`)
 
-**Checkpoint**: US3 acceptance scenarios 1–3 pass.
+**Checkpoint**: US3 acceptance scenarios 1–3 pass ✅
 
 ---
 
@@ -134,7 +134,7 @@
 
 > **TDD**: Write test FIRST.
 
-- [ ] T028 Write failing test for CueHandler pre-arm extension in `tests/test_fade_action_handler.py` — FadeCue with `target_value=100` triggers `arm(target_cue, init)` at load; FadeCue with `target_value=0` does NOT
+- [x] T028 Write failing test for CueHandler pre-arm extension in `tests/test_fade_action_handler.py` — FadeCue with `target_value=100` triggers `arm(target_cue, init)` at load; FadeCue with `target_value=0` does NOT
 - [ ] T029 [US1] Extend pre-arm block in `CueHandler.arm()` in `src/cuemsengine/cues/CueHandler.py`:
   ```python
   if isinstance(cue, ActionCue) and cue._action_target_object:
@@ -156,17 +156,17 @@
 - [ ] T031 [P] Verify `FadeCue` is imported in `src/cuemsengine/cues/run_cue.py`
 - [ ] T032 Run full test suite; confirm no regressions in existing tests: `poetry run pytest tests/ -v`
 - [ ] T033 Validate `quickstart.md` sequence diagrams match implemented call paths
-- [ ] T034 Review all new Logger calls: confirm each includes `fade_id` and `target_cue.id` per FR-013/FR-011
+- [ ] T034 Review all new Logger calls: confirm each includes `fade_id` and `target_cue.id` per FR-013
 
 ---
 
 ## Dependencies & Execution Order
 
 ```
-Phase 1 (T001–T006) → BLOCKS all phases
+Phase 1 (T005–T006) → BLOCKS all phases
 Phase 2 (T007–T008) → can start after Phase 1
 Phase 3 (T009–T018) → can start after Phase 1; MVP deliverable
-Phase 4 (T019–T023) → can start after Phase 1 (needs T016 from Phase 3 for on_fade_complete)
+Phase 4 (T019–T022) → can start after Phase 1 (needs T016 from Phase 3 for on_fade_complete)
 Phase 5 (T024–T027) → can start after Phase 1 (independent of Phase 3/4)
 Phase 6 (T028–T029) → depends on Phase 3 CueHandler changes
 Phase 7 (T030–T034) → after all phases
