@@ -192,10 +192,18 @@ it as a local command, and that gradient-motiond receives it.
   be resolved from the **target_cue** at dispatch time. The target_cue's `_osc` and
   `_layer_ids` attributes are the canonical sources; the FadeCue MUST NOT carry or
   override these values:
-  - target_cue is an AudioCue → `osc_port = target_cue._osc.remote_port`,
-    `osc_path = "/volmaster"`.
-  - target_cue is a VideoCue → `osc_port = 7000`,
-    `osc_path = f"/videocomposer/layer/{target_cue._layer_ids[0]}/opacity"`.
+  - target_cue is an AudioCue → one FadeCommand with
+    `osc_port = target_cue._osc.remote_port`, `osc_path = "/volmaster"`. The
+    `fade_id` is the base `str(FadeCue.uuid)`.
+  - target_cue is a VideoCue → **one FadeCommand per entry in `target_cue._layer_ids`**.
+    Each command uses `osc_port = 7000` and
+    `osc_path = f"/videocomposer/layer/{layer_id}/opacity"`. The per-layer
+    `fade_id` is `f"{base_fade_id}_{layer_id}"` so gradient-motiond can track
+    per-layer completion independently.
+
+  If any per-layer dispatch fails, the handler aborts the remaining layers and
+  returns `failed` (FR-013). Already-dispatched fades will be cleared by the next
+  CANCEL_ALL on project stop or load.
 - **FR-019**: A FadeCue MUST occupy the cue runner for its `duration` so that
   general cue lifecycle (auto-disarm of the FadeCue itself via the end-of-cue path)
   fires only after the gradient fade has elapsed. This is implemented by a

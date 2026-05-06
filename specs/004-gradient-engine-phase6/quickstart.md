@@ -86,17 +86,22 @@ Operator fires FadeCue
       1. Resolve target_cue = fade_cue._action_target_object
       2. Arm target_cue if not armed (general cue logic)
       3. start_time = mtc.timecode.milliseconds_rounded
-      4. payload = ActionHandler._build_payload(target_cue, fade_cue, start_time)
-         (returns body: osc_port, osc_path, start_value [from cache], target_value,
-          duration_ms, start_time, curve_type)
-      5. fade_cue._start_mtc / _end_mtc set from start_time + duration
+      4. payloads = ActionHandler._build_fade_payload(target_cue, fade_cue,
+                                                     start_time, fade_id)
+         (returns list[dict] — 1 entry for AudioCue, N entries for VideoCue
+          one per layer in _layer_ids. Each dict carries its own fade_id:
+          AudioCue → base uuid; VideoCue → f"{uuid}_{layer_id}".)
+      5. for entry in payloads:
+            entry_fade_id = entry.pop("fade_id")
+            ch.communications_thread.send_fade_command(entry, fade_id=entry_fade_id)
+            (envelope adds: command="start_fade", osc_host, curve_params)
+            (any failure aborts the loop; remaining layers NOT sent)
+      6. fade_cue._start_mtc / _end_mtc set from start_time + duration
          (so loop_fadeCue has a valid _end_mtc)
-      6. ch.communications_thread.send_fade_command(payload, fade_id=fade_cue.id)
-         (envelope adds: command="start_fade", fade_id, osc_host, curve_params)
       7. Return ActionHandler._action_result("applied", "fade_action", target_id)
   → loop_cue(fade_cue, mtc) → loop_fadeCue blocks until _end_mtc
   → go_threaded end-of-cue path → ch.disarm(fade_cue)  (FadeCue only)
 
-gradient-motiond drives OSC over `duration_ms` independently.
+gradient-motiond drives OSC over duration_ms independently for each layer.
 target_cue remains armed; its disarm is the responsibility of subsequent cues.
 ```

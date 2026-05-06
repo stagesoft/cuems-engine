@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "fade_command",
   "title": "FadeCommand NNG payload",
-  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope. The payload is built in two layers: ActionHandler._build_payload returns the body fields; NodeCommunications.send_fade_command injects the envelope fields (command, fade_id, osc_host, curve_params).",
+  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope. The payload is built in two layers: ActionHandler._build_fade_payload returns a list[dict] (1 entry for AudioCue, N entries for VideoCue — one per layer in _layer_ids); NodeCommunications.send_fade_command is called once per dict, injecting envelope fields (command, fade_id, osc_host, curve_params). For VideoCue dispatches, fade_id is suffixed with the layer_id (f'{base_uuid}_{layer_id}') so gradient-motiond tracks per-layer completion.",
   "type": "object",
   "required": [
     "command",
@@ -26,7 +26,7 @@
     "fade_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Envelope. Controller-assigned unique identifier. Equals str(FadeCue.uuid). Injected by send_fade_command."
+      "description": "Envelope. Controller-assigned unique identifier. AudioCue: str(FadeCue.uuid). VideoCue: f'{str(FadeCue.uuid)}_{layer_id}' (one per layer). Injected by send_fade_command via the fade_id kwarg."
     },
     "osc_host": {
       "type": "string",

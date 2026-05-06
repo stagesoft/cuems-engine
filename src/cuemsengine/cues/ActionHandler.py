@@ -435,45 +435,6 @@ def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
         ch.arm(target, init=True)
     return ActionHandler._action_result("applied", "go_to", target_id)
 
-
-def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int) -> dict:
-    """Build the body of a FadeCommand from target_cue + fade_cue.
-
-    Envelope fields (command, fade_id, osc_host, curve_params) are added by
-    NodeCommunications.send_fade_command — keep them out of this body so the
-    helper stays pure data construction.
-    """
-    from cuemsutils.cues import AudioCue, VideoCue
-
-    if isinstance(target_cue, AudioCue):
-        osc_port = target_cue._osc.remote_port
-        osc_path = "/volmaster"
-    elif isinstance(target_cue, VideoCue):
-        # TODO: resolve videocomposer OSC port from configuration
-        osc_port = 7000
-        osc_path = f"/videocomposer/layer/{target_cue._layer_ids[0]}/opacity"
-    else:
-        raise ValueError(
-            f"FadeCue target is not an AudioCue or VideoCue: "
-            f"{type(target_cue).__name__}"
-        )
-
-    start_value = target_cue._osc.get_value(osc_path)
-
-    curve_type = fade_cue.curve_type
-    curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
-
-    return {
-        "osc_port": osc_port,
-        "osc_path": osc_path,
-        "start_value": start_value,
-        "target_value": fade_cue.target_value,
-        "start_time": start_time,
-        "duration_ms": fade_cue.duration.milliseconds_rounded,
-        "curve_type": curve_type_str,
-    }
-
-
 def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
     """Execute a FadeCue: arm target_cue if needed, dispatch FadeCommand, set _end_mtc.
 
@@ -505,24 +466,30 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
     start_time = mtc.timecode.milliseconds_rounded
 
     try:
-        payload = _build_fade_payload(target_cue, cue, start_time)
+        payloads = _build_fade_payload(target_cue, cue, start_time, fade_id)
     except ValueError as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
         )
 
-    # Dispatch FIRST. If NNG fails the target_cue state must remain unchanged.
-    try:
-        ch.communications_thread.send_fade_command(payload, fade_id=fade_id)
-    except Exception as exc:
-        Logger.error(
-            f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed "
-            f"(target_cue={target_id}): {exc}"
-        )
-        return ActionHandler._action_result(
-            "failed", "fade_action", target_id,
-            f"NNG dispatch failed: {exc}"
-        )
+    # Dispatch ALL entries before mutating anything. If any NNG send fails the
+    # target_cue / FadeCue state must remain unchanged. Failure of one layer
+    # aborts the rest — the partial dispatch will be cleared by the next
+    # CANCEL_ALL (project stop or load).
+    for entry in payloads:
+        entry_fade_id = entry.pop("fade_id")
+        try:
+            ch.communications_thread.send_fade_command(entry, fade_id=entry_fade_id)
+        except Exception as exc:
+            Logger.error(
+                f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed "
+                f"(target_cue={target_id} fade_id={entry_fade_id} "
+                f"osc={entry['osc_path']}): {exc}"
+            )
+            return ActionHandler._action_result(
+                "failed", "fade_action", target_id,
+                f"NNG dispatch failed: {exc}"
+            )
 
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
@@ -531,12 +498,66 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
     cue._end_mtc = cue._start_mtc + cue.duration.return_in_other_framerate(framerate)
 
     Logger.info(
-        f"FadeCue {fade_id}: dispatched start_fade "
-        f"target_cue={target_id} osc={payload['osc_path']} "
-        f"start={payload['start_value']} target={payload['target_value']} "
-        f"duration={payload['duration_ms']}ms curve={payload['curve_type']}"
+        f"FadeCue {fade_id}: dispatched {len(payloads)} start_fade(s) "
+        f"target_cue={target_id} target_value={cue.target_value} "
+        f"duration={cue.duration.milliseconds_rounded}ms"
     )
     return ActionHandler._action_result("applied", "fade_action", target_id)
+
+
+def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int,
+                        fade_id: str) -> list[dict]:
+    """Build FadeCommand body dicts from target_cue + fade_cue.
+
+    Returns a list of dicts (one per OSC endpoint). For AudioCue this is a
+    single-element list; for VideoCue, one entry per layer in `_layer_ids`,
+    each with its own osc_path and a layer-suffixed `fade_id` so gradient-motiond
+    can track per-layer completion.
+
+    Envelope fields (command, osc_host, curve_params) are added by
+    NodeCommunications.send_fade_command. The per-layer `fade_id` is included
+    here so the handler can pass it through unchanged when iterating.
+    """
+    from cuemsutils.cues import AudioCue, VideoCue
+
+    curve_type = fade_cue.curve_type
+    curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+    duration_ms = fade_cue.duration.milliseconds_rounded
+    target_value = fade_cue.target_value
+
+    def _entry(osc_path: str, entry_fade_id: str) -> dict:
+        return {
+            "fade_id": entry_fade_id,
+            "osc_port": target_cue._osc.remote_port,
+            "osc_path": osc_path,
+            "start_value": target_cue._osc.get_value(osc_path),
+            "target_value": target_value,
+            "start_time": start_time,
+            "duration_ms": duration_ms,
+            "curve_type": curve_type_str,
+        }
+
+    if isinstance(target_cue, AudioCue):
+        return [_entry("/volmaster", fade_id)]
+
+    if isinstance(target_cue, VideoCue):
+        layer_ids = getattr(target_cue, "_layer_ids", []) or []
+        if not layer_ids:
+            raise ValueError(
+                f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
+            )
+        return [
+            _entry(
+                f"/videocomposer/layer/{layer_id}/opacity",
+                f"{fade_id}_{layer_id}",
+            )
+            for layer_id in layer_ids
+        ]
+
+    raise ValueError(
+        f"FadeCue target is not an AudioCue or VideoCue: "
+        f"{type(target_cue).__name__}"
+    )
 
 
 _ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
