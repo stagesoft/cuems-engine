@@ -179,11 +179,6 @@ as a local command, and that gradient-motiond receives it.
   target_cue in an inconsistent armed/disarmed state.
 - What if MTC transport is stopped mid-fade? The fade pauses until MTC resumes — it does not
   snap to `target_value`.
-- If `fade_complete` is never received from gradient-motiond after a fade-down
-  (`target_value=0`) is dispatched (e.g., gradient-motiond crashes mid-fade), the Python
-  engine MUST apply a timeout of (`duration` + 1 second). On expiry, the target_cue is
-  forcibly disarmed and a warning is logged. This prevents permanently stuck armed cues
-  without requiring operator intervention.
 - If gradient-motiond is unreachable at FadeCue dispatch time, the FadeCue fails with a
   logged error; the target_cue is NOT mutated. (See FR-013.)
 
@@ -226,10 +221,6 @@ as a local command, and that gradient-motiond receives it.
 - **FR-010**: All values dispatched to gradient-motiond MUST be normalised to the 0.0–1.0
   range, converting from the FadeCue's `target_value` (0–100 integer) and from the
   target_cue's existing volume representation where necessary.
-- **FR-011**: After dispatching a fade-down command (`target_value = 0`), the system MUST
-  start a timeout equal to the FadeCue `duration` plus one second. If `fade_complete` is
-  not received within that window, the system MUST forcibly disarm the target_cue and log
-  a warning identifying the FadeCue UUID, the target_cue UUID, and the fade ID.
 - **FR-012**: The FadeCue's `curve_type` (one of `linear`, `exponential`, `logarithmic`,
   `sigmoid`) MUST be passed through to gradient-motiond in the fade-start command. The
   Python engine MUST NOT interpret the curve; it is consumed by gradient-motiond.
@@ -250,14 +241,6 @@ as a local command, and that gradient-motiond receives it.
   target_cue is already playing, because a prior fade may have moved the actual OSC value
   away from the configured one. If the target_cue is not yet playing (fade-up case from
   FR-004), `start_value` is `0.0`.
-- **FR-014a**: The Python engine MUST retain a dispatch record (at minimum:
-  `fade_id → (target_cue, osc_path, end_value)`) for every dispatched FadeCommand, for the
-  lifetime of the fade. On receipt of a `fade_complete` STATUS, the system MUST ensure that
-  the next call to `target_cue._osc.get_value(path)` for that OSC path returns the
-  dispatched `end_value`, so a subsequent FadeCue dispatch reads a correct `start_value`.
-  The exact cache-update mechanism (e.g., `node.parameter.value` direct assignment vs. a
-  quiet-set helper) is plan-level — what matters is that the target_cue's cache reflects
-  post-fade truth without re-emitting a duplicate OSC message to the player.
 - **FR-015**: The FadeCommand `end_value` MUST be derived from `FadeCue.target_value / 100.0`,
   clamped to `[0.0, 1.0]`.
 - **FR-016**: The FadeCommand time fields MUST be derived from the current MTC time at

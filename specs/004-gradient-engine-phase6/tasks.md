@@ -11,10 +11,6 @@
 
 > **TDD**: Write tests FIRST and confirm FAIL before implementing.
 
-- [ ] T001 Write failing tests for `FadeDispatchRegistry` (register, complete, cancel_all, watchdog expiry) in `tests/test_fade_dispatch_registry.py`
-- [ ] T002 [US3/US4] Implement `src/cuemsengine/cues/FadeDispatchRegistry.py` — `FadeDispatchRecord` dataclass + `FadeDispatchRegistry` class with `register`, `complete`, `cancel_all`, and `_on_watchdog_timeout` (uses `threading.Lock` + `threading.Timer`)
-- [ ] T003 Write failing test for `OssiaNodes.set_cached_value` (quiet write, no OSC re-emit) in `tests/test_ossia.py` (extend existing file)
-- [ ] T004 [P] Implement `OssiaNodes.set_cached_value(self, path: str, value) -> None` in `src/cuemsengine/osc/OssiaNodes.py` — direct `node.parameter.value = value` assignment, no `push_value`
 - [ ] T005 Write failing tests for `NodeCommunications` gradient filter and STATUS registration in `tests/test_node_communications_gradient.py` — verify `gradientengine`-targeted COMMAND is swallowed; verify STATUS with `event="fade_complete"` calls `CUE_HANDLER.on_fade_complete`
 - [ ] T006 Implement `NodeCommunications` changes in `src/cuemsengine/comms/NodeCommunications.py`:
   - Early return in `_handle_command_operation` when `operation.target == "gradientengine"`
@@ -23,7 +19,7 @@
   - New `send_fade_command(self, payload: dict)` method
   - New `send_cancel_all(self)` method
 
-**Checkpoint**: Foundation ready — all six tasks green before Phase 2 begins.
+**Checkpoint**: Foundation ready — T005–T006 green before Phase 2 begins.
 
 ---
 
@@ -60,7 +56,6 @@
   - NNG send failure → returns `"failed"` result, target_cue not mutated
   - Arm failure → FadeCommand NOT dispatched
 - [ ] T010 Write failing test for `run_cue.py` FadeCue singledispatch branch in `tests/test_fade_action_handler.py` — `run_cue(FadeCue(...), mtc)` resolves to `run_actionCue`
-- [ ] T011 Write failing test for `CueHandler.on_fade_complete` (fade-up path) — cache updated via `set_cached_value`, no disarm
 - [ ] T012 [US1] Add `"fade_action"` to `SUPPORTED_CUE_ACTIONS` in `src/cuemsengine/cues/ActionHandler.py`
 - [ ] T013 [US1] Implement `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` (fade-up path):
   - Resolve `target_cue = cue._action_target_object`
@@ -70,16 +65,12 @@
   - Read `start_value = target_cue._osc.get_value(osc_path)` (0.0 from initial set)
   - Compute `end_value = cue.target_value / 100.0`
   - Build FadeCommand dict (all fields from data-model.md)
-  - Register in `ch.fade_registry`
-  - Call `ch.communications_thread.send_fade_command(payload)`; on error return `"failed"`, registry.cancel(fade_id), no target mutation
+  - Call `ch.communications_thread.send_fade_command(payload)`; on error return `"failed"`, no target mutation
   - Return `ActionHandler._action_result("applied", "fade_action", target_id)`
 - [ ] T014 [US1] Register `_handle_fade_action` in `_ACTION_HANDLERS` dict in `src/cuemsengine/cues/ActionHandler.py`
 - [ ] T015 [US1] Add `FadeCue` singledispatch branch to `src/cuemsengine/cues/run_cue.py`
 - [ ] T016 [US1] Implement `CueHandler.on_fade_complete(fade_id: str)` in `src/cuemsengine/cues/CueHandler.py`:
-  - Look up dispatch record; if not found log warning and return
-  - Call `record.target_cue._osc.set_cached_value(record.osc_path, record.end_value)`
-  - If `record.is_fade_down`: call `self.disarm(record.target_cue)`
-- [ ] T017 [US1] Inject `FadeDispatchRegistry` instance into `CueHandler` (add `self.fade_registry = FadeDispatchRegistry()` in `CueHandler.__init__`)
+  - Log receipt of fade_complete with fade_id; for fade-down: call `self.disarm(target_cue)` (resolution mechanism TBD)
 - [ ] T018 [US1] Modify `run_audioCue` in `src/cuemsengine/cues/run_cue.py` to consume `_fade_initial_volume` side-channel attribute (check `getattr(cue, '_fade_initial_volume', None)`, use it for initial `/volmaster` write if set, then `del cue._fade_initial_volume`)
 
 **Checkpoint**: US1 acceptance scenarios 1–2 pass. MTC-pause/resume (scenario 3) and pre-arm (scenario 4) handled in later tasks.
@@ -95,16 +86,13 @@
 > **TDD**: Write tests FIRST.
 
 - [ ] T019 Write failing tests for `_handle_fade_action` (fade-down path) in `tests/test_fade_action_handler.py`:
-  - `target_value=0`: start_value from Ossia cache (not 0.0), end_value=0.0, watchdog timer created
-  - Target not playing → logs warning, returns no-op (or `"rejected"`)
-- [ ] T020 Write failing tests for `CueHandler.on_fade_complete` (fade-down path) — `disarm` is called on target_cue; watchdog cancelled
-- [ ] T021 Write failing test for watchdog timeout — `_on_watchdog_timeout` calls `CUE_HANDLER.disarm(target_cue)` and logs warning
+  - `target_value=0`: start_value from Ossia cache (not 0.0), end_value=0.0
+  - Target not playing → logs warning, returns `"failed"`
+- [ ] T020 Write failing tests for `CueHandler.on_fade_complete` (fade-down path) — `disarm` is called on target_cue
 - [ ] T022 [US2] Extend `_handle_fade_action` in `src/cuemsengine/cues/ActionHandler.py` — fade-down path:
-  - If `target_value == 0` and target_cue not playing: log warning, return `"rejected"`
+  - If `target_value == 0` and target_cue not playing: log warning, return `"failed"`
   - `start_value = target_cue._osc.get_value(osc_path)` (from live cache)
   - `end_value = 0.0`
-  - `is_fade_down=True` in `FadeDispatchRecord`; watchdog timer started by `registry.register`
-- [ ] T023 [US2] Add `is_fade_down` watchdog arm logic to `FadeDispatchRegistry.register` — start `threading.Timer((duration_ms/1000.0) + 1.0, self._on_watchdog_timeout, args=[fade_id])` when `record.is_fade_down`
 
 **Checkpoint**: US2 acceptance scenarios 1–4 pass.
 

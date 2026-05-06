@@ -26,31 +26,6 @@ transitions affect the `target_cue` (arm → playing → disarmed after fade-dow
 
 ---
 
-### FadeDispatchRecord (new — in-memory only, never persisted)
-
-Stored in `FadeDispatchRegistry` keyed by `fade_id`. Exists for the lifetime of one active fade.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `fade_id` | `str` | Equals `FadeCue.uuid` |
-| `fade_cue` | `FadeCue` | The originating cue (for UUID logging) |
-| `target_cue` | `Cue` | The AudioCue or VideoCue being faded |
-| `osc_path` | `str` | Resolved OSC path (`/volmaster` or `/videocomposer/layer/N/opacity`) |
-| `end_value` | `float` | `FadeCue.target_value / 100.0`, clamped `[0.0, 1.0]` |
-| `is_fade_down` | `bool` | `True` if `target_value == 0` (watchdog armed for this) |
-| `watchdog` | `threading.Timer \| None` | Active only when `is_fade_down` is `True` |
-
-**Lifecycle**:
-1. Created by `FadeDispatchRegistry.register()` at FadeCue dispatch time.
-2. Cancelled by `FadeDispatchRegistry.complete(fade_id)` on `fade_complete` STATUS receipt.
-3. Expired by `FadeDispatchRegistry._on_watchdog_timeout(fade_id)` if `fade_complete` is not
-   received within `duration + 1 s`.
-4. Removed from the registry in both cases (2) and (3).
-
-**Concurrency**: Registry dict access is guarded by `threading.Lock`.
-
----
-
 ### FadeCommand (NNG wire payload — outbound)
 
 JSON-serialisable dict sent inside `NodeOperation.data` with `target="gradientengine"`.
@@ -101,26 +76,8 @@ Received from gradient-motiond when a fade finishes. Shape from gradient-motion-
 | `data.fade_id` | `str` | Matches `FadeCommand.fade_id` |
 | `data.node_name` | `str` | Node identifier from gradient-motiond |
 
-**Note**: `fade_complete` does NOT carry the final value. The Python engine recovers the
-correct end value from `FadeDispatchRecord.end_value` (keyed by `fade_id`).
-
----
-
-### FadeDispatchRegistry (new module — `src/cuemsengine/cues/FadeDispatchRegistry.py`)
-
-Owns all in-flight `FadeDispatchRecord` instances. Injected into `CueHandler` at startup.
-
-**Public interface**:
-
-```python
-class FadeDispatchRegistry:
-    def register(self, record: FadeDispatchRecord) -> None: ...
-    def complete(self, fade_id: str) -> FadeDispatchRecord | None: ...
-    def cancel_all(self) -> None: ...  # called on CANCEL_ALL / project stop
-    def _on_watchdog_timeout(self, fade_id: str) -> None: ...  # internal
-```
-
-**Thread safety**: All methods acquire `self._lock` (`threading.Lock`).
+**Note**: `fade_complete` carries only `fade_id`. The Python engine uses this to identify
+the originating FadeCue and disarm the target_cue (fade-down path only).
 
 ---
 
@@ -137,9 +94,7 @@ target_cue._osc.get_value(path) ──► FadeCommand.start_value
 target_cue._osc.remote_port ──────► FadeCommand.osc_port (AudioCue)
 target_cue._layer_ids[0] ─────────► FadeCommand.osc_path (VideoCue)
 
-FadeDispatchRecord.end_value ─────► OssiaNodes quiet cache update on fade_complete
-FadeDispatchRecord.watchdog ──────► threading.Timer (fade-down only)
-FadeDispatchRecord.target_cue ────► CueHandler.disarm(target_cue) on complete/timeout
+fade_complete.fade_id ────────────► CueHandler.on_fade_complete → disarm target_cue (fade-down)
 ```
 
 ---
@@ -162,13 +117,12 @@ are available before `ActionHandler._handle_fade_action` dispatches the FadeComm
 [not armed] ──arm (pre-arm at load)──► [armed/idle]
 [armed/idle] ──FadeCue fires──► start playback at vol=0 ──► [playing, vol=0]
 [playing, vol=0] ──FadeCommand dispatched──► [fading, gradient-motiond controls OSC]
-[fading] ──fade_complete STATUS──► Ossia cache updated to end_value ──► [playing, vol=end_value]
+[fading] ──fade_complete STATUS──► [playing, vol=end_value]
 ```
 
 ## State Machine: target_cue during fade-down (FadeCue.target_value = 0)
 
 ```
-[playing] ──FadeCue fires──► FadeCommand dispatched + watchdog started ──► [fading]
-[fading] ──fade_complete STATUS (within duration+1s)──► cache updated, disarm ──► [disarmed]
-[fading] ──watchdog expires (no fade_complete)──► warning logged, disarm ──► [disarmed]
+[playing] ──FadeCue fires──► FadeCommand dispatched ──► [fading]
+[fading] ──fade_complete STATUS──► disarm ──► [disarmed]
 ```

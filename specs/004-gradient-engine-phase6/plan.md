@@ -20,13 +20,11 @@ in `cuemsutils`; this plan wires it into the cuems-engine runtime.
 - `pyossia` — Ossia node cache (`node.parameter.value` direct-write for quiet cache update)
 - `nng` (via `NodesHub`/`NodeCommunications`) — NNG bus operations, `NodeOperation`, `OperationType`
 - `cuemsutils.log` — `Logger`
-- `threading`, `time` — timeout management for fade-down watchdog
-**Storage**: In-process registry (`dict[str, FadeDispatchRecord]`) keyed by `fade_id`
 **Testing**: `pytest` — test files under `tests/`, mirroring `src/cuemsengine/` module structure
 **Target Platform**: Linux (Debian/Ubuntu, systemd service)
 **Project Type**: Distributed engine (ControllerEngine + NodeEngine per node)
-**Performance Goals**: `CANCEL_ALL` dispatched before any player stops; `fade_complete` watchdog expires within `duration + 1 s` of dispatch; NNG dispatch non-blocking (threaded)
-**Constraints**: Must not mutate `target_cue` state if NNG dispatch fails; OSC cache update must not re-emit OSC to the player
+**Performance Goals**: `CANCEL_ALL` dispatched before any player stops; NNG dispatch non-blocking (threaded)
+**Constraints**: Must not mutate `target_cue` state if NNG dispatch fails
 
 ## Constitution Check
 
@@ -34,7 +32,7 @@ in `cuemsutils`; this plan wires it into the cuems-engine runtime.
 
 | Principle | Check | Notes |
 |-----------|-------|-------|
-| Single Responsibility | PASS | New `FadeDispatchRegistry` owns only the dispatch record; `GradientEngineClient` owns only NNG send. ActionHandler handler fn stays narrow. |
+| Single Responsibility | PASS | `ActionHandler` handler fn stays narrow; NNG send methods are thin wrappers on `NodeCommunications`. |
 | Open/Closed | PASS | `ActionHandler` hook registry extended via `_ACTION_HANDLERS` dict; existing handlers untouched. |
 | Liskov Substitution | PASS | `FadeCue` extends `ActionCue` and is handled via the existing `execute_action` dispatch path without breaking it. |
 | Interface Segregation | PASS | No god-interface added; STATUS callback registered separately from COMMAND callback in `NodeCommunications`. |
@@ -71,21 +69,18 @@ src/cuemsengine/
 │   └── NodesHub.py               (unchanged — COMMAND/STATUS reused)
 ├── cues/
 │   ├── ActionHandler.py           ← MODIFY: add fade_action to SUPPORTED + implement handler
-│   ├── CueHandler.py              ← MODIFY: pre-arm FadeCue targets; inject registry
-│   ├── FadeDispatchRegistry.py    ← NEW: dispatch record + timeout watchdog
+│   ├── CueHandler.py              ← MODIFY: pre-arm FadeCue targets; `on_fade_complete`
 │   └── run_cue.py                 ← MODIFY: add FadeCue branch (mirrors ActionCue branch)
 ├── ControllerEngine.py            ← MODIFY: STATUS sender guard + CANCEL_ALL on load/stop
 └── NodeEngine.py                  (unchanged — filter is in NodeCommunications layer)
 
 tests/
-├── test_fade_dispatch_registry.py  ← NEW
 ├── test_fade_action_handler.py     ← NEW
 ├── test_node_communications_gradient.py  ← NEW (STATUS filter + gradientengine passthrough)
 └── test_controller_engine_gradient.py    ← NEW (sender guard + CANCEL_ALL)
 ```
 
-**Structure Decision**: Single-project layout (existing). New `FadeDispatchRegistry` is a
-separate module to respect SRP; all other changes are modifications to existing files.
+**Structure Decision**: Single-project layout (existing). All changes are modifications to existing files.
 
 ## Complexity Tracking
 
@@ -115,20 +110,6 @@ and their stub handlers are retained for backward-compatibility during the trans
 XML scripts using those action types still parse; the new handler only fires for FadeCue
 objects). Implementation adds `_handle_fade_action` registered under `"fade_action"`.
 
-**D-002 — `FadeDispatchRegistry` as a standalone module**
-`CueHandler` receives a `FadeDispatchRegistry` instance at startup (injected). The registry
-stores `fade_id → FadeDispatchRecord` and owns the timeout watchdog thread per fade-down.
-This isolates the record-keeping from both `CueHandler` (orchestration) and `ActionHandler`
-(handler fns), satisfying SRP.
-
-**D-003 — Ossia quiet-cache update via `node.parameter.value` direct assignment**
-`OssiaNodes.set_value()` calls `push_value()` which re-emits OSC. After `fade_complete`, the
-engine must update the target_cue's Ossia node cache *without* re-emitting. The safe path is
-`target_cue._osc.nodes[osc_path].parameter.value = end_value` (direct Python attribute write
-to the pyossia parameter — does not trigger the push/send path). A thin helper
-`OssiaNodes.set_cached_value(path, value)` wraps this to avoid raw attribute access in
-`FadeDispatchRegistry`.
-
 **D-004 — `GradientEngineClient` thin wrapper in `NodeCommunications`**
 Rather than a separate class file, gradient-motiond dispatch is added as two methods on
 `NodeCommunications`: `send_fade_command(payload: dict)` and `send_cancel_all()`. Both
@@ -139,7 +120,7 @@ construct `NodeOperation(COMMAND, UPDATE, target="gradientengine", data=payload)
 `NodeCommunications.set_receive_callbacks` gains `OperationType.STATUS: self._handle_status_operation`.
 The STATUS handler checks `operation.target == "gradientengine"` and `operation.data.get("event") == "fade_complete"`,
 then calls `CUE_HANDLER.on_fade_complete(operation.data["fade_id"])`. `CueHandler.on_fade_complete`
-looks up the dispatch record, updates the Ossia cache, and disarms the target_cue.
+disarms the target_cue (fade-down path).
 
 **D-006 — `NodeCommunications._handle_command_operation` early return**
 At the top of `_handle_command_operation`, before extracting `command_name`, add:

@@ -77,29 +77,6 @@ existing ActionCue XML scripts. Their stub handlers continue unchanged.
 
 ---
 
-## R-005: Ossia quiet-cache update mechanism
-
-**Decision**: Use `target_cue._osc.nodes[osc_path].parameter.value = end_value` for quiet update.
-Wrap in `OssiaNodes.set_cached_value(path, value)` helper.
-
-**Finding** (`src/cuemsengine/osc/OssiaNodes.py`):
-- `set_value()` calls `node.parameter.push_value(value)` which triggers OSC emission — NOT safe
-  for quiet cache update after `fade_complete`.
-- `get_value()` returns `node.parameter.value` (local cache read only — safe).
-- `node.parameter.value = X` is a direct attribute write to the pyossia parameter Python object;
-  it updates the local cache without calling `push_value()` and therefore does not emit OSC.
-- This is the standard pyossia pattern for injecting received values into the local parameter
-  cache.
-- `OssiaNodes.nodes` is a `dict[str, Node]` keyed by path string — access is `self.nodes[path]`.
-- Adding `set_cached_value(self, path: str, value) -> None` (no `@logged` decorator — quiet by design)
-  to `OssiaNodes` is the cleanest SRP-compliant extension.
-
-**Alternatives considered**:
-- Calling `get_value()` and asserting it matches: read-only, no cache write. Rejected.
-- Adding a `push_value(False)` flag to `set_value()`: changes existing public API. Rejected (YAGNI).
-
----
-
 ## R-006: `ControllerEngine` STATUS callback and sender guard
 
 **Decision**: Guard in `status_operation_callback` using `operation.sender.startswith("gradientengine_")`.
@@ -164,20 +141,6 @@ Wrap in `OssiaNodes.set_cached_value(path, value)` helper.
   by the TDD principle (the test will verify this routing).
 - Explicit registration: `@run_cue.register(FadeCue)` wrapping a call to `run_actionCue`.
 - `FadeCue` import must be added to `run_cue.py` imports.
-
----
-
-## R-010: Fade-down watchdog timeout implementation
-
-**Decision**: Use `threading.Timer(duration_s + 1.0, callback)` per active fade-down in `FadeDispatchRegistry`.
-
-**Finding**:
-- `FadeDispatchRegistry` stores `fade_id → FadeDispatchRecord`. For fade-down entries,
-  a `threading.Timer` is started at dispatch time.
-- On `fade_complete` receipt: cancel the timer (`timer.cancel()`), update cache, disarm.
-- On timer expiry: forcibly disarm and log warning with `fade_id`, `target_cue.id`, `FadeCue.uuid`.
-- `duration_ms` is available in the dispatch record; timer delay is `(duration_ms / 1000.0) + 1.0`.
-- Thread safety: registry dict access guarded by `threading.Lock`.
 
 ---
 
