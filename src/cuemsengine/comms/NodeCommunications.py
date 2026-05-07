@@ -133,18 +133,21 @@ class NodeCommunications(AsyncCommsThread):
         """Send a start_fade command to gradient-motiond via NNG.
 
         Wraps the body returned by ActionHandler._build_fade_payload with the
-        four envelope fields (command, fade_id, osc_host, curve_params) and
-        sends as a COMMAND/UPDATE operation targeting gradientengine.
+        envelope fields (command, fade_id, node_name, osc_host, curve_params)
+        and sends as a COMMAND/UPDATE operation targeting gradientengine.
 
         Args:
             payload: FadeCommand body (osc_port, osc_path, start_value,
-                target_value, start_time, duration_ms, curve_type).
+                end_value, start_mtc_ms, duration_ms, curve_type).
+                Field names match the C++ parser at gradient-motion-engine
+                src/signal/FadeCommand.cpp parseStartFade.
             fade_id: Correlation key (FadeCue.uuid as string).
             timeout: Optional send timeout in seconds.
         """
         wrapped = {
             "command": "start_fade",
             "fade_id": fade_id,
+            "node_name": self.node_id,
             "osc_host": "127.0.0.1",
             "curve_params": {},
             **payload,
@@ -161,6 +164,9 @@ class NodeCommunications(AsyncCommsThread):
     def send_cancel_all(self, timeout: Optional[float] = None) -> None:
         """Send a cancel_all command to gradient-motiond via NNG.
 
+        node_name is required by parseFadeCommand's NodeMismatch filter — without
+        it the daemon returns MalformedJson and the cancel is silently dropped.
+
         Args:
             timeout: Optional send timeout in seconds.
         """
@@ -169,7 +175,7 @@ class NodeCommunications(AsyncCommsThread):
             action=ActionType.UPDATE,
             sender=self.node_id,
             target="gradientengine",
-            data={"command": "cancel_all"},
+            data={"command": "cancel_all", "node_name": self.node_id},
         )
         self.send_operation(operation, timeout)
 

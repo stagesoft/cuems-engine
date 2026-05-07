@@ -517,10 +517,10 @@ def _handle_fade_action(
             f"Target cue {target_id} could not be armed"
         )
 
-    start_time = mtc.timecode.milliseconds_rounded
+    start_mtc_ms = mtc.timecode.milliseconds_rounded
 
     try:
-        payloads = _build_fade_payload(target, action_cue, start_time, fade_id)
+        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, fade_id)
     except ValueError as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
@@ -548,7 +548,7 @@ def _handle_fade_action(
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
     framerate = mtc.main_tc.framerate
-    action_cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_time / 1000.0)
+    action_cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_mtc_ms / 1000.0)
     action_cue._end_mtc = action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
 
     Logger.info(
@@ -559,7 +559,7 @@ def _handle_fade_action(
     return ActionHandler._action_result("applied", "fade_action", target_id)
 
 
-def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int,
+def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
                         fade_id: str) -> list[dict]:
     """Build FadeCommand body dicts from target_cue + fade_cue.
 
@@ -568,16 +568,22 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int,
     each with its own osc_path and a layer-suffixed `fade_id` so gradient-motiond
     can track per-layer completion.
 
-    Envelope fields (command, osc_host, curve_params) are added by
+    Envelope fields (command, node_name, osc_host, curve_params) are added by
     NodeCommunications.send_fade_command. The per-layer `fade_id` is included
     here so the handler can pass it through unchanged when iterating.
+
+    Field names mirror the C++ parser at gradient-motion-engine
+    src/signal/FadeCommand.cpp parseStartFade: end_value (not target_value),
+    start_mtc_ms (not start_time). end_value is normalised to OSC scale
+    0.0–1.0 from FadeCue.target_value's UI scale 0–100; gradient-motiond
+    forwards end_value directly to OSC without further unit conversion.
     """
     from cuemsutils.cues import AudioCue, VideoCue
 
     curve_type = fade_cue.curve_type
     curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
     duration_ms = fade_cue.duration.milliseconds_rounded
-    target_value = fade_cue.target_value
+    end_value = float(fade_cue.target_value) / 100.0
 
     def _entry(osc_path: str, entry_fade_id: str) -> dict:
         return {
@@ -585,8 +591,8 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int,
             "osc_port": target_cue._osc.remote_port,
             "osc_path": osc_path,
             "start_value": target_cue._osc.get_value(osc_path),
-            "target_value": target_value,
-            "start_time": start_time,
+            "end_value": end_value,
+            "start_mtc_ms": start_mtc_ms,
             "duration_ms": duration_ms,
             "curve_type": curve_type_str,
         }
