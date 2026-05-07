@@ -194,3 +194,90 @@ class TestGradientEngineSendMethods:
             assert op.target == "gradientengine"
             assert op.data.get("command") == "cancel_all"
             assert op.data.get("node_name") == comms.node_id
+
+
+# ---------------------------------------------------------------------------
+# Wire-format contract tests (anchored against gradient-motion-engine's
+# src/signal/FadeCommand.cpp parseStartFade — see fade_command.json).
+# These are deliberately strict to catch regressions where a payload key
+# rename in Python silently breaks the C++ daemon (which would respond with
+# MissingField / NodeMismatch / MalformedJson and DropSilent the message).
+# ---------------------------------------------------------------------------
+
+
+class TestStartFadeWireContract:
+    """Lock the wire-format keys parseStartFade reads in FadeCommand.cpp."""
+
+    REQUIRED_KEYS = {
+        # envelope (injected by send_fade_command)
+        "command", "fade_id", "node_name", "osc_host", "curve_params",
+        # body (built by ActionHandler._build_fade_payload)
+        "osc_port", "osc_path", "start_value", "end_value",
+        "start_mtc_ms", "duration_ms", "curve_type",
+    }
+    LEGACY_KEYS_FORBIDDEN = {"target_value", "start_time"}
+
+    def _captured(self, body):
+        comms, _ = _build_comms()
+        with patch.object(comms, "send_operation") as mock_send:
+            comms.send_fade_command(body, fade_id="contract-uuid")
+            return mock_send.call_args[0][0].data
+
+    def _well_formed_body(self):
+        return {
+            "osc_port": 12345,
+            "osc_path": "/volmaster",
+            "start_value": 0.5,
+            "end_value": 0.8,
+            "start_mtc_ms": 1234,
+            "duration_ms": 3000,
+            "curve_type": "linear",
+        }
+
+    def test_required_keys_present(self):
+        data = self._captured(self._well_formed_body())
+        missing = self.REQUIRED_KEYS - set(data.keys())
+        assert not missing, (
+            f"Wire payload missing keys parseStartFade requires: {missing}. "
+            f"Got: {sorted(data.keys())}"
+        )
+
+    def test_legacy_keys_absent(self):
+        """target_value/start_time are NOT in the wire payload (they're the C++-rejected names)."""
+        data = self._captured(self._well_formed_body())
+        leaked = self.LEGACY_KEYS_FORBIDDEN & set(data.keys())
+        assert not leaked, (
+            f"Wire payload still contains legacy keys: {leaked}. "
+            f"These would fail parseStartFade with MissingField/TypeError."
+        )
+
+    def test_command_discriminator_is_start_fade(self):
+        data = self._captured(self._well_formed_body())
+        assert data["command"] == "start_fade"
+
+    def test_node_name_matches_node_id(self):
+        """parseFadeCommand drops the message with NodeMismatch if data.node_name != ownNodeName."""
+        data = self._captured(self._well_formed_body())
+        comms, _ = _build_comms()
+        assert data["node_name"] == comms.node_id
+
+    def test_end_value_is_unit_range_float(self):
+        """gradient-motiond forwards end_value to OSC verbatim — must be 0.0-1.0 float."""
+        data = self._captured(self._well_formed_body())
+        assert isinstance(data["end_value"], float)
+        assert 0.0 <= data["end_value"] <= 1.0
+
+
+class TestCancelAllWireContract:
+    """parseCancelAll passes through parseFadeCommand's NodeMismatch filter first."""
+
+    def test_node_name_required(self):
+        comms, _ = _build_comms()
+        with patch.object(comms, "send_operation") as mock_send:
+            comms.send_cancel_all()
+            data = mock_send.call_args[0][0].data
+        assert "node_name" in data, (
+            "cancel_all without node_name fails parseFadeCommand at the NodeMismatch "
+            "check (returns MalformedJson because data.node_name is absent)."
+        )
+        assert data["node_name"] == comms.node_id
