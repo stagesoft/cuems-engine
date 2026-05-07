@@ -241,7 +241,9 @@ class BaseEngine(SignalEngine):
 
     def mtc_callback(self, mtc: CTimecode) -> None:
         if self.go_offset is not None:
-            self.timecode = mtc.milliseconds_rounded - self.go_offset
+            # Drift = current MTC - GO-time MTC. Both _exact for sub-ms
+            # precision at NTSC framerates (29.97/23.976).
+            self.timecode = mtc.milliseconds_exact - self.go_offset
 
     ### CONFIG MANAGER ###
     def set_config_manager(self) -> None:

@@ -27,8 +27,55 @@ class MtcListener(Thread):
 
         self.step_callback = step_callback
         self.reset_callback = reset_callback
+
+        # 24h MTC rollover state (closes 869cpdbzy):
+        # MIDI MTC encodes hours in a 5-bit field (0-23) and real SMPTE senders
+        # reset to 00:00:00:00 after 24h. This listener detects that wrap by
+        # comparing decoded TC frames against the previous one (a backward jump
+        # of more than 1 hour indicates a rollover, not a manual seek) and
+        # accumulates a 24h offset that is added to every subsequent decoded
+        # TC. CTimecode itself is monotonic past 24h post-cuemsutils 0.1.0rc7
+        # (PR #10 layer 1), but without this listener-side accumulation the
+        # received MTC would reset to ~frames=1 every 24h regardless.
+        self._24h_offset_frames: int = 0
+        self._last_decoded_frames: int | None = None
+
         super().__init__(name = 'mtclistener')
         self.daemon = True
+
+    def _apply_24h_offset(self, decoded: CTimecode) -> CTimecode:
+        """Detect 24h MTC rollover and apply accumulated offset.
+
+        Heuristic: a decoded TC whose frames count is more than 1 hour LESS
+        than the previous decoded TC is treated as a 24h wrap (real SMPTE
+        senders cannot manually seek that far backward in installations).
+        For environments with manual seeking, deltas under 1h are treated as
+        seeks (no offset accumulated; existing reset detection still fires
+        when main_tc.milliseconds_rounded reaches 0).
+
+        Returns the offset-adjusted CTimecode (or the original if no offset
+        is active).
+        """
+        if self._last_decoded_frames is not None:
+            delta = decoded.frames - self._last_decoded_frames
+            frames_per_hour = decoded._int_framerate * 3600
+            if delta < -frames_per_hour:
+                self._24h_offset_frames += decoded._int_framerate * 86400
+                Logger.info(
+                    f'MtcListener: detected 24h MTC rollover '
+                    f'(prev frames={self._last_decoded_frames}, '
+                    f'new={decoded.frames}, delta={delta}); '
+                    f'accumulated offset = {self._24h_offset_frames} frames '
+                    f'({self._24h_offset_frames / decoded._int_framerate / 3600:.1f}h)'
+                )
+        self._last_decoded_frames = decoded.frames
+
+        if self._24h_offset_frames > 0:
+            return CTimecode(
+                framerate=decoded.framerate,
+                frames=decoded.frames + self._24h_offset_frames,
+            )
+        return decoded
 
 
     def timecode(self):
@@ -126,7 +173,10 @@ class MtcListener(Thread):
         hrs      = rhh & 31
         fps = ['24','25','29.97','30'][rateflag]
         # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60) //  TODO: goes to frame 0 in tc, non existent frame, changed to tc 0:0:0:0 = frame 1
-        return CTimecode('{}:{}:{}:{}'.format(hrs, mins, secs, frs), framerate=fps)
+        decoded = CTimecode('{}:{}:{}:{}'.format(hrs, mins, secs, frs), framerate=fps)
+        # Route through 24h-wrap detection so main_tc stays monotonic past 24h.
+        # See _apply_24h_offset docstring for heuristic details (closes 869cpdbzy).
+        return self._apply_24h_offset(decoded)
 
     def __mtc_decode_full_frame(self, full_frame_bytes):
         mtc_bytes = full_frame_bytes[5:-1]

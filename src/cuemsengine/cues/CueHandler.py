@@ -140,16 +140,16 @@ class CueHandler:
 
         prewait/postwait are always CTimecode (format_timecode returns
         CTimecode() for None/empty). CTimecode(0) is truthy but
-        .milliseconds_rounded returns 0.
+        .milliseconds_exact returns 0.0.
         """
-        pre = cue.prewait.milliseconds_rounded
-        post = cue.postwait.milliseconds_rounded
+        pre = cue.prewait.milliseconds_exact
+        post = cue.postwait.milliseconds_exact
 
         if isinstance(cue, CueList):
             body = 0  # container — duration is its contents
         elif isinstance(cue, (AudioCue, VideoCue)):
             try:
-                body = CTimecode(cue.media.duration).milliseconds_rounded if cue.media else 0
+                body = CTimecode(cue.media.duration).milliseconds_exact if cue.media else 0
             except Exception:
                 body = 0
         elif isinstance(cue, DmxCue):
@@ -412,7 +412,9 @@ class CueHandler:
                 return
 
         if frozen_mtc_ms is None:
-            frozen_mtc_ms = float(mtc.main_tc.milliseconds_rounded)
+            # GO-time MTC capture is used by BaseEngine.timecode = mtc - go_offset
+            # for drift measurement; _exact preserves sub-ms precision at NTSC.
+            frozen_mtc_ms = mtc.main_tc.milliseconds_exact
             Logger.debug(f'Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms')
 
         if cue._local:
@@ -482,11 +484,16 @@ class CueHandler:
     # Action Cue Execution (delegates to ActionHandler)
     # ---------------------------
 
-    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+    def execute_action(
+        self,
+        cue: ActionCue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float | None = None,
+    ) -> dict:
         """Execute an ActionCue against the running show (see ActionHandler)."""
         from .ActionHandler import ACTION_HANDLER
 
-        return ACTION_HANDLER.execute_action(cue, mtc)
+        return ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
 
     def register_action_hook(
         self,

@@ -55,6 +55,7 @@ class ActionHookContext:
     target_id: str | None
     outcome: dict | None = None
     cue_handler: Any = None
+    frozen_mtc_ms: float | None = None
 
 
 class ActionHandler:
@@ -195,7 +196,12 @@ class ActionHandler:
 
     # ---- main dispatch ----
 
-    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+    def execute_action(
+        self,
+        cue: ActionCue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float | None = None,
+    ) -> dict:
         action_type = cue.action_type
         target = cue._action_target_object
 
@@ -225,6 +231,7 @@ class ActionHandler:
             target_id=target_id,
             outcome=None,
             cue_handler=self._cue_handler,
+            frozen_mtc_ms=frozen_mtc_ms,
         )
 
         # before_dispatch hooks
@@ -249,7 +256,7 @@ class ActionHandler:
         ch = self._cue_handler
 
         def run_default() -> dict:
-            return handler(ch, cue, target, mtc, None)
+            return handler(ch, cue, target, mtc, frozen_mtc_ms)
 
         def apply_wraps() -> dict:
             inner: Callable[[], dict] = run_default
@@ -358,7 +365,7 @@ def _handle_play(
         )
     target._stop_requested = False
     try:
-        ch.go(target, mtc)
+        ch.go(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result(
             "failed", "play", target_id, str(exc)
@@ -451,7 +458,7 @@ def _handle_fade_in(
             "failed", "fade_in", target_id, "Target could not be armed"
         )
     target._stop_requested = False
-    ch.go(target, mtc)
+    ch.go(target, mtc, frozen_mtc_ms)
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
@@ -623,7 +630,9 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
     )
 
 
-_ACTION_HANDLERS: dict[str, Callable[[Any, Any, Cue, MtcListener, "float | None"], dict]] = {
+_ACTION_HANDLERS: dict[
+    str, Callable[[Any, Any, Cue, MtcListener, "float | None"], dict]
+] = {
     "play": _handle_play,
     "pause": _handle_pause,
     "stop": _handle_stop,

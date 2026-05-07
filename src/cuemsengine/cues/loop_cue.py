@@ -113,8 +113,10 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                 cue._start_mtc = CTimecode(framerate=cue._end_mtc.framerate, frames=cue._end_mtc.frames)
                 cue._end_mtc = cue._start_mtc + duration
 
-                offset_to_go = float(-cue._start_mtc.milliseconds_rounded)
-                
+                # Drift-sensitive: use _exact (float) rather than _rounded (int)
+                # to preserve sub-ms precision at NTSC framerates (29.97/23.976).
+                offset_to_go = -cue._start_mtc.milliseconds_exact
+
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_to_go} (MTC={mtc.main_tc.milliseconds_rounded}ms, _start_mtc={cue._start_mtc.milliseconds_rounded}ms, _end_mtc={cue._end_mtc.milliseconds_rounded}ms)')
 
                 try:

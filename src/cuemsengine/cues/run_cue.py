@@ -33,10 +33,16 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @run_cue.register
 def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """Run an ActionCue by delegating to ActionHandler.execute_action."""
+    """Run an ActionCue by delegating to ActionHandler.execute_action.
+
+    Forwards frozen_mtc_ms so a chained 'play' action triggered inside a
+    post_go='go' chain preserves the chain's MTC snapshot — without it,
+    ActionCue-mediated chains capture live MTC inside CueHandler.go and
+    drift relative to the chain's other cues.
+    """
     from .ActionHandler import ACTION_HANDLER
 
-    ACTION_HANDLER.execute_action(cue, mtc)
+    ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
 
 
 @run_cue.register
@@ -54,26 +60,33 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'AudioCue {cue.id} using frozen MTC: {mtc_ms}ms')
+        # Frozen path: only have a float ms snapshot (CueHandler captured it
+        # before this point); reconstruct via canonicalized __init__ which
+        # routes through HMSF + tc_to_frames, drop-frame correct.
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds_rounded)
-    
-    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
+        # Live MTC path: frame-domain construction skips the lossy
+        # ms→seconds→frames round-trip entirely (mirrors loop_cue.py:107,224).
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+
     # Convert duration to MTC framerate to prevent drift when looping
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
-    
+
     # Audio player formula: file_position = MTC + offset
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-    offset_to_go = float(-cue._start_mtc.milliseconds_rounded)
+    offset_to_go = -cue._start_mtc.milliseconds_exact
     
-    # Try to connect player to mixer based on cue output settings
+    # Verify mixer graph; only repair if drifted. Arm already wired it; the
+    # unconditional reconnect at GO costs ~21-28 ms (measured) without
+    # touching the audio path.
     try:
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
             uuid_slug = ''.join(str(cue.id).split('-'))
             # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
             player_name = f'Audio_Player-{uuid_slug}'
-            
+
             # Resolve JACK port names from cue output IDs via audio output lookup
             selected_outputs = []
             if hasattr(cue, 'outputs') and cue.outputs:
@@ -86,17 +99,39 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                             selected_outputs.append(port_name)
                         else:
                             selected_outputs.append(output_id)
-            
+
             Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
-            
-            # Connect based on selected outputs
-            mixer.connect_player_to_outputs(
+
+            # If the player's outport 0 is missing, the subprocess died between
+            # arm and GO. connect_player_to_outputs would block 15 s in its
+            # port-wait loop before failing; abort fast instead.
+            channel_0 = f'{player_name}:outport 0'
+            if not mixer.conn_man.port_exists(channel_0):
+                Logger.error(
+                    f"Audio cue {cue.id}: player JACK ports missing at GO "
+                    f"({channel_0}); subprocess likely crashed between arm "
+                    f"and GO. Aborting cue."
+                )
+                return
+
+            if mixer.player_connections_correct(
                 player_name=player_name,
                 player_output_prefix='outport',
-                selected_outputs=selected_outputs
-            )
+                selected_outputs=selected_outputs,
+            ):
+                Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
+            else:
+                Logger.warning(
+                    f"Audio cue {cue.id}: graph not wired correctly at GO; "
+                    f"repairing via connect_player_to_outputs"
+                )
+                mixer.connect_player_to_outputs(
+                    player_name=player_name,
+                    player_output_prefix='outport',
+                    selected_outputs=selected_outputs,
+                )
     except Exception as e:
-        Logger.warning(f"Could not connect player to mixer: {e}")
+        Logger.warning(f"Could not validate/connect player to mixer: {e}")
     
     # Define the offset - use MTC framerate for consistent timing with video
     try:
@@ -161,26 +196,27 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         if frozen_mtc_ms is not None:
             mtc_ms = frozen_mtc_ms
             Logger.debug(f'DmxCue {cue.id} using frozen MTC: {mtc_ms}ms')
+            # Frozen path: only have a float ms snapshot; canonicalized
+            # __init__ routes through HMSF + tc_to_frames.
+            cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
         else:
-            mtc_ms = float(mtc.main_tc.milliseconds_rounded)
-        
-        # Calculate MTC timing - use explicit framerate for consistency
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
-        
+            # Live MTC path: frame-domain construction (no round-trip loss).
+            cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+
         # DMX cues have no media - duration is inferred from fade times
         # Duration = fadein_time + fadeout_time (both in milliseconds)
         fadein_ms = getattr(cue, 'fadein_time', 0)
         fadeout_ms = getattr(cue, 'fadeout_time', 0)
         duration_ms = fadein_ms + fadeout_ms
-        
+
         # Convert duration to timecode format with explicit framerate
         duration_seconds = duration_ms / 1000.0
         duration = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=duration_seconds)
         cue._end_mtc = cue._start_mtc + duration
-        
+
         # Absolute MTC time for this cue (ms). DMX player expects mtc_time as absolute
         # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead, time).
-        offset_milliseconds = cue._start_mtc.milliseconds_rounded
+        offset_milliseconds = cue._start_mtc.milliseconds_exact
         mtc_time_str = f"0:0:{offset_milliseconds / 1000.0}"
         
         # Get DMX frame data from the cue
@@ -245,10 +281,12 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f'VideoCue {cue.id} using frozen MTC: {mtc_ms}ms')
+        # Frozen path: float ms snapshot; canonicalized __init__ handles it.
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     else:
-        mtc_ms = float(mtc.main_tc.milliseconds_rounded)
+        # Live MTC path: frame-domain construction (no round-trip loss).
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
 
-    cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=mtc_ms/1000)
     duration = CTimecode(cue.media.duration).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
@@ -266,14 +304,16 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         if index < len(output_names):
             output_name = output_names[index]
             try:
-                output = PLAYER_HANDLER.get_video_output(output_name)
+                output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f'{layer_path}/position', [x, y])
                 sx, sy = output.get_layer_scale()
                 if sx != 1.0 or sy != 1.0:
                     client.set_value(f'{layer_path}/scale', [sx, sy])
-            except (KeyError, Exception) as e:
+            except (KeyError, RuntimeError, ValueError) as e:
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
+            except Exception:
+                Logger.exception(f'Unexpected error re-applying position for layer {layer_id} (output "{output_name}")')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
         # Send mtcfollow before visible so the videocomposer loads the

@@ -474,7 +474,8 @@ def test_run_cue_fade_cue_resolves_to_run_actionCue():
     mtc = _make_mtc()
     with patch("cuemsengine.cues.ActionHandler.ACTION_HANDLER") as mock_ah:
         run_cue(cue, mtc)
-        mock_ah.execute_action.assert_called_once_with(cue, mtc)
+        # rc_1 threads frozen_mtc_ms through execute_action; default is None.
+        mock_ah.execute_action.assert_called_once_with(cue, mtc, None)
 
 
 # ---------------------------------------------------------------------------
