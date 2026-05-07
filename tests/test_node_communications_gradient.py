@@ -153,14 +153,14 @@ class TestGradientStatusDiscarded:
 
 class TestGradientEngineSendMethods:
     def test_send_fade_command_wraps_body_with_envelope(self):
-        """send_fade_command injects command, fade_id, osc_host, curve_params."""
+        """send_fade_command injects command, fade_id, node_name, osc_host, curve_params."""
         comms, _ = _build_comms()
         body = {
             "osc_port": 12345,
             "osc_path": "/volmaster",
             "start_value": 0.5,
-            "target_value": 80,
-            "start_time": 1234,
+            "end_value": 0.8,
+            "start_mtc_ms": 1234,
             "duration_ms": 3000,
             "curve_type": "linear",
         }
@@ -172,18 +172,19 @@ class TestGradientEngineSendMethods:
             assert op.target == "gradientengine"
             assert op.data["command"] == "start_fade"
             assert op.data["fade_id"] == "my-fade-uuid"
+            assert op.data["node_name"] == comms.node_id
             assert op.data["osc_host"] == "127.0.0.1"
             assert op.data["curve_params"] == {}
             # body fields preserved
             assert op.data["osc_port"] == 12345
             assert op.data["osc_path"] == "/volmaster"
-            assert op.data["target_value"] == 80
-            assert op.data["start_time"] == 1234
+            assert op.data["end_value"] == 0.8
+            assert op.data["start_mtc_ms"] == 1234
             assert op.data["duration_ms"] == 3000
             assert op.data["curve_type"] == "linear"
 
     def test_send_cancel_all_builds_correct_operation(self):
-        """send_cancel_all sends COMMAND/UPDATE with command='cancel_all'."""
+        """send_cancel_all sends COMMAND/UPDATE with command='cancel_all' + node_name."""
         comms, _ = _build_comms()
         with patch.object(comms, "send_operation") as mock_send:
             comms.send_cancel_all()
@@ -192,3 +193,4 @@ class TestGradientEngineSendMethods:
             assert op.type == OperationType.COMMAND
             assert op.target == "gradientengine"
             assert op.data.get("command") == "cancel_all"
+            assert op.data.get("node_name") == comms.node_id
