@@ -1,18 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "fade_command",
-  "title": "FadeCommand NNG payload",
-  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope. The payload is built in two layers: ActionHandler._build_fade_payload returns a list[dict] (1 entry for AudioCue, N entries for VideoCue — one per layer in _layer_ids); NodeCommunications.send_fade_command is called once per dict, injecting envelope fields (command, fade_id, osc_host, curve_params). For VideoCue dispatches, fade_id is suffixed with the layer_id (f'{base_uuid}_{layer_id}') so gradient-motiond tracks per-layer completion.",
+  "title": "FadeCommand NNG payload (start_fade)",
+  "description": "JSON payload sent inside NodeOperation.data when dispatching a fade to gradient-motiond. target='gradientengine' on the NodeOperation envelope. The payload is built in two layers: ActionHandler._build_fade_payload returns a list[dict] (1 entry for AudioCue, N entries for VideoCue — one per layer in _layer_ids); NodeCommunications.send_fade_command is called once per dict, injecting envelope fields (command, fade_id, node_name, osc_host, curve_params). For VideoCue dispatches, fade_id is suffixed with the layer_id (f'{base_uuid}_{layer_id}') so gradient-motiond tracks per-layer completion. CANONICAL TRUTH: gradient-motion-engine src/signal/FadeCommand.cpp parseStartFade — field names, types, and required-set must match exactly or the daemon rejects the message (MissingField/TypeError/NodeMismatch/MalformedJson) and silently drops it (DropSilent for NodeMismatch). cancel_all uses the same envelope filter and so also requires node_name; see cancel_all.json once added.",
   "type": "object",
   "required": [
     "command",
     "fade_id",
+    "node_name",
     "osc_host",
     "osc_port",
     "osc_path",
     "start_value",
-    "target_value",
-    "start_time",
+    "end_value",
+    "start_mtc_ms",
     "duration_ms",
     "curve_type",
     "curve_params"
@@ -21,12 +22,17 @@
     "command": {
       "type": "string",
       "const": "start_fade",
-      "description": "Envelope. Discriminator: gradient-motiond dispatches on this field. Injected by send_fade_command."
+      "description": "Envelope. Discriminator: parseFadeCommand dispatches on this field. Injected by send_fade_command."
     },
     "fade_id": {
       "type": "string",
       "minLength": 1,
       "description": "Envelope. Controller-assigned unique identifier. AudioCue: str(FadeCue.uuid). VideoCue: f'{str(FadeCue.uuid)}_{layer_id}' (one per layer). Injected by send_fade_command via the fade_id kwarg."
+    },
+    "node_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Envelope. Target node identifier — must equal gradient-motiond's --node-name (defaults to gethostname()). parseFadeCommand returns NodeMismatch and silently drops the message if data.node_name != ownNodeName. Injected by send_fade_command as self.node_id."
     },
     "osc_host": {
       "type": "string",
@@ -47,18 +53,20 @@
     },
     "start_value": {
       "type": "number",
-      "description": "Body. Initial level read from target_cue's Ossia node cache at dispatch time via target_cue._osc.get_value(osc_path). Native scale (0.0–1.0 for /volmaster and opacity)."
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Body. Initial level read from target_cue's Ossia node cache at dispatch time via target_cue._osc.get_value(osc_path). OSC native scale 0.0–1.0 for /volmaster and opacity."
     },
-    "target_value": {
+    "end_value": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Body. Target level on OSC scale 0.0–1.0. Computed as float(FadeCue.target_value) / 100.0 — Python normalises the FadeCue UI scale (0–100 integer) before the wire. gradient-motiond forwards this value to OSC verbatim with no further unit conversion (FadeMotion::evalAndSend uses end_value as-is)."
+    },
+    "start_mtc_ms": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 100,
-      "description": "Body. Target level on the FadeCue's UI scale (0–100). NOT normalised to 0.0–1.0; gradient-motiond is responsible for any unit conversion."
-    },
-    "start_time": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Body. MTC clock value in integer milliseconds at the moment of dispatch. Computed as mtc.main_tc.milliseconds_rounded. Used by gradient-motiond to synchronise curve evaluation to the show timecode."
+      "description": "Body. MTC clock value in integer milliseconds at the moment of dispatch. Anchored to the cue's frozen_mtc_ms snapshot when available so the fade aligns with audio/video cues firing in the same GO; falls back to mtc.main_tc.milliseconds_rounded. Used by gradient-motiond to synchronise curve evaluation to the show timecode."
     },
     "duration_ms": {
       "type": "integer",
