@@ -517,7 +517,10 @@ def _handle_fade_action(
             f"Target cue {target_id} could not be armed"
         )
 
-    start_mtc_ms = mtc.timecode.milliseconds_rounded
+    if frozen_mtc_ms is not None:
+        start_mtc_ms = int(frozen_mtc_ms)
+    else:
+        start_mtc_ms = mtc.main_tc.milliseconds_rounded
 
     try:
         payloads = _build_fade_payload(target, action_cue, start_mtc_ms, fade_id)
