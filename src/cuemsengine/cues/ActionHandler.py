@@ -249,7 +249,7 @@ class ActionHandler:
         ch = self._cue_handler
 
         def run_default() -> dict:
-            return handler(ch, target, mtc)
+            return handler(ch, cue, target, mtc, None)
 
         def apply_wraps() -> dict:
             inner: Callable[[], dict] = run_default
@@ -330,11 +330,21 @@ class ActionHandler:
 
 
 # ---------------------------------------------------------------------------
-# Per-action handlers (module-level; signature: (cue_handler, target, mtc))
+# Per-action handlers (module-level; signature: (cue_handler, action_cue, target, mtc, frozen_mtc_ms))
+#
+# action_cue is the originating ActionCue/FadeCue (cue.action_type drives dispatch);
+# target is the resolved cue._action_target_object. Most handlers only need target;
+# fade_action needs both (action_cue carries fade params, target is what gets faded).
 # ---------------------------------------------------------------------------
 
 
-def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_play(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(
@@ -356,7 +366,13 @@ def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "play", target_id)
 
 
-def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_pause(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -366,7 +382,13 @@ def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "pause", target_id)
 
 
-def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_stop(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -380,7 +402,13 @@ def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
-def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_enable(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if target.enabled:
         return ActionHandler._action_result(
@@ -390,7 +418,13 @@ def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "enable", target_id)
 
 
-def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_disable(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(
@@ -400,7 +434,13 @@ def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "disable", target_id)
 
 
-def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_in(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
@@ -415,7 +455,13 @@ def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
-def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_out(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to stop.
     # Also has the same zombie-process bug as the old stop handler:
     # bumps _go_generation but does not call disarm(), so player processes
@@ -427,7 +473,13 @@ def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "fade_out", target_id)
 
 
-def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_go_to(
+    ch: Any,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement seek/position navigation; currently only arms the target
     Logger.info("go_to only arms target (seek not yet implemented)")
     target_id = target.id
@@ -435,29 +487,31 @@ def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
         ch.arm(target, init=True)
     return ActionHandler._action_result("applied", "go_to", target_id)
 
-def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
-    """Execute a FadeCue: arm target_cue if needed, dispatch FadeCommand, set _end_mtc.
 
-    The handler MUST NOT disarm target_cue, set _fade_initial_volume, or call
-    ch.go(target_cue, mtc) — the target_cue is expected to be already playing.
-    The FadeCue itself is held in the cue runner by loop_fadeCue until _end_mtc.
+def _handle_fade_action(
+    ch: Any,
+    action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    """Execute a FadeCue: arm target if needed, dispatch FadeCommand, set _end_mtc.
+
+    action_cue is the FadeCue (curve_type, target_value, duration). target is the
+    resolved AudioCue/VideoCue that will be faded. The handler MUST NOT disarm
+    target, set _fade_initial_volume, or call ch.go(target, mtc) — target is
+    expected to be already playing. The FadeCue itself is held in the cue runner
+    by loop_fadeCue until _end_mtc.
     """
     from cuemsutils.tools.CTimecode import CTimecode
 
-    target_cue = cue._action_target_object
-    target_id = getattr(target_cue, "id", None)
-    fade_id = str(cue.id)
+    target_id = getattr(target, "id", None)
+    fade_id = str(action_cue.id)
 
-    if target_cue is None:
-        return ActionHandler._action_result(
-            "failed", "fade_action", target_id,
-            f"FadeCue {fade_id} has no resolved action_target_object"
-        )
-
-    # Arm target_cue via general cue logic (no envelope-from-silence here).
-    if not getattr(target_cue, "loaded", False):
-        ch.arm(target_cue, init=True)
-    if not getattr(target_cue, "loaded", False):
+    # Arm target via general cue logic (no envelope-from-silence here).
+    if not getattr(target, "loaded", False):
+        ch.arm(target, init=True)
+    if not getattr(target, "loaded", False):
         return ActionHandler._action_result(
             "failed", "fade_action", target_id,
             f"Target cue {target_id} could not be armed"
@@ -466,16 +520,16 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
     start_time = mtc.timecode.milliseconds_rounded
 
     try:
-        payloads = _build_fade_payload(target_cue, cue, start_time, fade_id)
+        payloads = _build_fade_payload(target, action_cue, start_time, fade_id)
     except ValueError as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
         )
 
     # Dispatch ALL entries before mutating anything. If any NNG send fails the
-    # target_cue / FadeCue state must remain unchanged. Failure of one layer
-    # aborts the rest — the partial dispatch will be cleared by the next
-    # CANCEL_ALL (project stop or load).
+    # target / FadeCue state must remain unchanged. Failure of one layer aborts
+    # the rest — the partial dispatch will be cleared by the next CANCEL_ALL
+    # (project stop or load).
     for entry in payloads:
         entry_fade_id = entry.pop("fade_id")
         try:
@@ -483,7 +537,7 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
         except Exception as exc:
             Logger.error(
                 f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed "
-                f"(target_cue={target_id} fade_id={entry_fade_id} "
+                f"(target={target_id} fade_id={entry_fade_id} "
                 f"osc={entry['osc_path']}): {exc}"
             )
             return ActionHandler._action_result(
@@ -494,13 +548,13 @@ def _handle_fade_action(ch: Any, cue: Any, mtc: MtcListener) -> dict:
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
     framerate = mtc.main_tc.framerate
-    cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_time / 1000.0)
-    cue._end_mtc = cue._start_mtc + cue.duration.return_in_other_framerate(framerate)
+    action_cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_time / 1000.0)
+    action_cue._end_mtc = action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
 
     Logger.info(
         f"FadeCue {fade_id}: dispatched {len(payloads)} start_fade(s) "
-        f"target_cue={target_id} target_value={cue.target_value} "
-        f"duration={cue.duration.milliseconds_rounded}ms"
+        f"target={target_id} target_value={action_cue.target_value} "
+        f"duration={action_cue.duration.milliseconds_rounded}ms"
     )
     return ActionHandler._action_result("applied", "fade_action", target_id)
 
@@ -560,7 +614,7 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_time: int,
     )
 
 
-_ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
+_ACTION_HANDLERS: dict[str, Callable[[Any, Any, Cue, MtcListener, "float | None"], dict]] = {
     "play": _handle_play,
     "pause": _handle_pause,
     "stop": _handle_stop,
