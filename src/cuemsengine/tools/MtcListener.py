@@ -46,12 +46,24 @@ class MtcListener(Thread):
     def _apply_24h_offset(self, decoded: CTimecode) -> CTimecode:
         """Detect 24h MTC rollover and apply accumulated offset.
 
-        Heuristic: a decoded TC whose frames count is more than 1 hour LESS
-        than the previous decoded TC is treated as a 24h wrap (real SMPTE
-        senders cannot manually seek that far backward in installations).
-        For environments with manual seeking, deltas under 1h are treated as
-        seeks (no offset accumulated; existing reset detection still fires
-        when main_tc.milliseconds_rounded reaches 0).
+        Heuristic: a real 24h wrap goes from 23:59:59:F (frames ≈ 24h - 1f)
+        to 00:00:00:00 (frames ≈ 0). We treat a backward jump as a 24h wrap
+        only when both:
+        - delta < -1h (large backward jump, not a small seek), AND
+        - prev_frames was within the last hour of the 24h boundary.
+
+        The second condition is critical: without it, a manual seek back to
+        00:00:00:00 from ANY high-watermark MTC time (e.g. after the engine
+        has been running for 4h and the user reloads a project, which sends
+        a Full-Frame SYSEX SEEK to frame 0) is mistakenly treated as a 24h
+        wrap, adding a phantom 2,160,000-frame offset that corrupts every
+        downstream timestamp (cue offsets become -2160k, video layers try
+        to seek to frame -2.5M of a 300-frame clip, layers stay in
+        awaitingFrame forever, monitor goes black).
+
+        For environments with manual seeking, deltas under 1h are treated
+        as seeks (no offset accumulated; existing reset detection still
+        fires when main_tc.milliseconds_rounded reaches 0).
 
         Returns the offset-adjusted CTimecode (or the original if no offset
         is active).
@@ -59,14 +71,25 @@ class MtcListener(Thread):
         if self._last_decoded_frames is not None:
             delta = decoded.frames - self._last_decoded_frames
             frames_per_hour = decoded._int_framerate * 3600
-            if delta < -frames_per_hour:
-                self._24h_offset_frames += decoded._int_framerate * 86400
+            frames_per_24h = decoded._int_framerate * 86400
+            near_24h_boundary = (
+                self._last_decoded_frames > frames_per_24h - frames_per_hour
+            )
+            if delta < -frames_per_hour and near_24h_boundary:
+                self._24h_offset_frames += frames_per_24h
                 Logger.info(
                     f'MtcListener: detected 24h MTC rollover '
                     f'(prev frames={self._last_decoded_frames}, '
                     f'new={decoded.frames}, delta={delta}); '
                     f'accumulated offset = {self._24h_offset_frames} frames '
                     f'({self._24h_offset_frames / decoded._int_framerate / 3600:.1f}h)'
+                )
+            elif delta < -frames_per_hour:
+                Logger.info(
+                    f'MtcListener: large backward MTC jump ignored as '
+                    f'manual seek (prev frames={self._last_decoded_frames}, '
+                    f'new={decoded.frames}, delta={delta}); not a 24h wrap '
+                    f'(prev < {frames_per_24h - frames_per_hour})'
                 )
         self._last_decoded_frames = decoded.frames
 
@@ -90,7 +113,7 @@ class MtcListener(Thread):
             if self.step_callback != None and self.reset_callback != None:
                 self.reset_callback()
         if self.step_callback != None:
-            self.step_callback(self.main_tc) 
+            self.step_callback(self.main_tc)
 
     def __open_port(self, port):
         # HEADLESS/CLOUD: get_input_names() can throw when no MIDI subsystem is
