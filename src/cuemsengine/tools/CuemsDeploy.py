@@ -180,7 +180,13 @@ class CuemsDeploy():
         try:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             with open(log_file, 'w') as f:
-                f.writelines(file_names)
+                # rsync --files-from is one path per line. Callers may or
+                # may not include the trailing newline; normalize so the
+                # file is never silently a single mashed string.
+                for name in file_names:
+                    if not name.endswith('\n'):
+                        name = name + '\n'
+                    f.write(name)
         except Exception as e:
             Logger.error(f'Exception raised when writing rsync request log file: {e}')
             return False

@@ -675,20 +675,27 @@ class NodeEngine(BaseEngine):
         if not self.script:
             Logger.error('No script loaded')
             return False
-        file_names = self.script.get_own_media_filenames(config=self.cm)
-        if len(file_names) == 0:
+        bare_names = self.script.get_own_media_filenames(config=self.cm)
+        if len(bare_names) == 0:
             Logger.info('No media files to deploy')
             return True
-        # Also include .idx sidecar files for video assets (rsync silently
-        # skips any entry that does not exist on the source, so this is safe
-        # even when the index has not been created yet).
+        # The rsync module 'cuems' maps to /opt/cuems_library on the
+        # controller. Media files live in <module>/media/<name>; their
+        # .idx sidecars live in <module>/media/indexes/<name>.idx.
+        # get_own_media_filenames returns the bare filename, so we
+        # prepend the module-relative path here.
+        # Also include .idx sidecar files for video assets — rsync with
+        # --ignore-missing-args silently skips entries that don't exist
+        # on the source, so this is safe even when the index hasn't been
+        # created yet.
         video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
-        idx_names = [
-            f'indexes/{name}.idx'
-            for name in file_names
+        media_entries = [f'media/{name}' for name in bare_names]
+        idx_entries = [
+            f'media/indexes/{name}.idx'
+            for name in bare_names
             if os.path.splitext(name)[1].lower() in video_exts
         ]
-        if not self.deploy_manager.sync_files(project, 'media', file_names + idx_names):
+        if not self.deploy_manager.sync_files(project, 'media', media_entries + idx_entries):
             Logger.error(
                 f'Media deploy failed for {project} — continuing with cached '
                 f'files; cues whose media is missing locally will fail on GO'
