@@ -523,8 +523,14 @@ class NodeEngine(BaseEngine):
     # Project logic
     #########################
     def ready_project(self, project):
-        """Prepare the project to be played"""
-        self.deploy_project(project)
+        """Prepare the project to be played.
+
+        deploy_project() runs in _load_project_inner BEFORE this point,
+        before the teardown of the previous project — so that a deploy
+        failure aborts the load without destroying running state.
+        Media deploy runs here because it is best-effort: a failure
+        logs but does not abort (cached media may already be on disk).
+        """
         self.cm.load_project_config(project)
         self.read_script(project)
         self.deploy_media(project)
@@ -568,7 +574,19 @@ class NodeEngine(BaseEngine):
         # Don't allow loading while script is running
         if self.get_status('running') == "yes":
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
-            return
+            return False
+
+        # Deploy the critical project files (script.xml, mappings.xml,
+        # settings.xml) BEFORE tearing down the previous project. If the
+        # controller is unreachable we abort here with the previous
+        # project still armed and usable — better than ending up with
+        # everything stopped and no new project loaded.
+        if not self.deploy_project(project):
+            Logger.error(
+                f'Project deploy FAILED for {project} — aborting load; '
+                f'previous project remains unchanged'
+            )
+            return False
 
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
@@ -639,18 +657,28 @@ class NodeEngine(BaseEngine):
         return True
 
     def deploy_project(self, project):
-        """Deploy the project files to the node"""
-        self.deploy_manager.sync_files(project, 'project')
+        """Deploy the project files (script.xml, mappings.xml, settings.xml).
+
+        Critical path: if these fail to sync, the local copy may be stale
+        and arming cues against it is unsafe. Caller is expected to abort
+        the load on False.
+        """
+        return self.deploy_manager.sync_files(project, 'project')
 
     def deploy_media(self, project):
-        """Deploy the media files (and their .idx sidecar indexes) to the node"""
+        """Deploy the media files (and their .idx sidecar indexes).
+
+        Best-effort: a failure here is recoverable if media is already
+        cached on disk. Returns False to surface the failure to logs,
+        but the caller continues the load.
+        """
         if not self.script:
             Logger.error('No script loaded')
-            return
+            return False
         file_names = self.script.get_own_media_filenames(config=self.cm)
         if len(file_names) == 0:
             Logger.info('No media files to deploy')
-            return
+            return True
         # Also include .idx sidecar files for video assets (rsync silently
         # skips any entry that does not exist on the source, so this is safe
         # even when the index has not been created yet).
@@ -660,7 +688,13 @@ class NodeEngine(BaseEngine):
             for name in file_names
             if os.path.splitext(name)[1].lower() in video_exts
         ]
-        self.deploy_manager.sync_files(project, 'media', file_names + idx_names)
+        if not self.deploy_manager.sync_files(project, 'media', file_names + idx_names):
+            Logger.error(
+                f'Media deploy failed for {project} — continuing with cached '
+                f'files; cues whose media is missing locally will fail on GO'
+            )
+            return False
+        return True
 
     def ensure_video_indexes(self):
         """Run cuems-videoindexer on any video files that are missing a .idx sidecar.
