@@ -60,6 +60,13 @@ class CuemsDeploy():
 
     def sync_files(self, project, tag, file_names=[]):
         """Sync the files from the controller to the node"""
+        if not self.enabled:
+            Logger.error(
+                f'CuemsDeploy is disabled (no controller IP) — '
+                f'skipping {tag} sync for project {project!r}'
+            )
+            return False
+
         if tag == 'project' and len(file_names) == 0:
             file_names = self._project_files(project)
         log_file = self._deploy_log_path(project, tag)
@@ -69,7 +76,10 @@ class CuemsDeploy():
         if synced:
             self._reset_deploy_log(log_file)
         else:
-            Logger.error(f'Failed to sync files from {log_file}')
+            Logger.error(
+                f'Failed to sync {tag} files for project {project!r} '
+                f'from {self.address} (log: {log_file})'
+            )
             for error in self.errors:
                 Logger.error(error)
         return synced
@@ -94,13 +104,21 @@ class CuemsDeploy():
             return None
 
     def _sync(self, path):
-        #rsync -rv --files-from=/opt/cuems_library/files.tmp --log-file=/tmp/cuems_rsync.log rsync://master.local/cuems /opt/cuems_library/
+        # --contimeout=2 caps the TCP connect attempt (was the source of the
+        #   ~6s getaddrinfo hangs).
+        # --timeout=5 is the rsync I/O inactivity timeout — bounded per-syscall,
+        #   not total transfer time, so multi-GB media still completes as long
+        #   as the stream is flowing.
+        # subprocess.run(timeout=15) is a Python-level backstop in case rsync
+        #   hangs before processing its own flags (e.g. inside getaddrinfo).
         try:
             result = subprocess.run(
                 [
                     'rsync',
                     '-rq',
                     '--stats',
+                    '--contimeout=2',
+                    '--timeout=5',
                     f'--files-from={path}',
                     f'--log-file={self.log_file}',
                     self.address,
@@ -108,7 +126,8 @@ class CuemsDeploy():
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=dict(os.environ, RSYNC_PASSWORD="f48t5eL2kLHw2Wfw")
+                env=dict(os.environ, RSYNC_PASSWORD="f48t5eL2kLHw2Wfw"),
+                timeout=15,
             )
             result.check_returncode()
             self.errors = []
@@ -118,8 +137,14 @@ class CuemsDeploy():
 
             #convert lines to list and remove last line (final error menssage)
             errors_list = errors_string.splitlines()
-            errors_list.pop()
+            if errors_list:
+                errors_list.pop()
             self.errors = errors_list
+            return False
+        except subprocess.TimeoutExpired:
+            self.errors = [
+                f'rsync timed out after 15s (target: {self.address})'
+            ]
             return False
 
     def _deploy_log_path(self, project, tag = 'project'):
