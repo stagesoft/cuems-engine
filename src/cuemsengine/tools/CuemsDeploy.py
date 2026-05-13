@@ -15,7 +15,7 @@ class CuemsDeploy():
             tmp_path = '/tmp/cuems_library/',
             controller_ip: str | None = None,
             hostname: str | None = None,
-            log_file: str = '/tmp/cuems_rsync.log',
+            log_file: str = '/run/cuems/rsync.log',
         ):
         """Construct a deploy manager.
 
@@ -104,6 +104,14 @@ class CuemsDeploy():
             return None
 
     def _sync(self, path):
+        # Ensure the log directory exists. /run/cuems is normally created
+        # by systemd RuntimeDirectory=, but the cuems user may write
+        # nested files into it on demand.
+        try:
+            os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+        except OSError as e:
+            Logger.warning(f'Could not create rsync log directory: {e}')
+
         # --contimeout=2 caps the TCP connect attempt (was the source of the
         #   ~6s getaddrinfo hangs).
         # --timeout=5 is the rsync I/O inactivity timeout — bounded per-syscall,
