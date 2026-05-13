@@ -73,7 +73,8 @@ class NodeEngine(BaseEngine):
             )
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
-                tmp_path=self.cm.tmp_path
+                tmp_path=self.cm.tmp_path,
+                controller_ip=self.controller_ip,  # set by BaseEngine.set_cm()
             )
             PLAYER_HANDLER.add_media_folder(
                 self.cm.library_path

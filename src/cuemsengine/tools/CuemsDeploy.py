@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 import subprocess
 import sys
 import os
@@ -9,19 +13,51 @@ class CuemsDeploy():
             self,
             library_path = '/opt/cuems_library/',
             tmp_path = '/tmp/cuems_library/',
-            hostname = CONTROLLER_HOST,
-            log_file = '/tmp/cuems_rsync.log'
+            controller_ip: str | None = None,
+            hostname: str | None = None,
+            log_file: str = '/tmp/cuems_rsync.log',
         ):
+        """Construct a deploy manager.
+
+        Args:
+            controller_ip: IP of the controller's rsync daemon (preferred).
+                Pass BaseEngine.controller_ip, already resolved from
+                network_map.xml. If falsy, manager runs disabled —
+                sync_files() returns False without invoking rsync.
+            hostname: Legacy fallback. Resolved via avahi when
+                controller_ip is not provided. Kept for backwards
+                compatibility with code/tests that pre-date the
+                controller_ip parameter.
+            log_file: Where rsync writes its log.
+        """
         self.library_path = library_path
         self.tmp_path = tmp_path
-        self.main_hostname = hostname
         self.log_file = log_file
         self.errors = []
         self.encoding = sys.getfilesystemencoding()
-        
-        self.main_ip = self._avahi_resolve(self.main_hostname)
-        self.address = f'rsync://cuems_library_rsync@{self.main_ip}/cuems'
-    
+
+        # TODO: reconstruct CuemsDeploy on network_map reload so an IP
+        # change (DHCP renewal, role-flip, manual XML edit) is picked up
+        # without restarting cuems-node-engine.
+        if controller_ip:
+            self.main_ip = controller_ip
+        elif hostname:
+            self.main_ip = self._avahi_resolve(hostname)
+        else:
+            self.main_ip = None
+
+        if self.main_ip:
+            self.address = f'rsync://cuems_library_rsync@{self.main_ip}/cuems'
+            self.enabled = True
+        else:
+            self.address = None
+            self.enabled = False
+            Logger.warning(
+                f'CuemsDeploy disabled: no valid controller IP '
+                f'(controller_ip={controller_ip!r}, hostname={hostname!r}, '
+                f'resolved={self.main_ip!r}). Project deploys will be skipped.'
+            )
+
     def sync_files(self, project, tag, file_names=[]):
         """Sync the files from the controller to the node"""
         if tag == 'project' and len(file_names) == 0:
@@ -40,17 +76,22 @@ class CuemsDeploy():
 
 
     def _avahi_resolve(self, hostname):
+        """Resolve a hostname via avahi-resolve-host-name.
+
+        Returns the IP string on success, or None on failure.
+        """
         try:
             result = subprocess.run(
                 ['avahi-resolve-host-name', '-n', hostname],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                timeout=5,
             )
             result.check_returncode()
             ip = result.stdout.decode(self.encoding).replace(hostname, "").strip()
-            return ip
-        except subprocess.CalledProcessError as e:
-            return False
+            return ip if ip else None
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
 
     def _sync(self, path):
         #rsync -rv --files-from=/opt/cuems_library/files.tmp --log-file=/tmp/cuems_rsync.log rsync://master.local/cuems /opt/cuems_library/
@@ -72,9 +113,9 @@ class CuemsDeploy():
             result.check_returncode()
             self.errors = []
             return True
-        except subprocess.CalledProcessError as e:            
+        except subprocess.CalledProcessError as e:
             errors_string = e.stderr.decode(self.encoding)
-            
+
             #convert lines to list and remove last line (final error menssage)
             errors_list = errors_string.splitlines()
             errors_list.pop()
@@ -88,7 +129,7 @@ class CuemsDeploy():
 
     def _create_deploy_log(self, log_file, file_names=[]):
         """Create a log file for a deploy request
-        
+
         Args:
             log_file (str): The path to the log file
             file_names (list): The list of files to deploy
@@ -113,6 +154,6 @@ class CuemsDeploy():
     def _project_files(self, project):
         return [
             '/projects/' + project + '/script.xml\n',
-            '/projects/' + project + '/mappings.xml\n', 
+            '/projects/' + project + '/mappings.xml\n',
             '/projects/' + project + '/settings.xml\n'
         ]

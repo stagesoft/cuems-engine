@@ -21,7 +21,7 @@ from ..tools.PortHandler import PORT_HANDLER
 MTC_PORT = "Midi Through Port-0"
 CONTROLLER_NETWORK_FLAG = "NodeType.master"
 SHOW_LOCK_PATH = '/tmp/cuems.show.lock'
-CONTROLLER_HOST = "localhost" #"controller.local"
+CONTROLLER_HOST = "controller.local"
 NODE_ENGINE_PORT = 10000
 
 class BaseEngine(SignalEngine):
