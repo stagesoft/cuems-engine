@@ -104,6 +104,8 @@ def test_sync_command_includes_timeout_flags(deploy, tmp_path):
         cmd = args[0]
         assert '--contimeout=2' in cmd
         assert '--timeout=5' in cmd
+        # Tolerate missing files on the source (script.xml-only projects).
+        assert '--ignore-missing-args' in cmd
         # Python-level backstop
         assert kwargs.get('timeout') == 15
 

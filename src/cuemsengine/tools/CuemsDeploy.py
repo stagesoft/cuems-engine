@@ -117,6 +117,12 @@ class CuemsDeploy():
         # --timeout=5 is the rsync I/O inactivity timeout — bounded per-syscall,
         #   not total transfer time, so multi-GB media still completes as long
         #   as the stream is flowing.
+        # --ignore-missing-args tells rsync to skip (not error on) entries from
+        #   --files-from that do not exist on the source. Projects in the
+        #   editor library hold only script.xml; the historical mappings.xml
+        #   and settings.xml entries in _project_files() are best-effort.
+        #   Real errors (network, auth, permission) still surface via the exit
+        #   code.
         # subprocess.run(timeout=15) is a Python-level backstop in case rsync
         #   hangs before processing its own flags (e.g. inside getaddrinfo).
         try:
@@ -127,6 +133,7 @@ class CuemsDeploy():
                     '--stats',
                     '--contimeout=2',
                     '--timeout=5',
+                    '--ignore-missing-args',
                     f'--files-from={path}',
                     f'--log-file={self.log_file}',
                     self.address,
