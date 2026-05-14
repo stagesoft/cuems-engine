@@ -11,6 +11,7 @@ from cuemsutils.cues import ActionCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
+from .CueHandler import CueHandler
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
 from ..tools.MtcListener import MtcListener
@@ -346,7 +347,7 @@ class ActionHandler:
 
 
 def _handle_play(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -374,7 +375,7 @@ def _handle_play(
 
 
 def _handle_pause(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -390,7 +391,7 @@ def _handle_pause(
 
 
 def _handle_stop(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -410,7 +411,7 @@ def _handle_stop(
 
 
 def _handle_enable(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -426,7 +427,7 @@ def _handle_enable(
 
 
 def _handle_disable(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -442,7 +443,7 @@ def _handle_disable(
 
 
 def _handle_fade_in(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -463,7 +464,7 @@ def _handle_fade_in(
 
 
 def _handle_fade_out(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -481,7 +482,7 @@ def _handle_fade_out(
 
 
 def _handle_go_to(
-    ch: Any,
+    ch: CueHandler,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -496,7 +497,7 @@ def _handle_go_to(
 
 
 def _handle_fade_action(
-    ch: Any,
+    ch: CueHandler,
     action_cue: Any,
     target: Cue,
     mtc: MtcListener,
