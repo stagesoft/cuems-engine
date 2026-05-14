@@ -1,18 +1,11 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: [TEMPLATE] → 1.0.0
-Status: Initial ratification — all placeholders replaced
+Version change: 1.0.0 → 1.1.0
+Status: MINOR amendment — new mandatory Development Workflow rule added
 
 Added sections:
-  - I. SOLID Design Principles (new)
-  - II. Test-Driven Development (new, NON-NEGOTIABLE)
-  - III. Integration & Contract Testing (new)
-  - IV. Simplicity & YAGNI (new)
-  - V. Observability & Reliability (new)
-  - Technology & Architecture Standards (new)
-  - Development Workflow (new)
-  - Governance (new)
+  - Development Workflow §7: Specification & Planning Layout (new)
 
 Removed sections: none
 
@@ -145,6 +138,22 @@ No new runtime dependency MAY be added without a documented justification and te
    style message. Force-pushes to `master` are forbidden.
 6. **Dev install**: Use `scripts/link-dev.sh` during development; never commit changes that
    only work with the installed deb package.
+7. **Specification & Planning Layout**: Project documentation artifacts MUST be partitioned by
+   audience and lifecycle:
+   - `specs/NNN-feature/` — per-feature spec, plan, tasks, and supporting design artifacts.
+     Created and owned by the feature branch that introduces them.
+   - `specs/planning/` — cross-cutting planning documents that span multiple features (refactor
+     roadmaps, phase handoff notes, migration strategies, architectural surveys). Scoped to
+     development workflow; not consumer-facing.
+   - `docs/` (top-level) — reserved for end-user documentation and generated API reference
+     output (Doxygen or equivalent). Hand-written development planning artifacts MUST NOT live
+     here, to prevent collisions with auto-generated content and to keep the user-facing surface
+     coherent.
+
+   Rationale: Mixing dev-internal planning with generated API docs forces tooling and consumers
+   to filter intent-mixed content. Clear partitioning lets each audience (feature authors,
+   cross-feature planners, library consumers) reach what they need without sifting through
+   artifacts addressed to someone else.
 
 ## Governance
 
@@ -166,4 +175,4 @@ All PRs and code reviews MUST verify compliance with the principles above. Compl
 violations must be documented in the plan's Complexity Tracking table before merging.
 Runtime development guidance lives in `.specify/memory/` and agent configuration files.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-27 | **Last Amended**: 2026-04-27
+**Version**: 1.1.0 | **Ratified**: 2026-04-27 | **Last Amended**: 2026-05-14

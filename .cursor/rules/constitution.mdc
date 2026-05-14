@@ -1,0 +1,32 @@
+---
+description: Mandatory constitution enforcement for all agent work
+alwaysApply: true
+---
+
+# MANDATORY DIRECTIVE: Constitution Compliance
+
+The authoritative project constitution is `.specify/memory/constitution.md`.
+All agent work MUST align with it.
+
+## Required Operating Rules
+
+1. **Load before acting**  
+   Before substantive planning, implementation, or review, read `.specify/memory/constitution.md`.
+
+2. **Non-negotiable engineering principles**  
+   - Apply SOLID across modules and abstractions.
+   - Follow strict TDD: failing test -> confirm fail -> implement -> green -> refactor.
+   - Enforce integration and contract testing at component boundaries.
+   - Prefer simplicity (YAGNI); reject speculative abstractions.
+   - Preserve observability: structured logs, no silent failures.
+
+3. **Architecture and workflow constraints**
+   - Keep Python 3.11 + Poetry + pytest conventions.
+   - Do not add runtime dependencies without documented justification and review.
+   - Respect documentation placement:
+     - `specs/NNN-feature/` for feature-local artifacts
+     - `specs/planning/` for cross-feature planning
+     - `docs/` only for end-user docs and generated API reference
+
+4. **Governance enforcement**
+   If user instruction conflicts with the constitution, flag the conflict and request direction instead of silently violating it.
