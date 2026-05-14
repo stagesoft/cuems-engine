@@ -361,10 +361,21 @@ class CueHandler:
             frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained cues
 
         Returns:
-            Thread running the cue, or None if the cue is disabled.
+            Thread running the cue, or None if the cue is disabled or not
+            local to this node (the node owning the target will run it via
+            its own GO/post_go dispatch).
         """
         if not cue.enabled:
             Logger.info(f'Cue {cue.id} is disabled, skipping execution')
+            return None
+        if not getattr(cue, '_local', True):
+            # Non-local target: handled by the node where it IS local via that
+            # node's own go_threaded → post_go chain. Trying to arm/run it
+            # locally would fail at re-arm (no local player), raise inside the
+            # caller's thread, and kill chained playback (master videocomposer
+            # froze after loop 1 when post_go='go' targeted an audio cue local
+            # to slave only).
+            Logger.info(f'Cue {cue.id} is not local to this node, skipping execution')
             return None
         Logger.info(f'GO command received. Starting cue {cue.id}')
         if not hasattr(cue, 'loaded') or not cue.loaded:
