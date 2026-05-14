@@ -338,6 +338,35 @@ class ActionHandler:
 
 
 # ---------------------------------------------------------------------------
+# Per-action helpers
+# ---------------------------------------------------------------------------
+
+
+def _ready_action_target(action: str, target: Cue, ch: Any) -> dict | None:
+    """Ensure target is enabled and loaded before dispatch; arm if needed.
+
+    Returns a failure result dict on the first problem, or None if ready.
+    """
+    target_id = getattr(target, "id", None)
+    if not target.enabled:
+        return ActionHandler._action_result(
+            "failed", action, target_id, "Target is disabled"
+        )
+    if not getattr(target, "loaded", False):
+        try:
+            ch.arm(target, init=True)
+        except Exception as exc:
+            return ActionHandler._action_result(
+                "failed", action, target_id, str(exc)
+            )
+    if not getattr(target, "loaded", False):
+        return ActionHandler._action_result(
+            "failed", action, target_id, "Target could not be armed"
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Per-action handlers (module-level; signature: (cue_handler, action_cue, target, mtc, frozen_mtc_ms))
 #
 # action_cue is the originating ActionCue/FadeCue (cue.action_type drives dispatch);
@@ -354,16 +383,9 @@ def _handle_play(
     frozen_mtc_ms: float | None = None,
 ) -> dict:
     target_id = target.id
-    if not target.enabled:
-        return ActionHandler._action_result(
-            "failed", "play", target_id, "Target is disabled"
-        )
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
-    if not getattr(target, "loaded", False):
-        return ActionHandler._action_result(
-            "failed", "play", target_id, "Target could not be armed"
-        )
+    fail = _ready_action_target("play", target, ch)
+    if fail is not None:
+        return fail
     target._stop_requested = False
     try:
         ch.go(target, mtc, frozen_mtc_ms)
@@ -406,7 +428,10 @@ def _handle_stop(
     target._go_generation = getattr(target, "_go_generation", 0) + 1
     # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
     time.sleep(0.1)
-    ch.disarm(target)
+    try:
+        ch.disarm(target)
+    except Exception as exc:
+        return ActionHandler._action_result("failed", "stop", target_id, str(exc))
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
@@ -452,14 +477,14 @@ def _handle_fade_in(
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
-    if not getattr(target, "loaded", False):
-        return ActionHandler._action_result(
-            "failed", "fade_in", target_id, "Target could not be armed"
-        )
+    fail = _ready_action_target("fade_in", target, ch)
+    if fail is not None:
+        return fail
     target._stop_requested = False
-    ch.go(target, mtc, frozen_mtc_ms)
+    try:
+        ch.go(target, mtc, frozen_mtc_ms)
+    except Exception as exc:
+        return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
@@ -491,8 +516,9 @@ def _handle_go_to(
     # TODO: implement seek/position navigation; currently only arms the target
     Logger.info("go_to only arms target (seek not yet implemented)")
     target_id = target.id
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
+    fail = _ready_action_target("go_to", target, ch)
+    if fail is not None:
+        return fail
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
@@ -516,14 +542,9 @@ def _handle_fade_action(
     target_id = getattr(target, "id", None)
     fade_id = str(action_cue.id)
 
-    # Arm target via general cue logic (no envelope-from-silence here).
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
-    if not getattr(target, "loaded", False):
-        return ActionHandler._action_result(
-            "failed", "fade_action", target_id,
-            f"Target cue {target_id} could not be armed"
-        )
+    fail = _ready_action_target("fade_action", target, ch)
+    if fail is not None:
+        return fail
 
     if frozen_mtc_ms is not None:
         start_mtc_ms = int(frozen_mtc_ms)
