@@ -340,6 +340,12 @@ class NodeEngine(BaseEngine):
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
+        self.set_gradient_client()
+
+    def set_gradient_client(self) -> None:
+        """Wire GradientClient into PLAYER_HANDLER using settings from node_conf."""
+        port = int(self.cm.node_conf['gradient_osc_port'])
+        PLAYER_HANDLER.set_gradient_client(port=port, node_uuid=self.cm.node_uuid)
 
     # Audio functions
     def set_audio_players(self):
@@ -568,6 +574,15 @@ class NodeEngine(BaseEngine):
         if self.get_status('running') == "yes":
             Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
             return
+
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f'gradient send_cancel_all failed on project load: {exc}')
+        else:
+            Logger.debug('gradient_client not initialised, skipping cancel_all on project load')
 
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
@@ -931,8 +946,17 @@ class NodeEngine(BaseEngine):
         ready_script(). Notifies Controller when armed (GO button green).
         """
         Logger.info('STOP command received. Stopping playback.')
-        
+
         self.set_status('running', "no")
+
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f'gradient send_cancel_all failed on stop: {exc}')
+        else:
+            Logger.debug('gradient_client not initialised, skipping cancel_all on stop')
 
         # Signal all running cue threads to stop immediately.
         # Must happen BEFORE blackout/reset so loop_cue threads don't

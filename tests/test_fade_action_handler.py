@@ -3,7 +3,7 @@
 Covers (per Phase 6 constraints):
 - Single fade_action handler — no fade-up/fade-down distinction.
 - _build_fade_payload returns list[dict]: 1 entry for AudioCue, N entries for VideoCue
-  (one per layer_id), each carrying its own layer-suffixed fade_id.
+  (one per layer_id), each carrying its own layer-suffixed motion_id.
 - Handler MUST NOT disarm target_cue, set _fade_initial_volume, or call ch.go.
 - FadeCue is NOT registered in run_cue singledispatch — inherits ActionCue branch via MRO.
 - CueHandler pre-arms FadeCue.action_target unconditionally.
@@ -11,7 +11,7 @@ Covers (per Phase 6 constraints):
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 import pytest
 
@@ -98,12 +98,12 @@ def test_fade_action_in_supported_cue_actions():
 
 
 class TestBuildFadePayloadAudio:
-    def _build(self, start_value=0.5, target_value=80, fade_id="fade-uuid"):
+    def _build(self, start_value=0.5, target_value=80, motion_id="fade-uuid"):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
         target_cue = _make_audio_cue(start_value=start_value)
         fade_cue = _make_fade_cue(target_cue, target_value=target_value)
         payloads = _build_fade_payload(target_cue, fade_cue, start_mtc_ms=1234,
-                                       fade_id=fade_id)
+                                       motion_id=motion_id)
         return payloads, target_cue, fade_cue
 
     def test_audio_returns_single_entry_list(self):
@@ -111,10 +111,10 @@ class TestBuildFadePayloadAudio:
         assert isinstance(payloads, list)
         assert len(payloads) == 1
 
-    def test_audio_fade_id_is_base_fade_id(self):
-        """AudioCue uses the base fade_id (no layer suffix — there's only one endpoint)."""
-        payloads, *_ = self._build(fade_id="my-fade-uuid")
-        assert payloads[0]["fade_id"] == "my-fade-uuid"
+    def test_audio_motion_id_is_base_motion_id(self):
+        """AudioCue uses the base motion_id (no layer suffix — there's only one endpoint)."""
+        payloads, *_ = self._build(motion_id="my-fade-uuid")
+        assert payloads[0]["motion_id"] == "my-fade-uuid"
 
     def test_audio_osc_port(self):
         payloads, target_cue, _ = self._build()
@@ -140,7 +140,7 @@ class TestBuildFadePayloadAudio:
         target_cue = _make_audio_cue()
         fade_cue = _make_fade_cue(target_cue)
         payloads = _build_fade_payload(target_cue, fade_cue, start_mtc_ms=7500,
-                                       fade_id="fid")
+                                       motion_id="fid")
         assert payloads[0]["start_mtc_ms"] == 7500
 
     def test_audio_duration_ms_from_milliseconds_rounded(self):
@@ -153,10 +153,7 @@ class TestBuildFadePayloadAudio:
         assert payloads[0]["curve_type"] == "linear"
 
     def test_audio_no_unwanted_envelope_fields(self):
-        """Body MUST NOT contain command, osc_host, curve_params (NNG layer adds those).
-
-        fade_id IS present in each entry so the handler can dispatch per-entry.
-        """
+        """Body MUST NOT contain NNG envelope fields (osc_host/curve_params injected by GradientClient)."""
         payloads, *_ = self._build()
         for envelope_field in ("command", "osc_host", "curve_params"):
             assert envelope_field not in payloads[0]
@@ -169,12 +166,12 @@ class TestBuildFadePayloadAudio:
 
 class TestBuildFadePayloadVideoSingleLayer:
     def _build(self, start_value=0.3, target_value=100, layer_ids=(2,),
-               fade_id="vid-fade"):
+               motion_id="vid-fade"):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
         target_cue = _make_video_cue(start_value=start_value, layer_ids=layer_ids)
         fade_cue = _make_fade_cue(target_cue, target_value=target_value)
         payloads = _build_fade_payload(target_cue, fade_cue, start_mtc_ms=1234,
-                                       fade_id=fade_id)
+                                       motion_id=motion_id)
         return payloads, target_cue, fade_cue
 
     def test_video_single_layer_one_entry(self):
@@ -189,10 +186,10 @@ class TestBuildFadePayloadVideoSingleLayer:
         payloads, *_ = self._build(layer_ids=(2,))
         assert payloads[0]["osc_path"] == "/videocomposer/layer/2/opacity"
 
-    def test_video_single_layer_fade_id_suffixed(self):
-        """VideoCue fade_id is suffixed with _{layer_id} even for a single layer."""
-        payloads, *_ = self._build(layer_ids=(2,), fade_id="base-uuid")
-        assert payloads[0]["fade_id"] == "base-uuid_2"
+    def test_video_single_layer_motion_id_suffixed(self):
+        """VideoCue motion_id is suffixed with _{layer_id} even for a single layer."""
+        payloads, *_ = self._build(layer_ids=(2,), motion_id="base-uuid")
+        assert payloads[0]["motion_id"] == "base-uuid_2"
 
     def test_video_single_layer_start_value_from_cache(self):
         payloads, *_ = self._build(start_value=0.7)
@@ -200,12 +197,12 @@ class TestBuildFadePayloadVideoSingleLayer:
 
 
 class TestBuildFadePayloadVideoMultiLayer:
-    def _build(self, layer_ids=(0, 2, 5), fade_id="multi-uuid"):
+    def _build(self, layer_ids=(0, 2, 5), motion_id="multi-uuid"):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
         target_cue = _make_video_cue(start_value=0.5, layer_ids=layer_ids)
         fade_cue = _make_fade_cue(target_cue, target_value=80)
         payloads = _build_fade_payload(target_cue, fade_cue, start_mtc_ms=1234,
-                                       fade_id=fade_id)
+                                       motion_id=motion_id)
         return payloads, target_cue, fade_cue
 
     def test_video_multi_layer_one_entry_per_layer(self):
@@ -221,10 +218,10 @@ class TestBuildFadePayloadVideoMultiLayer:
             "/videocomposer/layer/5/opacity",
         ]
 
-    def test_video_multi_layer_fade_ids_distinct_and_suffixed(self):
-        payloads, *_ = self._build(layer_ids=(0, 2, 5), fade_id="base-uuid")
-        fade_ids = [p["fade_id"] for p in payloads]
-        assert fade_ids == ["base-uuid_0", "base-uuid_2", "base-uuid_5"]
+    def test_video_multi_layer_motion_ids_distinct_and_suffixed(self):
+        payloads, *_ = self._build(layer_ids=(0, 2, 5), motion_id="base-uuid")
+        motion_ids = [p["motion_id"] for p in payloads]
+        assert motion_ids == ["base-uuid_0", "base-uuid_2", "base-uuid_5"]
 
     def test_video_multi_layer_shared_fields(self):
         """end_value, start_mtc_ms, duration_ms, curve_type, osc_port shared across layers."""
@@ -242,7 +239,7 @@ def test_build_payload_unsupported_target_raises():
     fake_target = MagicMock(spec=[])  # not Audio/VideoCue
     fade_cue = MagicMock()
     try:
-        _build_fade_payload(fake_target, fade_cue, start_mtc_ms=0, fade_id="x")
+        _build_fade_payload(fake_target, fade_cue, start_mtc_ms=0, motion_id="x")
     except ValueError:
         return
     raise AssertionError("Expected ValueError for unsupported target_cue type")
@@ -253,7 +250,7 @@ def test_build_payload_video_no_layer_ids_raises():
     target_cue = _make_video_cue(layer_ids=[])
     fade_cue = _make_fade_cue(target_cue)
     try:
-        _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, fade_id="x")
+        _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, motion_id="x")
     except ValueError:
         return
     raise AssertionError("Expected ValueError for VideoCue with no _layer_ids")
@@ -264,60 +261,63 @@ def test_build_payload_video_no_layer_ids_raises():
 # ---------------------------------------------------------------------------
 
 
+def _mock_gradient_client():
+    """Return a MagicMock acting as GradientClient with a call-tracking send_fade."""
+    gc = MagicMock()
+    gc.send_fade = MagicMock()
+    return gc
+
+
 class TestHandleFadeActionAudio:
-    def _call(self, target_value=80, mtc_ms=5000, start_value=0.5, comms=None):
+    def _call(self, target_value=80, mtc_ms=5000, start_value=0.5, mock_gc=None):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_audio_cue(start_value=start_value)
         cue = _make_fade_cue(target_cue, target_value=target_value)
         mtc = _make_mtc(mtc_ms)
-        ch = _make_cue_handler(comms=comms)
-        result = handler(ch, cue, target_cue, mtc)
-        return result, ch, cue, target_cue
+        ch = _make_cue_handler()
+        if mock_gc is None:
+            mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
+        return result, ch, cue, target_cue, mock_gc
 
     def test_returns_applied(self):
         result, *_ = self._call()
         assert result["status"] == "applied"
         assert result["action_type"] == "fade_action"
 
-    def test_send_fade_command_called_once(self):
-        result, ch, *_ = self._call()
-        assert ch.communications_thread.send_fade_command.call_count == 1
+    def test_send_fade_called_once(self):
+        """GradientClient.send_fade called exactly once for a single-endpoint audio cue."""
+        result, _, _, _, mock_gc = self._call()
+        assert mock_gc.send_fade.call_count == 1
 
-    def test_send_fade_command_passes_base_fade_id(self):
-        """AudioCue fade_id is the base FadeCue.uuid (no layer suffix)."""
-        result, ch, cue, _ = self._call()
-        kwargs = ch.communications_thread.send_fade_command.call_args.kwargs
-        assert kwargs.get("fade_id") == str(cue.id)
-
-    def test_send_fade_command_payload_has_no_envelope_or_fade_id(self):
-        """Body sent to send_fade_command MUST NOT include envelope fields or fade_id
-        (fade_id is passed as kwarg; envelope is added by send_fade_command itself)."""
-        result, ch, *_ = self._call()
-        body = ch.communications_thread.send_fade_command.call_args[0][0]
-        for excluded in ("command", "osc_host", "curve_params", "fade_id"):
-            assert excluded not in body
+    def test_send_fade_passes_base_motion_id(self):
+        """AudioCue motion_id is the base FadeCue.uuid (no layer suffix)."""
+        result, _, cue, _, mock_gc = self._call()
+        assert mock_gc.send_fade.call_args.kwargs.get("motion_id") == str(cue.id)
 
     def test_handler_does_not_disarm_target(self):
         result, ch, *_ = self._call()
         ch.disarm.assert_not_called()
 
     def test_handler_does_not_call_go_on_target(self):
-        result, ch, _, target_cue = self._call()
+        result, ch, _, target_cue, _ = self._call()
         for c in ch.go.call_args_list:
             assert c.args and c.args[0] is not target_cue
 
     def test_handler_does_not_set_fade_initial_volume(self):
-        result, _, _, target_cue = self._call()
+        result, _, _, target_cue, _ = self._call()
         assert not hasattr(target_cue, "_fade_initial_volume")
 
     def test_handler_sets_end_mtc_on_fade_cue(self):
-        result, _, cue, _ = self._call(mtc_ms=5000)
+        result, _, cue, _, _ = self._call(mtc_ms=5000)
         assert hasattr(cue, "_end_mtc")
         assert cue._end_mtc.milliseconds_rounded == 8000
 
     def test_handler_sets_start_mtc_on_fade_cue(self):
-        result, _, cue, _ = self._call(mtc_ms=5000)
+        result, _, cue, _, _ = self._call(mtc_ms=5000)
         assert hasattr(cue, "_start_mtc")
         assert cue._start_mtc.milliseconds_rounded == 5000
 
@@ -330,48 +330,42 @@ class TestHandleFadeActionAudio:
 class TestHandleFadeActionVideoMultiLayer:
     def _call(self, layer_ids=(0, 2, 5), mtc_ms=5000):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_video_cue(layer_ids=layer_ids)
         cue = _make_fade_cue(target_cue, target_value=80)
         mtc = _make_mtc(mtc_ms)
         ch = _make_cue_handler()
-        result = handler(ch, cue, target_cue, mtc)
-        return result, ch, cue, target_cue
+        mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
+        return result, ch, cue, target_cue, mock_gc
 
     def test_returns_applied(self):
         result, *_ = self._call()
         assert result["status"] == "applied"
 
-    def test_send_fade_command_called_per_layer(self):
-        result, ch, *_ = self._call(layer_ids=(0, 2, 5))
-        assert ch.communications_thread.send_fade_command.call_count == 3
+    def test_send_fade_called_per_layer(self):
+        result, _, _, _, mock_gc = self._call(layer_ids=(0, 2, 5))
+        assert mock_gc.send_fade.call_count == 3
 
-    def test_send_fade_command_fade_ids_layer_suffixed(self):
-        result, ch, cue, _ = self._call(layer_ids=(0, 2, 5))
+    def test_send_fade_motion_ids_layer_suffixed(self):
+        result, _, cue, _, mock_gc = self._call(layer_ids=(0, 2, 5))
         base = str(cue.id)
         observed = [
-            c.kwargs.get("fade_id")
-            for c in ch.communications_thread.send_fade_command.call_args_list
+            c.kwargs.get("motion_id")
+            for c in mock_gc.send_fade.call_args_list
         ]
         assert observed == [f"{base}_0", f"{base}_2", f"{base}_5"]
 
-    def test_send_fade_command_osc_paths_per_layer(self):
-        result, ch, *_ = self._call(layer_ids=(0, 2, 5))
-        paths = [
-            c.args[0]["osc_path"]
-            for c in ch.communications_thread.send_fade_command.call_args_list
-        ]
+    def test_send_fade_osc_paths_per_layer(self):
+        result, _, _, _, mock_gc = self._call(layer_ids=(0, 2, 5))
+        paths = [c.kwargs.get("osc_path") for c in mock_gc.send_fade.call_args_list]
         assert paths == [
             "/videocomposer/layer/0/opacity",
             "/videocomposer/layer/2/opacity",
             "/videocomposer/layer/5/opacity",
         ]
-
-    def test_send_fade_command_no_fade_id_in_body(self):
-        result, ch, *_ = self._call(layer_ids=(0, 2))
-        for c in ch.communications_thread.send_fade_command.call_args_list:
-            body = c.args[0]
-            assert "fade_id" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +376,7 @@ class TestHandleFadeActionVideoMultiLayer:
 class TestHandleFadeActionFailures:
     def test_arm_failure_returns_failed(self):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_audio_cue()
         target_cue.loaded = False
@@ -389,11 +384,14 @@ class TestHandleFadeActionFailures:
         mtc = _make_mtc()
         ch = _make_cue_handler()
         ch.arm = MagicMock(return_value=False)
-        result = handler(ch, cue, target_cue, mtc)
+        mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
 
-    def test_arm_failure_no_nng_dispatch(self):
+    def test_arm_failure_no_osc_dispatch(self):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_audio_cue()
         target_cue.loaded = False
@@ -401,54 +399,79 @@ class TestHandleFadeActionFailures:
         mtc = _make_mtc()
         ch = _make_cue_handler()
         ch.arm = MagicMock(return_value=False)
-        handler(ch, cue, target_cue, mtc)
-        ch.communications_thread.send_fade_command.assert_not_called()
+        mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            handler(ch, cue, target_cue, mtc)
+        mock_gc.send_fade.assert_not_called()
 
-    def test_nng_send_failure_returns_failed(self):
+    def test_osc_send_failure_returns_failed(self):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_audio_cue()
         cue = _make_fade_cue(target_cue, target_value=80)
         mtc = _make_mtc()
         ch = _make_cue_handler()
-        ch.communications_thread.send_fade_command.side_effect = RuntimeError("NNG down")
-        result = handler(ch, cue, target_cue, mtc)
+        mock_gc = _mock_gradient_client()
+        mock_gc.send_fade.side_effect = RuntimeError("OSC send failed")
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
 
-    def test_nng_failure_target_cue_unchanged(self):
-        """FR-013: NNG failure must leave target_cue state unchanged."""
+    def test_osc_failure_target_cue_unchanged(self):
+        """OSC failure must leave target_cue state unchanged."""
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_audio_cue()
         cue = _make_fade_cue(target_cue, target_value=80)
         mtc = _make_mtc()
         ch = _make_cue_handler()
-        ch.communications_thread.send_fade_command.side_effect = RuntimeError("NNG down")
-        handler(ch, cue, target_cue, mtc)
+        mock_gc = _mock_gradient_client()
+        mock_gc.send_fade.side_effect = RuntimeError("OSC send failed")
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            handler(ch, cue, target_cue, mtc)
         ch.disarm.assert_not_called()
         ch.go.assert_not_called()
         assert not hasattr(target_cue, "_fade_initial_volume")
 
-    def test_video_nng_failure_aborts_remaining_layers(self):
-        """If layer 1 dispatch fails, layers 2..N must NOT be sent."""
+    def test_gradient_client_none_returns_failed(self):
+        """If GradientClient is not yet initialised, handler returns failed (no crash)."""
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+        handler = _ACTION_HANDLERS["fade_action"]
+        target_cue = _make_audio_cue()
+        cue = _make_fade_cue(target_cue, target_value=80)
+        mtc = _make_mtc()
+        ch = _make_cue_handler()
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=None):
+            result = handler(ch, cue, target_cue, mtc)
+        assert result["status"] == "failed"
+
+    def test_video_osc_failure_aborts_remaining_layers(self):
+        """If layer 1 OSC send fails, layers 2..N must NOT be sent."""
+        from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         handler = _ACTION_HANDLERS["fade_action"]
         target_cue = _make_video_cue(layer_ids=[0, 2, 5])
         cue = _make_fade_cue(target_cue, target_value=80)
         mtc = _make_mtc()
         ch = _make_cue_handler()
+        mock_gc = _mock_gradient_client()
 
         call_count = {"n": 0}
-        def flaky_send(payload, fade_id=None, timeout=None):
+
+        def flaky_send(**kwargs):
             call_count["n"] += 1
             if call_count["n"] == 2:  # fail on second layer
-                raise RuntimeError("NNG down for layer 2")
-        ch.communications_thread.send_fade_command.side_effect = flaky_send
+                raise RuntimeError("OSC send failed for layer 2")
 
-        result = handler(ch, cue, target_cue, mtc)
+        mock_gc.send_fade.side_effect = flaky_send
+        with patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
         # Sent layer 0, failed on layer 2, did NOT attempt layer 5.
-        assert ch.communications_thread.send_fade_command.call_count == 2
+        assert mock_gc.send_fade.call_count == 2
 
 
 # ---------------------------------------------------------------------------

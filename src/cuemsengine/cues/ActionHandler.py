@@ -14,6 +14,7 @@ from cuemsutils.log import Logger
 from .CueHandler import CueHandler
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
+from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
 
 # Actions supported by the engine runtime.
@@ -342,7 +343,7 @@ class ActionHandler:
 # ---------------------------------------------------------------------------
 
 
-def _ready_action_target(action: str, target: Cue, ch: Any) -> dict | None:
+def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | None:
     """Ensure target is enabled and loaded before dispatch; arm if needed.
 
     Returns a failure result dict on the first problem, or None if ready.
@@ -540,11 +541,18 @@ def _handle_fade_action(
     from cuemsutils.tools.CTimecode import CTimecode
 
     target_id = getattr(target, "id", None)
-    fade_id = str(action_cue.id)
+    motion_id = str(action_cue.id)
 
     fail = _ready_action_target("fade_action", target, ch)
     if fail is not None:
         return fail
+
+    gradient_client = PLAYER_HANDLER.get_gradient_client()
+    if gradient_client is None:
+        Logger.error(f"FadeCue {motion_id}: GradientClient not initialised")
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, "GradientClient not initialised"
+        )
 
     if frozen_mtc_ms is not None:
         start_mtc_ms = int(frozen_mtc_ms)
@@ -552,29 +560,40 @@ def _handle_fade_action(
         start_mtc_ms = mtc.main_tc.milliseconds_rounded
 
     try:
-        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, fade_id)
+        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
     except ValueError as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
         )
 
-    # Dispatch ALL entries before mutating anything. If any NNG send fails the
+    # Dispatch ALL entries before mutating anything. If any OSC send fails the
     # target / FadeCue state must remain unchanged. Failure of one layer aborts
-    # the rest — the partial dispatch will be cleared by the next CANCEL_ALL
+    # the rest — the partial dispatch will be cleared by the next cancel_all
     # (project stop or load).
     for entry in payloads:
-        entry_fade_id = entry.pop("fade_id")
+        entry_motion_id = entry.pop("motion_id")
         try:
-            ch.communications_thread.send_fade_command(entry, fade_id=entry_fade_id)
+            gradient_client.send_fade(
+                motion_id=entry_motion_id,
+                osc_host='127.0.0.1',
+                osc_port=entry['osc_port'],
+                osc_path=entry['osc_path'],
+                start_value=entry['start_value'],
+                end_value=entry['end_value'],
+                start_mtc_ms=entry['start_mtc_ms'],
+                duration_ms=entry['duration_ms'],
+                curve_type=entry['curve_type'],
+                curve_params_json='{}',
+            )
         except Exception as exc:
             Logger.error(
-                f"FadeCue {fade_id}: NNG dispatch to gradient-motiond failed "
-                f"(target={target_id} fade_id={entry_fade_id} "
+                f"FadeCue {motion_id}: OSC dispatch to gradient-motiond failed "
+                f"(target={target_id} motion_id={entry_motion_id} "
                 f"osc={entry['osc_path']}): {exc}"
             )
             return ActionHandler._action_result(
                 "failed", "fade_action", target_id,
-                f"NNG dispatch failed: {exc}"
+                f"OSC dispatch failed: {exc}"
             )
 
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
@@ -584,7 +603,7 @@ def _handle_fade_action(
     action_cue._end_mtc = action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
 
     Logger.info(
-        f"FadeCue {fade_id}: dispatched {len(payloads)} start_fade(s) "
+        f"FadeCue {motion_id}: dispatched {len(payloads)} start_fade(s) "
         f"target={target_id} target_value={action_cue.target_value} "
         f"duration={action_cue.duration.milliseconds_rounded}ms"
     )
@@ -592,17 +611,13 @@ def _handle_fade_action(
 
 
 def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
-                        fade_id: str) -> list[dict]:
+                        motion_id: str) -> list[dict]:
     """Build FadeCommand body dicts from target_cue + fade_cue.
 
     Returns a list of dicts (one per OSC endpoint). For AudioCue this is a
     single-element list; for VideoCue, one entry per layer in `_layer_ids`,
-    each with its own osc_path and a layer-suffixed `fade_id` so gradient-motiond
+    each with its own osc_path and a layer-suffixed `motion_id` so gradient-motiond
     can track per-layer completion.
-
-    Envelope fields (command, node_name, osc_host, curve_params) are added by
-    NodeCommunications.send_fade_command. The per-layer `fade_id` is included
-    here so the handler can pass it through unchanged when iterating.
 
     Field names mirror the C++ parser at gradient-motion-engine
     src/signal/FadeCommand.cpp parseStartFade: end_value (not target_value),
@@ -617,9 +632,9 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
     duration_ms = fade_cue.duration.milliseconds_rounded
     end_value = float(fade_cue.target_value) / 100.0
 
-    def _entry(osc_path: str, entry_fade_id: str) -> dict:
+    def _entry(osc_path: str, entry_motion_id: str) -> dict:
         return {
-            "fade_id": entry_fade_id,
+            "motion_id": entry_motion_id,
             "osc_port": target_cue._osc.remote_port,
             "osc_path": osc_path,
             "start_value": target_cue._osc.get_value(osc_path),
@@ -630,7 +645,7 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
         }
 
     if isinstance(target_cue, AudioCue):
-        return [_entry("/volmaster", fade_id)]
+        return [_entry("/volmaster", motion_id)]
 
     if isinstance(target_cue, VideoCue):
         layer_ids = getattr(target_cue, "_layer_ids", []) or []
@@ -641,7 +656,7 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
         return [
             _entry(
                 f"/videocomposer/layer/{layer_id}/opacity",
-                f"{fade_id}_{layer_id}",
+                f"{motion_id}_{layer_id}",
             )
             for layer_id in layer_ids
         ]
