@@ -22,7 +22,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ## Phase 1: Setup
 
-**Status**: N/A — modifying an existing project; no scaffolding, dependency install, or directory creation required. Phase numbering retained for template parity.
+**Purpose**: Refresh `poetry.lock` to materialise the `cuemsutils = "0.1.0rc8"` pin in `pyproject.toml`. rc8 ships the `<gradient_osc_port>` XSD element required by FR-010 / Phase 5; running tests against the stale rc4 lock would mask XSD validation failures and produce green tests for the wrong reason.
+
+**⚠️ Blocking**: T000 must complete before any other task — every settings-loading test depends on the rc8 schema being installed.
+
+- [ ] T000 Run `poetry lock` to refresh `poetry.lock` from `pyproject.toml`'s `cuemsutils = "0.1.0rc8"` pin (Poetry 2.x: `--no-update` was removed; bare `poetry lock` is the right command and does not force-upgrade unrelated packages — they re-resolve at their existing constraints). Then `poetry install` to materialise the package; verify with `poetry show cuemsutils` reports `0.1.0rc8`. If resolution fails, fix the constraint conflict before continuing — do NOT downgrade `pyproject.toml` to rc4.
+
+**Checkpoint**: `poetry show cuemsutils` reports `0.1.0rc8`.
 
 ---
 
@@ -61,9 +67,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 **Independent Test**: `pytest tests/test_node_engine_gradient.py` passes — cancel_all ordering, setup orchestration, and `None` guard all verified.
 
-- [ ] T008 [P] [US2] Write failing tests for NodeEngine cancel-all behaviour and setup wiring — `PORT_HANDLER.add_config_ports({'gradient_motiond': <port>})` called, `node_uuid` pass-through to `PLAYER_HANDLER.set_gradient_client`, `set_gradient_client()` invoked from setup orchestrator alongside `set_video_players` / `set_dmx_players`, `cancel_all` fires before `stop_all_cues` on STOP, `cancel_all` fires on project load, `None` guard prevents crash when client not yet set (DEBUG log on skip) — in `tests/test_node_engine_gradient.py` (port-binding tests live in Phase 5 / US3, T011)
-- [ ] T009 [US2] Add `GRADIENT_OSC_PORT_DEFAULT = 7100` module-level constant alongside `VIDEOCOMPOSER_OSC_PORT_DEFAULT` and implement `NodeEngine.set_gradient_client()` method — reads `self.cm.node_conf.get('gradient_osc_port', GRADIENT_OSC_PORT_DEFAULT)`, calls `PLAYER_HANDLER.set_gradient_client(port=..., node_uuid=self.cm.node_uuid)` and `PORT_HANDLER.add_config_ports({'gradient_motiond': port})`, logs INFO when defaulting — in `src/cuemsengine/NodeEngine.py`. Note: this implementation makes BOTH the US2 setup-wiring tests (T008) AND the US3 port-binding tests (T011) green.
-- [ ] T010 [US2] Wire `self.set_gradient_client()` into node setup orchestrator alongside `set_video_players()` / `set_dmx_players()` calls; add guarded `cancel_all` block as first action in `stop_playback` (before `CUE_HANDLER.stop_all_cues`) and in `_load_project_inner` (before `CUE_HANDLER.stop_all_cues`) — guard pattern: `if gradient_client:` (log DEBUG on skip per spec edge case 4) wrapping a `try` that logs ERROR on `send_cancel_all` exception — in `src/cuemsengine/NodeEngine.py`
+- [ ] T008 [P] [US2] Write failing tests for NodeEngine cancel-all behaviour and setup wiring — `node_uuid` pass-through to `PLAYER_HANDLER.set_gradient_client`, `set_gradient_client()` invoked from setup orchestrator alongside `set_video_players` / `set_dmx_players`, `cancel_all` fires before `stop_all_cues` on STOP, `cancel_all` fires on project load, `None` guard prevents crash when client not yet set — assert via `caplog` that a DEBUG-level record matching `gradient_client not initialised` (or chosen wording) is emitted on skip — in `tests/test_node_engine_gradient.py` (port-binding test lives in Phase 5 / US3, T011). NOTE: no explicit `PORT_HANDLER.add_config_ports` assertion — registration is handled by the pre-existing `get_config_ports(node_conf)` helper, not by `set_gradient_client` (see plan Decision 6); a `test_set_gradient_client_defaults_to_7100` is also out of scope (rc8 XSD makes the element required).
+- [ ] T009 [US2] Implement `NodeEngine.set_gradient_client()` method — reads `self.cm.node_conf['gradient_osc_port']` (direct dict access; no `.get()` fallback because the `cuemsutils >= 0.1.0rc8` XSD makes the element required, so a validated `node_conf` always contains it), calls `PLAYER_HANDLER.set_gradient_client(port=int(gradient_osc_port), node_uuid=self.cm.node_uuid)` — in `src/cuemsengine/NodeEngine.py`. Do NOT introduce a `GRADIENT_OSC_PORT_DEFAULT` constant (no caller would reference it — Constitution IV) and do NOT call `PORT_HANDLER.add_config_ports` explicitly (registration is handled by the pre-existing `get_config_ports(node_conf)` helper). This implementation makes BOTH the US2 setup-wiring tests (T008) AND the US3 port-binding test (T011) green.
+- [ ] T010 [US2] Wire `self.set_gradient_client()` into node setup orchestrator alongside `set_video_players()` / `set_dmx_players()` calls; add guarded `cancel_all` block as first action in `stop_playback` (before `CUE_HANDLER.stop_all_cues`) and in `_load_project_inner` (before `CUE_HANDLER.stop_all_cues`) — guard pattern: `if gradient_client:` wrapping a `try` that logs ERROR on `send_cancel_all` exception; `else: Logger.debug(...)` on skip per spec edge case 4 — in `src/cuemsengine/NodeEngine.py`
 
 **Checkpoint**: `pytest tests/test_node_engine_gradient.py` green — NodeEngine initialises the client and cancels in-flight fades on stop/load before any other cleanup.
 
@@ -73,12 +79,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 **Goal**: `settings.xml` accepts `<gradient_osc_port>` under `<node>`; engine reads it at startup and sends all gradient OSC to that port.
 
-**Independent Test**: `pytest tests/test_node_engine_gradient.py -k port_binding` (or equivalent) passes — both the custom-port path and the default-port + INFO-log path are verified by US3-owned tests (no reliance on US2's test set).
+**Independent Test**: `pytest tests/test_node_engine_gradient.py -k port_binding` (or equivalent) passes — only the custom-port path is exercised; the absent-element path is unreachable per the rc8 XSD (validation rejects at settings-load layer, not at the engine).
 
-- [ ] T011 [P] [US3] Write failing tests for `gradient_osc_port` settings binding — custom value in `node_conf` (e.g. 7200) flows through `NodeEngine.set_gradient_client()` into `PLAYER_HANDLER.set_gradient_client(port=7200, ...)`; absent `gradient_osc_port` falls back to `GRADIENT_OSC_PORT_DEFAULT` (7100) with an INFO log noting the default — in `tests/test_node_engine_gradient.py`
-- [ ] T012 [P] [US3] Add `<gradient_osc_port>7100</gradient_osc_port>` as a flat child of `<node>` block (alongside other flat node config elements) in `dev/test_xml_files/settings.xml`. Scope is **engine-side only** (FR-010): if any test fails XSD validation because the schema in the external `cuems-utils` repo has not yet been updated, mark the affected test as `pytest.mark.xfail` / `skip` with a TODO referencing the `cuems-utils` schema dependency — do not block this feature on the external schema publication.
+- [ ] T011 [P] [US3] Write a failing test for `gradient_osc_port` settings binding — a custom value in `node_conf` (e.g. 7200) flows through `NodeEngine.set_gradient_client()` into `PLAYER_HANDLER.set_gradient_client(port=7200, ...)` — in `tests/test_node_engine_gradient.py`. The absence/default path is intentionally NOT tested: `cuemsutils >= 0.1.0rc8` XSD makes the element required, so any `node_conf` without `gradient_osc_port` is rejected at the settings-loader layer (cuemsutils' own tests cover that boundary).
+- [ ] T012 [P] [US3] Add `<gradient_osc_port>7100</gradient_osc_port>` as a flat child of `<node>` block (alongside other flat node config elements; place it after `<nng_hub_port>` to match the XSD field order) in `dev/test_xml_files/settings.xml`. The `cuemsutils >= 0.1.0rc8` schema requires this element — without it, **any** test loading the fixture via `ConfigManager` (e.g. `tests/test_controller_commands.py`, `tests/test_nodeengine_helpers.py`, `tests/test_core_baseengine_status.py`, `tests/test_default_mappings_valid.py`, plus the `env_config_path` fixture in `tests/fixtures.py`) will fail XSD validation. Audit other test files for inline settings XML strings and add the element there as well if found. **Do NOT mark tests `pytest.mark.xfail`** — the schema has shipped in rc8; failures indicate a fixture or lockfile bug, not a schema-availability gap.
 
-**Checkpoint**: `grep gradient_osc_port dev/test_xml_files/settings.xml` shows the element; T011 tests green (US2 setup-wiring tests already green from T009).
+**Checkpoint**: `grep gradient_osc_port dev/test_xml_files/settings.xml` shows the element; T011 test green (US2 setup-wiring tests already green from T009); the four ConfigManager-using test files above all load the fixture without XSD errors.
 
 ---
 
@@ -93,7 +99,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 - [ ] T015 Delete `tests/test_node_communications_gradient.py` in full (remaining tests cover `send_fade_command` / `send_cancel_all` which are now gone)
 - [ ] T016 Delete `TestSendGradientCancelAll`, `TestStopScriptCancelAllOrder`, `TestLoadProjectCancelAllOrder` test classes from `tests/test_controller_engine_gradient.py`; retain `TestGradientEngineSenderGuard` (status sender guard is unchanged)
 - [ ] T017 Delete `_send_gradient_cancel_all` method and its two call sites (`load_project` ~line 773, `stop_script` ~line 903) from `src/cuemsengine/ControllerEngine.py`
-- [ ] T018 [P] Full regression sweep: run `poetry run pytest -x`; confirm `grep -rn "fade_id\|entry_fade_id" src/ tests/ | grep -v ".pyc"` has no hits outside intentional cue-type names; confirm `grep -rn "send_fade_command\|_send_gradient_cancel_all" src/` has no hits
+- [ ] T018 [P] Full regression sweep: confirm `poetry show cuemsutils` reports `0.1.0rc8`; run `poetry run pytest -x` and confirm `tests/test_controller_commands.py`, `tests/test_nodeengine_helpers.py`, `tests/test_core_baseengine_status.py`, `tests/test_default_mappings_valid.py` all import & run cleanly against the updated fixture (no XSD validation errors); confirm `grep -rn "fade_id\|entry_fade_id" src/ tests/ | grep -v ".pyc"` has no hits outside intentional cue-type names; confirm `grep -rn "send_fade_command\|_send_gradient_cancel_all" src/` has no hits; confirm `grep -rn "GRADIENT_OSC_PORT_DEFAULT" src/ tests/` has no hits (constant deliberately not introduced — see T009)
 
 **Checkpoint**: Full suite green; no lingering NNG gradient references in source or tests.
 
@@ -103,10 +109,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ### Phase Dependencies
 
-- **Foundational (Phase 2)**: No blocking prerequisites — start immediately
+- **Setup (Phase 1)**: T000 is blocking for everything else — `poetry.lock` must reflect `cuemsutils 0.1.0rc8` before any test runs (rc4 silently masks XSD validation gaps).
+- **Foundational (Phase 2)**: requires Phase 1 complete
 - **User Stories (Phase 3–5)**: All require Phase 2 complete
   - US1 (Phase 3) and US2 (Phase 4) can proceed in parallel once Phase 2 is green (different files)
-  - US3 (Phase 5 — `settings.xml` only) can run in parallel with US1 and US2
+  - US3 (Phase 5 — `settings.xml` only) can run in parallel with US1 and US2; T012 (fixture update) SHOULD ideally precede the first run of any test that loads `dev/test_xml_files/settings.xml` once Phase 1 has bumped cuemsutils to rc8
 - **Polish (Phase 6)**: Requires US1 complete (no NNG callers remain) and US2 complete (ControllerEngine NNG path confirmed superseded)
 
 ### Within Each User Story

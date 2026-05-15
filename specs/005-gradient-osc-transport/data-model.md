@@ -46,12 +46,12 @@ New class in `src/cuemsengine/players/GradientClient.py`.
 | Property        | Value                                       |
 |-----------------|---------------------------------------------|
 | Config path     | `settings.xml → <node> → <gradient_osc_port>` (flat child) |
-| Type            | `int`                                       |
-| Default         | `GRADIENT_OSC_PORT_DEFAULT = 7100` (constant in `NodeEngine.py`) |
-| Valid range     | 1–65535 (standard UDP port)                 |
-| Read by         | `NodeEngine.set_gradient_client()` at node setup |
+| Type            | `int` — XSD `cms:NonPrivilegedPort` (1024–65535) |
+| Required        | Yes — `cuemsutils >= 0.1.0rc8` declares the element with implicit `minOccurs="1"`. Absence is a settings-load validation error raised by cuemsutils before the engine starts. |
+| Fixture value   | `7100` in `dev/test_xml_files/settings.xml` |
+| Read by         | `NodeEngine.set_gradient_client()` at node setup — direct dict access (`node_conf['gradient_osc_port']`), no `.get()` fallback |
 | Consumed by     | `PlayerHandler.set_gradient_client(port, node_uuid)` |
-| Registered with | `PORT_HANDLER.add_config_ports({'gradient_motiond': port})` |
+| Registered with | `PORT_HANDLER` automatically via `get_config_ports(node_conf)` in `NodeEngine.py` (helper collects every `*_port` key) — `set_gradient_client` does NOT call `add_config_ports` |
 
 Flat-child schema rationale: UDP port is the only configurable parameter for
 gradient-motion-engine on the engine side; no `path`/`args`/multi-port
@@ -117,9 +117,10 @@ All motion lifecycle state lives in `gradient-motiond`'s `MotionRegistry`.
 
 ## Validation Rules
 
-- `osc_port` (gradient port): must be `int`; invalid values should fall back
-  to default 7100 with a WARNING log (settings layer responsibility, not
-  `GradientClient`).
+- `osc_port` (gradient port): must be a valid `cms:NonPrivilegedPort`
+  (1024–65535). XSD validation in the cuemsutils settings loader enforces
+  this — out-of-range and missing values are rejected at load time, not at
+  the engine layer.
 - `start_value`, `end_value`: must be `float` in `[0.0, 1.0]` (caller
   responsibility; `_build_fade_payload` ensures `end_value` is normalised).
 - `motion_id`: non-empty string (caller ensures via `str(cue.id)`).

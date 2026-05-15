@@ -101,8 +101,8 @@ the settings fixture and verify NodeEngine sends gradient OSC to that port.
    **When** NodeEngine initialises `GradientClient`,
    **Then** all `/gradient/*` messages are sent to port 7200, not 7100.
 
-2. **Given** `settings.xml` does not contain `<gradient_osc_port>`,
-   **Then** `GradientClient` defaults to port 7100 and NodeEngine logs the default at INFO.
+2. **Given** `settings.xml` does not contain `<gradient_osc_port>` under `<node>`,
+   **Then** `cuemsutils` XSD validation (`>= 0.1.0rc8`) rejects the file at settings-load time. The engine never reaches `NodeEngine.set_gradient_client()`; no in-engine default branch is required and none exists.
 
 ---
 
@@ -133,9 +133,9 @@ the settings fixture and verify NodeEngine sends gradient OSC to that port.
 
 - **FR-008**: `ControllerEngine._send_gradient_cancel_all` and its two call sites (in `load_project` and `stop_script`) MUST be deleted.
 
-- **FR-009**: `PlayerHandler` MUST expose a `gradient_client` attribute (a `GradientClient` instance) initialised at node setup time, following the same pattern as `_dmx_player_client` and `_video_client`. Access via `PlayerHandler.get_gradient_client()` and construction via `PlayerHandler.set_gradient_client(port, node_uuid)` — naming parity with `set_video_client(port)` / `get_video_client()`. `NodeEngine` MUST expose a dedicated `set_gradient_client(self)` method called from the same setup orchestrator that invokes `set_video_players` / `set_dmx_players`, and MUST register the port via `PORT_HANDLER.add_config_ports({'gradient_motiond': port})` for parity with every other player subsystem. Re-calling `set_gradient_client` replaces the prior client (reconnection safe-guard).
+- **FR-009**: `PlayerHandler` MUST expose a `gradient_client` attribute (a `GradientClient` instance) initialised at node setup time, following the same pattern as `_dmx_player_client` and `_video_client`. Access via `PlayerHandler.get_gradient_client()` and construction via `PlayerHandler.set_gradient_client(port, node_uuid)` — naming parity with `set_video_client(port)` / `get_video_client()`. `NodeEngine` MUST expose a dedicated `set_gradient_client(self)` method called from the same setup orchestrator that invokes `set_video_players` / `set_dmx_players`. Port registration with `PORT_HANDLER` is handled automatically by the existing `get_config_ports(node_conf)` helper in `NodeEngine.py` (it collects every `*_port` key from `node_conf`, so `gradient_osc_port` is picked up without additional code) — `set_gradient_client` MUST NOT call `add_config_ports` explicitly. Re-calling `set_gradient_client` replaces the prior client (reconnection safe-guard).
 
-- **FR-010**: The engine-side `settings.xml` **parser** MUST accept an optional `<gradient_osc_port>` integer element under `<node>`, defaulting to 7100 when absent. The XSD lives in the external `cuems-utils` repo; the test fixture `dev/test_xml_files/settings.xml` is updated as part of this feature. If validation against the published XSD fails because `cuems-utils` has not yet shipped the schema update, the affected test(s) MUST be marked as expected-to-fail (`pytest.mark.xfail` / `skip`) with a TODO referencing the external dependency, until the schema is published — engine-side acceptance is the deliverable here.
+- **FR-010**: The engine-side `settings.xml` **parser** MUST treat `<gradient_osc_port>` as a required integer element under `<node>` — this matches the published `cuemsutils >= 0.1.0rc8` schema (`xml/schemas/settings.xsd`), which declares the element as `cms:NonPrivilegedPort` with implicit `minOccurs="1"`. Absence is a settings-load validation error raised by cuemsutils before `NodeEngine` runs; the engine MUST NOT carry a default-fallback branch for the missing case (Constitution IV: no dead code). The in-repo test fixture `dev/test_xml_files/settings.xml` MUST include `<gradient_osc_port>7100</gradient_osc_port>` under `<node>` so the fixture validates against the schema; any other in-repo fixture or inline settings XML used by tests MUST be updated likewise.
 
 - **FR-011**: All dispatch failures (OSC send errors, uninitialised player) MUST be logged at ERROR level and returned as `failed` action results; they MUST NOT raise unhandled exceptions in the calling thread.
 
@@ -147,7 +147,7 @@ the settings fixture and verify NodeEngine sends gradient OSC to that port.
 
 - **GradientClient**: A new OSC client class in `src/cuemsengine/players/GradientClient.py`. Wraps `PyOscClient` (`src/cuemsengine/osc/PyOsc.py`) for fire-and-forget UDP OSC sends — no pyossia device, no endpoint registration, no local port allocation, no subprocess management (`gradient-motiond` is a systemd service). Constructed with `(host, port, node_uuid)` analogous to `VideoClient(player_port=port)`; holds `node_uuid` and injects it as `node_name` on every `send_fade` (callers do not pass it). Exposes `send_fade(...)`, `send_cancel_motion(motion_id)`, `send_cancel_all()`.
 
-- **gradient_osc_port**: An integer configuration value, a **flat child of `<node>`** in `settings.xml` (not nested under a `<gradient_motiond>` block — it is the only configurable parameter for gradient-motion-engine on the engine side). Default 7100, sourced from `GRADIENT_OSC_PORT_DEFAULT` defined in `NodeEngine.py`. Read by `NodeEngine.set_gradient_client()` at startup and passed to `PlayerHandler.set_gradient_client(port, node_uuid)`.
+- **gradient_osc_port**: A required integer configuration value, a **flat child of `<node>`** in `settings.xml` (not nested under a `<gradient_motiond>` block — it is the only configurable parameter for gradient-motion-engine on the engine side). Per the `cuemsutils >= 0.1.0rc8` XSD, the element is `cms:NonPrivilegedPort` with implicit `minOccurs="1"` — absence is a settings-load validation error, not an engine-side fallback. Read by `NodeEngine.set_gradient_client()` at startup via direct dict access (`self.cm.node_conf['gradient_osc_port']`) and passed to `PlayerHandler.set_gradient_client(port, node_uuid)`. The in-repo test fixture uses `7100`.
 
 - **motion_id**: The daemon's canonical correlation key for an in-flight motion. For Phase H (fade only), the value is the `FadeCue.uuid` as a string, optionally with a `_{layer_id}` suffix for per-layer video fades. Future motion types (vector, crossfade) will populate the same field with their own cue's UUID, allowing `cancel_motion(motion_id)` and any future motion-generic OSC paths to operate uniformly. Replaces the previous `fade_id` identifier everywhere in the Python codebase (see FR-013).
 
@@ -175,7 +175,7 @@ the settings fixture and verify NodeEngine sends gradient OSC to that port.
 - The OSC type-tag string for `/gradient/start_fade` is `sssisffhiss` (11 args), verified against `/usr/bin/gradient-motiond` (v0.3.0) on 2026-05-14. Field order: `motion_id`(s), `node_name`(s), `osc_host`(s), `osc_port`(i — int32), `osc_path`(s), `start_value`(f), `end_value`(f), `start_mtc_ms`(**h — int64**), `duration_ms`(i — int32), `curve_type`(s), `curve_params_json`(s). The `h` (int64) tag on `start_mtc_ms` requires `OscMessageBuilder` with explicit `arg_type='h'` — python-osc's `SimpleUDPClient.send_message` type inference maps `int` → `i` (int32) only and would cause silent daemon-side drops. See `contracts/gradient_osc.md` for the full wire contract.
 - `GradientClient` wraps `PyOscClient` (`src/cuemsengine/osc/PyOsc.py`, `python-osc 1.9.3` already in `pyproject.toml`). It does NOT extend `PlayerClient` (pyossia): pyossia's `set_value()` pushes one typed value per registered endpoint, whereas `/gradient/start_fade` requires 11 individually typed arguments in a single OSC message — packing them as `ValueType.List` would lose the per-argument type tags the daemon's oscpack parser requires.
 - Per-node correctness: each NodeEngine instance only drives its own local daemon. Cross-machine fade dispatch is out of scope.
-- The settings XSD lives in the `cuems-utils` repo; changes to it are tracked there and referenced here as a dependency. The `dev/test_xml_files/settings.xml` in this repo is updated as a test fixture.
+- The settings XSD lives in the `cuems-utils` repo and ships in `cuemsutils >= 0.1.0rc8`, which declares `<gradient_osc_port>` as a required `cms:NonPrivilegedPort` element under `<node>`. This feature pins `cuemsutils = "0.1.0rc8"` in `pyproject.toml`; `poetry.lock` MUST be refreshed (Phase 1 / T000) to match before any test in this feature runs. The `dev/test_xml_files/settings.xml` in this repo is updated as a test fixture to include the new required element with value `7100`.
 - `curve_params_json` defaults to `"{}"` (empty JSON object string) when no curve parameters are specified.
 
 ## Clarifications
@@ -199,3 +199,17 @@ Post-`/speckit-analyze` startup-pattern parity refinements (the engine-side grad
 - Q: Is `set_gradient_client` safe to call multiple times? → A: Yes — any new call replaces the prior client (reconnection safe-guard). No teardown needed; `PyOscClient` is fire-and-forget UDP with no held resources.
 - Q: Does project unload (`_load_project_inner`) call `cancel_all`? → A: Yes — first cleanup action, before `CUE_HANDLER.stop_all_cues`, to free any lingering motions in the daemon before the new project loads (FR-005).
 - Q: Should FR-006's `ch.player_handler.gradient_client` indirection be kept? → A: No — replace with direct `PLAYER_HANDLER.gradient_client` singleton access, matching every existing action / run-cue module.
+
+### Session 2026-05-15 (cuemsutils rc8 alignment — post-`/speckit-analyze`)
+
+Triggered by `/speckit-analyze` discovering that `cuemsutils >= 0.1.0rc8` now ships
+`<gradient_osc_port>` in `xml/schemas/settings.xsd` as a required
+`cms:NonPrivilegedPort` element (implicit `minOccurs="1"`) — making the spec's
+prior "optional / default-when-absent" stance unreachable in any validated
+settings file.
+
+- Q: Should the engine still default to 7100 when `<gradient_osc_port>` is absent? → A: No — the XSD makes the element required, so absence is a settings-load validation error raised by cuemsutils before `NodeEngine` runs. The default branch is removed (Constitution IV: no dead code; Principle II: no untestable acceptance criteria).
+- Q: Should `NodeEngine.set_gradient_client()` call `PORT_HANDLER.add_config_ports({'gradient_motiond': port})`? → A: No — the existing `get_config_ports(node_conf)` helper in `NodeEngine.py` auto-registers every `*_port` key, including `gradient_osc_port`. Explicit registration would create a duplicate entry under a different label for the same UDP port.
+- Q: Is the FR-010 xfail/skip provision (for the case where the cuems-utils schema is unpublished) still relevant? → A: No — the schema has shipped in rc8. The xfail clause is removed; failing settings-load tests indicate a fixture or lockfile bug, not a schema-availability gap.
+- Q: Should the `GRADIENT_OSC_PORT_DEFAULT` module-level constant in `NodeEngine.py` be introduced? → A: No — with no default-fallback branch, the constant has no callers. Skipping it avoids dead code.
+- Q: Which in-repo XML fixtures need the new element? → A: `dev/test_xml_files/settings.xml` (the only `settings.xml` in the repo, consumed via `tests/fixtures.py::env_config_path` by `test_controller_commands.py`, `test_nodeengine_helpers.py`, `test_core_baseengine_status.py`, `test_default_mappings_valid.py`). Any inline settings XML in test files must be audited as part of T012.

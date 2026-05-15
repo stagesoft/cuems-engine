@@ -21,6 +21,10 @@ UUID at construction and injects it on every `send_fade`.
 `ControllerEngine._send_gradient_cancel_all` and its call sites are deleted;
 `ActionHandler` is updated to call `PLAYER_HANDLER.gradient_client` directly;
 all `fade_id` identifiers are renamed `motion_id` per FR-013.
+`<gradient_osc_port>` is consumed via the `cuemsutils >= 0.1.0rc8` settings
+XSD as a required element under `<node>` — no engine-side default-fallback;
+port registration with `PORT_HANDLER` is handled automatically by the
+pre-existing `get_config_ports(node_conf)` helper.
 
 ## Technical Context
 
@@ -240,56 +244,55 @@ follows the TDD Red → Green → Refactor cycle.
 
 **Files**: `src/cuemsengine/NodeEngine.py`, `tests/test_node_engine_gradient.py` (new)
 
-**Pattern parity** (decisions C1, C3, C4, C5):
-- Module-level constant: `GRADIENT_OSC_PORT_DEFAULT = 7100` near the existing `VIDEOCOMPOSER_OSC_PORT_DEFAULT` constant in `NodeEngine.py`.
+**Pattern parity** (decisions C1, C3, C4, C5, plus rc8 alignment):
 - Dedicated setup method `set_gradient_client(self)` on `NodeEngine`, called from the same orchestrator that calls `set_video_players` / `set_dmx_players` / `set_audio_outputs`.
-- `.get()` (dict access), NOT `getattr` — `self.cm.node_conf` is a dict.
-- Register the port with `PORT_HANDLER.add_config_ports({'gradient_motiond': port})` for parity with every other player.
+- Direct dict access on `self.cm.node_conf['gradient_osc_port']` — the element is XSD-required (`cuemsutils >= 0.1.0rc8`), so a validated `node_conf` always contains it; no `.get()` fallback, no `GRADIENT_OSC_PORT_DEFAULT` constant.
+- Port registration with `PORT_HANDLER` happens automatically via the existing `get_config_ports(node_conf)` helper in `NodeEngine.py` — `set_gradient_client` does NOT call `add_config_ports` explicitly (would create a duplicate entry under a different label for the same UDP port).
 
 **TDD steps**:
 
 1. Write failing tests (new file `tests/test_node_engine_gradient.py`):
    - `test_set_gradient_client_reads_port_from_node_conf` — when `self.cm.node_conf['gradient_osc_port'] == 7200`, `set_gradient_client()` calls `PLAYER_HANDLER.set_gradient_client(port=7200, node_uuid=<cm.node_uuid>)`.
-   - `test_set_gradient_client_defaults_to_7100` — when `gradient_osc_port` absent from `node_conf`, calls with `port=GRADIENT_OSC_PORT_DEFAULT` (7100) and logs at INFO that the default is being used.
-   - `test_set_gradient_client_registers_port` — assert `PORT_HANDLER.add_config_ports` called with `{'gradient_motiond': <resolved_port>}`.
    - `test_set_gradient_client_passes_node_uuid` — `node_uuid` kwarg equals `self.cm.node_uuid`.
    - `test_set_gradient_client_called_during_node_setup` — patch `set_gradient_client` and assert it's called once from the same orchestrator that calls `set_video_players` (or whichever method holds the setup sequence).
    - `test_stop_playback_calls_cancel_all` — patch `PLAYER_HANDLER.get_gradient_client`; call `stop_playback()`; assert `send_cancel_all` invoked.
    - `test_load_project_calls_cancel_all` — same for `_load_project_inner` (FR-005 — cancel_all on project unload to free any lingering motions in the daemon).
    - `test_cancel_all_before_cue_stop_on_stop` — `send_cancel_all` fires before `CUE_HANDLER.stop_all_cues` (FR-004: "before other stop-cleanup actions").
-   - `test_cancel_all_does_not_block_when_client_none` — `PLAYER_HANDLER.get_gradient_client()` returns `None`; `stop_playback` / `_load_project_inner` must not raise (guarded `if gradient_client:` block).
+   - `test_cancel_all_does_not_block_when_client_none` — `PLAYER_HANDLER.get_gradient_client()` returns `None`; `stop_playback` / `_load_project_inner` must not raise; `caplog` captures a DEBUG-level record matching `gradient_client not initialised` (or chosen wording — assert exact text once chosen).
 
-2. Add the constant at the top of `NodeEngine.py` (alongside `VIDEOCOMPOSER_OSC_PORT_DEFAULT`):
-   ```python
-   GRADIENT_OSC_PORT_DEFAULT = 7100
-   ```
+   NOTE: a `test_set_gradient_client_defaults_to_7100` test is intentionally
+   NOT in this list — the `cuemsutils >= 0.1.0rc8` XSD makes
+   `<gradient_osc_port>` required, so the absent-element code path is
+   unreachable and must not be implemented (Constitution IV). Settings-load
+   failures are the cuemsutils loader's responsibility and are covered by
+   cuemsutils' own tests. A `test_set_gradient_client_registers_port` test
+   is also out of scope here — port registration is handled by the
+   pre-existing `get_config_ports(node_conf)` helper.
 
-3. Add a dedicated `set_gradient_client(self)` method on `NodeEngine`, modelled on `set_video_players`:
+2. Add a dedicated `set_gradient_client(self)` method on `NodeEngine`, modelled on `set_video_players`:
    ```python
    def set_gradient_client(self):
        """Initialise (or replace) the local GradientClient.
 
        gradient-motiond is a systemd service; the engine only needs an OSC
        sender bound to its UDP port. The only configurable parameter is the
-       UDP port (flat <gradient_osc_port> under <node> in settings.xml).
+       UDP port (flat <gradient_osc_port> under <node> in settings.xml),
+       which is REQUIRED by the cuemsutils >= 0.1.0rc8 settings XSD —
+       validation rejects a missing element before this method runs, so no
+       default-fallback branch is needed. Port registration with
+       PORT_HANDLER is handled automatically by the existing
+       `get_config_ports(node_conf)` helper in this module.
        """
-       gradient_osc_port = int(
-           self.cm.node_conf.get('gradient_osc_port', GRADIENT_OSC_PORT_DEFAULT)
-       )
-       if 'gradient_osc_port' not in self.cm.node_conf:
-           Logger.info(
-               f'gradient_osc_port not set; using default {GRADIENT_OSC_PORT_DEFAULT}'
-           )
+       gradient_osc_port = int(self.cm.node_conf['gradient_osc_port'])
        PLAYER_HANDLER.set_gradient_client(
            port=gradient_osc_port,
            node_uuid=self.cm.node_uuid,
        )
-       PORT_HANDLER.add_config_ports({'gradient_motiond': gradient_osc_port})
    ```
 
-4. Call `self.set_gradient_client()` from the same node setup orchestrator that already calls `set_video_players()` and `set_dmx_players()` (locate via `grep -n "set_video_players\|set_dmx_players" NodeEngine.py`).
+3. Call `self.set_gradient_client()` from the same node setup orchestrator that already calls `set_video_players()` and `set_dmx_players()` (locate via `grep -n "set_video_players\|set_dmx_players" NodeEngine.py`).
 
-5. In `stop_playback` (line 926), insert `send_cancel_all` as FIRST cleanup action (before `CUE_HANDLER.stop_all_cues` at line 940), per FR-004:
+4. In `stop_playback` (line 926), insert `send_cancel_all` as FIRST cleanup action (before `CUE_HANDLER.stop_all_cues` at line 940), per FR-004:
    ```python
    gradient_client = PLAYER_HANDLER.get_gradient_client()
    if gradient_client:
@@ -297,11 +300,13 @@ follows the TDD Red → Green → Refactor cycle.
            gradient_client.send_cancel_all()
        except Exception as e:
            Logger.error(f'gradient cancel_all failed on stop: {e}')
+   else:
+       Logger.debug('gradient_client not initialised; skipping cancel_all')
    ```
 
-6. In `_load_project_inner` (line 566), insert the same block before `CUE_HANDLER.stop_all_cues()` at line 574 — this frees any lingering motions in the daemon before the new project loads (FR-005, decision C9).
+5. In `_load_project_inner` (line 566), insert the same block before `CUE_HANDLER.stop_all_cues()` at line 574 — this frees any lingering motions in the daemon before the new project loads (FR-005, decision C9).
 
-7. Green on all new tests.
+6. Green on all new tests.
 
 ---
 
@@ -484,8 +489,12 @@ to distinguish. A nested block would be a one-element pseudo-namespace.
    cancel is a node-local concern. Fires on both STOP (FR-004) and project load
    (FR-005) before any other cleanup, to free any lingering motions in the daemon.
 
-6. **Port-handler registration**: `PORT_HANDLER.add_config_ports({'gradient_motiond': port})`
-   on every `set_gradient_client()` call, for parity with every other player subsystem.
+6. **Port-handler registration**: Handled automatically by the existing
+   `get_config_ports(node_conf)` helper in `NodeEngine.py`, which collects
+   every `*_port` key from `node_conf` — `gradient_osc_port` is picked up
+   by that path without additional code. `set_gradient_client` MUST NOT
+   call `add_config_ports` explicitly (would create a duplicate entry
+   under a different label for the same UDP port).
 
 7. **Flat `<gradient_osc_port>` settings key**: child of `<node>`, not nested.
    The UDP port is the only configurable parameter for gradient-motion-engine on

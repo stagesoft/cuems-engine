@@ -25,6 +25,7 @@
             <mtc_port>Midi Through Port-0</mtc_port>
             <osc_in_port_base>7000</osc_in_port_base>
             <nng_hub_port>5555</nng_hub_port>
+            <gradient_osc_port>7100</gradient_osc_port>
             <videoplayer>
                 <path>/usr/bin/videocomposer</path>
                 <args></args>
