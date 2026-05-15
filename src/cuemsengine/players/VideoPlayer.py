@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 from cuemsutils.log import logged, Logger
 
 from .Player import Player
@@ -96,10 +99,14 @@ class VideoOutput:
     def apply_config(self, video_client: VideoClient) -> None:
         """No-op: videocomposer reads display config from display.conf at startup.
 
-        cuems-generate-display-conf (ExecStartPre) generates display.conf from
-        default_mappings.xml — the single source of truth for connector→region
-        mappings.  The engine must NOT send /display/region or resolution_mode
-        because that caused the MultiOutputRenderer to reconfigure (and sometimes
-        switch to native 4K resolution, corrupting the canvas layout).
+        /run/cuems/display.conf is the shared contract between engine and
+        videocomposer for canvas geometry. cuems-generate-display-conf
+        (videocomposer's ExecStartPre) writes it from default_mappings.xml;
+        both VC and the engine (via cuemsengine.display_conf.read_display_conf)
+        read it independently. The engine must NOT send /display/region or
+        resolution_mode here because that caused the MultiOutputRenderer to
+        reconfigure (and sometimes switch to native 4K resolution, corrupting
+        the canvas layout). Phase 2 will gate runtime tweaks behind explicit
+        edit-mode OSC handlers.
         """
         Logger.info(f'VideoOutput {self.mapped_to}: region ({self.x},{self.y} {self.width}x{self.height})')
