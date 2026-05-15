@@ -416,13 +416,8 @@ class ControllerEngine(BaseEngine):
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
 
-        Handles script_finished and armed_ready notifications.
+        Handles script_finished, armed_ready, nextcue, and cue_enabled notifications.
         """
-        # gradient-motiond broadcasts STATUS on the NNG bus (all peers receive it).
-        # ControllerEngine must silently discard these to avoid processing errors.
-        if operation.sender and operation.sender.startswith("gradientengine_"):
-            return
-
         Logger.info(f'Status operation received: {operation}')
         if operation.target == 'script_finished':
             if operation.data and operation.data.get('running') == 'no':

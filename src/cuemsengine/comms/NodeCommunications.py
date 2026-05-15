@@ -31,10 +31,8 @@ class NodeCommunications(AsyncCommsThread):
         self.node_id = node_id
         self._command_callback = command_callback
         
-        # Set up receive callbacks: COMMAND for local dispatch, STATUS for fade_complete.
         self.nng_hub.set_receive_callbacks({
             OperationType.COMMAND: self._handle_command_operation,
-            OperationType.STATUS: self._handle_status_operation,
         })
 
     def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:
@@ -71,11 +69,6 @@ class NodeCommunications(AsyncCommsThread):
         if operation.type != OperationType.COMMAND:
             return
 
-        # gradient-motiond commands are forwarded over NNG but must not be executed
-        # locally — the target field discriminates them from Python engine commands.
-        if operation.target == "gradientengine":
-            return
-
         command_name = operation.target
         data = operation.data or {}
         value = data.get('value')
@@ -103,28 +96,6 @@ class NodeCommunications(AsyncCommsThread):
         else:
             Logger.warning(f"No command callback set for NodeCommunications")
 
-    def _handle_status_operation(self, operation: NodeOperation) -> None:
-        """Handle STATUS operations on the NNG bus.
-
-        gradient-motiond STATUS broadcasts (e.g. fade_complete) are logged at
-        debug level and discarded — the Python engine no longer mutates state
-        in response to them (general cue lifecycle handles all disarm). All
-        other STATUS messages (e.g. nextcue updates) are not handled here —
-        they originate from NodeEngine itself and do not arrive inbound.
-
-        Args:
-            operation: The received NodeOperation of type STATUS.
-        """
-        if operation.target == "gradientengine":
-            data = operation.data or {}
-            event = data.get("event")
-            fade_id = data.get("fade_id", "")
-            Logger.debug(
-                f"gradient-motiond STATUS discarded: event={event} fade_id={fade_id}"
-            )
-            return
-
-    ###############################
     #########################
     # Nng comms to Controller
     #########################
