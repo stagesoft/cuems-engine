@@ -21,7 +21,7 @@ hooks:
   before_clarify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before clarification?
     description: Auto-commit before spec clarification
@@ -29,7 +29,7 @@ hooks:
   before_plan:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before planning?
     description: Auto-commit before implementation planning
@@ -37,7 +37,7 @@ hooks:
   before_tasks:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before task generation?
     description: Auto-commit before task generation
@@ -45,7 +45,7 @@ hooks:
   before_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before implementation?
     description: Auto-commit before implementation
@@ -53,7 +53,7 @@ hooks:
   before_checklist:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before checklist?
     description: Auto-commit before checklist generation
@@ -61,7 +61,7 @@ hooks:
   before_analyze:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before analysis?
     description: Auto-commit before analysis
@@ -69,7 +69,7 @@ hooks:
   before_taskstoissues:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit outstanding changes before issue sync?
     description: Auto-commit before tasks-to-issues conversion
@@ -77,7 +77,7 @@ hooks:
   after_constitution:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit constitution changes?
     description: Auto-commit after constitution update
@@ -85,7 +85,7 @@ hooks:
   after_specify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit specification changes?
     description: Auto-commit after specification
@@ -93,7 +93,7 @@ hooks:
   after_clarify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit clarification changes?
     description: Auto-commit after spec clarification
@@ -101,7 +101,7 @@ hooks:
   after_plan:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit plan changes?
     description: Auto-commit after implementation planning
@@ -109,7 +109,7 @@ hooks:
   after_tasks:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit task changes?
     description: Auto-commit after task generation
@@ -117,7 +117,7 @@ hooks:
   after_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit implementation changes?
     description: Auto-commit after implementation
@@ -125,7 +125,7 @@ hooks:
   after_checklist:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit checklist changes?
     description: Auto-commit after checklist generation
@@ -133,7 +133,7 @@ hooks:
   after_analyze:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit analysis results?
     description: Auto-commit after analysis
@@ -141,7 +141,7 @@ hooks:
   after_taskstoissues:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     prompt: Commit after syncing issues?
     description: Auto-commit after tasks-to-issues conversion
