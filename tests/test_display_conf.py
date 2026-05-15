@@ -5,7 +5,11 @@
 
 import pytest
 
-from cuemsengine.display_conf import read_display_conf, DisplayConfNotFoundError
+from cuemsengine.display_conf import (
+    read_display_conf,
+    DisplayConfNotFoundError,
+    DisplayConfValueError,
+)
 
 
 def _write(tmp_path, content):
@@ -75,10 +79,9 @@ canvas_region=0,0,1920,1080
 
 
 def test_ignores_non_output_sections(tmp_path):
-    """Global keys and unknown sections are tolerated."""
+    """Global keys (other than canvas_size) and unknown sections are tolerated."""
     path = _write(tmp_path, """\
 canvas_layout=custom
-canvas_size=5760x1080
 name=test-config
 
 [output:HDMI-A-1]
@@ -133,3 +136,99 @@ enabled=true
     regions, canvas = read_display_conf(path)
     assert regions["HDMI-A-1"]["width"] == 3840
     assert canvas == (3840, 2160)
+
+
+# ---------------------------------------------------------------------------
+# canvas_size override (oversized canvas / letterbox margin)
+# ---------------------------------------------------------------------------
+
+def test_canvas_size_override_larger_than_bbox(tmp_path):
+    """Operator-set canvas_size larger than monitor bbox is honored."""
+    path = _write(tmp_path, """\
+canvas_layout=custom
+canvas_size=7680x2160
+
+[output:HDMI-A-1]
+canvas_region=1920,540,1920,1080
+""")
+    regions, canvas = read_display_conf(path)
+    assert regions["HDMI-A-1"]["x"] == 1920
+    assert canvas == (7680, 2160)
+
+
+def test_canvas_size_equal_to_bbox_accepted(tmp_path):
+    """canvas_size exactly matching bbox is fine."""
+    path = _write(tmp_path, """\
+canvas_size=5760x1080
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+
+[output:DP-2]
+canvas_region=1920,0,1920,1080
+
+[output:DP-1]
+canvas_region=3840,0,1920,1080
+""")
+    _regions, canvas = read_display_conf(path)
+    assert canvas == (5760, 1080)
+
+
+def test_canvas_size_smaller_than_bbox_raises(tmp_path):
+    """canvas_size smaller than bbox would crop monitors — reject."""
+    path = _write(tmp_path, """\
+canvas_size=1000x500
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+""")
+    with pytest.raises(DisplayConfValueError, match="smaller than"):
+        read_display_conf(path)
+
+
+def test_canvas_size_zero_raises(tmp_path):
+    path = _write(tmp_path, """\
+canvas_size=0x0
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+""")
+    with pytest.raises(DisplayConfValueError, match="positive"):
+        read_display_conf(path)
+
+
+def test_canvas_size_negative_raises(tmp_path):
+    path = _write(tmp_path, """\
+canvas_size=-1920x-1080
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+""")
+    with pytest.raises(DisplayConfValueError):
+        read_display_conf(path)
+
+
+def test_canvas_size_malformed_raises(tmp_path):
+    path = _write(tmp_path, """\
+canvas_size=not_a_size
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+""")
+    with pytest.raises(DisplayConfValueError, match="malformed|non-integer"):
+        read_display_conf(path)
+
+
+def test_canvas_size_absent_falls_back_to_bbox(tmp_path):
+    """No canvas_size key → bbox is used (default behaviour)."""
+    path = _write(tmp_path, """\
+canvas_layout=custom
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+
+[output:DP-1]
+canvas_region=1920,0,1920,1080
+""")
+    _regions, canvas = read_display_conf(path)
+    assert canvas == (3840, 1080)

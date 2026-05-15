@@ -12,19 +12,21 @@ to live in NodeEngine.set_video_outputs).
 File format is INI-like:
 
     canvas_layout=custom
+    canvas_size=5760x1080        # optional, overrides bbox
 
     [output:HDMI-A-1]
     canvas_region=0,0,1920,1080
     resolution=1920x1080         # optional
     refresh=60.0                 # optional
 
-The engine only consumes `canvas_region` today; resolution + refresh are
-read by the videocomposer directly.
+The engine consumes `canvas_region` and the optional global `canvas_size`
+override; resolution + refresh are read by the videocomposer directly.
 """
 
 import configparser
 import os
-from typing import Tuple
+import re
+from typing import Optional, Tuple
 
 
 DEFAULT_DISPLAY_CONF = "/run/cuems/display.conf"
@@ -34,6 +36,45 @@ class DisplayConfNotFoundError(RuntimeError):
     """display.conf is missing, unreadable, or has no [output:*] sections."""
 
 
+class DisplayConfValueError(RuntimeError):
+    """display.conf is present but contains an invalid value (e.g. a
+    canvas_size override that is malformed, non-positive, or smaller than
+    the per-output region bounding box)."""
+
+
+_CANVAS_SIZE_RE = re.compile(r"^\s*canvas_size\s*=\s*(.+?)\s*$", re.MULTILINE)
+
+
+def _parse_canvas_size_override(preamble: str) -> Optional[Tuple[int, int]]:
+    """Scan the file's global preamble for `canvas_size=WIDTHxHEIGHT`.
+
+    Returns ``(w, h)`` if a valid positive-int override is present,
+    ``None`` if the key is absent. Raises ``DisplayConfValueError`` for
+    malformed or non-positive values.
+    """
+    match = _CANVAS_SIZE_RE.search(preamble)
+    if not match:
+        return None
+    raw = match.group(1)
+    parts = raw.lower().split("x")
+    if len(parts) != 2:
+        raise DisplayConfValueError(
+            f"canvas_size={raw!r} is malformed; expected WIDTHxHEIGHT"
+        )
+    try:
+        w = int(parts[0])
+        h = int(parts[1])
+    except ValueError:
+        raise DisplayConfValueError(
+            f"canvas_size={raw!r} has non-integer components"
+        )
+    if w <= 0 or h <= 0:
+        raise DisplayConfValueError(
+            f"canvas_size={raw!r} must be positive (got {w}x{h})"
+        )
+    return (w, h)
+
+
 def read_display_conf(path: str = DEFAULT_DISPLAY_CONF) -> Tuple[dict, Tuple[int, int]]:
     """Parse display.conf and return ``(regions, canvas_size)``.
 
@@ -41,11 +82,17 @@ def read_display_conf(path: str = DEFAULT_DISPLAY_CONF) -> Tuple[dict, Tuple[int
 
     - ``regions``: ``{connector_name: {'x', 'y', 'width', 'height'}}`` with
       pixel-int values.
-    - ``canvas_size``: ``(canvas_width, canvas_height)`` computed as
-      ``max(x + width, y + height)`` over all regions.
+    - ``canvas_size``: ``(canvas_width, canvas_height)``. If the global
+      ``canvas_size=WIDTHxHEIGHT`` key is present in the file's preamble,
+      it is used (after validating it is >= the per-region bounding box).
+      Otherwise, computed as ``max(x + width, y + height)`` over all regions.
 
-    Raises ``DisplayConfNotFoundError`` if the file is missing or has no
-    ``[output:*]`` sections.
+    Raises:
+
+    - ``DisplayConfNotFoundError`` if the file is missing or has no
+      ``[output:*]`` sections.
+    - ``DisplayConfValueError`` if ``canvas_size=`` is malformed, has
+      non-positive values, or is smaller than the per-region bbox.
     """
     if not os.path.isfile(path):
         raise DisplayConfNotFoundError(
@@ -53,21 +100,28 @@ def read_display_conf(path: str = DEFAULT_DISPLAY_CONF) -> Tuple[dict, Tuple[int
             "videocomposer must run first (its ExecStartPre generates it)"
         )
 
-    parser = configparser.ConfigParser()
-    parser.optionxform = str  # preserve key case for forward-compat keys
-
-    # Drop the file's global preamble (anything before the first [section]):
-    # display.conf carries top-level keys like `canvas_layout=custom` that
-    # ConfigParser would reject as MissingSectionHeaderError. Only [output:*]
-    # sections matter here; global keys are VC-side concerns.
     with open(path) as f:
         body = f.read()
+
+    # Pre-pass: extract global preamble (everything before the first
+    # [section] header) so we can scan it for `canvas_size=`. The
+    # ConfigParser path below DISCARDS the preamble — without this
+    # pre-pass the override is silently lost.
     if body.lstrip().startswith("["):
+        preamble = ""
         sectioned = body.lstrip()
     elif "\n[" in body:
-        sectioned = body[body.find("\n[") + 1:]
+        split_at = body.find("\n[") + 1
+        preamble = body[:split_at]
+        sectioned = body[split_at:]
     else:
+        preamble = body
         sectioned = ""
+
+    canvas_override = _parse_canvas_size_override(preamble)
+
+    parser = configparser.ConfigParser()
+    parser.optionxform = str  # preserve key case for forward-compat keys
     if sectioned:
         parser.read_string(sectioned)
 
@@ -94,6 +148,16 @@ def read_display_conf(path: str = DEFAULT_DISPLAY_CONF) -> Tuple[dict, Tuple[int
             "valid canvas_region"
         )
 
-    canvas_w = max(r["x"] + r["width"] for r in regions.values())
-    canvas_h = max(r["y"] + r["height"] for r in regions.values())
-    return regions, (canvas_w, canvas_h)
+    bbox_w = max(r["x"] + r["width"] for r in regions.values())
+    bbox_h = max(r["y"] + r["height"] for r in regions.values())
+
+    if canvas_override is not None:
+        cw, ch = canvas_override
+        if cw < bbox_w or ch < bbox_h:
+            raise DisplayConfValueError(
+                f"canvas_size={cw}x{ch} is smaller than the per-output "
+                f"bounding box {bbox_w}x{bbox_h}; monitors would be cropped"
+            )
+        return regions, (cw, ch)
+
+    return regions, (bbox_w, bbox_h)

@@ -457,7 +457,9 @@ class NodeEngine(BaseEngine):
                             'height': region['height'],
                             'canvas_region': dict(region),
                         }
-        PLAYER_HANDLER.start_video_outputs(video_outputs)
+        PLAYER_HANDLER.start_video_outputs(
+            video_outputs, canvas_override=(canvas_w, canvas_h)
+        )
 
 
     # DMX functions
