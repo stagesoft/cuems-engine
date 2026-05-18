@@ -2,11 +2,81 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import fcntl
+import os
+import re
+import selectors
 import subprocess
 import sys
-import os
+import time
+from typing import Callable
+
 from cuemsutils.log import Logger
 from ..core.BaseEngine import CONTROLLER_HOST
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ASYNC MIGRATION NOTE (read me when porting deploy to asyncio)
+# ──────────────────────────────────────────────────────────────────────────
+# This module uses `selectors` today because the engine is mid-migration to
+# asyncio (see comms/AsyncCommsThread.py for the existing pattern: asyncio
+# lives in its own dedicated thread, the rest is sync-with-threads). Pure
+# `selectors` keeps _sync() orthogonal to any event loop running elsewhere.
+#
+# When deploy is ready to go async-native, the rewrite is contained to this
+# file. Look for `[ASYNC-MIGRATE]` markers below. Mapping:
+#
+#   subprocess.Popen(...)       →  await asyncio.create_subprocess_exec(...)
+#   fcntl O_NONBLOCK setup      →  delete (asyncio StreamReader is async)
+#   selectors.DefaultSelector() →  delete; spawn TWO reader tasks instead
+#       sel.register(stdout)        t_out = asyncio.create_task(
+#       sel.register(stderr)                    self._pump(proc.stdout, 'out'))
+#                                   t_err = asyncio.create_task(
+#                                           self._pump(proc.stderr, 'err'))
+#   sel.select(timeout=budget)  →  asyncio.wait({t_out, t_err},
+#                                       timeout=budget,
+#                                       return_when=FIRST_COMPLETED)
+#       NOT  asyncio.wait_for(reader.read(4096), timeout=budget)
+#       (single-stream; would miss events on the other pipe — wrong)
+#   os.read(fd, 4096)           →  await reader.read(4096) inside each pump
+#   proc.poll() is None         →  proc.returncode is None
+#   proc.wait(timeout=...)      →  await asyncio.wait_for(proc.wait(),
+#                                                          timeout=...)
+#   def _sync(...)              →  async def _sync(...)
+#   _kill: proc.wait(timeout=2) →  await asyncio.wait_for(proc.wait(), 2.0)
+#   _kill: def _kill(...)       →  async def _kill(...)
+#
+# Concretely the async I/O loop becomes a `while not (t_out.done() and
+# t_err.done()):` driven by `asyncio.wait({t_out, t_err}, timeout=budget)`,
+# with each pump task pushing parsed/raw lines onto an asyncio.Queue that
+# the main task drains in the same loop. The watchdog stays: empty `done`
+# set from asyncio.wait means the budget expired → kill + return.
+#
+# Everything else — _parse_progress, _dispatch_line, _on_progress, error-
+# precedence semantics, watchdog constants, the \r/\n split, the "drop
+# rsync's trailer line" logic — transfers UNCHANGED.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+# Armed only until the first byte of output arrives. Catches pre-fork /
+# getaddrinfo hangs — the original 15s subprocess timeout's actual job.
+_STARTUP_DEADLINE_S = 10
+
+# Belt-and-braces inactivity watchdog ~3x rsync's own --timeout=5, so rsync
+# trips first and reports its own diagnostic in the normal case. Only fires
+# if rsync itself becomes uninterruptible.
+_INACTIVITY_S = 15
+
+
+# rsync 3.2+ --info=progress2 line shape:
+#       32,768   0%    0.00kB/s    0:00:00 (xfr#1, to-chk=0/1)
+# or near end:
+#  2,147,483,648 100%  118.34MB/s    0:00:17 (xfr#3, to-chk=0/3)
+_PROGRESS2_RE = re.compile(
+    r'^\s*([\d,]+)\s+(\d+)%\s+([\d.]+\s*[kMGT]?B/s)\s+(\d+:\d\d:\d\d)'
+    r'(?:\s+\(xfr#(\d+),\s*to-chk=(\d+)/(\d+)\))?\s*$'
+)
+
 
 class CuemsDeploy():
     def __init__(
@@ -16,6 +86,7 @@ class CuemsDeploy():
             controller_ip: str | None = None,
             hostname: str | None = None,
             log_file: str = '/run/cuems/rsync.log',
+            on_progress: Callable[[dict], None] | None = None,
         ):
         """Construct a deploy manager.
 
@@ -29,12 +100,18 @@ class CuemsDeploy():
                 compatibility with code/tests that pre-date the
                 controller_ip parameter.
             log_file: Where rsync writes its log.
+            on_progress: Optional callback fired for each rsync progress
+                update (parsed from --info=progress2). Receives a dict
+                like {'bytes': int, 'pct': int, 'rate': str, 'eta': str,
+                'xfr': int, 'remaining': int, 'total': int}. The UI hook
+                point — defaults to a no-op.
         """
         self.library_path = library_path
         self.tmp_path = tmp_path
         self.log_file = log_file
         self.errors = []
         self.encoding = sys.getfilesystemencoding()
+        self._on_progress = on_progress or (lambda parsed: None)
 
         # TODO: reconstruct CuemsDeploy on network_map reload so an IP
         # change (DHCP renewal, role-flip, manual XML edit) is picked up
@@ -103,7 +180,7 @@ class CuemsDeploy():
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
 
-    def _sync(self, path):
+    def _sync(self, path):  # [ASYNC-MIGRATE] → `async def _sync(...)`
         # Ensure the log directory exists. /run/cuems is normally created
         # by systemd RuntimeDirectory=, but the cuems user may write
         # nested files into it on demand.
@@ -112,55 +189,193 @@ class CuemsDeploy():
         except OSError as e:
             Logger.warning(f'Could not create rsync log directory: {e}')
 
-        # --contimeout=2 caps the TCP connect attempt (was the source of the
-        #   ~6s getaddrinfo hangs).
-        # --timeout=5 is the rsync I/O inactivity timeout — bounded per-syscall,
-        #   not total transfer time, so multi-GB media still completes as long
-        #   as the stream is flowing.
-        # --ignore-missing-args tells rsync to skip (not error on) entries from
-        #   --files-from that do not exist on the source. Projects in the
-        #   editor library hold only script.xml; the historical mappings.xml
-        #   and settings.xml entries in _project_files() are best-effort.
-        #   Real errors (network, auth, permission) still surface via the exit
-        #   code.
-        # subprocess.run(timeout=15) is a Python-level backstop in case rsync
-        #   hangs before processing its own flags (e.g. inside getaddrinfo).
+        # --contimeout=2 caps the TCP connect attempt.
+        # --timeout=5 is rsync's own I/O inactivity timeout — bounded per
+        #   syscall, not total transfer time. Multi-GB media completes as
+        #   long as the stream is flowing.
+        # --info=progress2,name0 emits a single-line overall progress feed
+        #   (with the ,name0 suffix suppressing per-file noise).
+        # --ignore-missing-args tells rsync to skip (not error on) entries
+        #   from --files-from that do not exist on the source.
+        #
+        # Supervision: this method streams stdout/stderr via selectors and
+        # supervises two watchdogs (startup deadline + inactivity). No
+        # total-wall-clock cap — huge transfers complete naturally.
+        cmd = [
+            'rsync', '-r',
+            '--info=progress2,name0',
+            '--stats',
+            '--contimeout=2',
+            '--timeout=5',
+            '--ignore-missing-args',
+            f'--files-from={path}',
+            f'--log-file={self.log_file}',
+            self.address,
+            self.library_path,
+        ]
+        env = dict(os.environ, RSYNC_PASSWORD="f48t5eL2kLHw2Wfw")
+
+        # [ASYNC-MIGRATE] Popen → asyncio.create_subprocess_exec; bufsize
+        #                 disappears (StreamReader handles framing).
+        # Bytes mode (no text=); we decode manually so we can split on \r.
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            bufsize=0,
+        )
+
+        # [ASYNC-MIGRATE] DELETE THIS BLOCK — async StreamReader is
+        #                 non-blocking by construction.
+        # Non-blocking pipes — the selector drives timing; os.read() must
+        # never block.
+        for fd in (proc.stdout.fileno(), proc.stderr.fileno()):
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        # [ASYNC-MIGRATE] DELETE — no selector; concurrent reader tasks
+        #                 replace this.
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ, 'out')
+        sel.register(proc.stderr, selectors.EVENT_READ, 'err')
+
+        bufs = {'out': '', 'err': ''}
+        stderr_lines: list[str] = []
+        started = False
+        deadline = time.monotonic() + _STARTUP_DEADLINE_S
+        rc: int | None = None
+
         try:
-            result = subprocess.run(
-                [
-                    'rsync',
-                    '-rq',
-                    '--stats',
-                    '--contimeout=2',
-                    '--timeout=5',
-                    '--ignore-missing-args',
-                    f'--files-from={path}',
-                    f'--log-file={self.log_file}',
-                    self.address,
-                    self.library_path
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=dict(os.environ, RSYNC_PASSWORD="f48t5eL2kLHw2Wfw"),
-                timeout=15,
-            )
-            result.check_returncode()
+            # [ASYNC-MIGRATE] Replace `sel.get_map()` with "both readers
+            #                 done"; replace sel.select(timeout=) with
+            #                 asyncio.wait({...}, timeout=budget). Empty
+            #                 result → asyncio.TimeoutError equivalent.
+            while sel.get_map():
+                budget = (
+                    (deadline - time.monotonic()) if not started
+                    else _INACTIVITY_S
+                )
+                events = sel.select(timeout=max(budget, 0.1))
+                if not events:
+                    reason = (
+                        'no output within startup deadline' if not started
+                        else 'no output within inactivity threshold'
+                    )
+                    self._kill(proc)
+                    self.errors = [
+                        f'rsync {reason} (target: {self.address})'
+                    ]
+                    # MUST return — don't let the stderr-derived branch
+                    # below overwrite the watchdog reason.
+                    return False
+
+                for key, _ in events:
+                    tag = key.data
+                    try:
+                        # [ASYNC-MIGRATE] → await reader.read(4096)
+                        chunk = os.read(key.fd, 4096)
+                    except BlockingIOError:
+                        # [ASYNC-MIGRATE] DELETE — async read can't raise
+                        continue
+                    if not chunk:
+                        sel.unregister(key.fileobj)
+                        if bufs[tag]:
+                            self._dispatch_line(tag, bufs[tag], stderr_lines)
+                            bufs[tag] = ''
+                        continue
+                    started = True
+                    bufs[tag] += chunk.decode(errors='replace')
+                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    for p in parts:
+                        if p:
+                            self._dispatch_line(tag, p, stderr_lines)
+
+            # rsync may close its pipes a fraction before exiting. Trust
+            # --timeout=5 to have done its job, but never block forever
+            # here. If wait() times out, the process is wedged after
+            # closing fds — kill it.
+            # [ASYNC-MIGRATE] → await asyncio.wait_for(proc.wait(),
+            #                                          timeout=_INACTIVITY_S)
+            try:
+                rc = proc.wait(timeout=_INACTIVITY_S)
+            except subprocess.TimeoutExpired:
+                self._kill(proc)
+                self.errors = [
+                    f'rsync closed pipes but did not exit within '
+                    f'{_INACTIVITY_S}s (target: {self.address})'
+                ]
+                return False
+        finally:
+            # [ASYNC-MIGRATE] proc.poll() → proc.returncode is None
+            if proc.poll() is None:
+                self._kill(proc)
+            sel.close()  # [ASYNC-MIGRATE] DELETE — no selector to close
+
+        if rc == 0:
             self.errors = []
             return True
-        except subprocess.CalledProcessError as e:
-            errors_string = e.stderr.decode(self.encoding)
+        # Drop rsync's positional "rsync error: ... at main.c(NNN)" trailer
+        # when present; keep the real diagnostic lines.
+        self.errors = (
+            stderr_lines[:-1]
+            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            else stderr_lines
+        )
+        return False
 
-            #convert lines to list and remove last line (final error menssage)
-            errors_list = errors_string.splitlines()
-            if errors_list:
-                errors_list.pop()
-            self.errors = errors_list
-            return False
+    def _dispatch_line(self, tag: str, line: str, stderr_lines: list[str]) -> None:
+        # Paradigm-portable: no I/O primitives, no concurrency. Stays sync
+        # in the async port.
+        if tag == 'out':
+            Logger.debug(f'rsync: {line}')
+            parsed = self._parse_progress(line)
+            if parsed:
+                self._on_progress(parsed)
+        else:
+            Logger.warning(f'rsync: {line}')
+            stderr_lines.append(line)
+
+    def _kill(self, proc):
+        # [ASYNC-MIGRATE] Make this `async def`. Both wait() calls become
+        #                 `await asyncio.wait_for(proc.wait(), 2.0)` with
+        #                 `except asyncio.TimeoutError` instead of
+        #                 `subprocess.TimeoutExpired`.
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            self.errors = [
-                f'rsync timed out after 15s (target: {self.address})'
-            ]
-            return False
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def _parse_progress(self, line: str) -> dict:
+        """Parse a rsync --info=progress2 line.
+
+        Returns {} for any line that isn't a progress2 update (stats
+        block, file names, blank, etc.). Returns a structured dict
+        otherwise — the only consumer today is self._on_progress, which a
+        future UI will subscribe to. Keep keys stable.
+        """
+        m = _PROGRESS2_RE.match(line)
+        if not m:
+            return {}
+        bytes_str, pct, rate, eta, xfr, done, total = m.groups()
+        out = {
+            'bytes': int(bytes_str.replace(',', '')),
+            'pct': int(pct),
+            'rate': rate,
+            'eta': eta,
+        }
+        if xfr is not None:
+            out.update({
+                'xfr': int(xfr),
+                'remaining': int(done),
+                'total': int(total),
+            })
+        return out
 
     def _deploy_log_path(self, project, tag = 'project'):
         return os.path.join(

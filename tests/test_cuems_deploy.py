@@ -8,17 +8,115 @@ Covers:
 - controller_ip direct path (preferred)
 - hostname + avahi fallback path (legacy)
 - disabled state when no IP is available
-- timeout handling (connect + I/O + subprocess.run backstop)
+- stream supervision: startup-deadline + inactivity watchdogs
 - rsync command flags
 - log file path defaults
+- on_progress callback wiring
+- _parse_progress shape
 """
 
+import selectors
 import subprocess
+from collections import deque
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from cuemsengine.tools.CuemsDeploy import CuemsDeploy
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Fakes
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class _FakeStream:
+    """File-object-ish wrapper with a stable fileno()."""
+    def __init__(self, fd: int):
+        self._fd = fd
+    def fileno(self) -> int:
+        return self._fd
+
+
+class _ScriptedSelector:
+    """Drop-in replacement for selectors.DefaultSelector for tests.
+
+    events is a list of (action, payload) tuples processed in order:
+       ('select', [fd, ...])  → .select() returns READ events for fds
+       ('select', [])         → .select() returns [] (watchdog fires)
+    """
+    def __init__(self, events):
+        self._events = list(events)
+        self._registered = {}  # fileobj → (fd, data)
+
+    def register(self, fileobj, _evt, data):
+        self._registered[fileobj] = (fileobj.fileno(), data)
+
+    def unregister(self, fileobj):
+        self._registered.pop(fileobj, None)
+
+    def get_map(self):
+        return self._registered
+
+    def select(self, timeout=None):
+        if not self._events:
+            return []
+        action, payload = self._events.pop(0)
+        assert action == 'select', action
+        keys = []
+        for fd in payload:
+            fileobj = next(
+                fo for fo, (fdv, _) in self._registered.items() if fdv == fd
+            )
+            _, data = self._registered[fileobj]
+            keys.append((
+                SimpleNamespace(fd=fd, fileobj=fileobj, data=data),
+                selectors.EVENT_READ,
+            ))
+        return keys
+
+    def close(self):
+        pass
+
+
+def _make_proc(rc: int, stdout_fd: int = 100, stderr_fd: int = 101):
+    """Build a Popen-shaped mock whose pipes have stable fds."""
+    proc = MagicMock()
+    proc.stdout = _FakeStream(stdout_fd)
+    proc.stderr = _FakeStream(stderr_fd)
+    # poll() returns None until wait() has been called; then returns rc
+    proc._returncode = None
+    def _wait(timeout=None):
+        proc._returncode = rc
+        return rc
+    proc.wait.side_effect = _wait
+    proc.poll.side_effect = lambda: proc._returncode
+    proc.terminate.return_value = None
+    proc.kill.return_value = None
+    return proc
+
+
+def _scripted_os_read(fd_chunks: dict[int, deque]):
+    """Build an os.read patch backed by per-fd chunk deques."""
+    def _read(fd, _n):
+        q = fd_chunks.get(fd)
+        if q is None or not q:
+            return b''
+        return q.popleft()
+    return _read
+
+
+def _shrink_watchdogs(monkeypatch, startup=0.05, inactivity=0.05):
+    """Speed up tests so watchdog branches fire promptly."""
+    import cuemsengine.tools.CuemsDeploy as mod
+    monkeypatch.setattr(mod, '_STARTUP_DEADLINE_S', startup)
+    monkeypatch.setattr(mod, '_INACTIVITY_S', inactivity)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Constructor / addressing
+# ─────────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -81,71 +179,10 @@ def test_controller_ip_takes_precedence_over_hostname():
 def test_sync_files_returns_false_when_disabled():
     """Disabled manager must not invoke rsync."""
     d = CuemsDeploy(controller_ip=None)
-    with patch('subprocess.run') as mock_run:
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen') as mock_popen:
         result = d.sync_files('proj', 'project')
         assert result is False
-        mock_run.assert_not_called()
-
-
-def test_sync_command_includes_timeout_flags(deploy, tmp_path):
-    """Both --contimeout and --timeout must be passed to rsync."""
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
-
-    with patch('subprocess.run') as mock_run:
-        completed = MagicMock()
-        completed.check_returncode = MagicMock()
-        completed.stderr = b''
-        mock_run.return_value = completed
-
-        deploy._sync(str(log_file))
-
-        args, kwargs = mock_run.call_args
-        cmd = args[0]
-        assert '--contimeout=2' in cmd
-        assert '--timeout=5' in cmd
-        # Tolerate missing files on the source (script.xml-only projects).
-        assert '--ignore-missing-args' in cmd
-        # Python-level backstop
-        assert kwargs.get('timeout') == 15
-
-
-def test_sync_handles_subprocess_timeout(deploy, tmp_path):
-    """If rsync hangs past 15s, subprocess.TimeoutExpired must be caught
-    and translated into a clean False."""
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
-
-    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired(cmd='rsync', timeout=15)):
-        result = deploy._sync(str(log_file))
-        assert result is False
-        assert any('timed out' in e for e in deploy.errors)
-
-
-def test_sync_handles_rsync_error_exit(deploy, tmp_path):
-    """A non-zero rsync exit must produce False with captured stderr."""
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
-
-    err = subprocess.CalledProcessError(
-        returncode=10, cmd='rsync',
-        stderr=b'rsync: connection refused\nrsync: error final\n',
-    )
-    with patch('subprocess.run', side_effect=err):
-        result = deploy._sync(str(log_file))
-        assert result is False
-        assert any('connection refused' in e for e in deploy.errors)
-
-
-def test_sync_handles_empty_stderr(deploy, tmp_path):
-    """Defensive: stderr may be empty (no trailing line to pop)."""
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
-
-    err = subprocess.CalledProcessError(returncode=1, cmd='rsync', stderr=b'')
-    with patch('subprocess.run', side_effect=err):
-        result = deploy._sync(str(log_file))
-        assert result is False
+        mock_popen.assert_not_called()
 
 
 def test_default_log_file_is_under_run_cuems():
@@ -153,3 +190,261 @@ def test_default_log_file_is_under_run_cuems():
     d = CuemsDeploy(controller_ip='10.0.0.1')
     assert d.log_file.startswith('/run/cuems/'), \
         f'expected /run/cuems/ prefix, got {d.log_file!r}'
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Rsync command flags
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_sync_command_includes_supervision_flags(deploy, tmp_path):
+    """rsync must be invoked with the stream-supervision flag set."""
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=0)
+    # Immediately EOF both pipes → loop exits → wait() returns 0
+    selector = _ScriptedSelector([
+        ('select', [proc.stdout.fileno(), proc.stderr.fileno()]),
+    ])
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc) as mock_popen, \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read',
+               side_effect=_scripted_os_read({
+                   proc.stdout.fileno(): deque([b'']),
+                   proc.stderr.fileno(): deque([b'']),
+               })):
+        deploy._sync(str(log_file))
+
+    args, _ = mock_popen.call_args
+    cmd = args[0]
+    assert cmd[0] == 'rsync'
+    # rsync's own per-syscall inactivity guard is the primary kill switch.
+    assert '--contimeout=2' in cmd
+    assert '--timeout=5' in cmd
+    # Tolerate missing files on the source (script.xml-only projects).
+    assert '--ignore-missing-args' in cmd
+    # Stream supervision: progress2 + suppressed per-file names.
+    assert '--info=progress2,name0' in cmd
+    # We dropped the -q (quiet) flag in favour of streaming.
+    assert '-rq' not in cmd
+    assert '-q' not in cmd
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Watchdog paths
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_sync_startup_deadline_fires_with_no_output(deploy, tmp_path, monkeypatch):
+    """If rsync produces zero output before the startup deadline, kill it
+    and surface a clean error — the original 'pre-fork hang' case."""
+    _shrink_watchdogs(monkeypatch)
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=0)
+    # Selector returns [] every time → startup deadline expires.
+    selector = _ScriptedSelector([
+        ('select', []),
+        ('select', []),
+        ('select', []),
+    ])
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc), \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read', return_value=b''):
+        result = deploy._sync(str(log_file))
+
+    assert result is False
+    assert any('startup deadline' in e for e in deploy.errors), deploy.errors
+    proc.terminate.assert_called()
+
+
+def test_sync_inactivity_threshold_fires_after_started(deploy, tmp_path, monkeypatch):
+    """Post-startup wedge: rsync emits one chunk, then nothing. Watchdog
+    must kick in with the inactivity message (not the startup one)."""
+    _shrink_watchdogs(monkeypatch)
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=0)
+    out_fd = proc.stdout.fileno()
+    err_fd = proc.stderr.fileno()
+    selector = _ScriptedSelector([
+        ('select', [out_fd]),    # one progress chunk
+        ('select', []),          # nothing → inactivity fires
+        ('select', []),
+    ])
+    fd_chunks = {
+        out_fd: deque([b'         1,024   0%    0.00kB/s    0:00:00\r']),
+        err_fd: deque([b'']),
+    }
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc), \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read',
+               side_effect=_scripted_os_read(fd_chunks)):
+        result = deploy._sync(str(log_file))
+
+    assert result is False
+    assert any('inactivity threshold' in e for e in deploy.errors), deploy.errors
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Error-exit paths
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_sync_handles_rsync_error_exit(deploy, tmp_path):
+    """A non-zero rsync exit must produce False with captured stderr,
+    and the positional 'rsync error: ...' trailer must be stripped."""
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=10)
+    out_fd = proc.stdout.fileno()
+    err_fd = proc.stderr.fileno()
+    selector = _ScriptedSelector([
+        ('select', [err_fd]),                    # stderr message
+        ('select', [out_fd, err_fd]),            # both EOF
+    ])
+    fd_chunks = {
+        out_fd: deque([b'']),
+        err_fd: deque([
+            b'rsync: connection refused\nrsync error: foo at main.c(123)\n',
+            b'',
+        ]),
+    }
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc), \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read',
+               side_effect=_scripted_os_read(fd_chunks)):
+        result = deploy._sync(str(log_file))
+
+    assert result is False
+    assert any('connection refused' in e for e in deploy.errors), deploy.errors
+    # Trailer dropped: no "rsync error:" line should remain.
+    assert not any('rsync error:' in e for e in deploy.errors), deploy.errors
+
+
+def test_sync_handles_empty_stderr(deploy, tmp_path):
+    """Defensive: rsync may exit non-zero without any stderr at all."""
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=1)
+    out_fd = proc.stdout.fileno()
+    err_fd = proc.stderr.fileno()
+    selector = _ScriptedSelector([
+        ('select', [out_fd, err_fd]),            # both EOF immediately
+    ])
+    fd_chunks = {out_fd: deque([b'']), err_fd: deque([b''])}
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc), \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read',
+               side_effect=_scripted_os_read(fd_chunks)):
+        result = deploy._sync(str(log_file))
+
+    assert result is False
+    assert deploy.errors == []
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# on_progress callback
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_sync_fires_on_progress_for_progress2_lines(tmp_path):
+    """on_progress receives a structured dict for each progress2 update."""
+    cb = MagicMock()
+    d = CuemsDeploy(controller_ip='10.0.0.1', on_progress=cb)
+    log_file = tmp_path / 'rsync_request.log'
+    log_file.write_text('')
+
+    proc = _make_proc(rc=0)
+    out_fd = proc.stdout.fileno()
+    err_fd = proc.stderr.fileno()
+    selector = _ScriptedSelector([
+        ('select', [out_fd]),
+        ('select', [out_fd, err_fd]),
+    ])
+    # A real-shape progress2 line, \r-terminated.
+    progress = (
+        b'  2,147,483,648 100%  118.34MB/s    0:00:17 '
+        b'(xfr#3, to-chk=0/3)\r'
+    )
+    fd_chunks = {
+        out_fd: deque([progress, b'']),
+        err_fd: deque([b'']),
+    }
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen',
+               return_value=proc), \
+         patch('cuemsengine.tools.CuemsDeploy.selectors.DefaultSelector',
+               return_value=selector), \
+         patch('cuemsengine.tools.CuemsDeploy.fcntl.fcntl'), \
+         patch('cuemsengine.tools.CuemsDeploy.os.read',
+               side_effect=_scripted_os_read(fd_chunks)):
+        result = d._sync(str(log_file))
+
+    assert result is True
+    assert cb.call_count == 1
+    parsed = cb.call_args[0][0]
+    assert parsed['bytes'] == 2_147_483_648
+    assert parsed['pct'] == 100
+    assert parsed['rate'] == '118.34MB/s'
+    assert parsed['eta'] == '0:00:17'
+    assert parsed['xfr'] == 3
+    assert parsed['remaining'] == 0
+    assert parsed['total'] == 3
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# _parse_progress unit tests
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_parse_progress_basic_line(deploy):
+    parsed = deploy._parse_progress(
+        '         32,768   0%    0.00kB/s    0:00:00 (xfr#1, to-chk=0/1)'
+    )
+    assert parsed['bytes'] == 32_768
+    assert parsed['pct'] == 0
+    assert parsed['rate'] == '0.00kB/s'
+    assert parsed['eta'] == '0:00:00'
+    assert parsed['xfr'] == 1
+    assert parsed['remaining'] == 0
+    assert parsed['total'] == 1
+
+
+def test_parse_progress_without_xfr_suffix(deploy):
+    parsed = deploy._parse_progress(
+        '         32,768   5%    1.50MB/s    0:00:10'
+    )
+    assert parsed['bytes'] == 32_768
+    assert parsed['pct'] == 5
+    assert 'xfr' not in parsed
+
+
+@pytest.mark.parametrize('line', [
+    '',
+    'Number of files: 1',                      # stats line
+    'sending incremental file list',
+    'projects/foo/script.xml',                  # file path
+    'total size is 1,234  speedup is 1.00',
+])
+def test_parse_progress_returns_empty_for_non_progress_lines(deploy, line):
+    assert deploy._parse_progress(line) == {}
