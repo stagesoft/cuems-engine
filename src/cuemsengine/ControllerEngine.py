@@ -1,6 +1,9 @@
 import asyncio
 import math
+import os
+import threading
 import time
+import xml.etree.ElementTree as ET
 from functools import partial
 
 from cuemsutils.log import Logger, logged
@@ -62,6 +65,21 @@ class ControllerEngine(BaseEngine):
         # the asyncio event loop (WS receive handler + _on_ws_client_connect),
         # so no lock is needed — keep it that way.
         self.mixer_status: dict[str, float] = {}
+
+        # Cluster-state tracking. Populated at load time by _resolve_cluster_state
+        # (chunk 3); used to gate the armed=yes flip on all required nodes having
+        # reported armed_ready. _pong_responses is populated by the comms thread
+        # via status_operation_callback as pong replies arrive. All set mutations
+        # and the read in _probe_cluster_liveness happen under _cluster_lock.
+        self._adopted_nodes: set[str] = set()
+        self._required_nodes: set[str] = set()
+        self._armed_nodes: set[str] = set()
+        self._finished_nodes: set[str] = set()
+        self._pong_responses: set[str] = set()
+        self._pong_expected: set[str] = set()
+        self._pong_event = threading.Event()
+        self._cluster_lock = threading.Lock()
+
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
@@ -415,10 +433,20 @@ class ControllerEngine(BaseEngine):
 
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
-        
-        Handles script_finished and armed_ready notifications.
+
+        Handles script_finished, armed_ready, nextcue, cue_enabled, and pong
+        notifications.
         """
         Logger.info(f'Status operation received: {operation}')
+        if operation.target == 'pong':
+            # Cluster liveness probe reply. Runs on the AsyncCommsThread event
+            # loop; _probe_cluster_liveness on the main thread waits on the event.
+            with self._cluster_lock:
+                self._pong_responses.add(operation.sender)
+                if self._pong_responses >= self._pong_expected:
+                    self._pong_event.set()
+            Logger.debug(f'Pong from {operation.sender}')
+            return
         if operation.target == 'script_finished':
             if operation.data and operation.data.get('running') == 'no':
                 Logger.info('Script finished notification received from node - updating running status')
@@ -764,6 +792,14 @@ class ControllerEngine(BaseEngine):
         # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
 
+        # Probe cluster liveness BEFORE forwarding the load. The result is
+        # logged here for visibility and used by chunk 3's GO gating; today it
+        # also refreshes the <online> field in network_map.xml (which nothing
+        # else maintains automatically).
+        alive = self._probe_cluster_liveness()
+        Logger.info(f'Cluster liveness at load time: alive={sorted(alive)}')
+        self._persist_online_field(alive)
+
         # Forward load command to NodeEngine via NNG (nodes will arm cues)
         self._forward_load_to_nodes(project_name)
 
@@ -857,6 +893,145 @@ class ControllerEngine(BaseEngine):
             Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
+
+    def _controller_uuid(self) -> str:
+        if hasattr(self, 'cm') and self.cm:
+            return self.cm.node_conf.get('uuid', 'controller')
+        return 'controller'
+
+    def _adopted_uuids_from_network_map(self) -> set[str]:
+        """Read adopted node UUIDs from the in-memory network_map.
+
+        We avoid NetworkMap.get_nodes_by_adoption() because it mutates the dict
+        via strtobool — only works on the first pass; subsequent calls raise
+        because `adopted`/`online` are no longer string-typed.
+        """
+        out: set[str] = set()
+        try:
+            node_list = (self.cm.network_map or {}).get('node_list', [])
+            for entry in node_list:
+                if not isinstance(entry, dict):
+                    continue
+                node = entry.get('node') or {}
+                uuid = node.get('uuid')
+                adopted = node.get('adopted', False)
+                if isinstance(adopted, str):
+                    adopted = adopted.strip().lower() in ('true', '1', 'yes')
+                if adopted and uuid:
+                    out.add(uuid)
+        except Exception as e:
+            Logger.warning(f'Could not read network_map: {e}')
+        return out
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+
+        expected = adopted_uuids - {controller_uuid}
+
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+
+        if not expected:
+            Logger.debug('Cluster probe: no remote nodes to ping')
+            return {controller_uuid}
+
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            Logger.warning('Cluster probe skipped: communications thread not available')
+            return {controller_uuid}
+
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target='ping',
+            data={'value': None, 'address': '/engine/cluster/ping'},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f'Could not broadcast cluster ping: {e}')
+            return {controller_uuid}
+
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+            f'Cluster probe: expected={sorted(expected)} '
+            f'alive_remote={sorted(alive - {controller_uuid})}'
+        )
+        return alive
+
+    def _persist_online_field(self, alive_nodes: set[str]) -> None:
+        """Rewrite /etc/cuems/network_map.xml with refreshed <online> values.
+
+        Best-effort: a failure here only loses a piece of operator-facing
+        metadata. Never propagates the exception.
+
+        TODO(cuems-common): cuems-controller-engine.service runs with
+        ProtectSystem=full + ReadWritePaths=/opt/cuems_library /tmp, so /etc
+        is read-only and this write fails with EROFS. Add /etc/cuems to
+        ReadWritePaths to enable persistence. Until then the in-memory probe
+        result is still authoritative for GO gating — the XML stays stale.
+        """
+        try:
+            nm_path = self.cm.conf_path('network_map.xml')
+        except Exception as e:
+            Logger.warning(f'Could not resolve network_map.xml path: {e}')
+            return
+        tmp_path = nm_path + '.tmp'
+        try:
+            # Preserve the cms: prefix on the root element when we round-trip.
+            ET.register_namespace('cms', 'https://stagelab.coop/cuems/')
+            tree = ET.parse(nm_path)
+            root = tree.getroot()
+            changed = 0
+            for node in root.findall('.//node'):
+                uuid_elem = node.find('uuid')
+                online_elem = node.find('online')
+                if uuid_elem is None or online_elem is None or not uuid_elem.text:
+                    continue
+                # XSD declares <online> as BoolType with enumeration {True, False}.
+                # Must write the literal Capital-T/F strings, not Python bools or
+                # lowercase.
+                new_value = 'True' if uuid_elem.text in alive_nodes else 'False'
+                if online_elem.text != new_value:
+                    online_elem.text = new_value
+                    changed += 1
+            if changed == 0:
+                return
+            tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
+            # Schema-validate the temp file before promoting. NetworkMap's
+            # constructor reads + validates against /etc/cuems/network_map.xsd
+            # (resolved via the cuemsutils schema loader).
+            NetworkMap(tmp_path)
+            os.replace(tmp_path, nm_path)
+            Logger.debug(
+                f'Persisted network_map.xml: refreshed <online> for {changed} node(s)'
+            )
+        except Exception as e:
+            Logger.warning(f'Could not persist network_map.xml <online>: {e}')
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
     def stop_script(self, value):
         """Handle STOP command - stop timecode, update status and forward to nodes."""
