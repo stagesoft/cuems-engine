@@ -59,22 +59,38 @@ class NodeCommunications(AsyncCommsThread):
     
     def _handle_command_operation(self, operation: NodeOperation) -> None:
         """Handle a COMMAND operation received from ControllerEngine.
-        
+
         IMPORTANT: Commands are executed in a separate thread to avoid blocking
-        the NNG message receiver. Some commands like 'go' can block for the 
+        the NNG message receiver. Some commands like 'go' can block for the
         duration of cue playback, which would prevent receiving STOP/LOAD commands.
-        
+
         Args:
             operation: The NodeOperation containing the command
         """
         if operation.type != OperationType.COMMAND:
             return
-        
+
+        # Cluster liveness probe — controller broadcasts ping, we reply pong.
+        # Must be cheap and independent of project state. Reply is fire-and-
+        # forget on the running event loop (we're already inside it via the
+        # receiver coroutine).
+        if operation.target == 'ping':
+            pong = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.node_id,
+                target='pong',
+                data={},
+            )
+            asyncio.create_task(self.nng_hub.send_operation(pong))
+            Logger.debug(f"Replied pong to ping from {operation.sender}")
+            return
+
         command_name = operation.target
         data = operation.data or {}
         value = data.get('value')
         address = data.get('address', f'/engine/command/{command_name}')
-        
+
         Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
         
         if self._command_callback:
