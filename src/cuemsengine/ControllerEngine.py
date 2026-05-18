@@ -79,6 +79,11 @@ class ControllerEngine(BaseEngine):
         self._pong_expected: set[str] = set()
         self._pong_event = threading.Event()
         self._cluster_lock = threading.Lock()
+        # One-shot watchdog: fires N seconds after _resolve_cluster_state if
+        # _armed_nodes still doesn't cover _required_nodes (e.g. a node ponged
+        # alive but then died mid-rsync). Logs an error listing the pending
+        # nodes. Does NOT force armed=yes — operator decides.
+        self._arm_watchdog: threading.Timer | None = None
 
         super().__init__(**kwargs)
         self.set_editor_request('')
@@ -497,6 +502,7 @@ class ControllerEngine(BaseEngine):
                     else:
                         Logger.info('All required nodes armed — enabling GO')
                     self.set_status('armed', 'yes')
+                    self._cancel_arm_watchdog()
         elif operation.target == 'nextcue':
             nextcue_id = operation.data.get('nextcue', '') if operation.data else ''
             self.set_status('nextcue', nextcue_id)
@@ -805,6 +811,7 @@ class ControllerEngine(BaseEngine):
         with self._cluster_lock:
             self._armed_nodes.clear()
             self._finished_nodes.clear()
+        self._cancel_arm_watchdog()
 
     #########################
     # Project management
@@ -1124,6 +1131,40 @@ class ControllerEngine(BaseEngine):
         )
 
         self._persist_online_field(alive)
+        self._arm_arm_watchdog()
+
+    _ARM_WATCHDOG_S = 120.0
+
+    def _arm_arm_watchdog(self) -> None:
+        """(Re)start the watchdog timer that surfaces a stalled load.
+
+        Fires _ARM_WATCHDOG_S seconds after a load if not all required nodes
+        have reported armed_ready by then. Logs an error naming the
+        still-pending UUIDs so operator sees what's wedged.
+        """
+        self._cancel_arm_watchdog()
+        timer = threading.Timer(self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire)
+        timer.daemon = True
+        self._arm_watchdog = timer
+        timer.start()
+
+    def _cancel_arm_watchdog(self) -> None:
+        timer = self._arm_watchdog
+        if timer is not None:
+            timer.cancel()
+            self._arm_watchdog = None
+
+    def _on_arm_watchdog_fire(self) -> None:
+        with self._cluster_lock:
+            armed = set(self._armed_nodes)
+            required = set(self._required_nodes)
+        pending = required - armed
+        if not pending:
+            return
+        Logger.error(
+            f'Load stalled: nodes still pending armed_ready after '
+            f'{self._ARM_WATCHDOG_S:.0f}s: {sorted(pending)}'
+        )
 
     def _persist_online_field(self, alive_nodes: set[str]) -> None:
         """Rewrite /etc/cuems/network_map.xml with refreshed <online> values.
