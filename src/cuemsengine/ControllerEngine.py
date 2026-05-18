@@ -1,9 +1,7 @@
 import asyncio
 import math
-import os
 import threading
 import time
-import xml.etree.ElementTree as ET
 from functools import partial
 
 from cuemsutils.log import Logger, logged
@@ -1130,7 +1128,14 @@ class ControllerEngine(BaseEngine):
             f'project={sorted(project)}'
         )
 
-        self._persist_online_field(alive)
+        # The probe's `alive` set is a runtime liveness snapshot (sub-second,
+        # used here for GO gating). The <online> field in network_map.xml is
+        # a different concept: nodeconf's startup-discovery flag, persisted
+        # so that adopted-but-currently-absent nodes keep their identity
+        # records instead of being dropped from the map. The engine must NOT
+        # overwrite that with its runtime view. See CLAUDE.md "Node identity"
+        # / "<online> field ownership" for the full rationale.
+
         self._arm_arm_watchdog()
 
     _ARM_WATCHDOG_S = 120.0
@@ -1165,60 +1170,6 @@ class ControllerEngine(BaseEngine):
             f'Load stalled: nodes still pending armed_ready after '
             f'{self._ARM_WATCHDOG_S:.0f}s: {sorted(pending)}'
         )
-
-    def _persist_online_field(self, alive_nodes: set[str]) -> None:
-        """Rewrite /etc/cuems/network_map.xml with refreshed <online> values.
-
-        Best-effort: a failure here only loses a piece of operator-facing
-        metadata. Never propagates the exception.
-
-        TODO(cuems-common): cuems-controller-engine.service runs with
-        ProtectSystem=full + ReadWritePaths=/opt/cuems_library /tmp, so /etc
-        is read-only and this write fails with EROFS. Add /etc/cuems to
-        ReadWritePaths to enable persistence. Until then the in-memory probe
-        result is still authoritative for GO gating — the XML stays stale.
-        """
-        try:
-            nm_path = self.cm.conf_path('network_map.xml')
-        except Exception as e:
-            Logger.warning(f'Could not resolve network_map.xml path: {e}')
-            return
-        tmp_path = nm_path + '.tmp'
-        try:
-            # Preserve the cms: prefix on the root element when we round-trip.
-            ET.register_namespace('cms', 'https://stagelab.coop/cuems/')
-            tree = ET.parse(nm_path)
-            root = tree.getroot()
-            changed = 0
-            for node in root.findall('.//node'):
-                uuid_elem = node.find('uuid')
-                online_elem = node.find('online')
-                if uuid_elem is None or online_elem is None or not uuid_elem.text:
-                    continue
-                # XSD declares <online> as BoolType with enumeration {True, False}.
-                # Must write the literal Capital-T/F strings, not Python bools or
-                # lowercase.
-                new_value = 'True' if uuid_elem.text in alive_nodes else 'False'
-                if online_elem.text != new_value:
-                    online_elem.text = new_value
-                    changed += 1
-            if changed == 0:
-                return
-            tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
-            # Schema-validate the temp file before promoting. NetworkMap's
-            # constructor reads + validates against /etc/cuems/network_map.xsd
-            # (resolved via the cuemsutils schema loader).
-            NetworkMap(tmp_path)
-            os.replace(tmp_path, nm_path)
-            Logger.debug(
-                f'Persisted network_map.xml: refreshed <online> for {changed} node(s)'
-            )
-        except Exception as e:
-            Logger.warning(f'Could not persist network_map.xml <online>: {e}')
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
 
     def stop_script(self, value):
         """Handle STOP command - stop timecode, update status and forward to nodes."""
