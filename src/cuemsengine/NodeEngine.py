@@ -14,10 +14,10 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .display_conf import read_display_conf, DisplayConfNotFoundError
 from .osc.helpers import add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
+from .tools.display_conf import read_display_conf, DisplayConfNotFoundError
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
