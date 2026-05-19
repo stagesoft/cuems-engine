@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-      - format/module_extraction
+      - rc_1
 
 jobs:
   deploy:
