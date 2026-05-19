@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Unit tests for loop_fadeCue (Phase 6).
 
 Per FR-019: a FadeCue MUST occupy the cue runner for its `duration` so general

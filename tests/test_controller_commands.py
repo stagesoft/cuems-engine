@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Tests for ControllerEngine cleanup consolidation and new commands.
 
 Tests _clear_playback_state(), refactored load_project/stop_script,

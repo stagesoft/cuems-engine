@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 """Fire-and-forget UDP OSC client for gradient-motiond v0.3.0."""
 
 from pythonosc.osc_message_builder import OscMessageBuilder

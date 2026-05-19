@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 from enum import Enum
 from typing import Callable, Union
 from pyossia.ossia_python import OSCDevice, OSCQueryDevice # type: ignore[attr-defined]

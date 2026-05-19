@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 """Unit tests for PlayerHandler.gradient_client lifecycle — Phase 2 / T003."""
 
 from __future__ import annotations

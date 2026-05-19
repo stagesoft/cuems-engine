@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 from pytest import fixture
 from unittest.mock import patch, PropertyMock
 from cuemsengine.core.BaseEngine import MTC_PORT

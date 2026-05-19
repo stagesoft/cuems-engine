@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Unit tests for ActionCue execution through ActionHandler.
 
 Tests cover all supported cue-level actions (FR-002a), idempotency (FR-004),

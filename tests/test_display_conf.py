@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 """Coverage for cuemsengine.tools.display_conf.read_display_conf."""
 
 import pytest

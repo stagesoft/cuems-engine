@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 """Unit tests for GradientClient — Phase 2 / T001.
 
 Covers (SC-004 required 8 tests, plus extras):
