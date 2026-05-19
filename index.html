@@ -1,0 +1,1092 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+        <link rel="next" href="api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>CUEMS Engine - FormitGo</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cuems-engine" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="CUEMS Engine - FormitGo" class="md-header__button md-logo" aria-label="CUEMS Engine - FormitGo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            CUEMS Engine - FormitGo
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              cuems-engine
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cuems/cuems-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="CUEMS Engine - FormitGo" class="md-nav__button md-logo" aria-label="CUEMS Engine - FormitGo" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    CUEMS Engine - FormitGo
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cuems/cuems-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cuems-engine
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cuems-engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-cuems-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is cuems-engine?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signal-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signal flow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#communications-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Communications layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cues-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cues layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#players-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Players layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#osc-oscquery-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OSC / OSCQuery layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tools-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-design-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key design decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key design decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#deterministic-playback-across-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deterministic playback across nodes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cluster-liveness-and-go-gating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster liveness and GO gating
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#async-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Async deployment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fadecue-and-gradient-motiond-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FadeCue and gradient-motiond integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="comms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cue Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="osc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Osc
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="players/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Players
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-cuems-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is cuems-engine?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signal-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Signal flow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#communications-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Communications layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cues-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cues layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#players-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Players layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#osc-oscquery-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OSC / OSCQuery layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tools-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-design-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key design decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Key design decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#deterministic-playback-across-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deterministic playback across nodes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cluster-liveness-and-go-gating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster liveness and GO gating
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#async-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Async deployment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fadecue-and-gradient-motiond-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FadeCue and gradient-motiond integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cuems-engine">cuems-engine</h1>
+<p><strong>Timecode-driven audio, video, and DMX cueing engine with OSCQuery control.</strong></p>
+<p><a href="https://pypi.org/project/cuemsengine"><img alt="PyPI - Version" src="https://img.shields.io/pypi/v/cuemsengine.svg" /></a>
+<a href="https://pypi.org/project/cuemsengine"><img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/cuemsengine.svg" /></a>
+<a href="https://www.gnu.org/licenses/gpl-3.0"><img alt="License: GPL v3" src="https://img.shields.io/badge/License-GPLv3-blue.svg" /></a></p>
+<div class="admonition note">
+<p class="admonition-title">Project README</p>
+<p>For installation instructions, release history, and licensing, see the
+<a href="https://github.com/stagesoft/cuems-engine#readme">project README</a> on GitHub.</p>
+</div>
+<hr />
+<h2 id="what-is-cuems-engine">What is cuems-engine?</h2>
+<p><code>cuems-engine</code> is the Python runtime at the heart of the <strong>CueMS</strong> (Cue Management System).
+It synchronises audio, video, and DMX playback across one or more nodes using
+<strong>MIDI Timecode (MTC)</strong>, exposing a live control surface over <strong>OSCQuery</strong> and <strong>WebSocket</strong>.</p>
+<p>The engine is split into two complementary processes that communicate over <strong>NNG</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Process</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>controller-engine</code></td>
+<td>Master: owns the cue list, drives the MTC clock, coordinates the node fleet, exposes the editor WebSocket interface</td>
+</tr>
+<tr>
+<td><code>node-engine</code></td>
+<td>Worker: deploys project assets via rsync, arms and fires audio/video/DMX players as subprocesses, reports status back</td>
+</tr>
+</tbody>
+</table>
+<p>Both processes inherit from a common <code>BaseEngine</code> base that owns the asyncio event loop,
+OSCQuery lifecycle, MTC listener integration, and the ongoing/next cue pointers.</p>
+<hr />
+<h2 id="signal-flow">Signal flow</h2>
+<pre><code>MTC Timecode ──► Controller Engine ──► Cue Dispatch ──► Node Engine ──► Player Lifecycle ──► Output
+                       │                                      │                                  │
+                 (WebSocket / OSC)                     (NNG transport)               ┌──────────┼──────────┐
+                   Editor UI                                                       Audio      Video      DMX
+                                                                                  (JACK)  (Gradient)
+</code></pre>
+<p>A single <code>GO</code> press:</p>
+<ol>
+<li><strong>Controller</strong> resolves the current cue pointer, verifies all required nodes are armed, and broadcasts a <code>COMMAND/GO</code>.</li>
+<li><strong>Node Engine</strong> receives the command, identifies the first local cue in the <code>post_go='go'</code> chain, and fires it with a frozen MTC timestamp.</li>
+<li><strong>Player subprocesses</strong> start their media aligned to that MTC snapshot; all nodes play in sync regardless of network latency.</li>
+<li><strong>Status</strong> flows back over NNG (<code>armed_ready</code>, <code>script_finished</code>, cue-level events) to update the controller's state machine and the editor UI.</li>
+</ol>
+<hr />
+<h2 id="architecture">Architecture</h2>
+<h3 id="core-layer">Core layer</h3>
+<p><a href="core/"><code>core/</code></a> — shared base used by both engines.</p>
+<ul>
+<li><strong><code>BaseEngine</code></strong> — abstract engine; owns the asyncio event loop, <code>ConfigManager</code>,
+  OSCQuery client/server lifecycle, MTC listener, and the ongoing/next cue pointers.</li>
+<li><strong><code>EngineStatus</code></strong> — structured data model for engine state.</li>
+<li><strong><code>libmtc</code></strong> — MIDI Timecode master helper.</li>
+</ul>
+<h3 id="communications-layer">Communications layer</h3>
+<p><a href="comms/"><code>comms/</code></a> — NNG-based message transport between controller and nodes.</p>
+<ul>
+<li><strong><code>ControllerCommunications</code></strong> — controller-side NNG publisher and WebSocket bridge.</li>
+<li><strong><code>NodeCommunications</code></strong> — node-side NNG receiver; dispatches <code>COMMAND</code> operations
+  and sends <code>STATUS</code> replies. Recognises <code>target='ping'</code> and replies with
+  <code>target='pong'</code> for the liveness probe.</li>
+<li><strong><code>AsyncCommsThread</code></strong> — asyncio/thread bridge for non-blocking NNG I/O.</li>
+<li><strong><code>NodesHub</code></strong> — <code>NodeOperation</code> enum and shared data models for the NNG protocol.</li>
+</ul>
+<h3 id="cues-layer">Cues layer</h3>
+<p><a href="cues/"><code>cues/</code></a> — the unit of show control.</p>
+<ul>
+<li><strong><code>CueHandler</code></strong> — singleton managing the armed-cue registry and video player index.</li>
+<li><strong><code>ActionHandler</code></strong> — action cue dispatch with a three-phase hook system
+  (<code>before_dispatch</code>, <code>after_dispatch</code>, <code>wrap_dispatch</code>). Every failure path returns a
+  structured <code>{status, action_type, target_id, reason}</code> dict.</li>
+<li><strong><code>arm_cue</code></strong> — cue arming workflow: pre-load, readiness checks.</li>
+<li><strong><code>run_cue</code></strong> — single-shot playback (audio, video, DMX, fade).</li>
+<li><strong><code>loop_cue</code></strong> — loop/multiplay execution with MTC-boundary polling; includes
+  <code>loop_fadeCue</code> for holding a cue alive for the duration of a gradient fade.</li>
+<li><strong><code>helpers</code></strong> — timing utilities (<code>find_timing</code>, pre/post-wait calculation).</li>
+</ul>
+<h3 id="players-layer">Players layer</h3>
+<p><a href="players/"><code>players/</code></a> — player subprocess management and hardware I/O.</p>
+<ul>
+<li><strong><code>PlayerHandler</code></strong> — singleton owning all active players; handles layer routing,
+  canvas setup, and OSC communication.</li>
+<li><strong><code>AudioMixer</code></strong> — JACK-based audio mixing, routing, and graph validation.</li>
+<li><strong><code>JackConnectionManager</code></strong> — JACK port management with self-heal on stale clients.</li>
+<li><strong><code>AudioPlayer</code></strong> / <strong><code>VideoPlayer</code></strong> / <strong><code>DmxPlayer</code></strong> — subprocess wrappers.</li>
+<li><strong><code>GradientClient</code></strong> — fire-and-forget UDP OSC client for <code>gradient-motiond</code>;
+  uses explicit <code>int64</code> for <code>start_mtc_ms</code> to avoid truncation above 2³¹ ms.</li>
+</ul>
+<h3 id="osc-oscquery-layer">OSC / OSCQuery layer</h3>
+<p><a href="osc/"><code>osc/</code></a> — protocol layer for live parameter control and editor communication.</p>
+<ul>
+<li><strong><code>OssiaNodes</code></strong> — Ossia device tree node management.</li>
+<li><strong><code>OssiaClient</code></strong> / <strong><code>OssiaServer</code></strong> — OSCQuery client/server lifecycle wrappers.</li>
+<li><strong><code>WebSocketOscHandler</code></strong> — bidirectional WebSocket-to-OSC bridge between the
+  show editor and the engine.</li>
+<li><strong><code>PyOsc</code></strong> — pure-Python OSC fallback for environments without Ossia.</li>
+</ul>
+<h3 id="tools-layer">Tools layer</h3>
+<p><a href="tools/"><code>tools/</code></a> — operational utilities used by both engines.</p>
+<ul>
+<li><strong><code>CuemsDeploy</code></strong> — async rsync-based project asset deployment; mandatory-file
+  precheck, progress streaming, startup (10 s) and inactivity (15 s) watchdog
+  timeouts, stale-file cleanup via <code>--delete</code>. Non-blocking: rsync runs under
+  <code>asyncio.create_subprocess_exec</code> on the injected event loop so NNG heartbeats
+  continue throughout multi-GB transfers.</li>
+<li><strong><code>MtcListener</code></strong> — MIDI Timecode decoder; 24 h rollover detection with a
+  two-condition guard that ignores manual seeks back to <code>00:00:00:00</code>.</li>
+<li><strong><code>PortHandler</code></strong> — dynamic OSC port allocation.</li>
+<li><strong><code>display_conf</code></strong> — parses <code>/run/cuems/display.conf</code> for per-connector pixel
+  regions and optional <code>canvas_size</code> override.</li>
+<li><strong><code>system_ports</code></strong> — system MIDI port enumeration.</li>
+</ul>
+<hr />
+<h2 id="key-design-decisions">Key design decisions</h2>
+<h3 id="deterministic-playback-across-nodes">Deterministic playback across nodes</h3>
+<p>All playback boundaries derive from a single MTC reference owned by the
+controller. The frozen <code>mtc_ms</code> value is captured once at <code>GO</code> and threaded
+through <code>ActionHandler</code> dispatch, player subprocess launch, and the
+<code>loop_fadeCue</code>/<code>loop_audioCue</code>/<code>loop_dmxCue</code> MTC-polling loops. Identical
+inputs produce identical outputs regardless of transport jitter.</p>
+<h3 id="cluster-liveness-and-go-gating">Cluster liveness and GO gating</h3>
+<p>At <code>load_project</code> time the controller runs a ping/pong liveness probe (1.5 s
+window). It intersects three sets — adopted nodes, alive nodes, and nodes
+referenced by the current script — to compute <code>required_nodes</code>. <code>armed=yes</code>
+only flips when every required node has sent <code>armed_ready</code>. A 120 s stalled-load
+watchdog fires an error if any node goes silent mid-rsync.</p>
+<h3 id="async-deployment">Async deployment</h3>
+<p><code>CuemsDeploy.sync_files()</code> is synchronous at its public boundary but internally
+submits an asyncio coroutine to the engine's shared event loop via
+<code>run_coroutine_threadsafe</code>. The caller blocks on <code>.result()</code>; the loop stays
+free for NNG heartbeats throughout. An SC-001 integration test verifies ≤ ±20 %
+heartbeat jitter during a concurrent multi-GB transfer.</p>
+<h3 id="fadecue-and-gradient-motiond-integration">FadeCue and gradient-motiond integration</h3>
+<p><code>FadeCue</code> dispatches a <code>/gradient/start_fade</code> UDP OSC datagram to
+<code>gradient-motiond</code> via <code>GradientClient</code> (direct localhost UDP, not NNG).
+The engine does not poll for fade completion — it seeds <code>_end_mtc</code> on the
+FadeCue at dispatch time and <code>loop_fadeCue</code> holds the cue runner alive by
+MTC-polling until the fade duration elapses. The daemon is a pure sink; no
+status messages flow back.</p>
+<hr />
+<h2 id="api-reference">API reference</h2>
+<p>Each module's public API is generated directly from docstrings:</p>
+<ul>
+<li><a href="core/">Core</a> — <code>BaseEngine</code>, <code>EngineStatus</code></li>
+<li><a href="comms/">Communications</a> — <code>AsyncCommsThread</code>, <code>ControllerCommunications</code>, <code>NodeCommunications</code>, <code>NodesHub</code></li>
+<li><a href="cues/">Cues</a> — <code>ActionHandler</code>, <code>CueHandler</code>, <code>arm_cue</code>, <code>run_cue</code>, <code>loop_cue</code></li>
+<li><a href="players/">Players</a> — <code>PlayerHandler</code>, <code>AudioMixer</code>, <code>JackConnectionManager</code>, player wrappers, <code>GradientClient</code></li>
+<li><a href="osc/">OSC / OSCQuery</a> — <code>OssiaNodes</code>, <code>OssiaClient</code>, <code>OssiaServer</code>, <code>WebSocketOscHandler</code>, <code>PyOsc</code></li>
+<li><a href="tools/">Tools</a> — <code>CuemsDeploy</code>, <code>MtcListener</code>, <code>PortHandler</code>, <code>display_conf</code>, <code>system_ports</code></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": [], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
