@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 from functools import partial
 from time import sleep
 import os
@@ -91,6 +93,7 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
+        self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
         self.set_players()  # Creates player devices - must be before NNG callback
         self._setup_nng_command_callback()  # Set up NNG command receiving (after players ready)
@@ -683,23 +686,7 @@ class NodeEngine(BaseEngine):
         if len(bare_names) == 0:
             Logger.info('No media files to deploy')
             return True
-        # The rsync module 'cuems' maps to /opt/cuems_library on the
-        # controller. Media files live in <module>/media/<name>; their
-        # .idx sidecars live in <module>/media/indexes/<name>.idx.
-        # get_own_media_filenames returns the bare filename, so we
-        # prepend the module-relative path here.
-        # Also include .idx sidecar files for video assets — rsync with
-        # --ignore-missing-args silently skips entries that don't exist
-        # on the source, so this is safe even when the index hasn't been
-        # created yet.
-        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
-        media_entries = [f'media/{name}' for name in bare_names]
-        idx_entries = [
-            f'media/indexes/{name}.idx'
-            for name in bare_names
-            if os.path.splitext(name)[1].lower() in video_exts
-        ]
-        if not self.deploy_manager.sync_files(project, 'media', media_entries + idx_entries):
+        if not self.deploy_manager.sync_files(project, 'media', bare_names):
             Logger.error(
                 f'Media deploy failed for {project} — continuing with cached '
                 f'files; cues whose media is missing locally will fail on GO'
