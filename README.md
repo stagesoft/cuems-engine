@@ -267,7 +267,7 @@ flake8 src/
 
 ## Copyright notice
 
-Copyright © 2026 Stagelab Coop SCCL. Authors: Ion Reguera (`ion@stagelab.coop`), Adrià Masip (`adria@stagelab.coop`).
+Copyright © 2026 Stagelab Coop SCCL. Authors: Alexander Ramos, Ion Reguera (`ion@stagelab.coop`) and Adrià Masip (`adria@stagelab.coop`).
 
 This work is part of **cuems-engine**. It is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License** as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
