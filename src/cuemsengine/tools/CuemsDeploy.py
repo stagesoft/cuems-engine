@@ -201,8 +201,18 @@ class CuemsDeploy():
         # Supervision: this method streams stdout/stderr via selectors and
         # supervises two watchdogs (startup deadline + inactivity). No
         # total-wall-clock cap — huge transfers complete naturally.
+        # -t (preserve mtime) is critical:
+        #   1. Without it, rsync stamps receiver mtime to "now" on every transfer,
+        #      so subsequent rsyncs see mtime mismatch and rehash the file to
+        #      verify content (delta-transfer). For a 4 GB unchanged file this
+        #      costs ~30 s of I/O per load.
+        #   2. The videocomposer's .idx cache stores the source mtime in its
+        #      header. A receiver-side mtime drift invalidates the cache on every
+        #      load, forcing a 3-pass reindex (~5 s for 4 GB).
+        # Caught on 2026-05-19 — rsync log showed `>f..T......` (size matches,
+        # only mtime being updated).
         cmd = [
-            'rsync', '-r',
+            'rsync', '-rt',
             '--info=progress2,name0',
             '--stats',
             '--contimeout=2',
