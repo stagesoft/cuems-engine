@@ -185,6 +185,75 @@ def test_sync_files_returns_false_when_disabled():
         mock_popen.assert_not_called()
 
 
+def test_sync_files_fails_fast_when_project_mandatory_file_missing():
+    """Option A: pre-check mandatory paths, then skip rsync transfer if absent."""
+    d = CuemsDeploy(controller_ip='10.0.0.1')
+    with patch.object(d, '_check_mandatory_sources', return_value=(False, [
+        '/projects/proj/script.xml'
+    ])) as check_mandatory, \
+         patch.object(d, '_sync') as sync_mock:
+        result = d.sync_files('proj', 'project')
+
+    assert result is False
+    check_mandatory.assert_called_once()
+    sync_mock.assert_not_called()
+    assert any('mandatory project files are missing' in e for e in d.errors), d.errors
+
+
+def test_sync_files_project_does_single_sync_after_mandatory_precheck():
+    """Option A keeps one transfer process after mandatory checks pass."""
+    d = CuemsDeploy(controller_ip='10.0.0.1')
+    with patch.object(d, '_check_mandatory_sources', return_value=(True, [])) as check_mandatory, \
+         patch.object(d, '_sync', return_value=True) as sync_mock:
+        result = d.sync_files('proj', 'project')
+
+    assert result is True
+    check_mandatory.assert_called_once()
+    sync_mock.assert_called_once()
+
+
+def test_check_mandatory_sources_probes_once_for_all_paths():
+    """Mandatory precheck should run one probe with the full path set."""
+    d = CuemsDeploy(controller_ip='10.0.0.1')
+    run_result = SimpleNamespace(returncode=0, stderr=b'')
+    mandatory_paths = [
+        '/projects/proj/script.xml',
+        '/projects/proj/settings.xml',
+    ]
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.run',
+               return_value=run_result) as run_mock:
+        ok, missing = d._check_mandatory_sources(mandatory_paths)
+
+    assert ok is True
+    assert missing == []
+    run_mock.assert_called_once()
+    cmd = run_mock.call_args.args[0]
+    assert cmd[0] == 'rsync'
+    assert '-r' in cmd
+    assert '--list-only' in cmd
+    assert any(str(part).startswith('--files-from=') for part in cmd)
+
+
+def test_check_mandatory_sources_extracts_missing_subset():
+    """Missing paths are extracted from a single probe stderr payload."""
+    d = CuemsDeploy(controller_ip='10.0.0.1')
+    stderr = (
+        b'rsync: [sender] link_stat "/projects/proj/settings.xml" failed: '
+        b'No such file or directory (2)\n'
+    )
+    run_result = SimpleNamespace(returncode=23, stderr=stderr)
+    mandatory_paths = [
+        '/projects/proj/script.xml',
+        '/projects/proj/settings.xml',
+    ]
+    with patch('cuemsengine.tools.CuemsDeploy.subprocess.run',
+               return_value=run_result):
+        ok, missing = d._check_mandatory_sources(mandatory_paths)
+
+    assert ok is False
+    assert missing == ['/projects/proj/settings.xml']
+
+
 def test_default_log_file_is_under_run_cuems():
     """Log file moved out of /tmp to avoid cross-uid ownership conflicts."""
     d = CuemsDeploy(controller_ip='10.0.0.1')

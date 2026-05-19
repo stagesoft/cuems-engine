@@ -8,6 +8,7 @@ import re
 import selectors
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Callable
 
@@ -135,8 +136,19 @@ class CuemsDeploy():
                 f'resolved={self.main_ip!r}). Project deploys will be skipped.'
             )
 
-    def sync_files(self, project, tag, file_names=[]):
-        """Sync the files from the controller to the node"""
+    def sync_files(self, project, tag, file_names=None):
+        """Sync files from the controller to the node.
+
+        Option A (mixed mandatory + optional) for project deploys:
+        1) pre-check mandatory source paths with cheap metadata probes,
+        2) execute one rsync transfer with --ignore-missing-args for the full list.
+
+        Performance note:
+        - Option A: N mandatory probes + 1 transfer process.
+        - Two-call approach: 2 transfer processes (mandatory then optional).
+        Option A usually wins because rsync setup/handshake cost is paid once
+        for the bulk transfer.
+        """
         if not self.enabled:
             Logger.error(
                 f'CuemsDeploy is disabled (no controller IP) — '
@@ -144,8 +156,27 @@ class CuemsDeploy():
             )
             return False
 
+        file_names = list(file_names or [])
         if tag == 'project' and len(file_names) == 0:
             file_names = self._project_files(project)
+
+        mandatory_paths = self._mandatory_paths(project, tag)
+        if mandatory_paths:
+            mandatory_ok, missing = self._check_mandatory_sources(mandatory_paths)
+            if not mandatory_ok:
+                if missing:
+                    self.errors = [
+                        f'mandatory project files are missing at source '
+                        f'{self.address}: {", ".join(missing)}'
+                    ]
+                Logger.error(
+                    f'Failed mandatory precheck for {tag} files '
+                    f'for project {project!r}'
+                )
+                for error in self.errors:
+                    Logger.error(error)
+                return False
+
         log_file = self._deploy_log_path(project, tag)
         self._create_deploy_log(log_file, file_names)
 
@@ -160,6 +191,78 @@ class CuemsDeploy():
             for error in self.errors:
                 Logger.error(error)
         return synced
+
+    def _mandatory_paths(self, project, tag):
+        if tag != 'project':
+            return []
+        return [f'/projects/{project}/script.xml']
+
+    def _check_mandatory_sources(self, mandatory_paths):
+        """Verify mandatory remote paths exist before bulk transfer.
+
+        Uses one rsync --list-only probe with all mandatory paths included,
+        then keeps one transfer call for the actual sync path.
+        """
+        mandatory_paths = [p.strip() for p in mandatory_paths if p.strip()]
+        if not mandatory_paths:
+            return True, []
+
+        env = dict(os.environ, RSYNC_PASSWORD="f48t5eL2kLHw2Wfw")
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding=self.encoding,
+            delete=False,
+            prefix='rsync_mandatory_',
+            suffix='.lst',
+        ) as probe_list:
+            for source_path in mandatory_paths:
+                probe_list.write(f'{source_path}\n')
+            probe_list_path = probe_list.name
+
+        try:
+            result = subprocess.run(
+                [
+                    'rsync',
+                    '-r',
+                    '--list-only',
+                    '--contimeout=2',
+                    '--timeout=5',
+                    f'--files-from={probe_list_path}',
+                    self.address,
+                    self.library_path,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                timeout=10,
+            )
+        finally:
+            try:
+                os.remove(probe_list_path)
+            except OSError:
+                pass
+
+        if result.returncode == 0:
+            return True, []
+
+        stderr = result.stderr.decode(errors='replace').strip()
+        missing = []
+        for source_path in mandatory_paths:
+            if source_path in stderr and (
+                'No such file or directory' in stderr
+                or 'link_stat' in stderr
+                or 'failed to stat' in stderr
+            ):
+                missing.append(source_path)
+
+        if missing:
+            return False, missing
+
+        self.errors = [
+            f'rsync mandatory precheck failed: '
+            f'{stderr or f"exit code {result.returncode}"}'
+        ]
+        return False, []
 
 
     def _avahi_resolve(self, hostname):
