@@ -729,11 +729,29 @@ class NodeEngine(BaseEngine):
             if not os.path.exists(idx_path):
                 unindexed.append(full_path)
         if unindexed:
-            Logger.info(f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx')
+            Logger.info(
+                f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx: '
+                f'{[os.path.basename(p) for p in unindexed]}'
+            )
             try:
-                subprocess.run(['cuems-videoindexer'] + unindexed, timeout=600)
+                result = subprocess.run(
+                    ['cuems-videoindexer'] + unindexed,
+                    timeout=600,
+                    capture_output=True,
+                    text=True,
+                )
             except Exception as e:
                 Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
+                return
+            if result.returncode == 0:
+                Logger.info(f'ensure_video_indexes: indexer ok (rc=0)')
+                if result.stdout:
+                    Logger.debug(f'ensure_video_indexes stdout: {result.stdout.strip()}')
+            else:
+                Logger.warning(
+                    f'ensure_video_indexes: indexer returned rc={result.returncode}. '
+                    f'stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}'
+                )
 
     #########################
     # Nextcue
@@ -932,8 +950,35 @@ class NodeEngine(BaseEngine):
                 return
 
         if not cue_to_go._local:
-            Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
-            return
+            # First cue in the GO target isn't ours, but a post_go='go' chain
+            # may include local cues further down. Walk forward through the
+            # chain to find our first local cue and start there. Each cue in a
+            # post_go='go' chain shares the same frozen MTC snapshot, so every
+            # node fires its own local cues from the same GO press in parallel.
+            # Stop walking if the chain breaks (post_go != 'go' on a non-local
+            # cue) — that's an explicit hand-off point waiting for the next GO.
+            original = cue_to_go
+            walked = 0
+            while cue_to_go is not None and not cue_to_go._local:
+                if cue_to_go.post_go != 'go':
+                    cue_to_go = None
+                    break
+                cue_to_go = getattr(cue_to_go, '_target_object', None)
+                walked += 1
+                if walked > 1024:
+                    Logger.error('GO chain walk hit safety limit; aborting')
+                    cue_to_go = None
+                    break
+
+            if cue_to_go is None:
+                Logger.info(
+                    f'No local cues in post_go="go" chain from {original.id}; '
+                    f'nothing to play on this node for this GO')
+                return
+
+            Logger.info(
+                f'GO: skipped {walked} non-local cue(s); starting from local '
+                f'cue {cue_to_go.id}')
 
         if not cue_to_go.enabled:
             Logger.info(f'Cue {cue_to_go.id} is disabled, advancing to next enabled cue')
