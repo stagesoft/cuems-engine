@@ -114,14 +114,25 @@ guard in `sync_files()` is a belt-and-braces defence, not a normal code path.
 
 ---
 
-## Module-level constant
+## Class-level constant
 
 ```python
-RSYNC_PASSWORD: str  # single definition; all subprocess env dicts reference this name
+from typing import ClassVar
+
+class CuemsDeploy:
+    _RSYNC_PASSWORD: ClassVar[str] = "..."  # private to the class; not exported
 ```
 
-Value is intentionally kept in source for this refactor. Rotation requires editing
-one line.
+**Rationale**: The credential is an implementation detail of `CuemsDeploy`'s subprocess
+invocations — no caller outside this class needs to read it. The leading underscore signals
+"do not import"; `ClassVar` signals to type checkers that this is a class constant, not an
+instance attribute.
+
+**Access pattern**: `self._RSYNC_PASSWORD` inside methods.
+
+**Test patching** (if ever needed): `monkeypatch.setattr(CuemsDeploy, '_RSYNC_PASSWORD', '...')`.
+
+Value is intentionally kept in source for this refactor. Rotation requires editing one line.
 
 ---
 

@@ -85,19 +85,20 @@ The path-construction rules for media files (`media/<name>`, `media/indexes/<nam
 - **FR-002**: The async implementation MUST preserve all existing watchdog semantics: startup deadline (`_STARTUP_DEADLINE_S = 10 s`) and inactivity deadline (`_INACTIVITY_S = 15 s`), driven by `asyncio.wait` with a timeout budget.
 - **FR-003**: Stdout and stderr MUST be consumed by two independent `asyncio.Task` reader coroutines running concurrently; the main loop MUST use `asyncio.wait({t_out, t_err}, timeout=budget)` to drive progress and watchdog checks.
 - **FR-004**: `_kill()` MUST be an `async def` coroutine using `asyncio.wait_for(proc.wait(), timeout=2.0)` with `asyncio.TimeoutError` handling in place of `subprocess.TimeoutExpired`.
-- **FR-005**: The `RSYNC_PASSWORD` string MUST be defined as a single module-level constant; no inline literal occurrences may remain anywhere in the file.
+- **FR-005**: The rsync daemon credential MUST be defined as a private class constant `CuemsDeploy._RSYNC_PASSWORD: ClassVar[str]` (single source of truth). No inline literal occurrences may remain anywhere in the file. Rationale: the credential is used exclusively by `CuemsDeploy` methods; class-level scoping prevents accidental import into other modules. The leading underscore signals it is internal to the class.
 - **FR-006**: The main rsync command in `_sync()` MUST include `--delete` and `--delete-delay` flags; the mandatory-precheck (`--list-only`) command in `_check_mandatory_sources()` MUST NOT include these flags.
 - **FR-007**: `CuemsDeploy` MUST expose a `_media_files(bare_names: list[str]) -> list[str]` method returning rsync-relative paths (`media/<name>` for all files plus `media/indexes/<name>.idx` for video files), so `NodeEngine.deploy_media()` can delegate path construction entirely to it.
 - **FR-008**: `sync_files()` MUST remain a synchronous `def` method from `NodeEngine`'s perspective. After non-I/O setup (file-list preparation, log-file creation), it MUST bridge the entire async flow — precheck followed conditionally by main sync — as a single coroutine submitted via `asyncio.run_coroutine_threadsafe`, blocking on the result. `NodeEngine` call sites are unchanged.
 - **FR-009**: `CuemsDeploy.__init__` MUST accept a new optional parameter `loop: asyncio.AbstractEventLoop | None = None`. `NodeEngine.start()` MUST assign the running loop to `deploy_manager.loop` after the comms thread is started (late-bind), so the loop is guaranteed non-`None` by the time any deploy is triggered.
 - **FR-010**: When `self.loop` is `None` at the time `sync_files()` is called, the method MUST log an error and return `False` without attempting to schedule any coroutine.
 - **FR-011**: All existing public behaviour of `sync_files()`, `_parse_progress()`, `_dispatch_line()`, error-precedence semantics, and the `on_progress` callback contract MUST be preserved unchanged.
-- **FR-012**: `_check_mandatory_sources()` MUST be refactored to `async def`, using `asyncio.create_subprocess_exec` instead of `subprocess.run`. If the precheck returns failure, the enclosing coroutine MUST return immediately without invoking `_sync()`; no main transfer is attempted on a failed precheck.
+- **FR-012**: `_check_mandatory_sources()` MUST be refactored to `async def`, using `asyncio.create_subprocess_exec` instead of `subprocess.run`. The probe MUST consume stdout/stderr via `proc.communicate()` (short-lived, bounded output, no streaming needed). If the precheck returns failure, the enclosing coroutine MUST return immediately without invoking `_sync()`; no main transfer is attempted on a failed precheck.
+- **FR-013**: After the refactor, `CuemsDeploy.py` documentation MUST be docstring-first. The `ASYNC MIGRATION NOTE` block (lines 19–59) and all `[ASYNC-MIGRATE]` inline markers MUST be removed. Design decisions (watchdog state machine, two-reader-queue pattern, `run_coroutine_threadsafe` bridge, late-bind protocol, early-fail semantics, `_avahi_resolve` sync rationale) MUST be captured as docstrings on the methods or module they describe. Inline `#` comments MUST be reserved for non-obvious WHY-only notes (≤1 line each); WHAT-level comments are forbidden.
 
 ### Key Entities
 
 - **`CuemsDeploy`**: The deploy manager class; owns all rsync subprocess lifecycle, progress parsing, watchdog logic, and library-path knowledge.
-- **`RSYNC_PASSWORD`**: Module-level string constant holding the rsync daemon credential.
+- **`CuemsDeploy._RSYNC_PASSWORD`**: Private class constant (`ClassVar[str]`) holding the rsync daemon credential. Single source of truth for credential rotation.
 - **`loop`**: `asyncio.AbstractEventLoop | None` attribute on `CuemsDeploy`; late-bound by `NodeEngine.start()` after the comms thread is running.
 - **`_media_files()`**: New helper encapsulating the controller library's media path layout (replaces inline logic in `NodeEngine.deploy_media()`).
 
@@ -107,10 +108,11 @@ The path-construction rules for media files (`media/<name>`, `media/indexes/<nam
 
 - **SC-001**: During a deploy of a 1 GB media file, NNG heartbeat intervals remain within ±20% of their configured cadence with no missed beats.
 - **SC-002**: After loading a project with a different media set, the node's library directory contains no files exclusive to the previous project (verified by directory listing).
-- **SC-003**: The string literal `"f48t5eL2kLHw2Wfw"` appears exactly once in `CuemsDeploy.py` (the constant definition); all other references use the constant name.
+- **SC-003**: The string literal `"f48t5eL2kLHw2Wfw"` appears exactly once in `CuemsDeploy.py` (the `_RSYNC_PASSWORD` class-attribute definition); all other references use `self._RSYNC_PASSWORD` (or `cls._RSYNC_PASSWORD`).
 - **SC-004**: The test suite passes without modification to any existing test assertions; no previously green test regresses.
 - **SC-005**: `NodeEngine.deploy_media()` contains no `media/` string literals or video-extension sets; these exist only in `CuemsDeploy`.
 - **SC-006**: `CuemsDeploy.py` contains no `import fcntl`, no `selectors` usage, and no `subprocess.Popen` or `subprocess.run` calls outside `_avahi_resolve()` after the refactor.
+- **SC-007**: Comment line count in `CuemsDeploy.py` (excluding SPDX header) is at most 20 lines after the refactor. Each new async method (`_sync`, `_kill`, `_pump`, `_deploy_all_async`, `_check_mandatory_sources`, `_media_files`) has a docstring covering: purpose, key design decision (one-line summary), and any non-obvious caller contract.
 
 ## Assumptions
 
