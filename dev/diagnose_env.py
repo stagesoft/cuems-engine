@@ -28,6 +28,7 @@ def get_path_info():
         'site_packages': site.getsitepackages(),
         'current_dir': str(Path.cwd()),
         'src_dir_exists': Path('src').exists(),
+        'src_dir_at_parent_exists': Path('../src').exists(),
         'src_cuemsengine_exists': Path('src/cuemsengine').exists()
     }
 
