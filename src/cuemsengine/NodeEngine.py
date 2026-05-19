@@ -714,11 +714,29 @@ class NodeEngine(BaseEngine):
             if not os.path.exists(idx_path):
                 unindexed.append(full_path)
         if unindexed:
-            Logger.info(f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx')
+            Logger.info(
+                f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx: '
+                f'{[os.path.basename(p) for p in unindexed]}'
+            )
             try:
-                subprocess.run(['cuems-videoindexer'] + unindexed, timeout=600)
+                result = subprocess.run(
+                    ['cuems-videoindexer'] + unindexed,
+                    timeout=600,
+                    capture_output=True,
+                    text=True,
+                )
             except Exception as e:
                 Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
+                return
+            if result.returncode == 0:
+                Logger.info(f'ensure_video_indexes: indexer ok (rc=0)')
+                if result.stdout:
+                    Logger.debug(f'ensure_video_indexes stdout: {result.stdout.strip()}')
+            else:
+                Logger.warning(
+                    f'ensure_video_indexes: indexer returned rc={result.returncode}. '
+                    f'stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}'
+                )
 
     #########################
     # Nextcue
