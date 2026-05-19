@@ -78,18 +78,65 @@ def mock_config_path():
 
 @fixture
 def mock_avahi_resolve():
-    """Mock avahi-resolve-host-name to return a fixed IP address"""
+    """Mock avahi-resolve-host-name to return a fixed IP address.
+
+    Retained for backwards compatibility: CuemsDeploy no longer calls
+    _avahi_resolve during __init__ when controller_ip is provided (the
+    normal path now), but tests still apply this patch so the legacy
+    hostname-fallback path also returns a usable value if exercised.
+    """
     def mock_avahi_resolve(hostname):
         return 'localhost'
-    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy._avahi_resolve', 
+    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy._avahi_resolve',
                side_effect=mock_avahi_resolve):
         yield
 
 @fixture
 def mock_controller_ip():
     """Mock BaseEngine.get_controller_ip to return localhost"""
-    with patch('cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip', 
+    with patch('cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip',
                return_value='localhost'):
+        yield
+
+@fixture
+def mock_deploy_success():
+    """Mock CuemsDeploy.sync_files to always succeed.
+
+    Used by NodeEngine tests so they don't actually invoke rsync
+    against localhost:873 (which isn't running in CI / dev envs).
+    Without this, deploy_project would return False and the new
+    fail-fast guard in _load_project_inner would abort every test.
+    """
+    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files',
+               return_value=True):
+        yield
+
+@fixture
+def mock_deploy_project_fail():
+    """Mock CuemsDeploy.sync_files to fail only for project deploys.
+
+    Lets tests exercise the abort-on-project-deploy-failure path
+    without touching the network. tag='media' still returns True
+    so we can also verify the asymmetric policy.
+    """
+    def selective(self, project, tag, file_names=None):
+        return tag != 'project'
+    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files',
+               new=selective):
+        yield
+
+@fixture
+def mock_deploy_media_fail():
+    """Mock CuemsDeploy.sync_files to fail only for media deploys.
+
+    project deploy still succeeds, so the load completes; media
+    failure should log an error but not abort. Verifies the
+    asymmetric policy.
+    """
+    def selective(self, project, tag, file_names=None):
+        return tag != 'media'
+    with patch('cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files',
+               new=selective):
         yield
 
 @fixture

@@ -1,5 +1,6 @@
 import asyncio
 import math
+import threading
 import time
 from functools import partial
 
@@ -62,6 +63,26 @@ class ControllerEngine(BaseEngine):
         # the asyncio event loop (WS receive handler + _on_ws_client_connect),
         # so no lock is needed — keep it that way.
         self.mixer_status: dict[str, float] = {}
+
+        # Cluster-state tracking. Populated at load time by _resolve_cluster_state
+        # (chunk 3); used to gate the armed=yes flip on all required nodes having
+        # reported armed_ready. _pong_responses is populated by the comms thread
+        # via status_operation_callback as pong replies arrive. All set mutations
+        # and the read in _probe_cluster_liveness happen under _cluster_lock.
+        self._adopted_nodes: set[str] = set()
+        self._required_nodes: set[str] = set()
+        self._armed_nodes: set[str] = set()
+        self._finished_nodes: set[str] = set()
+        self._pong_responses: set[str] = set()
+        self._pong_expected: set[str] = set()
+        self._pong_event = threading.Event()
+        self._cluster_lock = threading.Lock()
+        # One-shot watchdog: fires N seconds after _resolve_cluster_state if
+        # _armed_nodes still doesn't cover _required_nodes (e.g. a node ponged
+        # alive but then died mid-rsync). Logs an error listing the pending
+        # nodes. Does NOT force armed=yes — operator decides.
+        self._arm_watchdog: threading.Timer | None = None
+
         super().__init__(**kwargs)
         self.set_editor_request('')
         self.set_node_operation_callback()
@@ -416,22 +437,70 @@ class ControllerEngine(BaseEngine):
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
 
-        Handles script_finished, armed_ready, nextcue, and cue_enabled notifications.
+        Handles script_finished, armed_ready, nextcue, cue_enabled, and pong
+        notifications.
         """
         Logger.info(f'Status operation received: {operation}')
+        if operation.target == 'pong':
+            # Cluster liveness probe reply. Runs on the AsyncCommsThread event
+            # loop; _probe_cluster_liveness on the main thread waits on the event.
+            with self._cluster_lock:
+                self._pong_responses.add(operation.sender)
+                if self._pong_responses >= self._pong_expected:
+                    self._pong_event.set()
+            Logger.debug(f'Pong from {operation.sender}')
+            return
         if operation.target == 'script_finished':
             if operation.data and operation.data.get('running') == 'no':
-                Logger.info('Script finished notification received from node - updating running status')
-                self.set_status('running', 'no')
+                # Aggregate per-node: only flip running=no when all required
+                # nodes have reported. Filter foreign senders to keep the
+                # tracker bounded.
+                sender = operation.sender
+                if sender not in self._adopted_nodes:
+                    Logger.debug(
+                        f'Ignoring script_finished from non-adopted node {sender}'
+                    )
+                    return
+                with self._cluster_lock:
+                    self._finished_nodes.add(sender)
+                    finished_now = set(self._finished_nodes)
+                    required = set(self._required_nodes)
+                Logger.info(
+                    f'Node {sender} script_finished '
+                    f'({len(finished_now)}/{len(required)})'
+                )
+                if finished_now >= required and self.get_status('running') == 'yes':
+                    Logger.info('All required nodes finished — updating running status')
+                    self.set_status('running', 'no')
         elif operation.target == 'armed_ready':
             if operation.data and operation.data.get('armed') == 'yes':
-                if self.go_offset is None:
-                    Logger.info('Re-arm after stop - restarting timecode and enabling GO')
-                    self.start_timecode()
-                    self.go_offset = 0
-                else:
-                    Logger.info('Re-arm complete from node - enabling GO')
-                self.set_status('armed', 'yes')
+                # Aggregate per-node: only flip armed=yes when all required
+                # nodes have reported. Filter foreign senders to keep the
+                # tracker bounded.
+                sender = operation.sender
+                if sender not in self._adopted_nodes:
+                    Logger.debug(
+                        f'Ignoring armed_ready from non-adopted node {sender}'
+                    )
+                    return
+                with self._cluster_lock:
+                    self._armed_nodes.add(sender)
+                    armed_now = set(self._armed_nodes)
+                    required = set(self._required_nodes)
+                Logger.info(
+                    f'Node {sender} armed ({len(armed_now)}/{len(required)})'
+                )
+                if armed_now >= required and self.get_status('armed') != 'yes':
+                    if self.go_offset is None:
+                        Logger.info(
+                            'Re-arm after stop complete — restarting timecode and enabling GO'
+                        )
+                        self.start_timecode()
+                        self.go_offset = 0
+                    else:
+                        Logger.info('All required nodes armed — enabling GO')
+                    self.set_status('armed', 'yes')
+                    self._cancel_arm_watchdog()
         elif operation.target == 'nextcue':
             nextcue_id = operation.data.get('nextcue', '') if operation.data else ''
             self.set_status('nextcue', nextcue_id)
@@ -582,6 +651,40 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             Logger.debug(f"Status update (no-op): {key} = {repr(value)}")
 
+    def _collect_project_nodes(self, cuelist) -> set[str]:
+        """Walk a cuelist and return the set of node UUIDs referenced by any
+        cue's output_name.
+
+        output_name format depends on cue type:
+          - video / audio: "<36-char UUID>_<index>" (e.g. "07131798-...-...d18f_0")
+          - DMX:           "<UUID>" (no suffix)
+        In both cases, output_name[:36] is the node UUID. We validate with a
+        cheap UUID-shape check (hyphens at positions 8/13/18/23) so garbage
+        output names don't leak non-UUID strings into the set.
+        """
+        from cuemsutils.cues import CueList
+        nodes: set[str] = set()
+        if not (hasattr(cuelist, 'contents') and cuelist.contents):
+            return nodes
+        for item in cuelist.contents:
+            if item is None:
+                continue
+            outputs = getattr(item, 'outputs', None) or []
+            for out in outputs:
+                if not isinstance(out, dict):
+                    continue
+                name = out.get('output_name') or ''
+                if len(name) >= 36:
+                    head = name[:36]
+                    if (
+                        head[8] == '-' and head[13] == '-'
+                        and head[18] == '-' and head[23] == '-'
+                    ):
+                        nodes.add(head)
+            if isinstance(item, CueList):
+                nodes.update(self._collect_project_nodes(item))
+        return nodes
+
     def _collect_cue_ids(self, cuelist) -> list[str]:
         """Recursively collect all cue IDs from a cuelist (including nested CueLists)."""
         from cuemsutils.cues import CueList
@@ -690,13 +793,23 @@ class ControllerEngine(BaseEngine):
             Logger.debug(f'Timecode broadcast {current_second}s')
 
     def _clear_playback_state(self):
-        """Clear runtime playback tracking: timestamps, timecode, armed, nextcue."""
+        """Clear runtime playback tracking: timestamps, timecode, armed, nextcue.
+
+        Also clears the per-node armed/finished accumulators. The
+        _required_nodes / _adopted_nodes snapshots stay — they belong to
+        the loaded project, not playback state, and get recomputed on the
+        next load_project. unload_project clears them explicitly.
+        """
         self._cue_broadcast_timestamps.clear()
         self._last_timecode_second = -1
         self._broadcast_status('timecode', 0)
         self.set_status('armed', 'no')
         self.set_status('nextcue', '')
         self.stop_timecode()
+        with self._cluster_lock:
+            self._armed_nodes.clear()
+            self._finished_nodes.clear()
+        self._cancel_arm_watchdog()
 
     #########################
     # Project management
@@ -763,6 +876,11 @@ class ControllerEngine(BaseEngine):
         # Update internal status
         # TODO: send project UUID instead of name for robustness (would break UI contract)
         self.set_status('load', project_name)
+
+        # Probe cluster, derive _required_nodes for GO gating, refresh <online>
+        # in network_map. Done BEFORE _forward_load_to_nodes so the gating set
+        # is in place by the time nodes start sending armed_ready.
+        self._resolve_cluster_state()
 
         # Forward load command to NodeEngine via NNG (nodes will arm cues)
         self._forward_load_to_nodes(project_name)
@@ -858,6 +976,201 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
+    def _controller_uuid(self) -> str:
+        if hasattr(self, 'cm') and self.cm:
+            return self.cm.node_conf.get('uuid', 'controller')
+        return 'controller'
+
+    def _adopted_uuids_from_network_map(self) -> set[str]:
+        """Read adopted node UUIDs from the in-memory network_map.
+
+        We avoid NetworkMap.get_nodes_by_adoption() because it mutates the dict
+        via strtobool — only works on the first pass; subsequent calls raise
+        because `adopted`/`online` are no longer string-typed.
+        """
+        out: set[str] = set()
+        try:
+            node_list = (self.cm.network_map or {}).get('node_list', [])
+            for entry in node_list:
+                if not isinstance(entry, dict):
+                    continue
+                node = entry.get('node') or {}
+                uuid = node.get('uuid')
+                adopted = node.get('adopted', False)
+                if isinstance(adopted, str):
+                    adopted = adopted.strip().lower() in ('true', '1', 'yes')
+                if adopted and uuid:
+                    out.add(uuid)
+        except Exception as e:
+            Logger.warning(f'Could not read network_map: {e}')
+        return out
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+
+        expected = adopted_uuids - {controller_uuid}
+
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+
+        if not expected:
+            Logger.debug('Cluster probe: no remote nodes to ping')
+            return {controller_uuid}
+
+        if not hasattr(self, 'communications_thread') or not self.communications_thread:
+            Logger.warning('Cluster probe skipped: communications thread not available')
+            return {controller_uuid}
+
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target='ping',
+            data={'value': None, 'address': '/engine/cluster/ping'},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f'Could not broadcast cluster ping: {e}')
+            return {controller_uuid}
+
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+            f'Cluster probe: expected={sorted(expected)} '
+            f'alive_remote={sorted(alive - {controller_uuid})}'
+        )
+        return alive
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f'Could not collect project nodes: {e}')
+            project = set()
+        alive = self._probe_cluster_liveness()
+
+        # Categorize for operator visibility.
+        for uuid in sorted(adopted):
+            in_alive = uuid in alive
+            in_project = uuid in project
+            if in_alive and in_project:
+                continue  # the silent happy path — tracked via armed_ready
+            if in_alive and not in_project:
+                Logger.info(f'node {uuid} online but unused by this project')
+            elif not in_alive and in_project:
+                Logger.error(
+                    f'node {uuid} required by this project but did not '
+                    f'respond to ping; cues for it will not play. GO blocked.'
+                )
+            else:
+                Logger.warning(
+                    f'node {uuid} is adopted but did not respond to ping; '
+                    f'not required by this project — investigate why it is offline'
+                )
+
+        # Project nodes that are NOT adopted at all — script is broken for
+        # this cluster.
+        for uuid in sorted(project - adopted):
+            Logger.warning(
+                f'project references node {uuid} which is not in the cluster; '
+                f'cues for it will not fire'
+            )
+
+        required = (adopted & alive & project) | {controller_uuid}
+
+        with self._cluster_lock:
+            self._adopted_nodes = set(adopted)
+            self._required_nodes = required
+            self._armed_nodes.clear()
+            self._finished_nodes.clear()
+
+        Logger.info(
+            f'Cluster state resolved: required={sorted(required)} '
+            f'alive={sorted(alive)} adopted={sorted(adopted)} '
+            f'project={sorted(project)}'
+        )
+
+        # The probe's `alive` set is a runtime liveness snapshot (sub-second,
+        # used here for GO gating). The <online> field in network_map.xml is
+        # a different concept: nodeconf's startup-discovery flag, persisted
+        # so that adopted-but-currently-absent nodes keep their identity
+        # records instead of being dropped from the map. The engine must NOT
+        # overwrite that with its runtime view. See CLAUDE.md "Node identity"
+        # / "<online> field ownership" for the full rationale.
+
+        self._arm_arm_watchdog()
+
+    _ARM_WATCHDOG_S = 120.0
+
+    def _arm_arm_watchdog(self) -> None:
+        """(Re)start the watchdog timer that surfaces a stalled load.
+
+        Fires _ARM_WATCHDOG_S seconds after a load if not all required nodes
+        have reported armed_ready by then. Logs an error naming the
+        still-pending UUIDs so operator sees what's wedged.
+        """
+        self._cancel_arm_watchdog()
+        timer = threading.Timer(self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire)
+        timer.daemon = True
+        self._arm_watchdog = timer
+        timer.start()
+
+    def _cancel_arm_watchdog(self) -> None:
+        timer = self._arm_watchdog
+        if timer is not None:
+            timer.cancel()
+            self._arm_watchdog = None
+
+    def _on_arm_watchdog_fire(self) -> None:
+        with self._cluster_lock:
+            armed = set(self._armed_nodes)
+            required = set(self._required_nodes)
+        pending = required - armed
+        if not pending:
+            return
+        Logger.error(
+            f'Load stalled: nodes still pending armed_ready after '
+            f'{self._ARM_WATCHDOG_S:.0f}s: {sorted(pending)}'
+        )
+
     def stop_script(self, value):
         """Handle STOP command - stop timecode, update status and forward to nodes."""
         if self.get_status('running') != "yes":
@@ -895,6 +1208,12 @@ class ControllerEngine(BaseEngine):
         self.cue_status = {}
         self.cue_enabled_status = {}
         self.set_status('load', '')
+        # No project loaded → no required/adopted snapshot. Without this, a
+        # late armed_ready from a slow node could flip armed=yes on an
+        # unloaded project.
+        with self._cluster_lock:
+            self._required_nodes.clear()
+            self._adopted_nodes.clear()
         self._forward_command_to_nodes('/engine/command/stop', value)
         Logger.info('Project unloaded')
         return True

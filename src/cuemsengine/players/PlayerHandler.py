@@ -533,16 +533,39 @@ class PlayerHandler:
             f'GradientClient: bound to 127.0.0.1:{port} node_uuid={node_uuid}'
         )
 
-    def start_video_outputs(self, output_names: dict[str, dict[str, any]]) -> None:
-        """Ensures that the all the required video output exist."""
+    def start_video_outputs(
+        self,
+        output_names: dict[str, dict[str, any]],
+        canvas_override: tuple[int, int] | None = None,
+    ) -> None:
+        """Ensures that the all the required video output exist.
+
+        ``canvas_override`` is an optional ``(width, height)`` carrying the
+        engine reader's authoritative canvas size — set when display.conf
+        has a ``canvas_size=`` global key. When provided, it must be >=
+        the per-region bounding box (we validate as defense in depth — the
+        reader already validates, but a stale caller could pass garbage).
+        When ``None``, fall back to bbox computed from the output regions.
+        """
         Logger.info(f'Checking & starting video outputs for {output_names} ')
-        canvas_w, canvas_h = 0, 0
+        bbox_w, bbox_h = 0, 0
         for cfg in output_names.values():
             region = cfg.get('canvas_region') or {}
             right = region.get('x', 0) + region.get('width', 1920)
             bottom = region.get('y', 0) + region.get('height', 1080)
-            canvas_w = max(canvas_w, right)
-            canvas_h = max(canvas_h, bottom)
+            bbox_w = max(bbox_w, right)
+            bbox_h = max(bbox_h, bottom)
+        if canvas_override is not None:
+            cw, ch = canvas_override
+            if cw < bbox_w or ch < bbox_h:
+                raise ValueError(
+                    f"canvas_override {cw}x{ch} is smaller than the per-output "
+                    f"bounding box {bbox_w}x{bbox_h}; monitors would be cropped"
+                )
+            canvas_w, canvas_h = cw, ch
+        else:
+            canvas_w, canvas_h = bbox_w, bbox_h
+        Logger.info(f'Canvas: {canvas_w}x{canvas_h} (bbox={bbox_w}x{bbox_h})')
         for output_name, output_config in output_names.items():
             output_config['canvas_width'] = canvas_w
             output_config['canvas_height'] = canvas_h
