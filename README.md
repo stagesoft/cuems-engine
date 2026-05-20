@@ -14,6 +14,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 [![PyPI - Version](https://img.shields.io/pypi/v/cuemsengine.svg)](https://pypi.org/project/cuemsengine)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cuemsengine.svg)](https://pypi.org/project/cuemsengine)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![CI](https://github.com/stagesoft/cuems-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/stagesoft/cuems-engine/actions/workflows/ci.yml)
+[![Coverage](https://stagesoft.github.io/cuems-engine/badges/coverage.svg)](https://stagesoft.github.io/cuems-engine/)
 [![Deploy MkDocs site](https://github.com/stagesoft/cuems-engine/actions/workflows/gh-pages.yml/badge.svg)](https://github.com/stagesoft/cuems-engine/actions/workflows/gh-pages.yml)
 [![Upload Python Package](https://github.com/stagesoft/cuems-engine/actions/workflows/pypi-publish.yml/badge.svg)](https://github.com/stagesoft/cuems-engine/actions/workflows/pypi-publish.yml)
 
