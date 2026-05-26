@@ -9,13 +9,14 @@ This plugin provides automatic cleanup of background processes, threads,
 and other resources when tests are interrupted with Ctrl+C or fail unexpectedly.
 """
 
-import pytest
+import multiprocessing
+import os
 import signal
 import sys
 import threading
-import multiprocessing
-import os
-from typing import List, Callable
+from typing import Callable, List
+
+import pytest
 
 # Global registry for cleanup functions
 _active_engines = []

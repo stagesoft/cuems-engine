@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
 from unittest.mock import Mock, patch
-from cuemsengine.core.BaseEngine import BaseEngine, MTC_PORT
-from .fixtures import mock_config_manager, env_config_path
+
+import pytest
+
+from cuemsengine.core.BaseEngine import MTC_PORT, BaseEngine
+
+from .fixtures import env_config_path, mock_config_manager
 
 
 class TestBaseEngine:

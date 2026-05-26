@@ -6,11 +6,11 @@ from time import sleep
 from typing import Union
 
 from cuemsutils.log import Logger
+from pyossia import ossia
 
 from ..tools.PortHandler import PORT_HANDLER
-from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
-from pyossia import ossia
+from .OssiaNodes import STARTUP_DELAY, OssiaNodes
 
 OSCCLIENT_LOCAL_PORT = 9009
 OSCCLIENT_REMOTE_PORT = 9001

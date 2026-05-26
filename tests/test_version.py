@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsengine import __version__ as version
 import re
+
+from cuemsengine import __version__ as version
 
 
 def is_zero_or_digit(s: str) -> bool:

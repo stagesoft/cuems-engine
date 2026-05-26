@@ -2,23 +2,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
-from unittest.mock import patch
 from logging import INFO
 from time import sleep
+from unittest.mock import patch
+
+import pytest
+
 from cuemsengine import ControllerEngine, NodeEngine
 
 from .conftest import engine_cleanup  # type: ignore[import-untyped]
 from .fixtures import (
-    mock_config_path,
     mock_avahi_resolve,
-    mock_library_path,
+    mock_config_path,
     mock_controller_ip,
-    mock_deploy_success,
-    mock_deploy_project_fail,
     mock_deploy_media_fail,
-    suppress_logging,
+    mock_deploy_project_fail,
+    mock_deploy_success,
+    mock_library_path,
     mock_player_subprocess,
+    suppress_logging,
 )
 
 

@@ -3,22 +3,21 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 import subprocess
-from time import sleep
-
-from cuemsutils.log import Logger
-from cuemsutils.cues import AudioCue, DmxCue, VideoCue
-from cuemsutils.cues.Cue import Cue
 from functools import partial
 from threading import RLock
+from time import sleep
 from typing import Callable
 
-from .AudioPlayer import AudioPlayer, AudioClient, start_audio_output
-from .VideoPlayer import VideoPlayer, VideoClient, VideoOutput
-from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
-from .DmxPlayer import DmxPlayer, DmxClient, start_dmx_player
+from cuemsutils.cues import AudioCue, DmxCue, VideoCue
+from cuemsutils.cues.Cue import Cue
+from cuemsutils.log import Logger
 
-from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
+from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
+from .AudioPlayer import AudioClient, AudioPlayer, start_audio_output
+from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
+from .Player import Player
+from .VideoPlayer import VideoClient, VideoOutput, VideoPlayer
 
 DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
 

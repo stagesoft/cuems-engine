@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsengine.osc.PyOsc import PyOscClient, PyOscServer
+from unittest.mock import patch
 
+from pythonosc.osc_message import OscMessage
 from pythonosc.osc_server import ThreadingOSCUDPServer
 from pythonosc.udp_client import SimpleUDPClient
-from pythonosc.osc_message import OscMessage
-from unittest.mock import patch
+
+from cuemsengine.osc.PyOsc import PyOscClient, PyOscServer
 
 
 def test_new_osc_client():

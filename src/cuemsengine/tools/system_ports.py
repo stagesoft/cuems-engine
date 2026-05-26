@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import subprocess
 import re
+import subprocess
 from typing import Dict, Optional
 
 

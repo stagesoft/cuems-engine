@@ -3,13 +3,14 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from functools import singledispatch
+
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
-from ..tools.MtcListener import MtcListener
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..tools.MtcListener import MtcListener
 from .helpers import find_timing
 
 

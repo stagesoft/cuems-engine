@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsutils.log import logged, Logger
 from time import sleep
 
-from .Player import Player
-from ..osc.OssiaClient import PlayerClient
+from cuemsutils.log import Logger, logged
+
 from ..osc.endpoints import OSC_AUDIOPLAYER_CONF
+from ..osc.OssiaClient import PlayerClient
+from .Player import Player
 
 
 class AudioPlayer(Player):

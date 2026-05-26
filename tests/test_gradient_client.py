@@ -23,7 +23,6 @@ from unittest.mock import MagicMock
 import pytest
 from pythonosc.osc_message import OscMessage
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

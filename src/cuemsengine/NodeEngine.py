@@ -3,25 +3,25 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
-from functools import partial
-from time import sleep
 import os
 import subprocess
 import threading
+from functools import partial
+from time import sleep
 
-from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
-from cuemsutils.cues.MediaCue import MediaCue
+from cuemsutils.cues import AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
+from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
 from .osc.helpers import add_prefix_to_all
-from .tools.CuemsDeploy import CuemsDeploy
-from .tools.PortHandler import PORT_HANDLER
-from .tools.display_conf import read_display_conf, DisplayConfNotFoundError
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
+from .tools.CuemsDeploy import CuemsDeploy
+from .tools.display_conf import DisplayConfNotFoundError, read_display_conf
+from .tools.PortHandler import PORT_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
@@ -677,7 +677,7 @@ class NodeEngine(BaseEngine):
 
         # Notify Controller that arming is complete (GO button can go green)
         try:
-            from .comms.NodesHub import NodeOperation, OperationType, ActionType
+            from .comms.NodesHub import ActionType, NodeOperation, OperationType
 
             operation = NodeOperation(
                 type=OperationType.STATUS,
@@ -827,7 +827,7 @@ class NodeEngine(BaseEngine):
 
     def _notify_cue_enabled(self, cue_id: str, enabled: bool):
         """Send cue enabled status to Controller via NNG."""
-        from .comms.NodesHub import NodeOperation, OperationType, ActionType
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
 
         try:
             operation = NodeOperation(
@@ -1099,7 +1099,7 @@ class NodeEngine(BaseEngine):
 
             # Notify Controller that re-arm is complete (GO button can go green)
             try:
-                from .comms.NodesHub import NodeOperation, OperationType, ActionType
+                from .comms.NodesHub import ActionType, NodeOperation, OperationType
 
                 operation = NodeOperation(
                     type=OperationType.STATUS,

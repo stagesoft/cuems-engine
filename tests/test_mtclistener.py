@@ -4,11 +4,13 @@
 
 #!/usr/bin/env python3
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import mido
-from cuemsengine.tools.MtcListener import MtcListener
+import pytest
 from cuemsutils.tools.CTimecode import CTimecode
+
+from cuemsengine.tools.MtcListener import MtcListener
 
 
 class TestMtcListener:

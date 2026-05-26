@@ -19,8 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from cuemsengine.comms.NodeCommunications import NodeCommunications
-from cuemsengine.comms.NodesHub import ActionType, OperationType, NodeOperation
-
+from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
 NODE_UUID = "aaaaaaaa-1111-2222-3333-444444444444"
 CONTROLLER_UUID = "bbbbbbbb-1111-2222-3333-444444444444"

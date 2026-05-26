@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -106,8 +105,8 @@ class TestStopPlaybackCancelAll:
 
     def _stop_patches(self, ne, mock_gc=None):
         """Return a list of context managers that fully stub stop_playback dependencies."""
-        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         from cuemsengine.cues.CueHandler import CUE_HANDLER
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         return [
             patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
@@ -126,8 +125,8 @@ class TestStopPlaybackCancelAll:
         mock_gc = MagicMock()
         call_order = []
 
-        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         from cuemsengine.cues.CueHandler import CUE_HANDLER
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         patchers = self._stop_patches(ne, mock_gc=mock_gc)
         patchers.extend(
@@ -192,8 +191,8 @@ class TestLoadProjectCancelAll:
 
     def _load_patches(self, ne, mock_gc=None):
         """Return a list of context managers that fully stub _load_project_inner dependencies."""
-        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         from cuemsengine.cues.CueHandler import CUE_HANDLER
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         return [
             patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),

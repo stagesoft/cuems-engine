@@ -2,21 +2,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from unittest.mock import patch
 from time import sleep
+from unittest.mock import patch
+
 from cuemsengine import ControllerEngine, NodeEngine
-from .helpers import timeout
 
 from .conftest import engine_cleanup  # type: ignore[import-untyped]
 from .fixtures import (
-    mock_config_path,
     mock_avahi_resolve,
-    mock_library_path,
+    mock_config_path,
     mock_controller_ip,
-    suppress_logging,
+    mock_library_path,
     mock_player_clients,
     mock_player_subprocess,
+    suppress_logging,
 )
+from .helpers import timeout
 
 
 def test_project_go_from_controller(

@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
+from time import sleep
+from typing import Union
+
 # from threading import Thread
 from pyossia import LocalDevice
-from typing import Union
-from time import sleep
 
-from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ServerDevices, ServerSetupFunction
+from .OssiaNodes import STARTUP_DELAY, OssiaNodes
 
 OSCSERVER_LOCAL_PORT = 9000
 OSCSERVER_REMOTE_PORT = 9001

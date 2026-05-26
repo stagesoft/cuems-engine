@@ -2,18 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
-import time
-import psutil
 import threading
-from unittest.mock import patch, MagicMock
+import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from cuemsengine.core.BaseEngine import BaseEngine
+import psutil
+import pytest
+
 from cuemsengine.ControllerEngine import ControllerEngine
+from cuemsengine.core.BaseEngine import BaseEngine
 from cuemsengine.NodeEngine import NodeEngine
 
-from .fixtures import mock_config_manager, env_config_path
+from .fixtures import env_config_path, mock_config_manager
 
 
 class TestBaseEngineCPUUsage:

@@ -2,19 +2,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock, PropertyMock
-from time import sleep
 import sys
+from time import sleep
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 # Patch the problematic import before importing cuemsengine
 sys.modules["cuemsutils.tools.Osc_nodes_hub"] = Mock()
 
 from cuemsutils.cues import DmxCue
 from cuemsutils.tools.CTimecode import CTimecode
+
 from cuemsengine.cues.arm_cue import arm_dmxCue
-from cuemsengine.cues.run_cue import run_dmxCue
 from cuemsengine.cues.loop_cue import loop_dmxCue
+from cuemsengine.cues.run_cue import run_dmxCue
 from cuemsengine.players.DmxPlayer import DmxClient
 
 

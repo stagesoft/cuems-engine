@@ -29,7 +29,6 @@ import os
 import re
 from typing import Optional, Tuple
 
-
 DEFAULT_DISPLAY_CONF = "/run/cuems/display.conf"
 
 

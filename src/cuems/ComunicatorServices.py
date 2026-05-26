@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from abc import ABC, abstractmethod
-from collections.abc import Callable
 import asyncio
 import json
-from pynng import Req0, Rep0
-from cuemsutils.log import logged, Logger
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+
+from cuemsutils.log import Logger, logged
+from pynng import Rep0, Req0
 
 
 class ComunicatorService(ABC):

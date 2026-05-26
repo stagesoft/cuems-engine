@@ -2,15 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from pyossia import GlobalMessageQueue, ValueType
 from threading import Event
 from time import sleep
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
-from cuemsengine.osc.OssiaServer import OssiaServer
-from cuemsengine.osc.OssiaClient import OssiaClient
+from pyossia import GlobalMessageQueue, ValueType
+
 from cuemsengine.comms.NodeCommunications import NodeCommunications
-from cuemsengine.osc.helpers import ServerDevices, ClientDevices
+from cuemsengine.osc.helpers import ClientDevices, ServerDevices
+from cuemsengine.osc.OssiaClient import OssiaClient
+from cuemsengine.osc.OssiaServer import OssiaServer
 
 from .fixtures import ossia_client_factory, ossia_server_factory
 from .helpers import timeout

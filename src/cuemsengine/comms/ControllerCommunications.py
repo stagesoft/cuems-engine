@@ -5,19 +5,19 @@
 """Utilites for communications from ControllerEngine and NodeEngine."""
 import asyncio
 import json
-from pynng import Context
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
 
 from cuemsutils.log import Logger
 from cuemsutils.tools.CommunicatorServices import Communicator, IpcAddress
+from pynng import Context
 
-from .AsyncCommsThread import AsyncCommsThread
-from .NodesHub import NodesHub, NodeOperation, OperationType, ActionType
 from ..osc.WebSocketOscHandler import (
-    websocket_osc_listener,
-    build_osc_message,
     WebSocketOscRouter,
+    build_osc_message,
+    websocket_osc_listener,
 )
+from .AsyncCommsThread import AsyncCommsThread
+from .NodesHub import ActionType, NodeOperation, NodesHub, OperationType
 
 
 class ControllerCommunications(AsyncCommsThread):

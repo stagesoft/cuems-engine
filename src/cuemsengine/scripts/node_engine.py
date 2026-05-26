@@ -16,10 +16,11 @@ Example systemd service:
     Restart=always
 """
 
-import signal
 import argparse
+import signal
 
 from cuemsutils.log import Logger
+
 from cuemsengine.NodeEngine import NodeEngine
 
 

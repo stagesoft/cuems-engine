@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
-from unittest.mock import patch
 from os import environ
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from cuemsengine.core.BaseEngine import BaseEngine
 
@@ -25,8 +26,9 @@ def mock_signal():
 
 
 def test_engine_can_start_and_stop():
+    from os import environ, path
     from time import sleep
-    from os import path, environ
+
     from cuemsengine.core.BaseEngine import SHOW_LOCK_PATH
 
     environ["CUEMS_CONF_PATH"] = str(

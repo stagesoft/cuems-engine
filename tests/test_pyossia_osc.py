@@ -8,7 +8,8 @@ These tests verify basic OSC communication using pyossia, replacing
 the old pythonosc-based tests.
 """
 import time
-from pyossia import ossia, ValueType
+
+from pyossia import ValueType, ossia
 
 
 def test_osc_device_creation():

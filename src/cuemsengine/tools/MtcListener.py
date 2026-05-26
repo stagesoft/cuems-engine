@@ -4,11 +4,11 @@
 
 #!/usr/bin/env python3
 
-import mido
 import os
-from typing import Callable
 from threading import Thread
+from typing import Callable
 
+import mido
 from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 

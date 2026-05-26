@@ -16,15 +16,14 @@ Covers:
 
 import threading
 import time
-from pathlib import Path
 from os import environ
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from cuemsengine.comms.NodesHub import ActionType, OperationType, NodeOperation
-
+from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
 CONTROLLER_UUID = "aaaaaaaa-099f-11f0-a075-00e04c01b7e3"
 SLAVE_UUID = "bbbbbbbb-6c5c-5016-aac6-a039c6a7d18f"

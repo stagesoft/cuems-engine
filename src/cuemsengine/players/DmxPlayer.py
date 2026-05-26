@@ -5,9 +5,9 @@
 from cuemsutils.log import Logger, logged
 from pyossia import ossia
 
-from .Player import Player
-from ..osc.OssiaClient import PlayerClient
 from ..osc.endpoints import OSC_DMXPLAYER_CONF
+from ..osc.OssiaClient import PlayerClient
+from .Player import Player
 
 
 class DmxPlayer(Player):

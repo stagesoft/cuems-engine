@@ -8,8 +8,8 @@ from cuemsengine.tools.system_ports import get_used_ports_with_pid
 
 
 def main():
-    from sys import argv
     from json import dumps
+    from sys import argv
 
     show_help = "--help" in argv
     json_output = "--json" in argv

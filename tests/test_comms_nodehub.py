@@ -8,10 +8,11 @@ This test documents the expected flow of NodeOperation messages via NngHub
 when cues are armed/disarmed on NodeEngine.
 """
 import asyncio
-import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 
-from cuemsengine.comms.NodesHub import ActionType, OperationType, NodeOperation
+import pytest
+
+from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
 
 def test_player_operation_structure():
@@ -354,10 +355,11 @@ class TestCommunicationsIntegration:
 
     def test_node_to_controller_via_communications_threads(self):
         """Test NodeOperation sent via NodeCommunications reaches ControllerCommunications."""
-        from unittest.mock import patch, MagicMock, AsyncMock
+        import time
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from cuemsengine.comms.ControllerCommunications import ControllerCommunications
         from cuemsengine.comms.NodeCommunications import NodeCommunications
-        import time
 
         NNG_ADDRESS = "tcp://127.0.0.1:15561"
         received_operations = []
@@ -415,10 +417,11 @@ class TestCommunicationsIntegration:
 
     def test_multiple_operations_via_communications(self):
         """Test multiple operations flow correctly through communications layer."""
-        from unittest.mock import patch, MagicMock, AsyncMock
+        import time
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from cuemsengine.comms.ControllerCommunications import ControllerCommunications
         from cuemsengine.comms.NodeCommunications import NodeCommunications
-        import time
 
         NNG_ADDRESS = "tcp://127.0.0.1:15562"
         received_operations = []
@@ -473,10 +476,11 @@ class TestCommunicationsIntegration:
 
     def test_send_custom_operation_via_node_communications(self):
         """Test sending custom NodeOperation via NodeCommunications.send_operation()."""
-        from unittest.mock import patch, MagicMock, AsyncMock
+        import time
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from cuemsengine.comms.ControllerCommunications import ControllerCommunications
         from cuemsengine.comms.NodeCommunications import NodeCommunications
-        import time
 
         NNG_ADDRESS = "tcp://127.0.0.1:15563"
         received_operations = []

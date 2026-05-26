@@ -945,8 +945,9 @@ class TestArmPlayTarget:
 class TestEffectiveDuration:
 
     def test_video_cue_with_media(self):
-        from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues.MediaCue import Media
+
+        from cuemsengine.cues.CueHandler import CueHandler
 
         cue = _make_target()
         cue.media = Media({"file_name": "test.wav", "duration": "00:00:05.000"})
@@ -963,8 +964,9 @@ class TestEffectiveDuration:
         assert duration == 0
 
     def test_action_cue_with_prewait(self):
-        from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.tools.CTimecode import CTimecode
+
+        from cuemsengine.cues.CueHandler import CueHandler
 
         cue = ActionCue()
         cue.action_type = "play"
@@ -973,8 +975,9 @@ class TestEffectiveDuration:
         assert duration >= 1900  # ~2000ms
 
     def test_dmx_cue_fadein_seconds_to_ms(self):
-        from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues import DmxCue
+
+        from cuemsengine.cues.CueHandler import CueHandler
 
         cue = DmxCue()
         cue.fadein_time = 3.0  # 3 seconds

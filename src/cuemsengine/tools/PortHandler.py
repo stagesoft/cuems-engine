@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsutils.helpers import CuemsDict
-from cuemsutils.log import Logger
 from random import choice
 from threading import RLock
+
+from cuemsutils.helpers import CuemsDict
+from cuemsutils.log import Logger
 
 from .system_ports import get_used_ports_with_pid
 

@@ -7,10 +7,11 @@
 Tests _clear_playback_state(), refactored load_project/stop_script,
 and new get_project_status/unload_project/handle_editor_command dict returns.
 """
-import pytest
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
-from pathlib import Path
 from os import environ
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 
 @pytest.fixture(autouse=True)

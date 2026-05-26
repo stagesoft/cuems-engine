@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from enum import Enum
-from typing import Callable, Union
-from pyossia.ossia_python import OSCDevice, OSCQueryDevice  # type: ignore[attr-defined]
-from pyossia import Node, ValueType
-from typing import Optional
-from cuemsutils.log import Logger
 from datetime import datetime
+from enum import Enum
 from time import sleep
+from typing import Callable, Optional, Union
+
+from cuemsutils.log import Logger
+from pyossia import Node, ValueType
+from pyossia.ossia_python import OSCDevice, OSCQueryDevice  # type: ignore[attr-defined]
 
 # Type aliases for device setup functions
 ServerSetupFunction = Callable[..., bool]

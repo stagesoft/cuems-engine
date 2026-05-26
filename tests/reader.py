@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pyossia as ossia
 import time
+
+import pyossia as ossia
 
 
 def iterate_on_children(node):

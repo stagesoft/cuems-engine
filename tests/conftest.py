@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import signal
-import sys
-import pytest
-import threading
 import multiprocessing
 import os
+import signal
+import sys
+import threading
 import time
 from pathlib import Path
+
+import pytest
 
 # Store references to cleanup functions
 _cleanup_functions = []

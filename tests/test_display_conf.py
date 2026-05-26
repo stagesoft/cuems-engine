@@ -7,9 +7,9 @@
 import pytest
 
 from cuemsengine.tools.display_conf import (
-    read_display_conf,
     DisplayConfNotFoundError,
     DisplayConfValueError,
+    read_display_conf,
 )
 
 

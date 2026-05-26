@@ -3,10 +3,11 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from inspect import signature
-from pyossia import Node, ValueType, ossia
-from typing import Union, Any, Callable
 from time import sleep
-from cuemsutils.log import logged, Logger
+from typing import Any, Callable, Union
+
+from cuemsutils.log import Logger, logged
+from pyossia import Node, ValueType, ossia
 
 CLEANUP_DELAY = 0.3
 STARTUP_DELAY = 0.3

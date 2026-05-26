@@ -2,15 +2,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from .JackConnectionManager import JackConnectionManager
-from .Player import Player
-from ..osc.OssiaClient import PlayerClient
-from ..osc.helpers import add_callback_to_all
-from ..tools.PortHandler import PORT_HANDLER
-from pyossia import ValueType
-from cuemsutils.log import logged, Logger
 from functools import partial
 from time import sleep
+
+from cuemsutils.log import Logger, logged
+from pyossia import ValueType
+
+from ..osc.helpers import add_callback_to_all
+from ..osc.OssiaClient import PlayerClient
+from ..tools.PortHandler import PORT_HANDLER
+from .JackConnectionManager import JackConnectionManager
+from .Player import Player
 
 JACK_VOLUME_PATH = "/usr/local/bin/jack-volume"
 # usage: jack-volume [-c <jack_client_name>] [-s <jack_server_name>] [-p <osc_port>] [-n <number_of_channels>]

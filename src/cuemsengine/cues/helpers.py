@@ -4,6 +4,7 @@
 
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.tools.CTimecode import CTimecode
+
 from ..tools.MtcListener import MtcListener
 
 

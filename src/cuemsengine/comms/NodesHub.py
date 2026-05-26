@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from enum import Enum
-from dataclasses import dataclass
-from cuemsutils.tools.HubServices import Message, NngBusHub
-from cuemsutils.log import Logger
 import asyncio
-from typing import Optional, Dict, Callable
+from dataclasses import dataclass
+from enum import Enum
+from typing import Callable, Dict, Optional
 
-from ..osc.helpers import Node, serialize_node, deserialize_node
+from cuemsutils.log import Logger
+from cuemsutils.tools.HubServices import Message, NngBusHub
+
+from ..osc.helpers import Node, deserialize_node, serialize_node
 
 
 class ActionType(Enum):

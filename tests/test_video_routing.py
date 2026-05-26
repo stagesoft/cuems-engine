@@ -23,7 +23,6 @@ sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 from cuemsengine.players.PlayerHandler import PlayerHandler
 from cuemsengine.players.VideoPlayer import VideoOutput
 
-
 NODE_UUID = "0367f391-ebf4-48b2-9f26-000000000001"
 OTHER_NODE = "0367f391-ebf4-48b2-9f26-000000000099"
 

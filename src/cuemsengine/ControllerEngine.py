@@ -11,10 +11,10 @@ from functools import partial
 from cuemsutils.log import Logger, logged
 from cuemsutils.xml.Settings import NetworkMap
 
-from .core.BaseEngine import BaseEngine, NODE_ENGINE_PORT, CONTROLLER_HOST
-from .core.libmtc import libmtcmaster
 from .comms.ControllerCommunications import ControllerCommunications
-from .comms.NodesHub import NodeOperation, ActionType, OperationType
+from .comms.NodesHub import ActionType, NodeOperation, OperationType
+from .core.BaseEngine import CONTROLLER_HOST, NODE_ENGINE_PORT, BaseEngine
+from .core.libmtc import libmtcmaster
 
 
 class ControllerEngine(BaseEngine):

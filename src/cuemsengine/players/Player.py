@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from subprocess import Popen, PIPE, STDOUT, CalledProcessError
+import os
+from subprocess import PIPE, STDOUT, CalledProcessError, Popen
 from threading import Thread
 from time import sleep
-import os
 
-from cuemsutils.log import logged, Logger
+from cuemsutils.log import Logger, logged
 
 
 class Player(Thread):

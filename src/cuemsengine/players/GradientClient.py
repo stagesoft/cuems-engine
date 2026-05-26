@@ -3,9 +3,8 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 """Fire-and-forget UDP OSC client for gradient-motiond v0.3.0."""
 
-from pythonosc.osc_message_builder import OscMessageBuilder
-
 from cuemsutils.log import Logger
+from pythonosc.osc_message_builder import OscMessageBuilder
 
 from ..osc.PyOsc import PyOscClient
 

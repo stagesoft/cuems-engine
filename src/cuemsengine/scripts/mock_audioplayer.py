@@ -15,10 +15,9 @@ import signal
 import sys
 import threading
 
+from cuemsutils.log import Logger
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
-
-from cuemsutils.log import Logger
 
 
 def _make_handler(name: str):

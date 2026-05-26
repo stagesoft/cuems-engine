@@ -6,7 +6,6 @@
 from pathlib import Path
 
 import pytest
-
 from cuemsutils.xml import XmlReaderWriter
 
 # XML fixtures under dev/test_xml_files/ that BaseEngine and related

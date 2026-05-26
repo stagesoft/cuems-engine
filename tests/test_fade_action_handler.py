@@ -15,13 +15,11 @@ Covers (per Phase 6 constraints):
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
-
 from cuemsutils.cues import AudioCue, VideoCue
 from cuemsutils.cues.FadeCue import FadeCue, FadeCurveType
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -553,6 +551,7 @@ class TestArmFadeCuePreArmsTarget:
 
     def _make_ch(self):
         from threading import Lock
+
         from cuemsengine.cues.CueHandler import CueHandler
 
         ch = object.__new__(CueHandler)

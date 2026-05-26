@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from pytest import fixture
-from unittest.mock import patch, PropertyMock
-from cuemsengine.core.BaseEngine import MTC_PORT
 from pathlib import Path
+from unittest.mock import PropertyMock, patch
+
+from pytest import fixture
+
+from cuemsengine.core.BaseEngine import MTC_PORT
 
 
 @fixture
@@ -27,8 +29,8 @@ def mock_project_mappings():
 @fixture
 def env_config_path():
     """Mock ConfigManager to use test XML files"""
-    from pathlib import Path
     from os import environ
+    from pathlib import Path
 
     test_conf_path = Path(__file__).parent / ".." / "dev" / "test_xml_files"
 
@@ -43,8 +45,9 @@ def mock_mtc_listener():
 
 @fixture
 def ossia_client_factory():
-    from cuemsengine.osc.OssiaClient import OssiaClient
     from contextlib import contextmanager
+
+    from cuemsengine.osc.OssiaClient import OssiaClient
 
     @contextmanager
     def create_client(**kwargs):
@@ -60,8 +63,9 @@ def ossia_client_factory():
 
 @fixture
 def ossia_server_factory():
-    from cuemsengine.osc.OssiaServer import OssiaServer
     from contextlib import contextmanager
+
+    from cuemsengine.osc.OssiaServer import OssiaServer
 
     @contextmanager
     def create_server(**kwargs):
@@ -190,6 +194,7 @@ def suppress_logging(level: str = "info"):
 def mock_player_subprocess():
     """Mock player subprocess calls to prevent actual player process startup"""
     from unittest.mock import MagicMock
+
     from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
     # Complete reset of PLAYER_HANDLER state before test
@@ -228,6 +233,7 @@ def mock_player_subprocess():
 def mock_player_clients():
     """Mock PlayerClient creation to record commands without OSC communication"""
     from unittest.mock import MagicMock, Mock
+
     from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
     # Complete reset before test

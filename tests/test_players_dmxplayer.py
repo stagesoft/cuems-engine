@@ -2,16 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import pytest
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import MagicMock, Mock, call, patch
+
+import pytest
 
 # Patch the problematic import before importing cuemsengine
 sys.modules["cuemsutils.tools.Osc_nodes_hub"] = Mock()
 
-from cuemsengine.players.DmxPlayer import DmxPlayer, DmxClient, start_dmx_player
 from pyossia import ossia
+
+from cuemsengine.players.DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
 
 
 class TestDmxPlayer:

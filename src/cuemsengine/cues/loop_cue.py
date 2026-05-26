@@ -11,7 +11,7 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
-from ..tools.MtcListener import MtcListener, CTimecode
+from ..tools.MtcListener import CTimecode, MtcListener
 
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).

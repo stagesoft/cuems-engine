@@ -3,12 +3,12 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 import asyncio
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
 
 from cuemsutils.log import Logger
 
 from .AsyncCommsThread import AsyncCommsThread
-from .NodesHub import NodesHub, ActionType, OperationType, NodeOperation
+from .NodesHub import ActionType, NodeOperation, NodesHub, OperationType
 
 
 class NodeCommunications(AsyncCommsThread):

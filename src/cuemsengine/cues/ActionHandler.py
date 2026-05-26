@@ -15,11 +15,11 @@ from cuemsutils.cues import ActionCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
-from .CueHandler import CueHandler
-from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
+from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+from .CueHandler import CueHandler
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented

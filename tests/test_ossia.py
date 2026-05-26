@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsengine.osc.OssiaServer import OssiaServer
-from cuemsengine.osc.OssiaClient import OssiaClient
-
 from pyossia import ValueType
+from pytest import raises
+
+from cuemsengine.osc.OssiaClient import OssiaClient
+from cuemsengine.osc.OssiaServer import OssiaServer
 
 from .fixtures import ossia_client_factory, ossia_server_factory
-from pytest import raises
 
 """Logging testing functions"""
 
@@ -212,6 +212,7 @@ def test_oscclient_in_separate_process(process_cleanup):
     # ARRANGE
     from multiprocessing import Process, Queue
     from time import sleep
+
     from cuemsengine.osc.helpers import ClientDevices
 
     client_res = Queue()
@@ -249,9 +250,10 @@ def test_oscclient_in_separate_process(process_cleanup):
 
 def test_server_node_removal_affects_children():
     # ARRANGE
-    from cuemsengine.osc.OssiaServer import OssiaServer
-    from cuemsengine.osc.helpers import ServerDevices
     from time import sleep
+
+    from cuemsengine.osc.helpers import ServerDevices
+    from cuemsengine.osc.OssiaServer import OssiaServer
 
     server = OssiaServer(
         endpoints={
@@ -271,9 +273,10 @@ def test_server_node_removal_affects_children():
 
 def test_server_node_removal_affects_all_children():
     # ARRANGE
-    from cuemsengine.osc.OssiaServer import OssiaServer
-    from cuemsengine.osc.helpers import ServerDevices
     from time import sleep
+
+    from cuemsengine.osc.helpers import ServerDevices
+    from cuemsengine.osc.OssiaServer import OssiaServer
 
     server = OssiaServer(
         endpoints={
