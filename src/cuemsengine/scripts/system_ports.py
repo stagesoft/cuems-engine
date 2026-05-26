@@ -6,13 +6,15 @@
 
 from cuemsengine.tools.system_ports import get_used_ports_with_pid
 
+
 def main():
     from sys import argv
     from json import dumps
+
     show_help = "--help" in argv
     json_output = "--json" in argv
     user = argv[1] if len(argv) > 1 else None
-    
+
     if show_help:
         print("Port Recovery Utility")
         print("-" * 30)
@@ -29,11 +31,11 @@ def main():
     except Exception as e:
         print(f"Error getting used ports: {e}")
         exit(1)
-    
+
     if json_output:
         print(dumps(used_ports, indent=4, default=str))
         exit(0)
-    
+
     if user:
         print(f"Getting used ports for user containing: {user}")
     else:
@@ -45,6 +47,6 @@ def main():
     else:
         print("No used ports found.")
 
+
 if __name__ == "__main__":
     main()
-

@@ -15,16 +15,22 @@ from cuemsutils.tools.CTimecode import CTimecode
 # HEADLESS/CLOUD: On servers without an ALSA sequencer (/dev/snd/seq absent)
 # switch mido to the JACK-backed rtmidi backend so virtual MIDI ports are
 # still accessible.  On hardware nodes with ALSA this block is a no-op.
-if not os.path.exists('/dev/snd/seq'):
-    mido.set_backend('mido.backends.rtmidi/UNIX_JACK')
+if not os.path.exists("/dev/snd/seq"):
+    mido.set_backend("mido.backends.rtmidi/UNIX_JACK")
+
 
 class MtcListener(Thread):
-    def __init__(self, step_callback: Callable | None = None, reset_callback: Callable | None = None, port: str | None = None):
+    def __init__(
+        self,
+        step_callback: Callable | None = None,
+        reset_callback: Callable | None = None,
+        port: str | None = None,
+    ):
         # self.main_tc = CTimecode('0:0:0:0')
         self.main_tc = CTimecode()
         self.main_tc.set_fractional(True)
 
-        self.__quarter_frames = [0,0,0,0,0,0,0,0]
+        self.__quarter_frames = [0, 0, 0, 0, 0, 0, 0, 0]
         self.port = None
         self.port_name = None
         self.__open_port(port)
@@ -44,7 +50,7 @@ class MtcListener(Thread):
         self._24h_offset_frames: int = 0
         self._last_decoded_frames: int | None = None
 
-        super().__init__(name = 'mtclistener')
+        super().__init__(name="mtclistener")
         self.daemon = True
 
     def _apply_24h_offset(self, decoded: CTimecode) -> CTimecode:
@@ -82,18 +88,18 @@ class MtcListener(Thread):
             if delta < -frames_per_hour and near_24h_boundary:
                 self._24h_offset_frames += frames_per_24h
                 Logger.info(
-                    f'MtcListener: detected 24h MTC rollover '
-                    f'(prev frames={self._last_decoded_frames}, '
-                    f'new={decoded.frames}, delta={delta}); '
-                    f'accumulated offset = {self._24h_offset_frames} frames '
-                    f'({self._24h_offset_frames / decoded._int_framerate / 3600:.1f}h)'
+                    f"MtcListener: detected 24h MTC rollover "
+                    f"(prev frames={self._last_decoded_frames}, "
+                    f"new={decoded.frames}, delta={delta}); "
+                    f"accumulated offset = {self._24h_offset_frames} frames "
+                    f"({self._24h_offset_frames / decoded._int_framerate / 3600:.1f}h)"
                 )
             elif delta < -frames_per_hour:
                 Logger.info(
-                    f'MtcListener: large backward MTC jump ignored as '
-                    f'manual seek (prev frames={self._last_decoded_frames}, '
-                    f'new={decoded.frames}, delta={delta}); not a 24h wrap '
-                    f'(prev < {frames_per_24h - frames_per_hour})'
+                    f"MtcListener: large backward MTC jump ignored as "
+                    f"manual seek (prev frames={self._last_decoded_frames}, "
+                    f"new={decoded.frames}, delta={delta}); not a 24h wrap "
+                    f"(prev < {frames_per_24h - frames_per_hour})"
                 )
         self._last_decoded_frames = decoded.frames
 
@@ -104,16 +110,15 @@ class MtcListener(Thread):
             )
         return decoded
 
-
     def timecode(self):
         return self.main_tc
 
     def milliseconds(self):
-        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate))) # type: ignore[attr-defined]
+        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))  # type: ignore[attr-defined]
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
-        if (self.main_tc.milliseconds_rounded == 0):
+        if self.main_tc.milliseconds_rounded == 0:
             if self.step_callback != None and self.reset_callback != None:
                 self.reset_callback()
         if self.step_callback != None:
@@ -125,9 +130,9 @@ class MtcListener(Thread):
         # port_name is left as None and re-detected later in ControllerEngine.start()
         # once the timecode sender has created the virtual MIDI port.
         try:
-            ports = mido.get_input_names() # type: ignore[attr-defined]
+            ports = mido.get_input_names()  # type: ignore[attr-defined]
         except Exception as e:
-            Logger.warning(f'Could not list MIDI input ports: {e}')
+            Logger.warning(f"Could not list MIDI input ports: {e}")
             ports = []
 
         if port is not None:
@@ -156,51 +161,50 @@ class MtcListener(Thread):
                 # HEADLESS/CLOUD: no ports yet; caller must retry after the
                 # virtual MIDI sender port has been created.
                 self.port_name = None
-                Logger.warning('No MIDI input ports available')
+                Logger.warning("No MIDI input ports available")
         if self.port_name:
-            Logger.info(f'MtcListener will use MIDI port: {self.port_name}')
+            Logger.info(f"MtcListener will use MIDI port: {self.port_name}")
 
     def run(self):
-        Logger.debug('Starting MTC listener')
-        self.port = mido.open_input( # type: ignore[attr-defined]
-            self.port_name,
-            callback = self.__handle_message
+        Logger.debug("Starting MTC listener")
+        self.port = mido.open_input(  # type: ignore[attr-defined]
+            self.port_name, callback=self.__handle_message
         )
-        Logger.info('Listening to MIDI messages on > {} <'.format(self.port_name))
+        Logger.info("Listening to MIDI messages on > {} <".format(self.port_name))
 
     def stop(self):
         if self.port is not None:
             self.port.close()
 
     def __handle_message(self, message):
-        if message.type == 'quarter_frame':        
+        if message.type == "quarter_frame":
             self.__quarter_frames[message.frame_type] = message.frame_value
             if (message.frame_type == 3) or (message.frame_type == 7):
                 self.__update_timecode(self.main_tc + 1)
             #    print('QF+:',self.main_tc)
             if message.frame_type == 7:
                 tc = self.__mtc_decode_quarter_frames(self.__quarter_frames)
-            #    print('QFC:',tc)
+                #    print('QFC:',tc)
                 self.__update_timecode(tc)
-        elif message.type == 'sysex':
+        elif message.type == "sysex":
             # check to see if this is a timecode frame
-            if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
+            if len(message.data) == 8 and message.data[0:4] == (127, 127, 1, 1):
                 data = message.data[4:]
                 tc = self.__mtc_decode(data)
-                Logger.debug('FF:' + tc.__str__())
+                Logger.debug("FF:" + tc.__str__())
                 self.__update_timecode(tc)
         else:
             Logger.debug(message)
-            raise(NotImplementedError)
-    
+            raise (NotImplementedError)
+
     def __mtc_decode(self, mtc_bytes):
-        #print(mtc_bytes)
+        # print(mtc_bytes)
         rhh, mins, secs, frs = mtc_bytes
         rateflag = rhh >> 5
-        hrs      = rhh & 31
-        fps = ['24','25','29.97','30'][rateflag]
+        hrs = rhh & 31
+        fps = ["24", "25", "29.97", "30"][rateflag]
         # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60) //  TODO: goes to frame 0 in tc, non existent frame, changed to tc 0:0:0:0 = frame 1
-        decoded = CTimecode('{}:{}:{}:{}'.format(hrs, mins, secs, frs), framerate=fps)
+        decoded = CTimecode("{}:{}:{}:{}".format(hrs, mins, secs, frs), framerate=fps)
         # Route through 24h-wrap detection so main_tc stays monotonic past 24h.
         # See _apply_24h_offset docstring for heuristic details (closes 869cpdbzy).
         return self._apply_24h_offset(decoded)
@@ -214,12 +218,14 @@ class MtcListener(Thread):
         if len(frame_pieces) < 8:
             return None
         for piece in range(8):
-            mtc_index = 3 - piece//2    # quarter frame pieces are in reverse order of mtc_encode
+            mtc_index = (
+                3 - piece // 2
+            )  # quarter frame pieces are in reverse order of mtc_encode
             this_frame = frame_pieces[piece]
             if this_frame is bytearray or this_frame is list:
-                this_frame = this_frame[1] # type: ignore[index]
+                this_frame = this_frame[1]  # type: ignore[index]
             # ignore the frame_piece marker bits
-            data = this_frame & 15      # type: ignore[operator]
+            data = this_frame & 15  # type: ignore[operator]
             if piece % 2 == 0:
                 # 'even' pieces came from the low nibble
                 # and the first piece is 0, so it's even

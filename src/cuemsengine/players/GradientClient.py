@@ -18,8 +18,9 @@ class GradientClient:
     each new instance replaces the prior one in PlayerHandler.
     """
 
-    def __init__(self, host: str = '127.0.0.1', port: int = 7100,
-                 node_uuid: str = '') -> None:
+    def __init__(
+        self, host: str = "127.0.0.1", port: int = 7100, node_uuid: str = ""
+    ) -> None:
         self._host = host
         self._port = port
         self._node_uuid = node_uuid
@@ -36,36 +37,36 @@ class GradientClient:
         start_mtc_ms: int,
         duration_ms: int,
         curve_type: str,
-        curve_params_json: str = '{}',
+        curve_params_json: str = "{}",
     ) -> None:
-        builder = OscMessageBuilder(address='/gradient/start_fade')
-        builder.add_arg(motion_id,              arg_type='s')
-        builder.add_arg(self._node_uuid,        arg_type='s')  # node_name — self-injected
-        builder.add_arg(osc_host,               arg_type='s')
-        builder.add_arg(int(osc_port),          arg_type='i')
-        builder.add_arg(osc_path,               arg_type='s')
-        builder.add_arg(float(start_value),     arg_type='f')
-        builder.add_arg(float(end_value),       arg_type='f')
-        builder.add_arg(int(start_mtc_ms),      arg_type='h')  # int64 — REQUIRED
-        builder.add_arg(int(duration_ms),       arg_type='i')
-        builder.add_arg(curve_type,             arg_type='s')
-        builder.add_arg(curve_params_json,      arg_type='s')
+        builder = OscMessageBuilder(address="/gradient/start_fade")
+        builder.add_arg(motion_id, arg_type="s")
+        builder.add_arg(self._node_uuid, arg_type="s")  # node_name — self-injected
+        builder.add_arg(osc_host, arg_type="s")
+        builder.add_arg(int(osc_port), arg_type="i")
+        builder.add_arg(osc_path, arg_type="s")
+        builder.add_arg(float(start_value), arg_type="f")
+        builder.add_arg(float(end_value), arg_type="f")
+        builder.add_arg(int(start_mtc_ms), arg_type="h")  # int64 — REQUIRED
+        builder.add_arg(int(duration_ms), arg_type="i")
+        builder.add_arg(curve_type, arg_type="s")
+        builder.add_arg(curve_params_json, arg_type="s")
         try:
             self._osc.client.send(builder.build())
         except Exception as exc:
-            Logger.error(f'GradientClient.send_fade failed: {exc}')
+            Logger.error(f"GradientClient.send_fade failed: {exc}")
             raise
 
     def send_cancel_motion(self, motion_id: str) -> None:
         try:
-            self._osc.client.send_message('/gradient/cancel_motion', motion_id)
+            self._osc.client.send_message("/gradient/cancel_motion", motion_id)
         except Exception as exc:
-            Logger.error(f'GradientClient.send_cancel_motion failed: {exc}')
+            Logger.error(f"GradientClient.send_cancel_motion failed: {exc}")
             raise
 
     def send_cancel_all(self) -> None:
         try:
-            self._osc.client.send_message('/gradient/cancel_all', [])
+            self._osc.client.send_message("/gradient/cancel_all", [])
         except Exception as exc:
-            Logger.error(f'GradientClient.send_cancel_all failed: {exc}')
+            Logger.error(f"GradientClient.send_cancel_all failed: {exc}")
             raise

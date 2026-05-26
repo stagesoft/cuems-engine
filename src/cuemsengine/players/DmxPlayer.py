@@ -9,15 +9,16 @@ from .Player import Player
 from ..osc.OssiaClient import PlayerClient
 from ..osc.endpoints import OSC_DMXPLAYER_CONF
 
+
 class DmxPlayer(Player):
     """DMX player process wrapper.
-    
+
     Manages a single cuems-dmxplayer process per node and exposes OSC control.
     """
 
     def __init__(self, port, node_uuid, path=None, args: str | None = None):
         """Initialize the DmxPlayer.
-        
+
         Args:
             port: OSC port for dmxplayer communication
             node_uuid: Unique identifier for this player node
@@ -27,7 +28,7 @@ class DmxPlayer(Player):
         self.node_uuid = node_uuid
         self.port = port
         self.path = path
-        self.client_name = f'{self.node_uuid}_dmxplayer'
+        self.client_name = f"{self.node_uuid}_dmxplayer"
         self.args = args
         self.stdout = None
         self.stderr = None
@@ -39,24 +40,23 @@ class DmxPlayer(Player):
         if self.args:
             for arg in self.args.split():
                 process_call_list.append(arg)
-        process_call_list.extend(['--port', str(self.port)])
-        process_call_list.extend(['--uuid', str(self.node_uuid)])
+        process_call_list.extend(["--port", str(self.port)])
+        process_call_list.extend(["--uuid", str(self.node_uuid)])
         Logger.info(f"Starting dmxplayer with: {process_call_list}")
         self.call_subprocess(process_call_list)
+
 
 class DmxClient(PlayerClient):
     def __init__(self, player_port: int, client_name: str, host: str = "127.0.0.1"):
         """Initialize the DMX client.
-        
+
         Args:
             player_port: OSC port for communication
             client_name: Name for this client instance
             host: Host IP address of the dmxplayer
         """
         super().__init__(
-            player_port = player_port,
-            endpoints = OSC_DMXPLAYER_CONF,
-            name = client_name
+            player_port=player_port, endpoints=OSC_DMXPLAYER_CONF, name=client_name
         )
         self.host = host
         self.player_port = player_port
@@ -68,11 +68,21 @@ class DmxClient(PlayerClient):
     def _create_bundle_parameters(self) -> None:
         """Create parameters on the OSC device for bundle construction."""
         root = self.device.root_node
-        self._frame_param = root.add_node("/frame").create_parameter(ossia.ValueType.List)
-        self._mtc_time_param = root.add_node("/mtc_time").create_parameter(ossia.ValueType.String)
-        self._start_offset_param = root.add_node("/start_offset").create_parameter(ossia.ValueType.Int)
-        self._fade_time_param = root.add_node("/fade_time").create_parameter(ossia.ValueType.Float)
-        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(ossia.ValueType.Int)
+        self._frame_param = root.add_node("/frame").create_parameter(
+            ossia.ValueType.List
+        )
+        self._mtc_time_param = root.add_node("/mtc_time").create_parameter(
+            ossia.ValueType.String
+        )
+        self._start_offset_param = root.add_node("/start_offset").create_parameter(
+            ossia.ValueType.Int
+        )
+        self._fade_time_param = root.add_node("/fade_time").create_parameter(
+            ossia.ValueType.Float
+        )
+        self._mtcfollow_param = root.add_node("/mtcfollow").create_parameter(
+            ossia.ValueType.Int
+        )
 
     def enable_mtcfollow(self) -> None:
         """Enable MTC following so the dmxplayer tracks timecode."""
@@ -89,10 +99,10 @@ class DmxClient(PlayerClient):
         self,
         universe_frames: dict[int, dict[int, int]],
         mtc_time: str | int,
-        fade_time: float = 0.0
+        fade_time: float = 0.0,
     ) -> None:
         """Send a complete DMX scene as an OSC bundle via pyossia.
-        
+
         Constructs an OSC bundle containing:
         - /frame messages: universe_id followed by channel/value pairs
         - /mtc_time or /start_offset: timing information
@@ -108,7 +118,9 @@ class DmxClient(PlayerClient):
                         frame_data.append(int(channel))
                         frame_data.append(int(value))
                     bundle.append(self._frame_param, frame_data)
-                    Logger.debug(f"Added frame for universe {universe_id} with {len(channels)} channels")
+                    Logger.debug(
+                        f"Added frame for universe {universe_id} with {len(channels)} channels"
+                    )
 
             if isinstance(mtc_time, int):
                 bundle.append(self._start_offset_param, int(mtc_time))
@@ -151,17 +163,18 @@ class DmxClient(PlayerClient):
 
         # Tell the dmxplayer to clear all scenes/fades and send zeros to OLA.
         try:
-            self.set_value('/blackout', None)
+            self.set_value("/blackout", None)
         except Exception as e:
-            Logger.warning(f'Blackout command to dmxplayer failed: {e}')
+            Logger.warning(f"Blackout command to dmxplayer failed: {e}")
 
         # Backup: write zeros directly to OLA.
-        zeros = ','.join(['0'] * 512)
+        zeros = ",".join(["0"] * 512)
         for uid in universe_ids:
             try:
                 subprocess.run(
-                    ['ola_set_dmx', '-u', str(uid), '-d', zeros],
-                    timeout=2, check=True,
+                    ["ola_set_dmx", "-u", str(uid), "-d", zeros],
+                    timeout=2,
+                    check=True,
                     capture_output=True,
                 )
             except Exception as e:
@@ -169,46 +182,35 @@ class DmxClient(PlayerClient):
 
         Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
 
+
 @logged
 def start_dmx_player(
-    port: int,
-    node_uuid: str,
-    path: str,
-    args: str | None = None,
-    timeout: float = 5.0
+    port: int, node_uuid: str, path: str, args: str | None = None, timeout: float = 5.0
 ) -> tuple[DmxPlayer, DmxClient]:
     """Start a DMX player and its OSC client.
-    
+
     This function creates and starts a cuems-dmxplayer process and
     sets up an OSC client to control it.
-    
+
     Args:
         port: OSC port for dmxplayer communication
         node_uuid: Unique identifier for this player node
         path: Path to cuems-dmxplayer binary
         args: Additional arguments for cuems-dmxplayer
         timeout: Maximum time to wait for player to start (seconds)
-    
+
     Returns:
         Tuple containing the DmxPlayer and DmxClient instances
-        
+
     Raises:
         RuntimeError: If player fails to start within timeout or thread dies
     """
     # Create and start the player with timeout handling
-    player = DmxPlayer(
-        port=port,
-        node_uuid=node_uuid,
-        path=path,
-        args=args
-    )
+    player = DmxPlayer(port=port, node_uuid=node_uuid, path=path, args=args)
     player.start(timeout=timeout)
-    
+
     # Create OSC client for controlling the player
-    client = DmxClient(
-        player_port=port,
-        client_name=f'{node_uuid}_dmxplayer'
-    )
-    
+    client = DmxClient(player_port=port, client_name=f"{node_uuid}_dmxplayer")
+
     Logger.info(f"DMX player started: {node_uuid}_dmxplayer on port {port}")
     return player, client

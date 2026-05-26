@@ -6,7 +6,7 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-sys.modules.setdefault('cuemsutils.tools.Osc_nodes_hub', MagicMock())
+sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", MagicMock())
 
 
 def test_node_engine_start_late_binds_deploy_manager_loop():
@@ -17,24 +17,26 @@ def test_node_engine_start_late_binds_deploy_manager_loop():
     from cuemsengine.NodeEngine import NodeEngine
 
     node = object.__new__(NodeEngine)
-    node.nng_hub_address = 'tcp://10.0.0.1:9999'
+    node.nng_hub_address = "tcp://10.0.0.1:9999"
     node.deploy_manager = MagicMock()
     node.deploy_manager.loop = None
     node.mtc_listener = MagicMock()
     node.stop_requested = False
     node.cm = MagicMock()
-    node.cm.node_uuid = 'test-node-uuid'
+    node.cm.node_uuid = "test-node-uuid"
 
-    with patch('cuemsengine.NodeEngine.CUE_HANDLER') as mock_cue_handler, \
-         patch.object(node, 'set_oscquery_comms'), \
-         patch.object(node, 'set_players'), \
-         patch.object(node, '_setup_nng_command_callback'), \
-         patch('cuemsengine.core.BaseEngine.BaseEngine.start'):
+    with (
+        patch("cuemsengine.NodeEngine.CUE_HANDLER") as mock_cue_handler,
+        patch.object(node, "set_oscquery_comms"),
+        patch.object(node, "set_players"),
+        patch.object(node, "_setup_nng_command_callback"),
+        patch("cuemsengine.core.BaseEngine.BaseEngine.start"),
+    ):
 
         mock_cue_handler.communications_thread.event_loop = sentinel_loop
         node.start()
 
     assert node.deploy_manager.loop is sentinel_loop, (
-        'NodeEngine.start() must late-bind CUE_HANDLER.communications_thread.event_loop '
-        'to deploy_manager.loop'
+        "NodeEngine.start() must late-bind CUE_HANDLER.communications_thread.event_loop "
+        "to deploy_manager.loop"
     )

@@ -27,19 +27,19 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def _make_node_engine(gradient_osc_port='7100', node_uuid='node-001'):
+def _make_node_engine(gradient_osc_port="7100", node_uuid="node-001"):
     """Build a NodeEngine shell via __new__ — skips full __init__ and real config."""
     from cuemsengine.NodeEngine import NodeEngine
 
     ne = NodeEngine.__new__(NodeEngine)
-    ne._command_lock = __import__('threading').Lock()
-    ne._loading_lock = __import__('threading').Lock()
+    ne._command_lock = __import__("threading").Lock()
+    ne._loading_lock = __import__("threading").Lock()
     ne._loading = False
     ne.cm = MagicMock()
     ne.cm.node_uuid = node_uuid
     ne.cm.node_conf = {
-        'gradient_osc_port': gradient_osc_port,
-        'nng_hub_port': '5555',
+        "gradient_osc_port": gradient_osc_port,
+        "nng_hub_port": "5555",
     }
     return ne
 
@@ -54,37 +54,40 @@ class TestSetGradientClientWiring:
         """set_players() must call set_gradient_client() to wire the OSC client."""
         ne = _make_node_engine()
         with (
-            patch.object(ne, 'set_video_players'),
-            patch.object(ne, 'set_audio_players'),
-            patch.object(ne, 'set_dmx_players'),
-            patch.object(ne, 'set_gradient_client') as mock_sgc,
+            patch.object(ne, "set_video_players"),
+            patch.object(ne, "set_audio_players"),
+            patch.object(ne, "set_dmx_players"),
+            patch.object(ne, "set_gradient_client") as mock_sgc,
         ):
             ne.set_players()
         mock_sgc.assert_called_once()
 
     def test_set_gradient_client_node_uuid_passed(self):
         """set_gradient_client() must propagate cm.node_uuid to PLAYER_HANDLER."""
-        ne = _make_node_engine(node_uuid='node-007')
+        ne = _make_node_engine(node_uuid="node-007")
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
-        with patch.object(PLAYER_HANDLER, 'set_gradient_client') as mock_ph_sgc:
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
             ne.set_gradient_client()
 
         mock_ph_sgc.assert_called_once()
         _, kwargs = mock_ph_sgc.call_args
-        assert kwargs.get('node_uuid') == 'node-007' or mock_ph_sgc.call_args[0][1] == 'node-007'
+        assert (
+            kwargs.get("node_uuid") == "node-007"
+            or mock_ph_sgc.call_args[0][1] == "node-007"
+        )
 
     def test_set_gradient_client_port_from_node_conf(self):
         """set_gradient_client() must read gradient_osc_port from cm.node_conf."""
-        ne = _make_node_engine(gradient_osc_port='7100')
+        ne = _make_node_engine(gradient_osc_port="7100")
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
-        with patch.object(PLAYER_HANDLER, 'set_gradient_client') as mock_ph_sgc:
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
             ne.set_gradient_client()
 
         mock_ph_sgc.assert_called_once()
         _, kwargs = mock_ph_sgc.call_args
-        port_arg = kwargs.get('port') or mock_ph_sgc.call_args[0][0]
+        port_arg = kwargs.get("port") or mock_ph_sgc.call_args[0][0]
         assert port_arg == 7100
 
 
@@ -98,22 +101,23 @@ class TestStopPlaybackCancelAll:
         ne = _make_node_engine()
         ne._project_generation = 0
         ne.script = MagicMock()
-        ne.script.unix_name = 'test-project'
+        ne.script.unix_name = "test-project"
         return ne
 
     def _stop_patches(self, ne, mock_gc=None):
         """Return a list of context managers that fully stub stop_playback dependencies."""
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         from cuemsengine.cues.CueHandler import CUE_HANDLER
+
         return [
-            patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc),
-            patch.object(PLAYER_HANDLER, 'get_dmx_player_client', return_value=None),
-            patch.object(PLAYER_HANDLER, 'kill_all_audio_players'),
-            patch.object(PLAYER_HANDLER, 'cleanup_zombie_jack_clients'),
-            patch.object(ne, 'unload_video_devs'),
-            patch.object(ne, 'set_status'),
-            patch.object(ne, 'ready_script'),
-            patch.object(ne, '_broadcast_nextcue'),
+            patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
+            patch.object(PLAYER_HANDLER, "get_dmx_player_client", return_value=None),
+            patch.object(PLAYER_HANDLER, "kill_all_audio_players"),
+            patch.object(PLAYER_HANDLER, "cleanup_zombie_jack_clients"),
+            patch.object(ne, "unload_video_devs"),
+            patch.object(ne, "set_status"),
+            patch.object(ne, "ready_script"),
+            patch.object(ne, "_broadcast_nextcue"),
         ]
 
     def test_cancel_all_fires_before_stop_all_cues(self):
@@ -126,23 +130,29 @@ class TestStopPlaybackCancelAll:
         from cuemsengine.cues.CueHandler import CUE_HANDLER
 
         patchers = self._stop_patches(ne, mock_gc=mock_gc)
-        patchers.extend([
-            patch.object(CUE_HANDLER, 'stop_all_cues',
-                         side_effect=lambda: call_order.append('stop_all_cues')),
-        ])
-        mock_gc.send_cancel_all.side_effect = lambda: call_order.append('cancel_all')
+        patchers.extend(
+            [
+                patch.object(
+                    CUE_HANDLER,
+                    "stop_all_cues",
+                    side_effect=lambda: call_order.append("stop_all_cues"),
+                ),
+            ]
+        )
+        mock_gc.send_cancel_all.side_effect = lambda: call_order.append("cancel_all")
 
         import contextlib
+
         with contextlib.ExitStack() as stack:
             for p in patchers:
                 stack.enter_context(p)
             ne.stop_playback()
 
-        assert 'cancel_all' in call_order, "send_cancel_all must be called on stop"
-        assert 'stop_all_cues' in call_order, "stop_all_cues must be called on stop"
-        assert call_order.index('cancel_all') < call_order.index('stop_all_cues'), (
-            "send_cancel_all must fire before stop_all_cues"
-        )
+        assert "cancel_all" in call_order, "send_cancel_all must be called on stop"
+        assert "stop_all_cues" in call_order, "stop_all_cues must be called on stop"
+        assert call_order.index("cancel_all") < call_order.index(
+            "stop_all_cues"
+        ), "send_cancel_all must fire before stop_all_cues"
 
     def test_cancel_all_none_guard_on_stop_logs_debug(self, caplog):
         """When gradient_client is None, stop_playback logs DEBUG and does not crash."""
@@ -151,9 +161,10 @@ class TestStopPlaybackCancelAll:
         from cuemsengine.cues.CueHandler import CUE_HANDLER
 
         patchers = self._stop_patches(ne, mock_gc=None)
-        patchers.append(patch.object(CUE_HANDLER, 'stop_all_cues'))
+        patchers.append(patch.object(CUE_HANDLER, "stop_all_cues"))
 
         import contextlib
+
         with contextlib.ExitStack() as stack:
             for p in patchers:
                 stack.enter_context(p)
@@ -161,7 +172,7 @@ class TestStopPlaybackCancelAll:
                 ne.stop_playback()
 
         assert any(
-            'gradient' in r.message.lower() and r.levelno == logging.DEBUG
+            "gradient" in r.message.lower() and r.levelno == logging.DEBUG
             for r in caplog.records
         ), "must log DEBUG when gradient_client is None"
 
@@ -176,28 +187,29 @@ class TestLoadProjectCancelAll:
         ne = _make_node_engine()
         ne._project_generation = 0
         ne.script = MagicMock()
-        ne.script.unix_name = 'old-project'
+        ne.script.unix_name = "old-project"
         return ne
 
     def _load_patches(self, ne, mock_gc=None):
         """Return a list of context managers that fully stub _load_project_inner dependencies."""
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
         from cuemsengine.cues.CueHandler import CUE_HANDLER
+
         return [
-            patch.object(PLAYER_HANDLER, 'get_gradient_client', return_value=mock_gc),
-            patch.object(PLAYER_HANDLER, 'get_dmx_player_client', return_value=None),
-            patch.object(PLAYER_HANDLER, 'get_audio_mixer_client', return_value=None),
-            patch.object(PLAYER_HANDLER, 'kill_all_audio_players'),
-            patch.object(PLAYER_HANDLER, 'kill_orphaned_audio_processes'),
-            patch.object(PLAYER_HANDLER, 'cleanup_zombie_jack_clients'),
-            patch.object(ne, 'unload_video_devs'),
-            patch.object(ne, 'get_status', return_value='no'),
-            patch.object(ne, 'set_status'),
-            patch.object(ne, 'ready_project'),
-            patch.object(ne, 'ready_script'),
-            patch.object(ne, 'set_show_lock_file'),
-            patch.object(ne, '_broadcast_nextcue'),
-            patch.object(CUE_HANDLER, 'disarm_all'),
+            patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
+            patch.object(PLAYER_HANDLER, "get_dmx_player_client", return_value=None),
+            patch.object(PLAYER_HANDLER, "get_audio_mixer_client", return_value=None),
+            patch.object(PLAYER_HANDLER, "kill_all_audio_players"),
+            patch.object(PLAYER_HANDLER, "kill_orphaned_audio_processes"),
+            patch.object(PLAYER_HANDLER, "cleanup_zombie_jack_clients"),
+            patch.object(ne, "unload_video_devs"),
+            patch.object(ne, "get_status", return_value="no"),
+            patch.object(ne, "set_status"),
+            patch.object(ne, "ready_project"),
+            patch.object(ne, "ready_script"),
+            patch.object(ne, "set_show_lock_file"),
+            patch.object(ne, "_broadcast_nextcue"),
+            patch.object(CUE_HANDLER, "disarm_all"),
         ]
 
     def test_cancel_all_fires_on_project_load(self):
@@ -210,22 +222,26 @@ class TestLoadProjectCancelAll:
 
         patchers = self._load_patches(ne, mock_gc=mock_gc)
         patchers.append(
-            patch.object(CUE_HANDLER, 'stop_all_cues',
-                         side_effect=lambda: call_order.append('stop_all_cues'))
+            patch.object(
+                CUE_HANDLER,
+                "stop_all_cues",
+                side_effect=lambda: call_order.append("stop_all_cues"),
+            )
         )
-        mock_gc.send_cancel_all.side_effect = lambda: call_order.append('cancel_all')
+        mock_gc.send_cancel_all.side_effect = lambda: call_order.append("cancel_all")
 
         import contextlib
+
         with contextlib.ExitStack() as stack:
             for p in patchers:
                 stack.enter_context(p)
-            ne._load_project_inner('new-project')
+            ne._load_project_inner("new-project")
 
-        assert 'cancel_all' in call_order, "send_cancel_all must be called on load"
-        assert 'stop_all_cues' in call_order, "stop_all_cues must be called on load"
-        assert call_order.index('cancel_all') < call_order.index('stop_all_cues'), (
-            "send_cancel_all must fire before stop_all_cues on project load"
-        )
+        assert "cancel_all" in call_order, "send_cancel_all must be called on load"
+        assert "stop_all_cues" in call_order, "stop_all_cues must be called on load"
+        assert call_order.index("cancel_all") < call_order.index(
+            "stop_all_cues"
+        ), "send_cancel_all must fire before stop_all_cues on project load"
 
     def test_cancel_all_none_guard_on_load_logs_debug(self, caplog):
         """When gradient_client is None, _load_project_inner logs DEBUG and does not crash."""
@@ -234,17 +250,18 @@ class TestLoadProjectCancelAll:
         from cuemsengine.cues.CueHandler import CUE_HANDLER
 
         patchers = self._load_patches(ne, mock_gc=None)
-        patchers.append(patch.object(CUE_HANDLER, 'stop_all_cues'))
+        patchers.append(patch.object(CUE_HANDLER, "stop_all_cues"))
 
         import contextlib
+
         with contextlib.ExitStack() as stack:
             for p in patchers:
                 stack.enter_context(p)
             with caplog.at_level(logging.DEBUG):
-                ne._load_project_inner('new-project')
+                ne._load_project_inner("new-project")
 
         assert any(
-            'gradient' in r.message.lower() and r.levelno == logging.DEBUG
+            "gradient" in r.message.lower() and r.levelno == logging.DEBUG
             for r in caplog.records
         ), "must log DEBUG when gradient_client is None on load"
 
@@ -257,15 +274,15 @@ class TestLoadProjectCancelAll:
 class TestGradientOscPortBinding:
     def test_custom_port_flows_to_player_handler(self):
         """Custom gradient_osc_port in node_conf is forwarded as int to PLAYER_HANDLER."""
-        ne = _make_node_engine(gradient_osc_port='7200', node_uuid='node-002')
+        ne = _make_node_engine(gradient_osc_port="7200", node_uuid="node-002")
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
-        with patch.object(PLAYER_HANDLER, 'set_gradient_client') as mock_sgc:
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_sgc:
             ne.set_gradient_client()
 
         mock_sgc.assert_called_once()
         _, kwargs = mock_sgc.call_args
-        port_arg = kwargs.get('port') or mock_sgc.call_args[0][0]
+        port_arg = kwargs.get("port") or mock_sgc.call_args[0][0]
         assert port_arg == 7200, f"Expected port 7200, got {port_arg}"
-        uuid_arg = kwargs.get('node_uuid') or mock_sgc.call_args[0][1]
-        assert uuid_arg == 'node-002'
+        uuid_arg = kwargs.get("node_uuid") or mock_sgc.call_args[0][1]
+        assert uuid_arg == "node-002"

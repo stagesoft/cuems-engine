@@ -10,12 +10,15 @@ import mido
 from cuemsengine.tools.MtcListener import MtcListener
 from cuemsutils.tools.CTimecode import CTimecode
 
+
 class TestMtcListener:
     @pytest.fixture
     def mock_mido(self):
-        with patch('mido.get_input_names') as mock_get_names, \
-             patch('mido.open_input') as mock_open_input:
-            mock_get_names.return_value = ['MTC Port 1', 'MTC Port 2']
+        with (
+            patch("mido.get_input_names") as mock_get_names,
+            patch("mido.open_input") as mock_open_input,
+        ):
+            mock_get_names.return_value = ["MTC Port 1", "MTC Port 2"]
             mock_port = MagicMock()
             mock_open_input.return_value = mock_port
             mock_port.close.return_value = None
@@ -26,9 +29,7 @@ class TestMtcListener:
         step_callback = MagicMock()
         reset_callback = MagicMock()
         listener = MtcListener(
-            step_callback=step_callback,
-            reset_callback=reset_callback,
-            port=1234
+            step_callback=step_callback, reset_callback=reset_callback, port=1234
         )
         yield listener
         listener.stop()
@@ -45,17 +46,19 @@ class TestMtcListener:
     def test_timecode_methods(self, mtc_listener):
         """Test timecode and milliseconds methods"""
         # Set a specific timecode
-        test_tc = CTimecode('1:2:3:4')
+        test_tc = CTimecode("1:2:3:4")
         mtc_listener.main_tc = test_tc
-        
+
         assert mtc_listener.timecode() == test_tc
-        assert mtc_listener.milliseconds_rounded() == int(test_tc.frames * (1000 / float(test_tc._framerate)))
+        assert mtc_listener.milliseconds_rounded() == int(
+            test_tc.frames * (1000 / float(test_tc._framerate))
+        )
 
     def test_quarter_frame_handling(self, mtc_listener):
         """Test handling of quarter frame messages"""
         # Create a quarter frame message
         message = MagicMock()
-        message.type = 'quarter_frame'
+        message.type = "quarter_frame"
         message.frame_type = 4
         message.frame_value = 15
 
@@ -69,8 +72,17 @@ class TestMtcListener:
         """Test handling of sysex messages"""
         # Create a sysex message with timecode data
         message = MagicMock()
-        message.type = 'sysex'
-        message.data = (127, 127, 1, 1, 1, 2, 3, 4)  # Hours: 1, Minutes: 2, Seconds: 3, Frames: 4
+        message.type = "sysex"
+        message.data = (
+            127,
+            127,
+            1,
+            1,
+            1,
+            2,
+            3,
+            4,
+        )  # Hours: 1, Minutes: 2, Seconds: 3, Frames: 4
 
         # Call the message handler
         mtc_listener._MtcListener__handle_message(message)
@@ -89,7 +101,7 @@ class TestMtcListener:
         mtc_bytes = (1, 2, 3, 4)  # Hours: 1, Minutes: 2, Seconds: 3, Frames: 4
         tc = mtc_listener._MtcListener__mtc_decode(mtc_bytes)
         hours, minutes, seconds, frames = tc.frames_to_tc(tc.frames)
-        
+
         assert hours == 1
         assert minutes == 2
         assert seconds == 3
@@ -101,7 +113,7 @@ class TestMtcListener:
         frame_pieces[2] = 2  # Set seconds
         frame_pieces[4] = 3  # Set minutes
         frame_pieces[6] = 4  # Set hours
-        
+
         tc = mtc_listener._MtcListener__mtc_decode_quarter_frames(frame_pieces)
         hours, minutes, seconds, frames = tc.frames_to_tc(tc.frames)
         assert tc is not None
@@ -118,10 +130,10 @@ class TestMtcListener:
     def test_invalid_message_type(self, mtc_listener):
         """Test handling of invalid message types"""
         message = MagicMock()
-        message.type = 'invalid_type'
-        
+        message.type = "invalid_type"
+
         with pytest.raises(NotImplementedError):
-            mtc_listener._MtcListener__handle_message(message) 
+            mtc_listener._MtcListener__handle_message(message)
 
 
 # ----------------------------------------------------------------------
@@ -139,15 +151,17 @@ class TestMtcListener24hRollover:
 
     @pytest.fixture
     def mock_mido(self):
-        with patch('mido.get_input_names') as mock_get_names, \
-             patch('mido.open_input') as mock_open_input:
-            mock_get_names.return_value = ['MTC Port 1']
+        with (
+            patch("mido.get_input_names") as mock_get_names,
+            patch("mido.open_input") as mock_open_input,
+        ):
+            mock_get_names.return_value = ["MTC Port 1"]
             mock_open_input.return_value = MagicMock()
             yield None
 
     @pytest.fixture
     def listener(self, mock_mido):
-        listener = MtcListener(port='MTC Port 1')
+        listener = MtcListener(port="MTC Port 1")
         yield listener
 
     def test_initial_state_no_offset(self, listener):
@@ -189,7 +203,9 @@ class TestMtcListener24hRollover:
         # The previous decoded frames (per heuristic) is the raw decoded
         # frames=1, NOT the offset-adjusted frames. Walk forward to ~24h.
         listener._apply_24h_offset(CTimecode(framerate=25, frames=FRAMES_24H_25 - 1))
-        adjusted = listener._apply_24h_offset(CTimecode(framerate=25, frames=1))  # wrap 2
+        adjusted = listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=1)
+        )  # wrap 2
 
         assert listener._24h_offset_frames == 2 * FRAMES_24H_25
         assert adjusted.frames == 1 + 2 * FRAMES_24H_25
@@ -199,7 +215,7 @@ class TestMtcListener24hRollover:
         # 24h offset accumulation. Seek behavior is preserved (existing
         # reset detection in __update_timecode handles seek-to-zero).
         tc1 = CTimecode(framerate=25, frames=10000)  # ~6:40 in
-        tc2 = CTimecode(framerate=25, frames=100)    # seek back to ~4s
+        tc2 = CTimecode(framerate=25, frames=100)  # seek back to ~4s
         listener._apply_24h_offset(tc1)
         listener._apply_24h_offset(tc2)
         # delta = -9900 frames = -396s = -0.11h, less than 1 hour
@@ -244,7 +260,10 @@ class TestMtcListener24hRollover:
 
         # MIDI wraps; raw decoded is ~1; after offset it's at ~24h+1.
         mtc_post_wrap = listener._apply_24h_offset(CTimecode(framerate=25, frames=1))
-        assert mtc_post_wrap.milliseconds_rounded > mtc_at_wrap_minus_1.milliseconds_rounded
+        assert (
+            mtc_post_wrap.milliseconds_rounded
+            > mtc_at_wrap_minus_1.milliseconds_rounded
+        )
 
         # MTC continues to walk; eventually exceeds cue_end → loop terminates.
         mtc_past_end = listener._apply_24h_offset(CTimecode(framerate=25, frames=800))

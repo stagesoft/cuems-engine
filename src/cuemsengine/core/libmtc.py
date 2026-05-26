@@ -3,13 +3,14 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from ctypes import *
-#import .log
+
+# import .log
 
 try:
-    libmtcmaster = cdll.LoadLibrary('libmtcmaster.so.0')
+    libmtcmaster = cdll.LoadLibrary("libmtcmaster.so.0")
 except:
     libmtcmaster = None
-    raise ImportError('libmtcmaster import error')
+    raise ImportError("libmtcmaster import error")
 
 # void* MTCSender_create()
 libmtcmaster.MTCSender_create.argtypes = None

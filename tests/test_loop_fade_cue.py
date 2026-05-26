@@ -19,15 +19,20 @@ from cuemsutils.cues.FadeCue import FadeCue
 
 
 def _make_fade_cue() -> FadeCue:
-    cue = FadeCue({'action_target': 'some-target-uuid',
-                   'target_value': 80,
-                   'duration': '0:0:0:1',
-                   'curve_type': 'linear'})
+    cue = FadeCue(
+        {
+            "action_target": "some-target-uuid",
+            "target_value": 80,
+            "duration": "0:0:0:1",
+            "curve_type": "linear",
+        }
+    )
     return cue
 
 
 class _AdvancingMtc:
     """Mock MTC whose .main_tc.milliseconds_rounded advances over wall time."""
+
     def __init__(self, start_ms: int, ms_per_second: float = 1000.0):
         self._start_wall = time.monotonic()
         self._start_ms = start_ms
@@ -42,6 +47,7 @@ class _AdvancingMtc:
 def test_fade_cue_registered_in_loop_cue_dispatch():
     """FadeCue must have its own loop_cue branch (not inherit no-op ActionCue)."""
     from cuemsengine.cues.loop_cue import loop_cue
+
     registry = loop_cue.registry
     assert FadeCue in registry, (
         "FadeCue must be registered in loop_cue singledispatch — "

@@ -39,10 +39,14 @@ def main():
         epilog="""
 Runs as a standalone service (NOT launched by the engine).
 Start before the engine so OSC packets are received.
-        """
+        """,
     )
-    parser.add_argument("--port", type=int, default=7000, help="OSC UDP port (default: 7000)")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    parser.add_argument(
+        "--port", type=int, default=7000, help="OSC UDP port (default: 7000)"
+    )
+    parser.add_argument(
+        "--host", type=str, default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
+    )
     args = parser.parse_args()
 
     Logger.info(f"[mock-videocomposer] starting -- host={args.host} port={args.port}")
@@ -87,9 +91,9 @@ Start before the engine so OSC packets are received.
     dispatcher.map("/videocomposer/output/capture", log_handler)
 
     # Catch-all for dynamic per-layer endpoints (/videocomposer/layer/<id>/*)
-    dispatcher.set_default_handler(lambda address, *a: Logger.info(
-        f"[mock-videocomposer] OSC {address} {list(a)}"
-    ))
+    dispatcher.set_default_handler(
+        lambda address, *a: Logger.info(f"[mock-videocomposer] OSC {address} {list(a)}")
+    )
 
     server = BlockingOSCUDPServer((args.host, args.port), dispatcher)
     server_ref.append(server)

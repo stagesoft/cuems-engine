@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
+
 class EngineStatus:
     """
     A class that represents the status of an engine.
     """
+
     def __init__(self):
         self.recieved = 0  # Initialize before test (test setter increments this)
         self.load = ""
@@ -25,13 +27,13 @@ class EngineStatus:
         self.running = ""
         self.armed = ""
 
-        del self.currentcue # start with empty array
+        del self.currentcue  # start with empty array
 
     @property
     def load(self) -> str | None:
         return self._load
 
-    @load.setter 
+    @load.setter
     def load(self, value: str | None) -> None:
         self._load = value
 
@@ -108,7 +110,7 @@ class EngineStatus:
         self._hwdiscovery = value
 
     @property
-    def deploy(self) -> str | None  :
+    def deploy(self) -> str | None:
         return self._deploy
 
     @deploy.setter
@@ -148,10 +150,10 @@ class EngineStatus:
     @currentcue.setter
     def currentcue(self, value: list[str, str] | tuple[str, str]) -> None:
         """Set a (cue, offset) pair to the current cue list
-        
+
         Args:
             value: A list or tuple of two strings
-        
+
         Raises:
             ValueError: If the value is not a list or tuple of two elements
 
@@ -159,7 +161,7 @@ class EngineStatus:
             Non-string values are converted to strings using str().
         """
         if not isinstance(value, (list, tuple)) or len(value) != 2:
-            raise ValueError('Current cue must be a list or tuple of two strings')
+            raise ValueError("Current cue must be a list or tuple of two strings")
         id, offset = str(value[0]), str(value[1])
         for item in self._currentcue:
             if item[0] == id:
@@ -171,10 +173,10 @@ class EngineStatus:
     def currentcue(self) -> None:
         """Clear all current cue entries."""
         self._currentcue = []
-    
+
     def remove_currentcue(self, cue_id: str) -> None:
         """Remove a specific cue entry by its ID.
-        
+
         Args:
             cue_id: The ID of the cue to remove
         """

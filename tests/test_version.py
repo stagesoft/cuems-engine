@@ -5,10 +5,12 @@
 from cuemsengine import __version__ as version
 import re
 
+
 def is_zero_or_digit(s: str) -> bool:
     if s[0] == "0":
         return len(s) == 1
     return s.isdigit()
+
 
 def is_alpha_beta_rc(s: str) -> bool:
     p = r"^(?:0|[1-9]\d*)(?:a[1-9]\d*|b[1-9]\d*|rc[1-9]\d*)?$"
@@ -17,12 +19,14 @@ def is_alpha_beta_rc(s: str) -> bool:
         return False
     return sre.span() == (0, len(s))
 
+
 def test_zero_or_digit():
     assert is_zero_or_digit("0")
     assert is_zero_or_digit("1")
     assert is_zero_or_digit("123")
     assert not is_zero_or_digit("0123")
     assert not is_zero_or_digit("0123a")
+
 
 def test_alpha_beta_rc():
     assert is_alpha_beta_rc("1a1")
@@ -37,6 +41,7 @@ def test_alpha_beta_rc():
     assert not is_alpha_beta_rc("1a1a")
     assert not is_alpha_beta_rc("1b1b")
     assert not is_alpha_beta_rc("1rc1rc")
+
 
 def test_version():
     version_split = version.split(".")

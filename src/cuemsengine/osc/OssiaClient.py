@@ -15,6 +15,7 @@ from pyossia import ossia
 OSCCLIENT_LOCAL_PORT = 9009
 OSCCLIENT_REMOTE_PORT = 9001
 
+
 class OssiaClient(OssiaNodes):
     def __init__(
         self,
@@ -23,7 +24,7 @@ class OssiaClient(OssiaNodes):
         remote_port: int = OSCCLIENT_REMOTE_PORT,
         remote_type: ClientSetupFunction = ClientDevices.OSC,
         endpoints: Union[dict, list] | None = None,
-        name: str = "cuems"
+        name: str = "cuems",
     ):
         super().__init__()
         self.host = host
@@ -61,18 +62,19 @@ class OssiaClient(OssiaNodes):
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):
         super().__init__(
-            host = host,
-            local_port = local_port,
-            remote_type = ClientDevices.OSCQUERY,
-            endpoints = endpoints
+            host=host,
+            local_port=local_port,
+            remote_type=ClientDevices.OSCQUERY,
+            endpoints=endpoints,
         )
+
 
 class PlayerClient(OssiaClient):
     def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
         super().__init__(
-            local_port = PORT_HANDLER.new_random_port(),
-            remote_port = player_port,
-            remote_type = ClientDevices.OSC,
-            endpoints = endpoints,
-            name = name
+            local_port=PORT_HANDLER.new_random_port(),
+            remote_port=player_port,
+            remote_type=ClientDevices.OSC,
+            endpoints=endpoints,
+            name=name,
         )

@@ -22,17 +22,23 @@ import pytest
 from cuemsutils.tools.CTimecode import CTimecode
 
 
-def _rebase_fixed(end_mtc: CTimecode, duration: CTimecode) -> tuple[CTimecode, CTimecode]:
+def _rebase_fixed(
+    end_mtc: CTimecode, duration: CTimecode
+) -> tuple[CTimecode, CTimecode]:
     """Mirror of the fixed rebase in loop_cue.py:107-108 and :224-225."""
     start_mtc = CTimecode(framerate=end_mtc.framerate, frames=end_mtc.frames)
     new_end_mtc = start_mtc + duration
     return start_mtc, new_end_mtc
 
 
-def _rebase_buggy(end_mtc: CTimecode, duration: CTimecode, framerate) -> tuple[CTimecode, CTimecode]:
+def _rebase_buggy(
+    end_mtc: CTimecode, duration: CTimecode, framerate
+) -> tuple[CTimecode, CTimecode]:
     """Mirror of the pre-fix rebase — kept for contrast so the test documents
     the drift the fix eliminates."""
-    start_mtc = CTimecode(framerate=framerate, start_seconds=end_mtc.milliseconds_rounded / 1000)
+    start_mtc = CTimecode(
+        framerate=framerate, start_seconds=end_mtc.milliseconds_rounded / 1000
+    )
     new_end_mtc = start_mtc + duration
     return start_mtc, new_end_mtc
 
@@ -75,9 +81,9 @@ def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
         drifts.append(delta - 30000)
         prev_start_ms = start_mtc.milliseconds_rounded
 
-    assert all(d == -40 for d in drifts), (
-        f"expected buggy path to lose exactly 40 ms/iter at 25 fps, got {drifts}"
-    )
+    assert all(
+        d == -40 for d in drifts
+    ), f"expected buggy path to lose exactly 40 ms/iter at 25 fps, got {drifts}"
 
 
 def test_fixed_rebase_matches_absolute_anchor():

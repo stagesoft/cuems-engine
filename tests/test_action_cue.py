@@ -133,7 +133,9 @@ class TestPlayAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("player init failed")):
+        with patch.object(
+            handler, "arm", side_effect=RuntimeError("player init failed")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -438,8 +440,11 @@ class TestRapidSuccession:
     def test_rapid_stop_play_cycle(self, handler, mtc):
         target = _make_target()
 
-        with patch.object(handler, "go"), patch.object(handler, "arm"), \
-             patch.object(handler, "disarm"):
+        with (
+            patch.object(handler, "go"),
+            patch.object(handler, "arm"),
+            patch.object(handler, "disarm"),
+        ):
             for _ in range(20):
                 handler.execute_action(_make_action_cue("stop", target), mtc)
                 target._stop_requested = False
@@ -747,7 +752,7 @@ def _make_action_target(**overrides) -> ActionCue:
     cue._stop_requested = False
     cue._go_generation = 0
     cue._local = True
-    cue.action_type = 'enable'
+    cue.action_type = "enable"
     cue._action_target_object = _make_target()
     for k, v in overrides.items():
         setattr(cue, k, v)
@@ -761,7 +766,7 @@ class TestGoRearm:
         """A cue with loaded=False should be re-armed before GO proceeds."""
         cue = _make_action_target(loaded=False)
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
         thread = handler.go(cue, mtc)
         thread.join(timeout=2)
@@ -782,9 +787,9 @@ class TestGoRearm:
         """A cue with loaded=True should NOT trigger a re-arm."""
         cue = _make_action_target(loaded=True)
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
-        with patch.object(handler, 'arm') as mock_arm:
+        with patch.object(handler, "arm") as mock_arm:
             thread = handler.go(cue, mtc)
             thread.join(timeout=2)
 
@@ -794,13 +799,13 @@ class TestGoRearm:
         """go() should call _arm_ahead to arm cues in the target chain."""
         next_cue = _make_action_target(loaded=False)
         next_cue._target_object = None
-        next_cue.post_go = 'pause'
+        next_cue.post_go = "pause"
 
         cue = _make_action_target(loaded=True)
         cue._target_object = next_cue
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
-        with patch.object(handler, '_arm_ahead') as mock_ahead:
+        with patch.object(handler, "_arm_ahead") as mock_ahead:
             thread = handler.go(cue, mtc)
             thread.join(timeout=2)
 
@@ -820,15 +825,15 @@ class TestArmPlayTarget:
         play_target = _make_action_target(loaded=False)
         play_target._target_object = None
         play_target._action_target_object = None
-        play_target.action_type = 'enable'
+        play_target.action_type = "enable"
 
         cue = ActionCue()
         cue.enabled = True
         cue._local = True
-        cue.action_type = 'play'
+        cue.action_type = "play"
         cue._action_target_object = play_target
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
         handler.arm(cue, init=True)
 
@@ -843,15 +848,15 @@ class TestArmPlayTarget:
         cue = ActionCue()
         cue.enabled = True
         cue._local = True
-        cue.action_type = 'stop'
+        cue.action_type = "stop"
         cue._action_target_object = stop_target
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
         handler.arm(cue, init=True)
 
         assert cue.loaded is True
-        assert not getattr(stop_target, 'loaded', False)
+        assert not getattr(stop_target, "loaded", False)
 
     def test_arm_nonlocal_does_not_cascade(self, handler, mtc):
         """A non-local cue should not trigger recursive arms."""
@@ -860,15 +865,15 @@ class TestArmPlayTarget:
         cue = ActionCue()
         cue.enabled = True
         cue._local = False  # non-local
-        cue.action_type = 'play'
+        cue.action_type = "play"
         cue._action_target_object = play_target
         cue._target_object = None
 
         handler.arm(cue, init=True)
 
         # Non-local cue: arm_cue not called, no cascade
-        assert not getattr(cue, 'loaded', False)
-        assert not getattr(play_target, 'loaded', False)
+        assert not getattr(cue, "loaded", False)
+        assert not getattr(play_target, "loaded", False)
 
     def test_arm_loading_waits_for_in_progress_arm(self, handler, mtc):
         """An init=True arm on a cue being armed should wait and succeed."""
@@ -900,11 +905,11 @@ class TestArmPlayTarget:
         cue._loading = Event()  # never signalled
 
         # Patch timeout to avoid 5s wait in tests
-        with patch.object(cue._loading, 'wait', return_value=False):
+        with patch.object(cue._loading, "wait", return_value=False):
             result = handler.arm(cue, init=True)
 
         assert result is False
-        assert not getattr(cue, 'loaded', False)
+        assert not getattr(cue, "loaded", False)
 
     def test_arm_loading_non_init_returns_false(self, handler, mtc):
         """A non-init arm on a cue being armed should return False immediately."""
@@ -921,7 +926,7 @@ class TestArmPlayTarget:
         """arm() should use _armed_cues_set for O(1) membership check."""
         cue = _make_action_target(loaded=False)
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
         # Add to set but not list — arm should see it as found
         handler._armed_cues_set.add(cue.id)
@@ -942,24 +947,27 @@ class TestEffectiveDuration:
     def test_video_cue_with_media(self):
         from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues.MediaCue import Media
+
         cue = _make_target()
-        cue.media = Media({'file_name': 'test.wav', 'duration': '00:00:05.000'})
+        cue.media = Media({"file_name": "test.wav", "duration": "00:00:05.000"})
         # prewait=0, postwait=0, media=5s
         duration = CueHandler._effective_duration_ms(cue)
         assert duration >= 4900  # ~5000ms, allow rounding
 
     def test_action_cue_zero_duration(self):
         from cuemsengine.cues.CueHandler import CueHandler
+
         cue = ActionCue()
-        cue.action_type = 'play'
+        cue.action_type = "play"
         duration = CueHandler._effective_duration_ms(cue)
         assert duration == 0
 
     def test_action_cue_with_prewait(self):
         from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.tools.CTimecode import CTimecode
+
         cue = ActionCue()
-        cue.action_type = 'play'
+        cue.action_type = "play"
         cue.prewait = CTimecode(start_seconds=2.0)
         duration = CueHandler._effective_duration_ms(cue)
         assert duration >= 1900  # ~2000ms
@@ -967,6 +975,7 @@ class TestEffectiveDuration:
     def test_dmx_cue_fadein_seconds_to_ms(self):
         from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues import DmxCue
+
         cue = DmxCue()
         cue.fadein_time = 3.0  # 3 seconds
         cue.fadeout_time = 0.0
@@ -984,15 +993,16 @@ class TestArmAhead:
     def _make_chain(self, durations_ms, handler):
         """Build a chain of ActionCues with given effective durations via prewait."""
         from cuemsutils.tools.CTimecode import CTimecode
+
         cues = []
         for d in durations_ms:
             cue = ActionCue()
             cue.enabled = True
             cue._local = True
-            cue.action_type = 'enable'
+            cue.action_type = "enable"
             cue._action_target_object = _make_target()
             cue._target_object = None
-            cue.post_go = 'go_at_end'
+            cue.post_go = "go_at_end"
             if d > 0:
                 cue.prewait = CTimecode(start_seconds=d / 1000.0)
             cues.append(cue)
@@ -1012,7 +1022,7 @@ class TestArmAhead:
 
         # All 5 should be armed (3 short + 2 counted)
         for cue in cues:
-            assert getattr(cue, 'loaded', False), f'Cue should be loaded'
+            assert getattr(cue, "loaded", False), f"Cue should be loaded"
 
     def test_arm_ahead_stops_at_two_real_cues(self, handler, mtc):
         """Stops after finding 2 cues with duration >= threshold."""
@@ -1023,9 +1033,9 @@ class TestArmAhead:
 
         handler._arm_ahead(start)
 
-        assert getattr(cues[0], 'loaded', False)
-        assert getattr(cues[1], 'loaded', False)
-        assert not getattr(cues[2], 'loaded', False)  # not reached
+        assert getattr(cues[0], "loaded", False)
+        assert getattr(cues[1], "loaded", False)
+        assert not getattr(cues[2], "loaded", False)  # not reached
 
     def test_arm_ahead_hard_cap(self, handler, mtc, caplog):
         """Stops at MAX_LOOKAHEAD_DEPTH and logs warning."""
@@ -1040,18 +1050,21 @@ class TestArmAhead:
         # Only first MAX_LOOKAHEAD_DEPTH cues armed
         depth = handler._MAX_LOOKAHEAD_DEPTH
         for i in range(depth):
-            assert getattr(cues[i], 'loaded', False)
-        assert not getattr(cues[depth], 'loaded', False)
+            assert getattr(cues[i], "loaded", False)
+        assert not getattr(cues[depth], "loaded", False)
 
         # Warning logged
-        assert any('depth limit' in r.getMessage() for r in caplog.records)
+        assert any("depth limit" in r.getMessage() for r in caplog.records)
 
     def test_arm_ahead_skips_cuelist(self, handler, mtc):
         """CueList targets in the chain are skipped."""
         from cuemsutils.cues import CueList
+
         cue_after = _make_action_target(loaded=False)
         cue_after._target_object = None
-        cue_after.prewait = __import__('cuemsutils.tools.CTimecode', fromlist=['CTimecode']).CTimecode(start_seconds=2.0)
+        cue_after.prewait = __import__(
+            "cuemsutils.tools.CTimecode", fromlist=["CTimecode"]
+        ).CTimecode(start_seconds=2.0)
 
         cuelist = CueList()
         cuelist._target_object = cue_after
@@ -1062,18 +1075,18 @@ class TestArmAhead:
         handler._arm_ahead(start)
 
         # CueList skipped, cue_after armed
-        assert not getattr(cuelist, 'loaded', False)
-        assert getattr(cue_after, 'loaded', False)
+        assert not getattr(cuelist, "loaded", False)
+        assert getattr(cue_after, "loaded", False)
 
     def test_arm_ahead_uninit_loaded(self, handler, mtc):
         """A cue without 'loaded' attribute should be armed (getattr fallback)."""
         cue = ActionCue()
         cue.enabled = True
         cue._local = True
-        cue.action_type = 'enable'
+        cue.action_type = "enable"
         cue._action_target_object = _make_target()
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
         # Don't set 'loaded' at all
 
         start = _make_action_target()
@@ -1081,4 +1094,4 @@ class TestArmAhead:
 
         handler._arm_ahead(start)
 
-        assert getattr(cue, 'loaded', False)
+        assert getattr(cue, "loaded", False)

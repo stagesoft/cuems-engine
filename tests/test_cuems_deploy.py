@@ -34,7 +34,7 @@ from cuemsengine.tools.CuemsDeploy import CuemsDeploy
 # anyio: restrict to asyncio backend (trio is not installed in this project)
 @pytest.fixture
 def anyio_backend():
-    return 'asyncio'
+    return "asyncio"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ def _make_stream_reader(chunks):
     q = iter(chunks)
 
     async def _read(n):
-        return next(q, b'')
+        return next(q, b"")
 
     reader.read = _read
     return reader
@@ -74,8 +74,9 @@ def _make_async_proc(rc, stdout_chunks, stderr_chunks):
 def _shrink_watchdogs(monkeypatch, startup=0.05, inactivity=0.05):
     """Speed up tests so watchdog branches fire promptly."""
     import cuemsengine.tools.CuemsDeploy as mod
-    monkeypatch.setattr(mod, '_STARTUP_DEADLINE_S', startup)
-    monkeypatch.setattr(mod, '_INACTIVITY_S', inactivity)
+
+    monkeypatch.setattr(mod, "_STARTUP_DEADLINE_S", startup)
+    monkeypatch.setattr(mod, "_INACTIVITY_S", inactivity)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ def _shrink_watchdogs(monkeypatch, startup=0.05, inactivity=0.05):
 @pytest.fixture
 def deploy():
     """Default-enabled deploy manager with a valid controller IP."""
-    return CuemsDeploy(controller_ip='10.0.0.1')
+    return CuemsDeploy(controller_ip="10.0.0.1")
 
 
 @pytest.fixture
@@ -95,7 +96,7 @@ def deploy_with_loop():
     loop = asyncio.new_event_loop()
     t = threading.Thread(target=loop.run_forever, daemon=True)
     t.start()
-    d = CuemsDeploy(controller_ip='10.0.0.1', loop=loop)
+    d = CuemsDeploy(controller_ip="10.0.0.1", loop=loop)
     yield d
     loop.call_soon_threadsafe(loop.stop)
     t.join(timeout=2)
@@ -107,10 +108,10 @@ def deploy_with_loop():
 
 
 def test_constructor_with_controller_ip_is_enabled():
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d.enabled is True
-    assert d.main_ip == '10.0.0.1'
-    assert d.address == 'rsync://cuems_library_rsync@10.0.0.1/cuems'
+    assert d.main_ip == "10.0.0.1"
+    assert d.address == "rsync://cuems_library_rsync@10.0.0.1/cuems"
 
 
 def test_constructor_with_none_ip_is_disabled():
@@ -130,30 +131,30 @@ def test_constructor_with_false_is_disabled():
 
 
 def test_constructor_with_empty_string_is_disabled():
-    d = CuemsDeploy(controller_ip='')
+    d = CuemsDeploy(controller_ip="")
     assert d.enabled is False
     assert d.address is None
 
 
 def test_constructor_with_hostname_falls_back_to_avahi():
-    with patch.object(CuemsDeploy, '_avahi_resolve', return_value='192.168.1.10'):
-        d = CuemsDeploy(controller_ip=None, hostname='controller.local')
+    with patch.object(CuemsDeploy, "_avahi_resolve", return_value="192.168.1.10"):
+        d = CuemsDeploy(controller_ip=None, hostname="controller.local")
         assert d.enabled is True
-        assert d.main_ip == '192.168.1.10'
+        assert d.main_ip == "192.168.1.10"
 
 
 def test_constructor_hostname_avahi_failure_is_disabled():
-    with patch.object(CuemsDeploy, '_avahi_resolve', return_value=None):
-        d = CuemsDeploy(controller_ip=None, hostname='nonexistent.local')
+    with patch.object(CuemsDeploy, "_avahi_resolve", return_value=None):
+        d = CuemsDeploy(controller_ip=None, hostname="nonexistent.local")
         assert d.enabled is False
 
 
 def test_controller_ip_takes_precedence_over_hostname():
     """controller_ip is the preferred path; hostname must not be resolved
     when controller_ip is provided (avoids unnecessary avahi calls)."""
-    with patch.object(CuemsDeploy, '_avahi_resolve') as mock_resolve:
-        d = CuemsDeploy(controller_ip='10.0.0.1', hostname='controller.local')
-        assert d.main_ip == '10.0.0.1'
+    with patch.object(CuemsDeploy, "_avahi_resolve") as mock_resolve:
+        d = CuemsDeploy(controller_ip="10.0.0.1", hostname="controller.local")
+        assert d.main_ip == "10.0.0.1"
         mock_resolve.assert_not_called()
 
 
@@ -166,43 +167,57 @@ def test_sync_files_returns_false_when_disabled():
     """Disabled manager must not invoke rsync — disabled check fires before
     any subprocess call or loop check."""
     d = CuemsDeploy(controller_ip=None)
-    result = d.sync_files('proj', 'project')
+    result = d.sync_files("proj", "project")
     assert result is False
 
 
 def test_sync_files_fails_fast_when_project_mandatory_file_missing(deploy_with_loop):
     """Option A: pre-check mandatory paths, then skip rsync transfer if absent."""
     d = deploy_with_loop
-    with patch.object(
-        d, '_check_mandatory_sources', new_callable=AsyncMock,
-        return_value=(False, ['/projects/proj/script.xml']),
-    ) as check_mandatory, \
-    patch.object(
-        d, '_sync', new_callable=AsyncMock, return_value=True,
-    ) as sync_mock, \
-    patch.object(d, '_create_deploy_log', return_value=True), \
-    patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(False, ["/projects/proj/script.xml"]),
+        ) as check_mandatory,
+        patch.object(
+            d,
+            "_sync",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as sync_mock,
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
 
     assert result is False
     check_mandatory.assert_called_once()
     sync_mock.assert_not_called()
-    assert any('mandatory project files are missing' in e for e in d.errors), d.errors
+    assert any("mandatory project files are missing" in e for e in d.errors), d.errors
 
 
 def test_sync_files_project_does_single_sync_after_mandatory_precheck(deploy_with_loop):
     """Option A keeps one transfer process after mandatory checks pass."""
     d = deploy_with_loop
-    with patch.object(
-        d, '_check_mandatory_sources', new_callable=AsyncMock,
-        return_value=(True, []),
-    ) as check_mandatory, \
-    patch.object(
-        d, '_sync', new_callable=AsyncMock, return_value=True,
-    ) as sync_mock, \
-    patch.object(d, '_create_deploy_log', return_value=True), \
-    patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(True, []),
+        ) as check_mandatory,
+        patch.object(
+            d,
+            "_sync",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as sync_mock,
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
 
     assert result is True
     check_mandatory.assert_called_once()
@@ -217,58 +232,62 @@ def test_sync_files_project_does_single_sync_after_mandatory_precheck(deploy_wit
 @pytest.mark.anyio
 async def test_check_mandatory_sources_probes_once_for_all_paths():
     """Mandatory precheck should run one probe with the full path set."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     mandatory_paths = [
-        '/projects/proj/script.xml',
-        '/projects/proj/settings.xml',
+        "/projects/proj/script.xml",
+        "/projects/proj/settings.xml",
     ]
     proc = MagicMock()
     proc.returncode = 0
 
     async def _communicate():
-        return b'', b''
+        return b"", b""
 
     proc.communicate = _communicate
 
-    with patch('asyncio.create_subprocess_exec', new_callable=AsyncMock,
-               return_value=proc) as mock_exec:
+    with patch(
+        "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=proc
+    ) as mock_exec:
         ok, missing = await d._check_mandatory_sources(mandatory_paths)
 
     assert ok is True
     assert missing == []
     mock_exec.assert_called_once()
     args = mock_exec.call_args.args
-    assert args[0] == 'rsync'
-    assert '-r' in args
-    assert '--list-only' in args
-    assert any(str(a).startswith('--files-from=') for a in args)
+    assert args[0] == "rsync"
+    assert "-r" in args
+    assert "--list-only" in args
+    assert any(str(a).startswith("--files-from=") for a in args)
 
 
 @pytest.mark.anyio
 async def test_check_mandatory_sources_extracts_missing_subset():
     """Missing paths are extracted from a single probe stderr payload."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     stderr = (
         b'rsync: [sender] link_stat "/projects/proj/settings.xml" failed: '
-        b'No such file or directory (2)\n'
+        b"No such file or directory (2)\n"
     )
     proc = MagicMock()
     proc.returncode = 23
 
     async def _communicate():
-        return b'', stderr
+        return b"", stderr
 
     proc.communicate = _communicate
 
-    with patch('asyncio.create_subprocess_exec', new_callable=AsyncMock,
-               return_value=proc):
-        ok, missing = await d._check_mandatory_sources([
-            '/projects/proj/script.xml',
-            '/projects/proj/settings.xml',
-        ])
+    with patch(
+        "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=proc
+    ):
+        ok, missing = await d._check_mandatory_sources(
+            [
+                "/projects/proj/script.xml",
+                "/projects/proj/settings.xml",
+            ]
+        )
 
     assert ok is False
-    assert missing == ['/projects/proj/settings.xml']
+    assert missing == ["/projects/proj/settings.xml"]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -278,9 +297,10 @@ async def test_check_mandatory_sources_extracts_missing_subset():
 
 def test_default_log_file_is_under_run_cuems():
     """Log file moved out of /tmp to avoid cross-uid ownership conflicts."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    assert d.log_file.startswith('/run/cuems/'), \
-        f'expected /run/cuems/ prefix, got {d.log_file!r}'
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    assert d.log_file.startswith(
+        "/run/cuems/"
+    ), f"expected /run/cuems/ prefix, got {d.log_file!r}"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -291,27 +311,27 @@ def test_default_log_file_is_under_run_cuems():
 @pytest.mark.anyio
 async def test_sync_command_includes_supervision_flags(tmp_path):
     """rsync must be invoked with the stream-supervision flag set."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
-    proc = _make_async_proc(rc=0, stdout_chunks=[b''], stderr_chunks=[b''])
+    proc = _make_async_proc(rc=0, stdout_chunks=[b""], stderr_chunks=[b""])
     captured = []
 
     async def _capture(*args, **kwargs):
         captured.extend(args)
         return proc
 
-    with patch('asyncio.create_subprocess_exec', side_effect=_capture):
+    with patch("asyncio.create_subprocess_exec", side_effect=_capture):
         await d._sync(str(log_file))
 
-    assert captured[0] == 'rsync'
-    assert '--contimeout=2' in captured
-    assert '--timeout=5' in captured
-    assert '--ignore-missing-args' in captured
-    assert '--info=progress2,name0' in captured
-    assert '-rq' not in captured
-    assert '-q' not in captured
+    assert captured[0] == "rsync"
+    assert "--contimeout=2" in captured
+    assert "--timeout=5" in captured
+    assert "--ignore-missing-args" in captured
+    assert "--info=progress2,name0" in captured
+    assert "-rq" not in captured
+    assert "-q" not in captured
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -324,13 +344,13 @@ async def test_sync_startup_deadline_fires_with_no_output(tmp_path, monkeypatch)
     """If rsync produces zero output before the startup deadline, kill it
     and surface a clean error — the original 'pre-fork hang' case (T011)."""
     _shrink_watchdogs(monkeypatch)
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
     async def _hanging_read(n):
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     proc = MagicMock()
     proc.returncode = None
@@ -347,11 +367,11 @@ async def test_sync_startup_deadline_fires_with_no_output(tmp_path, monkeypatch)
     proc.terminate = MagicMock()
     proc.kill = MagicMock()
 
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
-    assert any('startup deadline' in e for e in d.errors), d.errors
+    assert any("startup deadline" in e for e in d.errors), d.errors
     proc.terminate.assert_called()
 
 
@@ -360,22 +380,22 @@ async def test_sync_inactivity_threshold_fires_after_started(tmp_path, monkeypat
     """Post-startup wedge: rsync emits one chunk, then nothing. Watchdog
     must kick in with the inactivity message (T012)."""
     _shrink_watchdogs(monkeypatch)
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
-    stdout_source = iter([b'  1,024   0%    0.00kB/s    0:00:00\r'])
+    stdout_source = iter([b"  1,024   0%    0.00kB/s    0:00:00\r"])
 
     async def _read_stdout(n):
         chunk = next(stdout_source, None)
         if chunk is not None:
             return chunk
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     async def _hanging_read(n):
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     proc = MagicMock()
     proc.returncode = None
@@ -392,11 +412,11 @@ async def test_sync_inactivity_threshold_fires_after_started(tmp_path, monkeypat
     proc.terminate = MagicMock()
     proc.kill = MagicMock()
 
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
-    assert any('inactivity threshold' in e for e in d.errors), d.errors
+    assert any("inactivity threshold" in e for e in d.errors), d.errors
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -408,32 +428,32 @@ async def test_sync_inactivity_threshold_fires_after_started(tmp_path, monkeypat
 async def test_sync_handles_rsync_error_exit(tmp_path):
     """A non-zero rsync exit must produce False with captured stderr,
     and the positional 'rsync error: ...' trailer must be stripped."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
     proc = _make_async_proc(
         rc=10,
-        stdout_chunks=[b''],
-        stderr_chunks=[b'rsync: connection refused\nrsync error: foo at main.c(123)\n'],
+        stdout_chunks=[b""],
+        stderr_chunks=[b"rsync: connection refused\nrsync error: foo at main.c(123)\n"],
     )
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
-    assert any('connection refused' in e for e in d.errors), d.errors
-    assert not any('rsync error:' in e for e in d.errors), d.errors
+    assert any("connection refused" in e for e in d.errors), d.errors
+    assert not any("rsync error:" in e for e in d.errors), d.errors
 
 
 @pytest.mark.anyio
 async def test_sync_handles_empty_stderr(tmp_path):
     """Defensive: rsync may exit non-zero without any stderr at all."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
-    proc = _make_async_proc(rc=1, stdout_chunks=[b''], stderr_chunks=[b''])
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    proc = _make_async_proc(rc=1, stdout_chunks=[b""], stderr_chunks=[b""])
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
@@ -449,32 +469,29 @@ async def test_sync_handles_empty_stderr(tmp_path):
 async def test_sync_fires_on_progress_for_progress2_lines(tmp_path):
     """on_progress receives a structured dict for each progress2 update."""
     cb = MagicMock()
-    d = CuemsDeploy(controller_ip='10.0.0.1', on_progress=cb)
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1", on_progress=cb)
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
-    progress = (
-        b'  2,147,483,648 100%  118.34MB/s    0:00:17 '
-        b'(xfr#3, to-chk=0/3)\r'
-    )
+    progress = b"  2,147,483,648 100%  118.34MB/s    0:00:17 " b"(xfr#3, to-chk=0/3)\r"
     proc = _make_async_proc(
         rc=0,
-        stdout_chunks=[progress, b''],
-        stderr_chunks=[b''],
+        stdout_chunks=[progress, b""],
+        stderr_chunks=[b""],
     )
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is True
     assert cb.call_count == 1
     parsed = cb.call_args[0][0]
-    assert parsed['bytes'] == 2_147_483_648
-    assert parsed['pct'] == 100
-    assert parsed['rate'] == '118.34MB/s'
-    assert parsed['eta'] == '0:00:17'
-    assert parsed['xfr'] == 3
-    assert parsed['remaining'] == 0
-    assert parsed['total'] == 3
+    assert parsed["bytes"] == 2_147_483_648
+    assert parsed["pct"] == 100
+    assert parsed["rate"] == "118.34MB/s"
+    assert parsed["eta"] == "0:00:17"
+    assert parsed["xfr"] == 3
+    assert parsed["remaining"] == 0
+    assert parsed["total"] == 3
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -484,33 +501,34 @@ async def test_sync_fires_on_progress_for_progress2_lines(tmp_path):
 
 def test_parse_progress_basic_line(deploy):
     parsed = deploy._parse_progress(
-        '         32,768   0%    0.00kB/s    0:00:00 (xfr#1, to-chk=0/1)'
+        "         32,768   0%    0.00kB/s    0:00:00 (xfr#1, to-chk=0/1)"
     )
-    assert parsed['bytes'] == 32_768
-    assert parsed['pct'] == 0
-    assert parsed['rate'] == '0.00kB/s'
-    assert parsed['eta'] == '0:00:00'
-    assert parsed['xfr'] == 1
-    assert parsed['remaining'] == 0
-    assert parsed['total'] == 1
+    assert parsed["bytes"] == 32_768
+    assert parsed["pct"] == 0
+    assert parsed["rate"] == "0.00kB/s"
+    assert parsed["eta"] == "0:00:00"
+    assert parsed["xfr"] == 1
+    assert parsed["remaining"] == 0
+    assert parsed["total"] == 1
 
 
 def test_parse_progress_without_xfr_suffix(deploy):
-    parsed = deploy._parse_progress(
-        '         32,768   5%    1.50MB/s    0:00:10'
-    )
-    assert parsed['bytes'] == 32_768
-    assert parsed['pct'] == 5
-    assert 'xfr' not in parsed
+    parsed = deploy._parse_progress("         32,768   5%    1.50MB/s    0:00:10")
+    assert parsed["bytes"] == 32_768
+    assert parsed["pct"] == 5
+    assert "xfr" not in parsed
 
 
-@pytest.mark.parametrize('line', [
-    '',
-    'Number of files: 1',                      # stats line
-    'sending incremental file list',
-    'projects/foo/script.xml',                  # file path
-    'total size is 1,234  speedup is 1.00',
-])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "",
+        "Number of files: 1",  # stats line
+        "sending incremental file list",
+        "projects/foo/script.xml",  # file path
+        "total size is 1,234  speedup is 1.00",
+    ],
+)
 def test_parse_progress_returns_empty_for_non_progress_lines(deploy, line):
     assert deploy._parse_progress(line) == {}
 
@@ -524,14 +542,16 @@ def test_rsync_password_constant_defined():
     """_RSYNC_PASSWORD must be a ClassVar on CuemsDeploy with the correct value
     and the literal must appear exactly once in the module source."""
     import inspect
-    assert hasattr(CuemsDeploy, '_RSYNC_PASSWORD'), \
-        'CuemsDeploy must have a _RSYNC_PASSWORD class attribute'
-    assert CuemsDeploy._RSYNC_PASSWORD == 'f48t5eL2kLHw2Wfw'
+
+    assert hasattr(
+        CuemsDeploy, "_RSYNC_PASSWORD"
+    ), "CuemsDeploy must have a _RSYNC_PASSWORD class attribute"
+    assert CuemsDeploy._RSYNC_PASSWORD == "f48t5eL2kLHw2Wfw"
     source = inspect.getsource(CuemsDeploy)
-    count = source.count('f48t5eL2kLHw2Wfw')
-    assert count == 1, (
-        f'Password literal must appear exactly once in source; got {count}'
-    )
+    count = source.count("f48t5eL2kLHw2Wfw")
+    assert (
+        count == 1
+    ), f"Password literal must appear exactly once in source; got {count}"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -561,9 +581,9 @@ def test_check_mandatory_sources_is_coroutine_function():
 
 def test_sync_files_returns_false_when_loop_is_none():
     """T010: sync_files must return False immediately when self.loop is None."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d.loop is None
-    result = d.sync_files('proj', 'project')
+    result = d.sync_files("proj", "project")
     assert result is False
 
 
@@ -577,16 +597,17 @@ async def test_sync_startup_watchdog_fires(tmp_path, monkeypatch):
     """T011: startup watchdog fires when asyncio.wait returns empty done set
     before first output (pump tasks hang, timeout expires)."""
     import cuemsengine.tools.CuemsDeploy as mod
-    monkeypatch.setattr(mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    monkeypatch.setattr(mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(mod, "_INACTIVITY_S", 0.05)
+
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
     async def _hanging_read(n):
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     proc = MagicMock()
     proc.returncode = None
@@ -603,11 +624,11 @@ async def test_sync_startup_watchdog_fires(tmp_path, monkeypatch):
     proc.terminate = MagicMock()
     proc.kill = MagicMock()
 
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
-    assert any('startup deadline' in e for e in d.errors), d.errors
+    assert any("startup deadline" in e for e in d.errors), d.errors
     proc.terminate.assert_called()
 
 
@@ -615,25 +636,26 @@ async def test_sync_startup_watchdog_fires(tmp_path, monkeypatch):
 async def test_sync_inactivity_watchdog_fires_after_first_chunk(tmp_path, monkeypatch):
     """T012: inactivity watchdog fires after first chunk arrives then silence."""
     import cuemsengine.tools.CuemsDeploy as mod
-    monkeypatch.setattr(mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    monkeypatch.setattr(mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(mod, "_INACTIVITY_S", 0.05)
 
-    stdout_source = iter([b'  1,024   0%    0.00kB/s    0:00:00\r'])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
+
+    stdout_source = iter([b"  1,024   0%    0.00kB/s    0:00:00\r"])
 
     async def _read_stdout(n):
         chunk = next(stdout_source, None)
         if chunk is not None:
             return chunk
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     async def _hanging_read(n):
         await asyncio.sleep(100)
-        return b''
+        return b""
 
     proc = MagicMock()
     proc.returncode = None
@@ -650,11 +672,11 @@ async def test_sync_inactivity_watchdog_fires_after_first_chunk(tmp_path, monkey
     proc.terminate = MagicMock()
     proc.kill = MagicMock()
 
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
 
     assert result is False
-    assert any('inactivity threshold' in e for e in d.errors), d.errors
+    assert any("inactivity threshold" in e for e in d.errors), d.errors
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -666,24 +688,24 @@ async def test_sync_inactivity_watchdog_fires_after_first_chunk(tmp_path, monkey
 async def test_check_mandatory_sources_returns_false_and_missing_paths_on_nonzero_exit():
     """T013: async _check_mandatory_sources returns (False, [path]) when
     asyncio.create_subprocess_exec exits non-zero with matching stderr."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     stderr_payload = (
         b'rsync: [sender] link_stat "/projects/proj/script.xml" failed: '
-        b'No such file or directory (2)\n'
+        b"No such file or directory (2)\n"
     )
     proc = MagicMock()
     proc.returncode = 23
 
     async def _communicate():
-        return b'', stderr_payload
+        return b"", stderr_payload
 
     proc.communicate = _communicate
 
-    with patch('asyncio.create_subprocess_exec', return_value=proc):
-        ok, missing = await d._check_mandatory_sources(['/projects/proj/script.xml'])
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
+        ok, missing = await d._check_mandatory_sources(["/projects/proj/script.xml"])
 
     assert ok is False
-    assert missing == ['/projects/proj/script.xml']
+    assert missing == ["/projects/proj/script.xml"]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -694,15 +716,27 @@ async def test_check_mandatory_sources_returns_false_and_missing_paths_on_nonzer
 def test_sync_files_returns_false_and_skips_sync_when_precheck_fails(deploy_with_loop):
     """T014: sync_files returns False without calling _sync when precheck fails."""
     d = deploy_with_loop
-    with patch.object(
-        d, '_check_mandatory_sources', new_callable=AsyncMock,
-        return_value=(False, ['/projects/proj/script.xml']),
-    ), patch.object(
-        d, '_sync', new_callable=AsyncMock, return_value=True,
-    ) as mock_sync, patch.object(
-        d, '_create_deploy_log', return_value=True,
-    ), patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(False, ["/projects/proj/script.xml"]),
+        ),
+        patch.object(
+            d,
+            "_sync",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_sync,
+        patch.object(
+            d,
+            "_create_deploy_log",
+            return_value=True,
+        ),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
 
     assert result is False
     mock_sync.assert_not_called()
@@ -711,15 +745,27 @@ def test_sync_files_returns_false_and_skips_sync_when_precheck_fails(deploy_with
 def test_sync_files_returns_true_when_precheck_and_sync_succeed(deploy_with_loop):
     """T015: sync_files returns True when both precheck and _sync succeed."""
     d = deploy_with_loop
-    with patch.object(
-        d, '_check_mandatory_sources', new_callable=AsyncMock,
-        return_value=(True, []),
-    ), patch.object(
-        d, '_sync', new_callable=AsyncMock, return_value=True,
-    ), patch.object(
-        d, '_create_deploy_log', return_value=True,
-    ), patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(True, []),
+        ),
+        patch.object(
+            d,
+            "_sync",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch.object(
+            d,
+            "_create_deploy_log",
+            return_value=True,
+        ),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
 
     assert result is True
 
@@ -732,33 +778,33 @@ def test_sync_files_returns_true_when_precheck_and_sync_succeed(deploy_with_loop
 @pytest.mark.anyio
 async def test_sync_command_includes_delete_flags(tmp_path):
     """T027: rsync cmd in _sync() must contain --delete and --delete-delay."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = tmp_path / 'rsync_request.log'
-    log_file.write_text('')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = tmp_path / "rsync_request.log"
+    log_file.write_text("")
 
-    proc = _make_async_proc(rc=0, stdout_chunks=[b''], stderr_chunks=[b''])
+    proc = _make_async_proc(rc=0, stdout_chunks=[b""], stderr_chunks=[b""])
     captured = []
 
     async def _capture(*args, **kwargs):
         captured.extend(args)
         return proc
 
-    with patch('asyncio.create_subprocess_exec', side_effect=_capture):
+    with patch("asyncio.create_subprocess_exec", side_effect=_capture):
         await d._sync(str(log_file))
 
-    assert '--delete' in captured
-    assert '--delete-delay' in captured
+    assert "--delete" in captured
+    assert "--delete-delay" in captured
 
 
 @pytest.mark.anyio
 async def test_check_mandatory_sources_does_not_include_delete_flags():
     """T028: rsync cmd in _check_mandatory_sources() must NOT contain --delete."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     proc = MagicMock()
     proc.returncode = 0
 
     async def _communicate():
-        return b'', b''
+        return b"", b""
 
     proc.communicate = _communicate
     captured = []
@@ -767,11 +813,11 @@ async def test_check_mandatory_sources_does_not_include_delete_flags():
         captured.extend(args)
         return proc
 
-    with patch('asyncio.create_subprocess_exec', side_effect=_capture):
-        await d._check_mandatory_sources(['/projects/proj/script.xml'])
+    with patch("asyncio.create_subprocess_exec", side_effect=_capture):
+        await d._check_mandatory_sources(["/projects/proj/script.xml"])
 
-    assert '--delete' not in captured
-    assert '--delete-delay' not in captured
+    assert "--delete" not in captured
+    assert "--delete-delay" not in captured
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -783,13 +829,14 @@ def test_rsync_password_not_in_method_bodies():
     """T030: neither _sync nor _check_mandatory_sources body contains the
     password literal; _RSYNC_PASSWORD is annotated as ClassVar."""
     import inspect
+
     sync_src = inspect.getsource(CuemsDeploy._sync)
     check_src = inspect.getsource(CuemsDeploy._check_mandatory_sources)
-    assert 'f48t5eL2kLHw2Wfw' not in sync_src
-    assert 'f48t5eL2kLHw2Wfw' not in check_src
+    assert "f48t5eL2kLHw2Wfw" not in sync_src
+    assert "f48t5eL2kLHw2Wfw" not in check_src
     # ClassVar annotation must appear in the class body
     class_src = inspect.getsource(CuemsDeploy)
-    assert 'ClassVar' in class_src
+    assert "ClassVar" in class_src
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -799,23 +846,23 @@ def test_rsync_password_not_in_method_bodies():
 
 def test_media_files_video_and_audio(deploy):
     """T031: video gets media/ + idx entry; audio gets only media/ entry."""
-    result = deploy._media_files(['clip.mp4', 'track.wav'])
+    result = deploy._media_files(["clip.mp4", "track.wav"])
     assert result == [
-        'media/clip.mp4',
-        'media/indexes/clip.mp4.idx',
-        'media/track.wav',
+        "media/clip.mp4",
+        "media/indexes/clip.mp4.idx",
+        "media/track.wav",
     ]
 
 
 def test_media_files_idx_only_for_video_extensions(deploy):
     """T032: .avi and .mkv get idx entries; .mp3 does not."""
-    result = deploy._media_files(['a.avi', 'b.mkv', 'c.mp3'])
-    assert 'media/a.avi' in result
-    assert 'media/indexes/a.avi.idx' in result
-    assert 'media/b.mkv' in result
-    assert 'media/indexes/b.mkv.idx' in result
-    assert 'media/c.mp3' in result
-    assert 'media/indexes/c.mp3.idx' not in result
+    result = deploy._media_files(["a.avi", "b.mkv", "c.mp3"])
+    assert "media/a.avi" in result
+    assert "media/indexes/a.avi.idx" in result
+    assert "media/b.mkv" in result
+    assert "media/indexes/b.mkv.idx" in result
+    assert "media/c.mp3" in result
+    assert "media/indexes/c.mp3.idx" not in result
 
 
 def test_sync_files_media_tag_auto_expands_bare_names(deploy_with_loop):
@@ -828,13 +875,15 @@ def test_sync_files_media_tag_auto_expands_bare_names(deploy_with_loop):
         captured_file_names.extend(file_names)
         return True
 
-    with patch.object(d, '_create_deploy_log', side_effect=_capture_log), \
-         patch.object(d, '_sync', new_callable=AsyncMock, return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'media', ['clip.mp4', 'track.wav'])
+    with (
+        patch.object(d, "_create_deploy_log", side_effect=_capture_log),
+        patch.object(d, "_sync", new_callable=AsyncMock, return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "media", ["clip.mp4", "track.wav"])
 
     assert result is True
-    assert 'media/clip.mp4' in captured_file_names
-    assert 'media/indexes/clip.mp4.idx' in captured_file_names
-    assert 'media/track.wav' in captured_file_names
-    assert 'clip.mp4' not in captured_file_names
+    assert "media/clip.mp4" in captured_file_names
+    assert "media/indexes/clip.mp4.idx" in captured_file_names
+    assert "media/track.wav" in captured_file_names
+    assert "clip.mp4" not in captured_file_names

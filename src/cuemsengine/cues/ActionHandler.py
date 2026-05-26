@@ -361,9 +361,7 @@ def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | Non
         try:
             ch.arm(target, init=True)
         except Exception as exc:
-            return ActionHandler._action_result(
-                "failed", action, target_id, str(exc)
-            )
+            return ActionHandler._action_result("failed", action, target_id, str(exc))
     if not getattr(target, "loaded", False):
         return ActionHandler._action_result(
             "failed", action, target_id, "Target could not be armed"
@@ -395,9 +393,7 @@ def _handle_play(
     try:
         ch.go(target, mtc, frozen_mtc_ms)
     except Exception as exc:
-        return ActionHandler._action_result(
-            "failed", "play", target_id, str(exc)
-        )
+        return ActionHandler._action_result("failed", "play", target_id, str(exc))
     return ActionHandler._action_result("applied", "play", target_id)
 
 
@@ -579,15 +575,15 @@ def _handle_fade_action(
         try:
             gradient_client.send_fade(
                 motion_id=entry_motion_id,
-                osc_host='127.0.0.1',
-                osc_port=entry['osc_port'],
-                osc_path=entry['osc_path'],
-                start_value=entry['start_value'],
-                end_value=entry['end_value'],
-                start_mtc_ms=entry['start_mtc_ms'],
-                duration_ms=entry['duration_ms'],
-                curve_type=entry['curve_type'],
-                curve_params_json='{}',
+                osc_host="127.0.0.1",
+                osc_port=entry["osc_port"],
+                osc_path=entry["osc_path"],
+                start_value=entry["start_value"],
+                end_value=entry["end_value"],
+                start_mtc_ms=entry["start_mtc_ms"],
+                duration_ms=entry["duration_ms"],
+                curve_type=entry["curve_type"],
+                curve_params_json="{}",
             )
         except Exception as exc:
             Logger.error(
@@ -596,15 +592,18 @@ def _handle_fade_action(
                 f"osc={entry['osc_path']}): {exc}"
             )
             return ActionHandler._action_result(
-                "failed", "fade_action", target_id,
-                f"OSC dispatch failed: {exc}"
+                "failed", "fade_action", target_id, f"OSC dispatch failed: {exc}"
             )
 
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
     framerate = mtc.main_tc.framerate
-    action_cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_mtc_ms / 1000.0)
-    action_cue._end_mtc = action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
+    action_cue._start_mtc = CTimecode(
+        framerate=framerate, start_seconds=start_mtc_ms / 1000.0
+    )
+    action_cue._end_mtc = (
+        action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
+    )
 
     Logger.info(
         f"FadeCue {motion_id}: dispatched {len(payloads)} start_fade(s) "
@@ -614,8 +613,9 @@ def _handle_fade_action(
     return ActionHandler._action_result("applied", "fade_action", target_id)
 
 
-def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
-                        motion_id: str) -> list[dict]:
+def _build_fade_payload(
+    target_cue: Cue, fade_cue: Any, start_mtc_ms: int, motion_id: str
+) -> list[dict]:
     """Build FadeCommand body dicts from target_cue + fade_cue.
 
     Returns a list of dicts (one per OSC endpoint). For AudioCue this is a
@@ -632,7 +632,9 @@ def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
     from cuemsutils.cues import AudioCue, VideoCue
 
     curve_type = fade_cue.curve_type
-    curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+    curve_type_str = (
+        curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+    )
     duration_ms = fade_cue.duration.milliseconds_rounded
     end_value = float(fade_cue.target_value) / 100.0
 

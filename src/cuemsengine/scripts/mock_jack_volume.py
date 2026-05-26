@@ -25,10 +25,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="Mock jack-volume for headless deployments"
     )
-    parser.add_argument("-c", dest="client_name", default="mock_mixer", help="JACK client name")
+    parser.add_argument(
+        "-c", dest="client_name", default="mock_mixer", help="JACK client name"
+    )
     parser.add_argument("-p", dest="port", type=int, required=True, help="OSC UDP port")
-    parser.add_argument("-n", dest="channels", type=int, default=2, help="Number of channels")
-    parser.add_argument("-s", dest="server", default=None, help="JACK server name (ignored)")
+    parser.add_argument(
+        "-n", dest="channels", type=int, default=2, help="Number of channels"
+    )
+    parser.add_argument(
+        "-s", dest="server", default=None, help="JACK server name (ignored)"
+    )
     args, _ = parser.parse_known_args()
 
     Logger.info(
@@ -53,9 +59,9 @@ def main():
     for i in range(args.channels):
         dispatcher.map(f"{base}/{i}", volume_handler)
     dispatcher.map("/quit", quit_handler)
-    dispatcher.set_default_handler(lambda address, *a: Logger.info(
-        f"[mock-jack-volume] OSC {address} {list(a)}"
-    ))
+    dispatcher.set_default_handler(
+        lambda address, *a: Logger.info(f"[mock-jack-volume] OSC {address} {list(a)}")
+    )
 
     server = BlockingOSCUDPServer(("0.0.0.0", args.port), dispatcher)
     server_ref.append(server)

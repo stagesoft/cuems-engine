@@ -6,23 +6,26 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.tools.CTimecode import CTimecode
 from ..tools.MtcListener import MtcListener
 
+
 def find_timing(
     cue: Cue, mtc: MtcListener, in_frames: bool = False
 ) -> tuple[int, CTimecode]:
     """Find the duration and offset of a cue
-    
+
     Args:
         cue (Cue): The cue with _start_mtc defined to find the timing
         mtc (Mtc): The main timecode object
         in_frames (bool): If True, return the offset in frames instead of milliseconds
-        
+
     Returns:
         tuple[int, CTimecode]: The offset in frames and the duration
     """
     if not cue._start_mtc:
         # Frame-domain construction (mirrors the surgical fix at
         # loop_cue.py:107,224) to skip the lossy ms→seconds→frames round-trip.
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+        cue._start_mtc = CTimecode(
+            framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
+        )
 
     if in_frames:
         time_attribute = "frame_number"

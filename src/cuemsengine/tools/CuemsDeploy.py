@@ -42,24 +42,24 @@ _INACTIVITY_S = 15
 
 # rsync 3.2+ --info=progress2: "  32,768   0%  0.00kB/s  0:00:00 (xfr#1, to-chk=0/1)"
 _PROGRESS2_RE = re.compile(
-    r'^\s*([\d,]+)\s+(\d+)%\s+([\d.]+\s*[kMGT]?B/s)\s+(\d+:\d\d:\d\d)'
-    r'(?:\s+\(xfr#(\d+),\s*to-chk=(\d+)/(\d+)\))?\s*$'
+    r"^\s*([\d,]+)\s+(\d+)%\s+([\d.]+\s*[kMGT]?B/s)\s+(\d+:\d\d:\d\d)"
+    r"(?:\s+\(xfr#(\d+),\s*to-chk=(\d+)/(\d+)\))?\s*$"
 )
 
 
-class CuemsDeploy():
-    _RSYNC_PASSWORD: ClassVar[str] = 'f48t5eL2kLHw2Wfw'
+class CuemsDeploy:
+    _RSYNC_PASSWORD: ClassVar[str] = "f48t5eL2kLHw2Wfw"
 
     def __init__(
-            self,
-            library_path = '/opt/cuems_library/',
-            tmp_path = '/tmp/cuems_library/',
-            controller_ip: str | None = None,
-            hostname: str | None = None,
-            log_file: str = '/run/cuems/rsync.log',
-            on_progress: Callable[[dict], None] | None = None,
-            loop: asyncio.AbstractEventLoop | None = None,
-        ):
+        self,
+        library_path="/opt/cuems_library/",
+        tmp_path="/tmp/cuems_library/",
+        controller_ip: str | None = None,
+        hostname: str | None = None,
+        log_file: str = "/run/cuems/rsync.log",
+        on_progress: Callable[[dict], None] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ):
         """Construct a deploy manager.
 
         Args:
@@ -92,18 +92,20 @@ class CuemsDeploy():
             self.main_ip = None
 
         if self.main_ip:
-            self.address = f'rsync://cuems_library_rsync@{self.main_ip}/cuems'
+            self.address = f"rsync://cuems_library_rsync@{self.main_ip}/cuems"
             self.enabled = True
         else:
             self.address = None
             self.enabled = False
             Logger.warning(
-                f'CuemsDeploy disabled: no valid controller IP '
-                f'(controller_ip={controller_ip!r}, hostname={hostname!r}, '
-                f'resolved={self.main_ip!r}). Project deploys will be skipped.'
+                f"CuemsDeploy disabled: no valid controller IP "
+                f"(controller_ip={controller_ip!r}, hostname={hostname!r}, "
+                f"resolved={self.main_ip!r}). Project deploys will be skipped."
             )
 
-    def sync_files(self, project: str, tag: str, file_names: list[str] | None = None) -> bool:
+    def sync_files(
+        self, project: str, tag: str, file_names: list[str] | None = None
+    ) -> bool:
         """Sync files from the controller to the node.
 
         Submits _deploy_all_async() to self.loop via run_coroutine_threadsafe()
@@ -126,23 +128,23 @@ class CuemsDeploy():
         """
         if not self.enabled:
             Logger.error(
-                f'CuemsDeploy is disabled (no controller IP) — '
-                f'skipping {tag} sync for project {project!r}'
+                f"CuemsDeploy is disabled (no controller IP) — "
+                f"skipping {tag} sync for project {project!r}"
             )
             return False
 
         if self.loop is None:
             Logger.error(
-                f'CuemsDeploy event loop not bound (NodeEngine.start() not '
-                f'called yet) — skipping {tag} sync for project {project!r}'
+                f"CuemsDeploy event loop not bound (NodeEngine.start() not "
+                f"called yet) — skipping {tag} sync for project {project!r}"
             )
-            self.errors = ['event loop not bound']
+            self.errors = ["event loop not bound"]
             return False
 
         file_names = list(file_names or [])
-        if tag == 'project' and len(file_names) == 0:
+        if tag == "project" and len(file_names) == 0:
             file_names = self._project_files(project)
-        elif tag == 'media' and len(file_names) > 0:
+        elif tag == "media" and len(file_names) > 0:
             file_names = self._media_files(file_names)
 
         mandatory_paths = self._mandatory_paths(project, tag)
@@ -152,7 +154,7 @@ class CuemsDeploy():
             coro = self._deploy_all_async(log_file, file_names, mandatory_paths)
             synced = asyncio.run_coroutine_threadsafe(coro, self.loop).result()
         except Exception as e:
-            Logger.error(f'Unexpected error during deploy of {project!r}: {e}')
+            Logger.error(f"Unexpected error during deploy of {project!r}: {e}")
             self.errors = [str(e)]
             return False
 
@@ -161,19 +163,21 @@ class CuemsDeploy():
             self.errors = []
         else:
             Logger.error(
-                f'Failed to sync {tag} files for project {project!r} '
-                f'from {self.address} (log: {log_file})'
+                f"Failed to sync {tag} files for project {project!r} "
+                f"from {self.address} (log: {log_file})"
             )
             for error in self.errors:
                 Logger.error(error)
         return synced
 
     def _mandatory_paths(self, project: str, tag: str) -> list[str]:
-        if tag != 'project':
+        if tag != "project":
             return []
-        return [f'/projects/{project}/script.xml']
+        return [f"/projects/{project}/script.xml"]
 
-    async def _check_mandatory_sources(self, mandatory_paths: list[str]) -> tuple[bool, list[str]]:
+    async def _check_mandatory_sources(
+        self, mandatory_paths: list[str]
+    ) -> tuple[bool, list[str]]:
         """Verify mandatory remote paths exist before bulk transfer.
 
         Uses one rsync --list-only probe with all mandatory paths. Output is
@@ -187,24 +191,24 @@ class CuemsDeploy():
 
         env = dict(os.environ, RSYNC_PASSWORD=self._RSYNC_PASSWORD)
         with tempfile.NamedTemporaryFile(
-            mode='w',
+            mode="w",
             encoding=self.encoding,
             delete=False,
-            prefix='rsync_mandatory_',
-            suffix='.lst',
+            prefix="rsync_mandatory_",
+            suffix=".lst",
         ) as probe_list:
             for source_path in mandatory_paths:
-                probe_list.write(f'{source_path}\n')
+                probe_list.write(f"{source_path}\n")
             probe_list_path = probe_list.name
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                'rsync',
-                '-r',
-                '--list-only',
-                '--contimeout=2',
-                '--timeout=5',
-                f'--files-from={probe_list_path}',
+                "rsync",
+                "-r",
+                "--list-only",
+                "--contimeout=2",
+                "--timeout=5",
+                f"--files-from={probe_list_path}",
                 self.address,
                 self.library_path,
                 stdout=asyncio.subprocess.PIPE,
@@ -221,13 +225,13 @@ class CuemsDeploy():
         if proc.returncode == 0:
             return True, []
 
-        stderr = stderr_bytes.decode(errors='replace').strip()
+        stderr = stderr_bytes.decode(errors="replace").strip()
         missing = []
         for source_path in mandatory_paths:
             if source_path in stderr and (
-                'No such file or directory' in stderr
-                or 'link_stat' in stderr
-                or 'failed to stat' in stderr
+                "No such file or directory" in stderr
+                or "link_stat" in stderr
+                or "failed to stat" in stderr
             ):
                 missing.append(source_path)
 
@@ -235,7 +239,7 @@ class CuemsDeploy():
             return False, missing
 
         self.errors = [
-            f'rsync mandatory precheck failed: '
+            f"rsync mandatory precheck failed: "
             f'{stderr or f"exit code {proc.returncode}"}'
         ]
         return False, []
@@ -247,20 +251,23 @@ class CuemsDeploy():
         exists. Returns the IP string on success, or None on failure.
         """
         import subprocess
+
         try:
             result = subprocess.run(
-                ['avahi-resolve-host-name', '-n', hostname],
+                ["avahi-resolve-host-name", "-n", hostname],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=5,
             )
             result.check_returncode()
-            ip = result.stdout.decode(self.encoding).replace(hostname, '').strip()
+            ip = result.stdout.decode(self.encoding).replace(hostname, "").strip()
             return ip if ip else None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
 
-    async def _pump(self, stream: asyncio.StreamReader, tag: str, queue: asyncio.Queue) -> None:
+    async def _pump(
+        self, stream: asyncio.StreamReader, tag: str, queue: asyncio.Queue
+    ) -> None:
         """Read 4096-byte chunks until EOF; push (tag, chunk) then (tag, None).
 
         (tag, None) is the EOF sentinel consumed by _sync's driver loop.
@@ -288,20 +295,21 @@ class CuemsDeploy():
         try:
             os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         except OSError as e:
-            Logger.warning(f'Could not create rsync log directory: {e}')
+            Logger.warning(f"Could not create rsync log directory: {e}")
 
         # -t: rsync shows >f..T...... without it; also breaks .idx mtime cache (2026-05-19).
         cmd = [
-            'rsync', '-rt',
-            '--delete',
-            '--delete-delay',
-            '--info=progress2,name0',
-            '--stats',
-            '--contimeout=2',
-            '--timeout=5',
-            '--ignore-missing-args',
-            f'--files-from={path}',
-            f'--log-file={self.log_file}',
+            "rsync",
+            "-rt",
+            "--delete",
+            "--delete-delay",
+            "--info=progress2,name0",
+            "--stats",
+            "--contimeout=2",
+            "--timeout=5",
+            "--ignore-missing-args",
+            f"--files-from={path}",
+            f"--log-file={self.log_file}",
             self.address,
             self.library_path,
         ]
@@ -315,10 +323,10 @@ class CuemsDeploy():
         )
 
         queue: asyncio.Queue = asyncio.Queue()
-        t_out = asyncio.create_task(self._pump(proc.stdout, 'out', queue))
-        t_err = asyncio.create_task(self._pump(proc.stderr, 'err', queue))
+        t_out = asyncio.create_task(self._pump(proc.stdout, "out", queue))
+        t_err = asyncio.create_task(self._pump(proc.stderr, "err", queue))
 
-        bufs = {'out': '', 'err': ''}
+        bufs = {"out": "", "err": ""}
         stderr_lines: list[str] = []
         started = False
         deadline = asyncio.get_event_loop().time() + _STARTUP_DEADLINE_S
@@ -330,9 +338,7 @@ class CuemsDeploy():
         try:
             while pipes_done < 2:
                 budget = deadline - asyncio.get_event_loop().time()
-                done, pending = await asyncio.wait(
-                    pending, timeout=max(budget, 0.1)
-                )
+                done, pending = await asyncio.wait(pending, timeout=max(budget, 0.1))
                 # Drain before watchdog: pump can push data without completing its task.
                 got_data = False
                 while not queue.empty():
@@ -340,27 +346,28 @@ class CuemsDeploy():
                     if chunk is None:
                         if bufs[tag]:
                             self._dispatch_line(tag, bufs[tag], stderr_lines)
-                            bufs[tag] = ''
+                            bufs[tag] = ""
                         pipes_done += 1
                         continue
                     got_data = True
                     started = True
                     deadline = asyncio.get_event_loop().time() + _INACTIVITY_S
-                    bufs[tag] += chunk.decode(errors='replace')
-                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    bufs[tag] += chunk.decode(errors="replace")
+                    *parts, bufs[tag] = re.split(r"[\r\n]", bufs[tag])
                     for p in parts:
                         if p:
                             self._dispatch_line(tag, p, stderr_lines)
                 if not done and not got_data:
                     reason = (
-                        'no output within startup deadline' if not started
-                        else 'no output within inactivity threshold'
+                        "no output within startup deadline"
+                        if not started
+                        else "no output within inactivity threshold"
                     )
                     t_out.cancel()
                     t_err.cancel()
                     await asyncio.gather(t_out, t_err, return_exceptions=True)
                     await self._kill(proc)
-                    self.errors = [f'rsync {reason} (target: {self.address})']
+                    self.errors = [f"rsync {reason} (target: {self.address})"]
                     return False
 
             try:
@@ -368,8 +375,8 @@ class CuemsDeploy():
             except asyncio.TimeoutError:
                 await self._kill(proc)
                 self.errors = [
-                    f'rsync closed pipes but did not exit within '
-                    f'{_INACTIVITY_S}s (target: {self.address})'
+                    f"rsync closed pipes but did not exit within "
+                    f"{_INACTIVITY_S}s (target: {self.address})"
                 ]
                 return False
         finally:
@@ -382,19 +389,19 @@ class CuemsDeploy():
         # Drop the positional "rsync error: ... at main.c(NNN)" trailer if present.
         self.errors = (
             stderr_lines[:-1]
-            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            if stderr_lines and "rsync error:" in stderr_lines[-1]
             else stderr_lines
         )
         return False
 
     def _dispatch_line(self, tag: str, line: str, stderr_lines: list[str]) -> None:
-        if tag == 'out':
-            Logger.debug(f'rsync: {line}')
+        if tag == "out":
+            Logger.debug(f"rsync: {line}")
             parsed = self._parse_progress(line)
             if parsed:
                 self._on_progress(parsed)
         else:
-            Logger.warning(f'rsync: {line}')
+            Logger.warning(f"rsync: {line}")
             stderr_lines.append(line)
 
     async def _kill(self, proc: asyncio.subprocess.Process) -> None:
@@ -409,23 +416,23 @@ class CuemsDeploy():
             except asyncio.TimeoutError:
                 pass
 
-    async def _deploy_all_async(self, log_file: str, file_names: list[str], mandatory_paths: list[str]) -> bool:
+    async def _deploy_all_async(
+        self, log_file: str, file_names: list[str], mandatory_paths: list[str]
+    ) -> bool:
         """Full deploy flow: precheck → log creation → rsync transfer.
 
         Early-fails on precheck failure; the log file is only created when
         precheck passes (preserving the pre-refactor invariant).
         """
         if mandatory_paths:
-            mandatory_ok, missing = await self._check_mandatory_sources(
-                mandatory_paths
-            )
+            mandatory_ok, missing = await self._check_mandatory_sources(mandatory_paths)
             if not mandatory_ok:
                 if missing:
                     self.errors = [
-                        f'mandatory project files are missing at source '
+                        f"mandatory project files are missing at source "
                         f'{self.address}: {", ".join(missing)}'
                     ]
-                Logger.error('Failed mandatory precheck for project files')
+                Logger.error("Failed mandatory precheck for project files")
                 return False
         self._create_deploy_log(log_file, file_names)
         return await self._sync(log_file)
@@ -443,49 +450,49 @@ class CuemsDeploy():
             return {}
         bytes_str, pct, rate, eta, xfr, done, total = m.groups()
         out = {
-            'bytes': int(bytes_str.replace(',', '')),
-            'pct': int(pct),
-            'rate': rate,
-            'eta': eta,
+            "bytes": int(bytes_str.replace(",", "")),
+            "pct": int(pct),
+            "rate": rate,
+            "eta": eta,
         }
         if xfr is not None:
-            out.update({
-                'xfr': int(xfr),
-                'remaining': int(done),
-                'total': int(total),
-            })
+            out.update(
+                {
+                    "xfr": int(xfr),
+                    "remaining": int(done),
+                    "total": int(total),
+                }
+            )
         return out
 
-    def _deploy_log_path(self, project: str, tag: str = 'project') -> str:
-        return os.path.join(
-            self.tmp_path, f'rsync_request_{project}_{tag}.log'
-        )
+    def _deploy_log_path(self, project: str, tag: str = "project") -> str:
+        return os.path.join(self.tmp_path, f"rsync_request_{project}_{tag}.log")
 
     def _create_deploy_log(self, log_file: str, file_names: list[str] = []) -> bool:
         """Create the rsync --files-from list file for a deploy request."""
         try:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
-            with open(log_file, 'w') as f:
+            with open(log_file, "w") as f:
                 # Normalize to one-path-per-line; callers may omit the trailing newline.
                 for name in file_names:
-                    if not name.endswith('\n'):
-                        name = name + '\n'
+                    if not name.endswith("\n"):
+                        name = name + "\n"
                     f.write(name)
         except Exception as e:
-            Logger.error(f'Exception raised when writing rsync request log file: {e}')
+            Logger.error(f"Exception raised when writing rsync request log file: {e}")
             return False
         return True
 
     def _reset_deploy_log(self, log_file: str) -> None:
-        with open(log_file, 'w'):
+        with open(log_file, "w"):
             pass
-        Logger.info(f'rsync Deploy log file {log_file} emptied')
+        Logger.info(f"rsync Deploy log file {log_file} emptied")
 
     def _project_files(self, project: str) -> list[str]:
         return [
-            '/projects/' + project + '/script.xml\n',
-            '/projects/' + project + '/mappings.xml\n',
-            '/projects/' + project + '/settings.xml\n'
+            "/projects/" + project + "/script.xml\n",
+            "/projects/" + project + "/mappings.xml\n",
+            "/projects/" + project + "/settings.xml\n",
         ]
 
     def _media_files(self, bare_names: list[str]) -> list[str]:
@@ -494,10 +501,10 @@ class CuemsDeploy():
         Every file gets a media/<name> entry. Video files (.mp4 .mov .avi
         .mkv .mpg) also get a media/indexes/<name>.idx sidecar entry.
         """
-        _VIDEO_EXTS = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
+        _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mpg"}
         result = []
         for name in bare_names:
-            result.append(f'media/{name}')
+            result.append(f"media/{name}")
             if os.path.splitext(name)[1].lower() in _VIDEO_EXTS:
-                result.append(f'media/indexes/{name}.idx')
+                result.append(f"media/indexes/{name}.idx")
         return result

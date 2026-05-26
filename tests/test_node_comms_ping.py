@@ -22,8 +22,8 @@ from cuemsengine.comms.NodeCommunications import NodeCommunications
 from cuemsengine.comms.NodesHub import ActionType, OperationType, NodeOperation
 
 
-NODE_UUID = 'aaaaaaaa-1111-2222-3333-444444444444'
-CONTROLLER_UUID = 'bbbbbbbb-1111-2222-3333-444444444444'
+NODE_UUID = "aaaaaaaa-1111-2222-3333-444444444444"
+CONTROLLER_UUID = "bbbbbbbb-1111-2222-3333-444444444444"
 
 
 @pytest.fixture
@@ -31,11 +31,11 @@ def comms(monkeypatch):
     """A NodeCommunications instance with the NNG hub mocked."""
     # NodesHub constructor opens an actual NNG socket; mock it out.
     monkeypatch.setattr(
-        'cuemsengine.comms.NodeCommunications.NodesHub',
+        "cuemsengine.comms.NodeCommunications.NodesHub",
         MagicMock(),
     )
     obj = NodeCommunications(
-        hub_address='tcp://127.0.0.1:0',
+        hub_address="tcp://127.0.0.1:0",
         node_id=NODE_UUID,
     )
     # AsyncMock so asyncio.create_task(send_operation(...)) gets a real
@@ -51,7 +51,7 @@ def _ping_op() -> NodeOperation:
         type=OperationType.COMMAND,
         action=ActionType.UPDATE,
         sender=CONTROLLER_UUID,
-        target='ping',
+        target="ping",
         data={},
     )
 
@@ -62,7 +62,7 @@ def _normal_command_op(name: str) -> NodeOperation:
         action=ActionType.UPDATE,
         sender=CONTROLLER_UUID,
         target=name,
-        data={'value': 'foo', 'address': f'/engine/command/{name}'},
+        data={"value": "foo", "address": f"/engine/command/{name}"},
     )
 
 
@@ -73,6 +73,7 @@ def test_ping_triggers_pong_with_own_uuid(comms):
         comms._handle_command_operation(_ping_op())
         # Let the scheduled task pick up.
         await asyncio.sleep(0)
+
     asyncio.run(runner())
 
     assert comms.nng_hub.send_operation.call_count == 1
@@ -80,7 +81,7 @@ def test_ping_triggers_pong_with_own_uuid(comms):
     assert isinstance(sent, NodeOperation)
     assert sent.type == OperationType.STATUS
     assert sent.action == ActionType.UPDATE
-    assert sent.target == 'pong'
+    assert sent.target == "pong"
     assert sent.sender == NODE_UUID
 
 
@@ -88,6 +89,7 @@ def test_ping_does_not_dispatch_to_command_callback(comms):
     async def runner():
         comms._handle_command_operation(_ping_op())
         await asyncio.sleep(0)
+
     asyncio.run(runner())
 
     # The user-facing command callback (load/go/stop dispatcher) must NOT
@@ -96,10 +98,11 @@ def test_ping_does_not_dispatch_to_command_callback(comms):
 
 
 def test_regular_command_still_routes_to_callback(comms):
-    comms._handle_command_operation(_normal_command_op('load'))
+    comms._handle_command_operation(_normal_command_op("load"))
 
     # _command_callback is invoked from a worker thread, so we wait briefly.
     import time
+
     for _ in range(10):
         if comms._command_callback.call_count > 0:
             break
@@ -115,7 +118,7 @@ def test_non_command_type_returns_early(comms):
         type=OperationType.STATUS,
         action=ActionType.UPDATE,
         sender=CONTROLLER_UUID,
-        target='ping',
+        target="ping",
         data={},
     )
     comms._handle_command_operation(status_op)

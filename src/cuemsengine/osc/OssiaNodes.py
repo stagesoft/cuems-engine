@@ -11,9 +11,10 @@ from cuemsutils.log import logged, Logger
 CLEANUP_DELAY = 0.3
 STARTUP_DELAY = 0.3
 
+
 class OssiaNodes(object):
     """Manage a collection of OSC nodes.
-    
+
     Internal static methods allow to:
         - add nodes
         - remove nodes
@@ -31,12 +32,12 @@ class OssiaNodes(object):
         - callback function (*optional*)
         - initial / default value (*optional*)
         - **Note**: to set a parameter value without a callback, pass None as the second argument
-    
+
     """
+
     def __init__(self):
         self.device = None
         self.nodes = {}
-
 
     def iterate_on_children(self, node):
         for child in node.children():
@@ -45,8 +46,8 @@ class OssiaNodes(object):
 
     def set_node(self, path: str):
         """Add a new node to the device
-            Node memory address is stored in self.nodes[path]
-            and must be kept to access the node later
+        Node memory address is stored in self.nodes[path]
+        and must be kept to access the node later
         """
         if not self.device:
             raise AttributeError("No device found")
@@ -56,14 +57,12 @@ class OssiaNodes(object):
             self.nodes[path] = self.device.root_node.add_node(path)
 
     def get_node(self, path: str):
-        """Get a node from the collection
-        """
+        """Get a node from the collection"""
         return self.nodes[path]
-    
+
     def remove_node(self, path: str):
-        """Remove a node from the collection and all its children
-        """
-        if not path or path.strip('/') == '':
+        """Remove a node from the collection and all its children"""
+        if not path or path.strip("/") == "":
             return
         self.device.root_node.remove_child(path)
         children = [k for k in self.nodes.keys() if str(k).startswith(path)]
@@ -71,8 +70,7 @@ class OssiaNodes(object):
             del self.nodes[str(key)]
 
     def remove_device(self) -> None:
-        """Remove the device and all nodes from the collection
-        """
+        """Remove the device and all nodes from the collection"""
         node_keys = list(self.nodes.keys())
         for node in node_keys:
             self.remove_node(node)
@@ -82,9 +80,14 @@ class OssiaNodes(object):
         self.device = None
 
     @staticmethod
-    def set_parameter(node: Node, value_type, callback: Callable = None, value = None, repetition_filter = True):
-        """Set a parameter to a node
-        """
+    def set_parameter(
+        node: Node,
+        value_type,
+        callback: Callable = None,
+        value=None,
+        repetition_filter=True,
+    ):
+        """Set a parameter to a node"""
         if not isinstance(value_type, ValueType):
             raise ValueError("value_type must be a pyossia.ValueType")
         _ = node.create_parameter(value_type)
@@ -92,7 +95,11 @@ class OssiaNodes(object):
         # must always be OFF, otherwise ossia silently drops repeated sends.
         if value_type == ValueType.Impulse:
             repetition_filter = False
-        _.repetition_filter = ossia.RepetitionFilter.On if repetition_filter else ossia.RepetitionFilter.Off
+        _.repetition_filter = (
+            ossia.RepetitionFilter.On
+            if repetition_filter
+            else ossia.RepetitionFilter.Off
+        )
         _.access_mode = ossia.AccessMode.Bi
         if callback:
             l = len(signature(callback).parameters)
@@ -106,8 +113,7 @@ class OssiaNodes(object):
             _.value = value
 
     def set_node_callback(self, node: Node, callback: Callable) -> None:
-        """Set a callback to a node
-        """
+        """Set a callback to a node"""
         Logger.debug(f"Setting callback for node {str(node)}")
         l = len(signature(callback).parameters)
         if l == 1:
@@ -160,7 +166,7 @@ class OssiaNodes(object):
 
         Returns:
             - value: The value of the node
-        
+
         Raises:
             - ValueError: If the node is not found
         """
@@ -172,8 +178,7 @@ class OssiaNodes(object):
         return node.parameter.value
 
     def create_endpoint(self, path: str, param_args: list | None = None):
-        """Create an endpoint as a node with parameter
-        """
+        """Create an endpoint as a node with parameter"""
         try:
             self.set_node(path)
             if param_args and isinstance(param_args, list):
@@ -185,8 +190,7 @@ class OssiaNodes(object):
 
     @logged
     def create_endpoints(self, paths: dict[str, Any] | list[str]):
-        """Create multiple endpoints
-        """
+        """Create multiple endpoints"""
         if isinstance(paths, list):
             for path in paths:
                 self.create_endpoint(path)
@@ -195,15 +199,17 @@ class OssiaNodes(object):
                 self.create_endpoint(path, params)
 
     def get_endpoints(self) -> dict[str, list[Any]]:
-        """Get all endpoints (node paths with their parameter arguments)
-        
-        """
+        """Get all endpoints (node paths with their parameter arguments)"""
         # endpoints_raw = self.iterate_on_children(self.device.root_node)
         Logger.info(f"Getting endpoints from device: {self.device}")
         endpoints = {}
         for path, node in self.nodes.items():
             if node.parameter:
-                endpoints[path] = [node.parameter.value_type, None, node.parameter.value]
+                endpoints[path] = [
+                    node.parameter.value_type,
+                    None,
+                    node.parameter.value,
+                ]
         return endpoints
 
     def nodes_from_device(self, node: Node = None) -> dict[str, Node]:
@@ -211,16 +217,18 @@ class OssiaNodes(object):
         is_root = node is None
         if is_root:
             node = self.device.root_node
-        Logger.debug(f"{self.__class__.__name__} Node {node.name} has {len(node.children())} children")
+        Logger.debug(
+            f"{self.__class__.__name__} Node {node.name} has {len(node.children())} children"
+        )
         if len(node.children()) == 0:
             if not is_root:
                 nodes[str(node)] = node
-            return nodes        
+            return nodes
         for n, i in enumerate[int, Node](node.children()):
             Logger.debug(f"Adding child {n} named {i.name}")
             nodes.update(self.nodes_from_device(i))
             # DEV: iteration raises RuntimeError at the end of the loop
-            if  n + 1 == len(node.children()):
+            if n + 1 == len(node.children()):
                 Logger.debug(f"All children from {node.name} added")
                 break
         return nodes

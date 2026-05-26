@@ -8,9 +8,11 @@ from random import choice
 from threading import RLock
 
 from .system_ports import get_used_ports_with_pid
- # olad ports defaults to 9090 9010, raise de initial port to skip these ports
+
+# olad ports defaults to 9090 9010, raise de initial port to skip these ports
 INITIAL_PORT = 9190
 MAX_PORT = 9999
+
 
 class PortHandler(object):
     def __new__(cls):
@@ -22,7 +24,7 @@ class PortHandler(object):
         Config ports are ports that are ports assigned with None as key
         Thread-safe: internal state mutations are guarded by a Lock.
         """
-        if not hasattr(cls, '_instance'):
+        if not hasattr(cls, "_instance"):
             cls._instance = super(PortHandler, cls).__new__(cls)
             cls._instance._lock = RLock()
             cls._instance._ports = {None: {}}
@@ -30,19 +32,19 @@ class PortHandler(object):
             cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
             cls._instance._random_ports = []
         return cls._instance
-    
+
     def assign_ports(self, names: list[str], cue: CuemsDict = None) -> dict:
         """Assign free ports to a list of names
 
         This method is thread-safe and should be the preferred way to assign ports to a list of names for a cue or config.
-        
+
         Args:
             names: The names to assign ports to
             cue: The cue to assign ports to
         """
         with self._lock:
             new_ports = self.get_free_ports(len(names))
-        out = {k: new_ports[i] for i,k in enumerate(names)}
+        out = {k: new_ports[i] for i, k in enumerate(names)}
         if cue is None:
             self.add_config_ports(out)
         else:
@@ -55,15 +57,17 @@ class PortHandler(object):
         """
         with self._lock:
             return self._ports[-1]
-    
+
     def get_ports(self, cue: CuemsDict) -> dict | None:
         """
         Get the ports for a cue
         """
         with self._lock:
             return self._ports.get(cue, None)
-    
-    def set_ports(self, cue: CuemsDict, ports: list | dict, check_range: bool = True) -> None:
+
+    def set_ports(
+        self, cue: CuemsDict, ports: list | dict, check_range: bool = True
+    ) -> None:
         """
         Set the ports for a cue
         """
@@ -92,7 +96,7 @@ class PortHandler(object):
         """
         with self._lock:
             Logger.debug(f"All used ports: {self._all_used_ports}")
-            Logger.debug(f'Random ports: {self._random_ports}')
+            Logger.debug(f"Random ports: {self._random_ports}")
             return set(self._all_used_ports) | set(self._random_ports)
 
     def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
@@ -139,7 +143,7 @@ class PortHandler(object):
         Get a free port
 
         Thread-safe: internal state mutations are guarded by a Lock.
-        
+
         Returns:
             The free port
         Raises:
@@ -167,7 +171,7 @@ class PortHandler(object):
         Add all system ports to the configuration dictionary
         """
         self.add_config_ports(self.find_system_ports())
-    
+
     def add_config_ports(self, ports: list | dict):
         """
         Add new ports to the configuration dictionary
@@ -207,9 +211,12 @@ class PortHandler(object):
         """
         Clean the random ports set by keeping only ports that are in use by the system
         """
-        sys_ports = [i for i in self.find_system_ports().values() if i in self._random_ports]
+        sys_ports = [
+            i for i in self.find_system_ports().values() if i in self._random_ports
+        ]
         with self._lock:
             self._random_ports = [i for i in self._random_ports if i in sys_ports]
+
 
 # ---------------------------
 # Singleton

@@ -3,4 +3,3 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 """CUEMS Engine CLI scripts package."""
-

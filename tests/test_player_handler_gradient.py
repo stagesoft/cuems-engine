@@ -12,6 +12,7 @@ import pytest
 def reset_player_handler():
     """Force a fresh PlayerHandler singleton for each test."""
     from cuemsengine.players.PlayerHandler import PlayerHandler
+
     PlayerHandler._instance = None
     yield
     PlayerHandler._instance = None
@@ -19,6 +20,7 @@ def reset_player_handler():
 
 def _get_handler():
     from cuemsengine.players.PlayerHandler import PlayerHandler
+
     return PlayerHandler()
 
 
@@ -33,27 +35,28 @@ class TestSetGradientClient:
     def test_set_gradient_client_constructs_client(self):
         """set_gradient_client(port, node_uuid) constructs a GradientClient."""
         from cuemsengine.players.GradientClient import GradientClient
+
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid='node-002')
+        handler.set_gradient_client(port=7200, node_uuid="node-002")
         client = handler.get_gradient_client()
         assert isinstance(client, GradientClient)
 
     def test_set_gradient_client_stores_correct_port(self):
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid='node-002')
+        handler.set_gradient_client(port=7200, node_uuid="node-002")
         assert handler.get_gradient_client()._port == 7200
 
     def test_set_gradient_client_stores_correct_node_uuid(self):
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid='node-002')
-        assert handler.get_gradient_client()._node_uuid == 'node-002'
+        handler.set_gradient_client(port=7200, node_uuid="node-002")
+        assert handler.get_gradient_client()._node_uuid == "node-002"
 
     def test_set_gradient_client_replaces_prior_instance(self):
         """Re-calling set_gradient_client replaces the prior client (reconnection safe-guard)."""
         handler = _get_handler()
-        handler.set_gradient_client(port=7100, node_uuid='node-001')
+        handler.set_gradient_client(port=7100, node_uuid="node-001")
         first = handler.get_gradient_client()
-        handler.set_gradient_client(port=7200, node_uuid='node-002')
+        handler.set_gradient_client(port=7200, node_uuid="node-002")
         second = handler.get_gradient_client()
         assert second is not first
         assert second._port == 7200

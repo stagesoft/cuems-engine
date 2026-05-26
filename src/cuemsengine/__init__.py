@@ -8,7 +8,4 @@ from .ControllerEngine import ControllerEngine
 from .NodeEngine import NodeEngine
 
 
-__all__ = [
-    'ControllerEngine',
-    'NodeEngine'
-]
+__all__ = ["ControllerEngine", "NodeEngine"]

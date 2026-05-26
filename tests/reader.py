@@ -5,6 +5,7 @@
 import pyossia as ossia
 import time
 
+
 def iterate_on_children(node):
 
     for child in node.children():
@@ -18,12 +19,11 @@ iterate_on_children(dev.root_node)
 
 print(dev)
 globq = ossia.GlobalMessageQueue(dev)
-while(True):
-  res = globq.pop()
-  while(res != None):
-    parameter, value = res
-    print("globq: Got " +  str(parameter.node) + " => " + str(value))
+while True:
     res = globq.pop()
+    while res != None:
+        parameter, value = res
+        print("globq: Got " + str(parameter.node) + " => " + str(value))
+        res = globq.pop()
 
-  time.sleep(0.1)
-
+    time.sleep(0.1)

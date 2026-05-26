@@ -9,19 +9,19 @@ import json
 from pynng import Req0, Rep0
 from cuemsutils.log import logged, Logger
 
+
 class ComunicatorService(ABC):
     @abstractmethod
-    def __init__(self, address:str):
+    def __init__(self, address: str):
         self.address = address
 
     @abstractmethod
-    def send_request(self, resquest:dict) -> dict:
-        """ Send request dic and return response dict  """
+    def send_request(self, resquest: dict) -> dict:
+        """Send request dic and return response dict"""
 
     @abstractmethod
-    def reply(self, request_processor:Callable[[dict], dict]) -> dict:
-        """ Get request, give it to request processor, and return the response from it  """
-
+    def reply(self, request_processor: Callable[[dict], dict]) -> dict:
+        """Get request, give it to request processor, and return the response from it"""
 
 
 class Nng_request_response(ComunicatorService):
@@ -39,13 +39,11 @@ class Nng_request_response(ComunicatorService):
         """
         self.address = address
         if resquester_dials:
-            self.params_request = {'dial': self.address}
-            self.params_reply = {'listen': self.address}
-        else: 
-            self.params_request = {'listen': self.address}
-            self.params_reply = {'dial': self.address}
-
-
+            self.params_request = {"dial": self.address}
+            self.params_reply = {"listen": self.address}
+        else:
+            self.params_request = {"listen": self.address}
+            self.params_reply = {"dial": self.address}
 
     @logged
     async def send_request(self, request):
@@ -129,24 +127,27 @@ class Nng_request_response(ComunicatorService):
         """
         asyncio.run(self.reply(request_processor))
 
+
 class Comunicator(ComunicatorService):
-    def __init__(self, address, comunicator_service = Nng_request_response, nng_mode=True):
+    def __init__(
+        self, address, comunicator_service=Nng_request_response, nng_mode=True
+    ):
         self.address = address
         self.nng_mode = nng_mode
-        self.comunicator_service = comunicator_service(self.address, resquester_dials=self.nng_mode)
+        self.comunicator_service = comunicator_service(
+            self.address, resquester_dials=self.nng_mode
+        )
 
     async def send_request(self, request):
         response = await self.comunicator_service.send_request(request)
         return response
 
     async def reply(self, request_processor):
-       await self.comunicator_service.reply(request_processor)
-
+        await self.comunicator_service.reply(request_processor)
 
     def sync_send_request(self, request):
         response = self.comunicator_service.sync_send_request(request)
         return response
-    
-    
+
     def sync_reply(self, request_processor):
         self.comunicator_service.sync_reply(request_processor)

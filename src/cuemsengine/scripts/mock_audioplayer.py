@@ -24,6 +24,7 @@ from cuemsutils.log import Logger
 def _make_handler(name: str):
     def handler(address, *args):
         Logger.info(f"[mock-audioplayer] OSC {address} {list(args)}")
+
     handler.__name__ = name
     return handler
 
@@ -51,12 +52,22 @@ def main():
     server_ref = []
 
     dispatcher.map("/quit", lambda address, *a: _quit_handler(server_ref, address, *a))
-    for endpoint in ("/load", "/play", "/stop", "/vol0", "/vol1", "/volmaster",
-                     "/mtcfollow", "/offset", "/check", "/stoponlost"):
+    for endpoint in (
+        "/load",
+        "/play",
+        "/stop",
+        "/vol0",
+        "/vol1",
+        "/volmaster",
+        "/mtcfollow",
+        "/offset",
+        "/check",
+        "/stoponlost",
+    ):
         dispatcher.map(endpoint, _make_handler(endpoint))
-    dispatcher.set_default_handler(lambda address, *a: Logger.info(
-        f"[mock-audioplayer] OSC {address} {list(a)}"
-    ))
+    dispatcher.set_default_handler(
+        lambda address, *a: Logger.info(f"[mock-audioplayer] OSC {address} {list(a)}")
+    )
 
     server = BlockingOSCUDPServer(("0.0.0.0", args.port), dispatcher)
     server_ref.append(server)

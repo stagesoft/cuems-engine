@@ -11,22 +11,28 @@ from typing import Optional, Dict, Callable
 
 from ..osc.helpers import Node, serialize_node, deserialize_node
 
+
 class ActionType(Enum):
     """The type of action to be performed."""
+
     ADD = "add"
     REMOVE = "remove"
     UPDATE = "update"
 
+
 class OperationType(Enum):
     """The type of operation to be performed."""
+
     CUE = "cue"
     PLAYER = "player"
     COMMAND = "command"  # For ControllerEngine → NodeEngine command forwarding
-    STATUS = "status"    # For NodeEngine → ControllerEngine status updates
+    STATUS = "status"  # For NodeEngine → ControllerEngine status updates
+
 
 @dataclass
 class NodeOperation:
     """Represents an operation to be performed from/to a node."""
+
     type: OperationType
     action: ActionType
     sender: str
@@ -39,7 +45,7 @@ class NodeOperation:
             action=self.action,
             sender=self.sender,
             target=self.target,
-            data=self.data if self.data else {}
+            data=self.data if self.data else {},
         )
 
     @staticmethod
@@ -53,7 +59,7 @@ class NodeOperation:
             action=ActionType(message.data["action"]),
             sender=message.data["sender"],
             target=message.data["target"],
-            data=message.data["data"]
+            data=message.data["data"],
         )
 
     def __dict__(self):
@@ -62,25 +68,26 @@ class NodeOperation:
             "action": self.action.value,
             "sender": self.sender,
             "target": self.target,
-            "data": self.data
+            "data": self.data,
         }
-    
+
     def __str__(self):
         return f"{type(self).__name__} by {self.sender}: {self.action.value} on {self.type.value} {self.target} (with{'out' if not self.data else ''} data)"
+
 
 class NodesHub(NngBusHub):
     """
     Extension of NngBusHub for transmitting pyossia player node structures.
-    
+
     Nodes send player structures (player_id + root_node) to the controller.
     Players are transmitted one by one as they become available.
     This class handles transmission only - storage is left to the user.
     """
-    
+
     def __init__(self, hub_address: str, mode=NngBusHub.Mode.LISTENER):
         """
         Initialize NodesHub.
-        
+
         Parameters:
         - hub_address: The address for the bus communication
         - mode: LISTENER or DIALER mode
@@ -88,10 +95,10 @@ class NodesHub(NngBusHub):
         Note: We use the base class queues (self.outgoing and self.incoming) to send and receive Message objects that are translated into NodeOperations.
         """
         super().__init__(hub_address, mode)
-        
+
         # Callback for when operations are received
         self._on_operation_received: Optional[dict[OperationType, Callable]] = None
-        
+
     #########################
     # Nodes communication
     #########################
@@ -110,12 +117,14 @@ class NodesHub(NngBusHub):
         """
         message = Message(sender=operation.sender, data=operation.__dict__())
         await self.send_message(message)
-        Logger.debug(f"Queued {operation.action.value} operation for {operation.type.value} {operation.target}")
+        Logger.debug(
+            f"Queued {operation.action.value} operation for {operation.type.value} {operation.target}"
+        )
 
     def set_receive_callbacks(self, callback_dict: dict[OperationType, Callable]):
         """
         Set the callbacks to be invoked when nodes send operations.
-        
+
         The keys of the dictionary are the operation types to perform, and the values are the callbacks.
         The callbacks must take the following argument: (operation: NodeOperation)
         """
@@ -124,23 +133,23 @@ class NodesHub(NngBusHub):
     async def start_message_receiver(self):
         """
         Continuously receive messages and invoke callback (controller side).
-        
+
         This runs in a loop, receiving messages and invoking the callback
         if set. Should be run as a background task.
-        
+
         The callback receives: (sender, message)
         """
         if not self._on_operation_received:
             Logger.warning("No operation callbacks set")
             return
-        
+
         while True:
             try:
                 operation = await self.get_operation()
-                
+
                 if operation:
                     Logger.debug(f"Received {operation}")
-                    
+
                     # Invoke callback if set (lookup by enum, not string value)
                     message_function = self._on_operation_received.get(operation.type)
                     if message_function:
@@ -149,7 +158,7 @@ class NodesHub(NngBusHub):
                         else:
                             message_function(operation)
                 await asyncio.sleep(0.01)  # Prevent tight loop
-                
+
             except Exception as e:
                 Logger.error(f"{type(e)} handling {operation}: {e}")
                 await asyncio.sleep(0.1)  # Back off on error
