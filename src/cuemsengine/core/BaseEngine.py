@@ -37,15 +37,21 @@ NODE_ENGINE_PORT = 10000
 
 class BaseEngine(SignalEngine):
     def __init__(
-        self, with_cm: bool = True, with_mtc: bool = True, with_signals: bool = True
+        self,
+        with_cm: bool = True,
+        with_mtc: bool = True,
+        with_signals: bool = True,
     ):
         """
         Initialize the BaseEngine.
 
         Args:
-            with_cm (bool): Whether to initialize the ConfigManager. Default is True.
-            with_mtc (bool): Whether to initialize the MTC listener. Default is True.
-            with_signals (bool): Whether to initialize the SignalEngine. Default is True.
+            with_cm (bool): Whether to initialize the ConfigManager. Default is
+            True.
+            with_mtc (bool): Whether to initialize the MTC listener. Default is
+            True.
+            with_signals (bool): Whether to initialize the SignalEngine.
+            Default is True.
         """
         # Engine parameters
         self.with_cm = with_cm
@@ -70,15 +76,18 @@ class BaseEngine(SignalEngine):
 
         ## dev: CUE "POINTERS":
         # here we use the "standard" point of view that there is an
-        # ongoing cue already running (one or many, at least the last to be gone)
-        # and a pointer indicating which is the next to be gone when go is pressed
+        # ongoing cue already running (one or many, at least the last to be
+        # gone)
+        # and a pointer indicating which is the next to be gone when go is
+        # pressed
 
         self.ongoing_cue = None
         self.next_cue_pointer = None
         self.show_locked = False
 
         Logger.info(
-            f"{self.__class__.__name__}@{self.node_name} initialized, waiting start signal"
+            f"{self.__class__.__name__}@{self.node_name} initialized, waiting"
+            f"start signal"
         )
 
     @property
@@ -105,13 +114,16 @@ class BaseEngine(SignalEngine):
             raise e
 
     ### STATUS ###
-    def set_status(self, property: str, value: str, strict: bool = False) -> None:
+    def set_status(
+        self, property: str, value: str, strict: bool = False
+    ) -> None:
         """Set the status of the engine
 
         Args:
             property (str): The property to set
             value (str): The value to set
-            strict (bool): If True, raise an AttributeError if the property is not found
+            strict (bool): If True, raise an AttributeError if the property is
+            not found
         """
         if f"_{property}" in self.status.__dict__.keys():
             Logger.debug(f"Setting property {property} to {value}")
@@ -119,20 +131,25 @@ class BaseEngine(SignalEngine):
         else:
             Logger.error(f"Property {property} not found in EngineStatus")
             if strict:
-                raise AttributeError(f"Property {property} not found in EngineStatus")
+                raise AttributeError(
+                    f"Property {property} not found in EngineStatus"
+                )
 
     def get_status(self, property: str, strict: bool = False) -> str:
         """Get the status of the engine
 
         Args:
             property (str): The property to get
-            strict (bool): If True, raise an AttributeError if the property is not found
+            strict (bool): If True, raise an AttributeError if the property is
+            not found
         """
         value = getattr(self.status, property, "NotFound")
         if value == "NotFound":
             Logger.error(f"Property {property} not found in EngineStatus")
             if strict:
-                raise AttributeError(f"Property {property} not found in EngineStatus")
+                raise AttributeError(
+                    f"Property {property} not found in EngineStatus"
+                )
         return value
 
     def status_callback(self, endpoint: str, value: str) -> None:
@@ -147,17 +164,22 @@ class BaseEngine(SignalEngine):
     def get_status_endpoints(self) -> dict[str, list[Any]]:
         endpoints = self.build_endpoints_from_status()
         Logger.debug(f"Status endpoints: {endpoints}")
-        # remove unwanted callbacks from status nodes that are set programmatically
-        # to avoid callback loops and threading issues when push_value() is called
+        # remove unwanted callbacks from status nodes that are set
+        # programmatically
+        # to avoid callback loops and threading issues when push_value() is
+        # called
         for i in ["currentcue", "running", "load", "timecode", "armed"]:
             if f"/engine/status/{i}" in endpoints:
                 endpoints[f"/engine/status/{i}"][1] = None
         return endpoints
 
-    def build_endpoints_from_status(self) -> dict[str, list[Any, Callable | None, Any]]:
+    def build_endpoints_from_status(
+        self,
+    ) -> dict[str, list[Any, Callable | None, Any]]:
         endpoints = {}
         Logger.debug(
-            f"Building endpoints from status, vars: {list(vars(self.status).keys())}"
+            f"Building endpoints from status, vars:"
+            f"{list(vars(self.status).keys())}"
         )
         for k, v in vars(self.status).items():
             if v is None:
@@ -169,7 +191,8 @@ class BaseEngine(SignalEngine):
                 type_name = "string"
             if type_name not in VALUE_TYPES_DICT:
                 Logger.warning(
-                    f"Unknown value type {type_name} for status property {k}, skipping"
+                    f"Unknown value type {type_name} for status property {k},"
+                    f"skipping"
                 )
                 continue
             endpoint_path = f"/engine/status/{k[1:]}"
@@ -179,7 +202,8 @@ class BaseEngine(SignalEngine):
                 v,
             ]
             Logger.debug(
-                f"Added endpoint: {endpoint_path} with type {type_name} and value {v}"
+                f"Added endpoint: {endpoint_path} with type {type_name} and"
+                f"value {v}"
             )
         return endpoints
 
@@ -199,7 +223,8 @@ class BaseEngine(SignalEngine):
             else:
                 port = 9001  # Default OSCQuery port
         if host is None:
-            # For ControllerEngine, controller_ip might be None, use CONTROLLER_HOST as fallback
+            # For ControllerEngine, controller_ip might be None, use
+            # CONTROLLER_HOST as fallback
             host = getattr(self, "controller_ip", None) or CONTROLLER_HOST
         local_port = PORT_HANDLER.new_random_port()
         if local_port is None:
@@ -212,7 +237,9 @@ class BaseEngine(SignalEngine):
             endpoints=endpoints,
         )
 
-    def set_oscquery_client(self, host: str = None, port: int = None) -> OssiaClient:
+    def set_oscquery_client(
+        self, host: str = None, port: int = None
+    ) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf["oscquery_ws_port"]
         if host is None:
@@ -231,14 +258,18 @@ class BaseEngine(SignalEngine):
     def set_mtc_listener(self) -> None:
         """Set the MTC listener"""
         mtc_step = partial(BaseEngine.mtc_callback, self)
-        mtc_reset = partial(BaseEngine.mtc_callback, self, CTimecode("00:00:00:00"))
+        mtc_reset = partial(
+            BaseEngine.mtc_callback, self, CTimecode("00:00:00:00")
+        )
 
         if not self.mtc_port:
             self.mtc_port = self.cm.node_conf["mtc_port"]
 
         if self.mtc_port is not None:
             self.mtc_listener = MtcListener(
-                port=self.mtc_port, step_callback=mtc_step, reset_callback=mtc_reset
+                port=self.mtc_port,
+                step_callback=mtc_step,
+                reset_callback=mtc_reset,
             )
         else:
             Logger.error("MTC port not set, cannot create MtcListener")
@@ -264,11 +295,16 @@ class BaseEngine(SignalEngine):
             # Only set OSCQuery values if server exists and has the nodes
             if hasattr(self, "oscquery_server") and self.oscquery_server:
                 try:
-                    self.oscquery_server.set_value("/engine/status/running", "no")
-                    self.oscquery_server.set_value("/engine/status/gocue", "no")
+                    self.oscquery_server.set_value(
+                        "/engine/status/running", "no"
+                    )
+                    self.oscquery_server.set_value(
+                        "/engine/status/gocue", "no"
+                    )
                 except ValueError as e:
                     Logger.warning(
-                        f"Could not reset OSCQuery status nodes: {e}. Server may not be fully initialized."
+                        f"Could not reset OSCQuery status nodes: {e}. Server"
+                        f"may not be fully initialized."
                     )
 
     def mtc_callback(self, mtc: CTimecode) -> None:
@@ -322,7 +358,11 @@ class BaseEngine(SignalEngine):
         if not nodes:
             raise ValueError("No nodes found in network map")
         for node_item in nodes:
-            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            node = (
+                node_item.get("node", {})
+                if isinstance(node_item, dict)
+                else {}
+            )
             if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
                 return node.get("ip")
         raise ValueError("No controller node found in network map")
@@ -332,7 +372,8 @@ class BaseEngine(SignalEngine):
         Extract the list of adopted online hosts in the network map
 
         Returns:
-        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and controller flag
+        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and
+          - controller flag
 
         Exceptions:
         - ValueError: No nodes found in network map
@@ -365,7 +406,9 @@ class BaseEngine(SignalEngine):
         if self.cm.is_alive():
             Logger.info(self.cm.getName() + " is alive)")
         else:
-            Logger.info(self.cm.getName() + " is not alive, trying to restore it")
+            Logger.info(
+                self.cm.getName() + " is not alive, trying to restore it"
+            )
             self.cm.start()
 
         """
@@ -378,7 +421,8 @@ class BaseEngine(SignalEngine):
             else:
                 Logger.info('\tws child process is running')
         else:
-            Logger.info(self.ws_server.getName() + ' is not alive, trying to restore it')
+            Logger.info(self.ws_server.getName() + ' is not alive, trying to
+            restore it')
             # self.ws_server.start()
         """
 
@@ -448,7 +492,8 @@ class BaseEngine(SignalEngine):
         for index, item in enumerate(cuelist.contents):
             if item is None:
                 Logger.warning(
-                    f"Skipping None item at index {index} in cuelist {cuelist.id}"
+                    f"Skipping None item at index {index} in cuelist"
+                    f"{cuelist.id}"
                 )
                 continue
 
@@ -478,22 +523,33 @@ class BaseEngine(SignalEngine):
                     item._target_object = self.script.find(item.target)
                     if item._target_object is None:
                         Logger.warning(
-                            f"{type(item).__name__} {item.id} has target {item.target} that could not be found in the script (deleted?)"
+                            f"{type(item).__name__} {item.id} has target"
+                            f" {item.target} that could not be found in"
+                            " the script (deleted?)"
                         )
 
                 Logger.debug(
-                    f"Target object for {type(item)} {item.id} is {item._target_object}"
+                    f"Target object for {type(item)} {item.id} is"
+                    f"{item._target_object}"
                 )
                 if isinstance(item, ActionCue):
-                    item._action_target_object = self.script.find(item.action_target)
-                    if item._action_target_object is None and item.action_target:
+                    item._action_target_object = self.script.find(
+                        item.action_target
+                    )
+                    if (
+                        item._action_target_object is None
+                        and item.action_target
+                    ):
                         Logger.warning(
-                            f"ActionCue {item.id} has action_target {item.action_target} that could not be found in the script (deleted?)"
+                            f"ActionCue {item.id} has action_target"
+                            f" {item.action_target} that could not be"
+                            " found in the script (deleted?)"
                         )
 
             except Exception as e:
                 Logger.error(
-                    f"Error processing item at index {index} in cuelist {cuelist.id}: {e}"
+                    f"Error processing item at index {index} in cuelist"
+                    f"{cuelist.id}: {e}"
                 )
                 continue
 
@@ -508,14 +564,17 @@ class BaseEngine(SignalEngine):
                 if c.enabled:
                     first_cue = c
                     break
-            # If the cuelist's first cue isn't ours, walk the post_go='go' chain
+            # If the cuelist's first cue isn't ours, walk the post_go='go'
+            # chain
             # to find our first local cue — same shape as NodeEngine.go_script.
             # Without this, slaves don't pre-arm anything at load time and the
             # /videocomposer/layer/load only fires when GO is hit, producing
             # staggered starts as the async loads complete in arrival order.
             first_local = first_cue
             walked = 0
-            while first_local is not None and not getattr(first_local, "_local", False):
+            while first_local is not None and not getattr(
+                first_local, "_local", False
+            ):
                 if first_local.post_go != "go":
                     first_local = None
                     break
@@ -527,12 +586,14 @@ class BaseEngine(SignalEngine):
             if first_local is not None:
                 if first_local is not first_cue:
                     Logger.info(
-                        f"Pre-arm: skipped {walked} non-local cue(s); arming first "
+                        f"Pre-arm: skipped {walked} non-local cue(s); arming"
+                        f"first "
                         f"local cue {first_local.id} + lookahead"
                     )
                 else:
                     Logger.info(
-                        f"Arming first enabled cue + lookahead for {type(cuelist).__name__}: {cuelist.id}"
+                        f"Arming first enabled cue + lookahead for"
+                        f"{type(cuelist).__name__}: {cuelist.id}"
                     )
                 CUE_HANDLER.arm(first_local, True)
                 CUE_HANDLER._arm_ahead(first_local)

@@ -20,7 +20,8 @@ libmtcmaster.MTCSender_create.restype = c_void_p
 libmtcmaster.MTCSender_release.argtypes = [c_void_p]
 libmtcmaster.MTCSender_release.restype = None
 
-# void MTCSender_openPort(void* mtcsender, unsigned int portnumber, const char* portname);
+# void MTCSender_openPort(void* mtcsender, unsigned int portnumber, const
+# char* portname);
 try:
     libmtcmaster.MTCSender_openPort.argtypes = [c_void_p, c_uint, c_char_p]
     libmtcmaster.MTCSender_openPort.restype = None

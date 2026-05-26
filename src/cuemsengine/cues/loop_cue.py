@@ -62,7 +62,8 @@ def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
     end_mtc = getattr(cue, "_end_mtc", None)
     if end_mtc is None:
         Logger.warning(
-            f"FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting immediately"
+            f"FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting"
+            f"immediately"
         )
         return
 
@@ -85,7 +86,8 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
         mtc: The MIDI Time Code interface.
     """
     Logger.info(
-        f"Running audio cue loop {cue.id}, cue.loop={cue.loop} (type={type(cue.loop).__name__})"
+        f"Running audio cue loop {cue.id}, cue.loop={cue.loop}"
+        f"(type={type(cue.loop).__name__})"
     )
 
     try:
@@ -94,7 +96,9 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             mtc.main_tc.framerate
         )
         Logger.info(
-            f"Audio duration: {duration}, _end_mtc: {cue._end_mtc.milliseconds_rounded}ms, current MTC: {mtc.main_tc.milliseconds_rounded}ms"
+            f"Audio duration: {duration}, "
+            f"_end_mtc: {cue._end_mtc.milliseconds_rounded}ms, "
+            f"current MTC: {mtc.main_tc.milliseconds_rounded}ms"
         )
 
         while cue.loop < 1 or loop_counter < cue.loop:
@@ -102,14 +106,19 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                 Logger.info(f"Audio loop {cue.id} cancelled by stop request")
                 return
             Logger.info(
-                f"Audio loop iteration starting: loop_counter={loop_counter}, cue.loop={cue.loop}"
+                f"Audio loop iteration starting: loop_counter={loop_counter},"
+                f"cue.loop={cue.loop}"
             )
 
             last_status_update = 0.0
-            while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
+            while (
+                mtc.main_tc.milliseconds_rounded
+                < cue._end_mtc.milliseconds_rounded
+            ):
                 if cue._stop_requested:
                     Logger.info(
-                        f"Audio loop {cue.id} cancelled by stop request (inner)"
+                        f"Audio loop {cue.id} cancelled by stop request"
+                        f"(inner)"
                     )
                     return
                 sleep(0.02)
@@ -118,34 +127,46 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                 # _now = time.monotonic()
                 # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
                 #     last_status_update = _now
-                #     _elapsed = mtc.main_tc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
-                #     _total = cue._end_mtc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
+                # _elapsed = mtc.main_tc.milliseconds_rounded -
+                # cue._start_mtc.milliseconds_rounded
+                # _total = cue._end_mtc.milliseconds_rounded -
+                # cue._start_mtc.milliseconds_rounded
                 #     if _total > 0:
                 #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
-                #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
+                # CUE_HANDLER.communications_thread.update_cue(cue.id, _pct,
+                # timeout=0.1)
 
             Logger.info(
-                f"Audio iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds_rounded}ms reached _end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
+                f"Audio iteration {loop_counter + 1} finished "
+                f"(MTC={mtc.main_tc.milliseconds_rounded}ms reached "
+                f"_end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
             )
             loop_counter += 1
 
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
             Logger.info(
-                f"After increment: loop_counter={loop_counter}, will_loop_again={will_loop_again}"
+                f"After increment: loop_counter={loop_counter},"
+                f"will_loop_again={will_loop_again}"
             )
 
             if cue._local and will_loop_again:
                 cue._start_mtc = CTimecode(
-                    framerate=cue._end_mtc.framerate, frames=cue._end_mtc.frames
+                    framerate=cue._end_mtc.framerate,
+                    frames=cue._end_mtc.frames,
                 )
                 cue._end_mtc = cue._start_mtc + duration
 
-                # Drift-sensitive: use _exact (float) rather than _rounded (int)
-                # to preserve sub-ms precision at NTSC framerates (29.97/23.976).
+                # Drift-sensitive: use _exact (float) rather than _rounded
+                # (int)
+                # to preserve sub-ms precision at NTSC framerates
+                # (29.97/23.976).
                 offset_to_go = -cue._start_mtc.milliseconds_exact
 
                 Logger.info(
-                    f"Loop {loop_counter}: setting offset={offset_to_go} (MTC={mtc.main_tc.milliseconds_rounded}ms, _start_mtc={cue._start_mtc.milliseconds_rounded}ms, _end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
+                    f"Loop {loop_counter}: setting offset={offset_to_go}"
+                    f" (MTC={mtc.main_tc.milliseconds_rounded}ms,"
+                    f" _start_mtc={cue._start_mtc.milliseconds_rounded}ms,"
+                    f" _end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
                 )
 
                 try:
@@ -161,7 +182,8 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                     )
 
         Logger.info(
-            f"Audio loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}"
+            f"Audio loop FINISHED: loop_counter={loop_counter},"
+            f"cue.loop={cue.loop}"
         )
         if cue._local:
             try:
@@ -186,7 +208,8 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
 
     DMX scenes are fire-and-forget (sent once in run_dmxCue), so we only wait
     for the cue duration to elapse to maintain proper script timing.
-    The cue._local guard is maintained for potential future looping implementation.
+    The cue._local guard is maintained for potential future looping
+    implementation.
 
     Args:
         cue: The DmxCue
@@ -194,7 +217,10 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
     """
     try:
         last_status_update = 0.0
-        while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
+        while (
+            mtc.main_tc.milliseconds_rounded
+            < cue._end_mtc.milliseconds_rounded
+        ):
             if cue._stop_requested:
                 Logger.info(f"DMX loop {cue.id} cancelled by stop request")
                 return
@@ -204,11 +230,14 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
             # _now = time.monotonic()
             # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
             #     last_status_update = _now
-            #     _elapsed = mtc.main_tc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
-            #     _total = cue._end_mtc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
+            # _elapsed = mtc.main_tc.milliseconds_rounded -
+            # cue._start_mtc.milliseconds_rounded
+            # _total = cue._end_mtc.milliseconds_rounded -
+            # cue._start_mtc.milliseconds_rounded
             #     if _total > 0:
             #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
-            #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
+            # CUE_HANDLER.communications_thread.update_cue(cue.id, _pct,
+            # timeout=0.1)
 
         if cue._local:
             pass
@@ -227,7 +256,8 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
     updating offset via the single VideoClient in cue._osc.
     """
     Logger.info(
-        f"Running video cue loop {cue.id}, cue.loop={cue.loop} (type={type(cue.loop).__name__})"
+        f"Running video cue loop {cue.id}, cue.loop={cue.loop}"
+        f"(type={type(cue.loop).__name__})"
     )
 
     try:
@@ -236,15 +266,18 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
             mtc.main_tc.framerate
         )
         Logger.info(
-            f"Video duration: {duration}, duration in frames: {duration.frame_number} {duration.framerate}"
+            f"Video duration: {duration}, duration in frames:"
+            f"{duration.frame_number} {duration.framerate}"
         )
         Logger.info(
-            f"Initial _end_mtc: {cue._end_mtc.milliseconds_rounded}ms, current MTC: {mtc.main_tc.milliseconds_rounded}ms"
+            f"Initial _end_mtc: {cue._end_mtc.milliseconds_rounded}ms,"
+            f"current MTC: {mtc.main_tc.milliseconds_rounded}ms"
         )
 
         layer_ids = getattr(cue, "_layer_ids", [])
 
-        # Tell the videocomposer this is a looping cue so it wraps frames at the
+        # Tell the videocomposer this is a looping cue so it wraps frames at
+        # the
         # loop boundary (instead of clamping to the last frame).
         for layer_id in layer_ids:
             try:
@@ -257,10 +290,14 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                 Logger.info(f"Video loop {cue.id} cancelled by stop request")
                 return
             last_status_update = 0.0
-            while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
+            while (
+                mtc.main_tc.milliseconds_rounded
+                < cue._end_mtc.milliseconds_rounded
+            ):
                 if cue._stop_requested:
                     Logger.info(
-                        f"Video loop {cue.id} cancelled by stop request (inner)"
+                        f"Video loop {cue.id} cancelled by stop request"
+                        f"(inner)"
                     )
                     return
                 sleep(0.02)
@@ -269,14 +306,19 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                 # _now = time.monotonic()
                 # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
                 #     last_status_update = _now
-                #     _elapsed = mtc.main_tc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
-                #     _total = cue._end_mtc.milliseconds_rounded - cue._start_mtc.milliseconds_rounded
+                # _elapsed = mtc.main_tc.milliseconds_rounded -
+                # cue._start_mtc.milliseconds_rounded
+                # _total = cue._end_mtc.milliseconds_rounded -
+                # cue._start_mtc.milliseconds_rounded
                 #     if _total > 0:
                 #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
-                #         CUE_HANDLER.communications_thread.update_cue(cue.id, _pct, timeout=0.1)
+                # CUE_HANDLER.communications_thread.update_cue(cue.id, _pct,
+                # timeout=0.1)
 
             Logger.info(
-                f"Video iteration {loop_counter + 1} finished (MTC={mtc.main_tc.milliseconds_rounded}ms reached _end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
+                f"Video iteration {loop_counter + 1} finished "
+                f"(MTC={mtc.main_tc.milliseconds_rounded}ms reached "
+                f"_end_mtc={cue._end_mtc.milliseconds_rounded}ms)"
             )
             loop_counter += 1
 
@@ -284,13 +326,15 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
 
             if cue._local and will_loop_again:
                 cue._start_mtc = CTimecode(
-                    framerate=cue._end_mtc.framerate, frames=cue._end_mtc.frames
+                    framerate=cue._end_mtc.framerate,
+                    frames=cue._end_mtc.frames,
                 )
                 cue._end_mtc = cue._start_mtc + duration
                 offset_change_frames = -cue._start_mtc.frame_number
 
                 Logger.info(
-                    f"Loop {loop_counter}: setting offset={offset_change_frames}"
+                    f"Loop {loop_counter}: setting"
+                    f"offset={offset_change_frames}"
                 )
 
                 for layer_id in layer_ids:
@@ -300,9 +344,13 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                             int(offset_change_frames),
                         )
                     except Exception as e:
-                        Logger.error(f"Offset send failed for layer {layer_id}: {e}")
+                        Logger.error(
+                            f"Offset send failed for layer {layer_id}: {e}"
+                        )
 
-        Logger.info(f"Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}")
+        Logger.info(
+            f"Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}"
+        )
 
     except AttributeError:
         pass

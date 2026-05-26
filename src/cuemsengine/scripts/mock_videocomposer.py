@@ -44,11 +44,16 @@ Start before the engine so OSC packets are received.
         "--port", type=int, default=7000, help="OSC UDP port (default: 7000)"
     )
     parser.add_argument(
-        "--host", type=str, default="0.0.0.0", help="Bind host (default: 0.0.0.0)"
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Bind host (default: 0.0.0.0)",
     )
     args = parser.parse_args()
 
-    Logger.info(f"[mock-videocomposer] starting -- host={args.host} port={args.port}")
+    Logger.info(
+        f"[mock-videocomposer] starting -- host={args.host} port={args.port}"
+    )
 
     dispatcher = Dispatcher()
     server_ref = []
@@ -59,7 +64,9 @@ Start before the engine so OSC packets are received.
     def quit_handler(address, *osc_args):
         Logger.info(f"[mock-videocomposer] OSC {address} -- shutting down")
         if server_ref:
-            threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
+            threading.Thread(
+                target=server_ref[0].shutdown, daemon=True
+            ).start()
 
     # Top-level videocomposer commands
     dispatcher.map("/videocomposer/quit", quit_handler)
@@ -91,7 +98,9 @@ Start before the engine so OSC packets are received.
 
     # Catch-all for dynamic per-layer endpoints (/videocomposer/layer/<id>/*)
     dispatcher.set_default_handler(
-        lambda address, *a: Logger.info(f"[mock-videocomposer] OSC {address} {list(a)}")
+        lambda address, *a: Logger.info(
+            f"[mock-videocomposer] OSC {address} {list(a)}"
+        )
     )
 
     server = BlockingOSCUDPServer((args.host, args.port), dispatcher)

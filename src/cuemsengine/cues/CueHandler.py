@@ -64,7 +64,8 @@ class CueHandler:
         )
         self.communications_thread.start()
 
-        # Wait for NNG thread to initialize (prevents race condition in nni_random)
+        # Wait for NNG thread to initialize (prevents race condition in
+        # nni_random)
         max_wait = 5.0  # seconds
         wait_interval = 0.1
         waited = 0.0
@@ -73,12 +74,16 @@ class CueHandler:
                 self.communications_thread.is_alive()
                 and self.communications_thread.event_loop is not None
             ):
-                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
+                Logger.info(
+                    f"NNG communications thread ready after {waited:.1f}s"
+                )
                 break
             sleep(wait_interval)
             waited += wait_interval
         else:
-            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
+            Logger.warning(
+                f"NNG communications thread not ready after {max_wait}s"
+            )
 
     # ---------------------------
     # Armed Cues List Methods
@@ -150,13 +155,16 @@ class CueHandler:
         elif isinstance(cue, (AudioCue, VideoCue)):
             try:
                 body = (
-                    CTimecode(cue.media.duration).milliseconds_exact if cue.media else 0
+                    CTimecode(cue.media.duration).milliseconds_exact
+                    if cue.media
+                    else 0
                 )
             except Exception:
                 body = 0
         elif isinstance(cue, DmxCue):
             # fadein_time/fadeout_time stored as float seconds.
-            # fadeout_time exists in model but not yet implemented (always 0.0).
+            # fadeout_time exists in model but not yet implemented (always
+            # 0.0).
             fadein = getattr(cue, "fadein_time", 0) or 0
             fadeout = getattr(cue, "fadeout_time", 0) or 0
             body = (fadein + fadeout) * 1000  # convert seconds → ms
@@ -172,7 +180,8 @@ class CueHandler:
     def _arm_ahead(self, start_cue: Cue) -> None:
         """Arm ahead in the target chain until 2 cues with meaningful
         duration are armed. Short/zero-duration cues are armed but don't
-        count. CueList targets are skipped (handled by initial_cuelist_process).
+        count. CueList targets are skipped (handled by
+        initial_cuelist_process).
         """
         target = getattr(start_cue, "_target_object", None)
         counted = 0
@@ -194,7 +203,10 @@ class CueHandler:
                 continue
             if not getattr(target, "loaded", False):
                 self.arm(target, init=True)
-            if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
+            if (
+                self._effective_duration_ms(target)
+                >= self._ARM_WINDOW_THRESHOLD_MS
+            ):
                 counted += 1
             target = getattr(target, "_target_object", None)
             walked += 1
@@ -286,8 +298,10 @@ class CueHandler:
             if cue._target_object.enabled:
                 self.arm(cue._target_object, init)
 
-        # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm target
-        # so it's ready when the action fires (ActionCue has zero duration; FadeCue
+        # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm
+        # target
+        # so it's ready when the action fires (ActionCue has zero duration;
+        # FadeCue
         # expects target_cue already armed before reading its OSC cache).
         if isinstance(cue, ActionCue) and cue._action_target_object:
             if cue.action_type in ("play", "fade_action"):
@@ -318,11 +332,15 @@ class CueHandler:
                             client.set_value(
                                 f"/videocomposer/layer/{layer_id}/visible", 0
                             )
-                            client.set_value("/videocomposer/layer/unload", layer_id)
+                            client.set_value(
+                                "/videocomposer/layer/unload", layer_id
+                            )
                             client.remove_layer_endpoints(layer_id)
                             PLAYER_HANDLER.deregister_layer(layer_id)
                         except Exception as e:
-                            Logger.debug(f"Error disarming video layer {layer_id}: {e}")
+                            Logger.debug(
+                                f"Error disarming video layer {layer_id}: {e}"
+                            )
                 cue._layer_ids = []
 
             PLAYER_HANDLER.remove_cue_player(cue)
@@ -368,7 +386,8 @@ class CueHandler:
         Args:
             cue: The cue to start
             mtc: The MTC listener
-            frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained cues
+            frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained
+            cues
 
         Returns:
             Thread running the cue, or None if the cue is disabled or not
@@ -385,18 +404,22 @@ class CueHandler:
             # caller's thread, and kill chained playback (master videocomposer
             # froze after loop 1 when post_go='go' targeted an audio cue local
             # to slave only).
-            Logger.info(f"Cue {cue.id} is not local to this node, skipping execution")
+            Logger.info(
+                f"Cue {cue.id} is not local to this node, skipping execution"
+            )
             return None
         Logger.info(f"GO command received. Starting cue {cue.id}")
         if not hasattr(cue, "loaded") or not cue.loaded:
             Logger.warning(
-                f"Cue {cue.id} not loaded at go() time — this should not happen, "
+                f"Cue {cue.id} not loaded at go() time — this should not"
+                f"happen, "
                 f"pre-arm may have failed. Re-arming as fallback."
             )
             self.arm(cue, init=True)
             if not hasattr(cue, "loaded") or not cue.loaded:
                 raise Exception(
-                    f"{cue.__class__.__name__} {cue.id} not loaded to go (re-arm failed)"
+                    f"{cue.__class__.__name__} {cue.id} not loaded to go"
+                    f"(re-arm failed)"
                 )
 
         cue._stop_requested = False
@@ -417,7 +440,11 @@ class CueHandler:
         return thread
 
     def go_threaded(
-        self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float = None,
+        go_gen: int = 0,
     ):
         """Runs a cue based on its properties.
 
@@ -427,14 +454,18 @@ class CueHandler:
             frozen_mtc_ms: Optional frozen MTC timestamp in milliseconds.
             go_gen: Generation counter captured at go() time. If the cue's
                     generation has changed by the time the loop ends, another
-                    go/stop cycle occurred and this thread must not touch the cue.
+                    go/stop cycle occurred and this thread must not touch the
+                    cue.
         """
         if cue.prewait > 0:
-            # Notify controller before pre-wait so UI shows "playing" immediately
+            # Notify controller before pre-wait so UI shows "playing"
+            # immediately
             if cue._local and not cue._stop_requested:
                 try:
                     offset = frozen_mtc_ms if frozen_mtc_ms is not None else 0
-                    self.communications_thread.add_cue(cue.id, str(offset), timeout=0.1)
+                    self.communications_thread.add_cue(
+                        cue.id, str(offset), timeout=0.1
+                    )
                 except Exception:
                     pass
             sleep(cue.prewait.milliseconds_rounded / 1000)
@@ -443,10 +474,13 @@ class CueHandler:
                 return
 
         if frozen_mtc_ms is None:
-            # GO-time MTC capture is used by BaseEngine.timecode = mtc - go_offset
+            # GO-time MTC capture is used by BaseEngine.timecode = mtc -
+            # go_offset
             # for drift measurement; _exact preserves sub-ms precision at NTSC.
             frozen_mtc_ms = mtc.main_tc.milliseconds_exact
-            Logger.debug(f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms")
+            Logger.debug(
+                f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms"
+            )
 
         if cue._local:
             try:
@@ -461,7 +495,11 @@ class CueHandler:
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds_rounded / 1000)
 
-        if cue.post_go == "go" and cue._target_object and not cue._stop_requested:
+        if (
+            cue.post_go == "go"
+            and cue._target_object
+            and not cue._stop_requested
+        ):
             Logger.info(f"Running post go for next cue:{cue.target}")
             post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
 
@@ -478,14 +516,17 @@ class CueHandler:
 
         if getattr(cue, "_go_generation", 0) != go_gen:
             Logger.info(
-                f"Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup"
+                f"Cue {cue.id} generation changed ({go_gen} →"
+                f"{cue._go_generation}), skipping cleanup"
             )
             return
 
         # Notify the controller that the cue finished playing (status → 100).
         # Done here (after loop_cue) so the status only changes to 100 when the
-        # cue has actually completed its full duration, not just when playback started.
-        # Skipped if the cue was stopped (controller's stop_script already resets to 0).
+        # cue has actually completed its full duration, not just when playback
+        # started.
+        # Skipped if the cue was stopped (controller's stop_script already
+        # resets to 0).
         if cue._local and not getattr(cue, "_stop_requested", False):
             try:
                 self.communications_thread.remove_cue(cue.id, timeout=0.1)
@@ -498,7 +539,9 @@ class CueHandler:
             and cue._target_object
             and not cue._stop_requested
         ):
-            Logger.info(f"Running go at end for {cue.__class__.__name__}:{cue.id}")
+            Logger.info(
+                f"Running go at end for {cue.__class__.__name__}:{cue.id}"
+            )
             go_at_end_thread = self.go(cue._target_object, mtc)
 
         self.disarm(cue)
@@ -506,7 +549,11 @@ class CueHandler:
         if cue.post_go == "go_at_end" and go_at_end_thread:
             self.wait_for_cue(go_at_end_thread)
 
-        if cue.post_go == "go" and cue._target_object and not cue._stop_requested:
+        if (
+            cue.post_go == "go"
+            and cue._target_object
+            and not cue._stop_requested
+        ):
             if post_go_thread:
                 self.wait_for_cue(post_go_thread)
 
@@ -529,7 +576,9 @@ class CueHandler:
         mtc: MtcListener,
         frozen_mtc_ms: float | None = None,
     ) -> dict:
-        """Execute an ActionCue against the running show (see ActionHandler)."""
+        """
+        Execute an ActionCue against the running show (see ActionHandler).
+        """
         from .ActionHandler import ACTION_HANDLER
 
         return ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
@@ -541,7 +590,9 @@ class CueHandler:
         *,
         action_types: frozenset | None = None,
     ) -> None:
-        """Register a cue-layer extension hook; forwards to ``ACTION_HANDLER``."""
+        """
+        Register a cue-layer extension hook; forwards to ``ACTION_HANDLER``.
+        """
         from .ActionHandler import ACTION_HANDLER
 
         ACTION_HANDLER.register_action_hook(
@@ -556,7 +607,8 @@ class CueHandler:
         """Route audio OSCQuery message to the appropriate handler.
 
         Args:
-            path_parts: Path parts after 'audio' (e.g., ['mixer', '0', 'master', 'volume']
+            path_parts: Path parts after 'audio' (e.g., ['mixer', '0',
+            'master', 'volume']
                         or ['cue', '<uuid>', '0', 'volume'])
             value: The OSC value to set
         """
@@ -565,7 +617,8 @@ class CueHandler:
             return
 
         if path_parts[0] == "mixer":
-            # Route to audio mixer: ['mixer', '<output_index>', '<channel>', 'volume']
+            # Route to audio mixer: ['mixer', '<output_index>', '<channel>',
+            # 'volume']
             # → /audiomixer/0_mixer/<channel>
             if len(path_parts) >= 3:
                 output_index = path_parts[1]
@@ -592,11 +645,14 @@ class CueHandler:
                     # UI already sends 0.0-1.0 via sliderToFloat(); just clamp
                     vol_value = max(0.0, min(1.0, float(value)))
                     Logger.debug(
-                        f"Routing audio cue {cue_uuid}: {audio_cmd} = {vol_value}"
+                        f"Routing audio cue {cue_uuid}: {audio_cmd} ="
+                        f"{vol_value}"
                     )
                     cue._osc.set_value(audio_cmd, vol_value)
                 else:
-                    Logger.warning(f"Cue {cue_uuid} not found or has no OSC client")
+                    Logger.warning(
+                        f"Cue {cue_uuid} not found or has no OSC client"
+                    )
             else:
                 Logger.warning(f"Invalid cue audio path: {path_parts}")
         else:
@@ -606,7 +662,8 @@ class CueHandler:
         """Route DMX OSCQuery message to the DMX player.
 
         Args:
-            path_parts: Path parts after 'dmx' (e.g., ['mixer', '0', 'channel', '1'])
+            path_parts: Path parts after 'dmx' (e.g., ['mixer', '0', 'channel',
+            '1'])
             value: The OSC value to set
         """
         if not path_parts:
@@ -615,7 +672,8 @@ class CueHandler:
 
         # Build DMX command from path: find 'mixer' and use everything after it
         if "mixer" in path_parts:
-            mixer_index = path_parts.index("mixer") + 1  # +1 to skip 'mixer' keyword
+            # +1 to skip 'mixer' keyword
+            mixer_index = path_parts.index("mixer") + 1
             dmx_cmd = "/" + "/".join(path_parts[mixer_index:])
             dmx_client = PLAYER_HANDLER.get_dmx_player_client()
             if dmx_client:
@@ -624,7 +682,9 @@ class CueHandler:
             else:
                 Logger.warning("DMX player client not available")
         else:
-            Logger.warning(f"Invalid DMX path (no 'mixer' keyword): {path_parts}")
+            Logger.warning(
+                f"Invalid DMX path (no 'mixer' keyword): {path_parts}"
+            )
 
     def get_armed_cue_by_id(self, cue_id: str) -> Cue | None:
         """Returns the armed cue with the given uuid string."""

@@ -129,7 +129,8 @@ def test_node_operation_serialization_format():
     str_repr = str(operation)
     assert (
         str_repr
-        == f"NodeOperation by {sender_id}: add on player {player_id} (with data)"
+        == f"NodeOperation by {sender_id}: add on player {player_id}"
+        " (with data)"
     )
 
     # Test REMOVE operation serialization
@@ -144,7 +145,8 @@ def test_node_operation_serialization_format():
     # ASSERT - Verify __str__ for REMOVE (without data)
     assert (
         str(remove_op)
-        == f"NodeOperation by {sender_id}: remove on player {player_id} (without data)"
+        == f"NodeOperation by {sender_id}: remove on player {player_id}"
+        " (without data)"
     )
 
 
@@ -172,7 +174,9 @@ class TestNodesHubIntegration:
 
             # ACT - Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
+            receiver_task = asyncio.create_task(
+                listener_hub.start_message_receiver()
+            )
             await asyncio.sleep(0.1)  # Allow listener to bind
 
             dialer_task = asyncio.create_task(dialer_hub.start())
@@ -232,7 +236,9 @@ class TestNodesHubIntegration:
 
             # Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
+            receiver_task = asyncio.create_task(
+                listener_hub.start_message_receiver()
+            )
             await asyncio.sleep(0.1)
             dialer_task = asyncio.create_task(dialer_hub.start())
             await asyncio.sleep(0.1)
@@ -285,7 +291,10 @@ class TestNodesHubIntegration:
         assert received_operations[2].action == ActionType.REMOVE
 
     def test_operation_dict_serialization_roundtrip(self):
-        """Test that operation serialization/deserialization preserves data integrity."""
+        """
+        Test that operation serialization/deserialization preserves data
+        integrity.
+        """
         from cuemsengine.comms.NodesHub import NodesHub
 
         NNG_ADDRESS = "tcp://127.0.0.1:15553"
@@ -305,7 +314,9 @@ class TestNodesHubIntegration:
 
             # Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
+            receiver_task = asyncio.create_task(
+                listener_hub.start_message_receiver()
+            )
             await asyncio.sleep(0.1)
             dialer_task = asyncio.create_task(dialer_hub.start())
             await asyncio.sleep(0.1)
@@ -351,14 +362,21 @@ class TestNodesHubIntegration:
 
 
 class TestCommunicationsIntegration:
-    """Integration tests using ControllerCommunications and NodeCommunications."""
+    """
+    Integration tests using ControllerCommunications and NodeCommunications.
+    """
 
     def test_node_to_controller_via_communications_threads(self):
-        """Test NodeOperation sent via NodeCommunications reaches ControllerCommunications."""
+        """
+        Test NodeOperation sent via NodeCommunications reaches
+        ControllerCommunications.
+        """
         import time
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from cuemsengine.comms.ControllerCommunications import ControllerCommunications
+        from cuemsengine.comms.ControllerCommunications import (
+            ControllerCommunications,
+        )
         from cuemsengine.comms.NodeCommunications import NodeCommunications
 
         NNG_ADDRESS = "tcp://127.0.0.1:15561"
@@ -373,7 +391,9 @@ class TestCommunicationsIntegration:
         # Mock IPC communicators with async methods
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_comm.responder_get_request = AsyncMock(
+            side_effect=asyncio.CancelledError
+        )
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",
@@ -396,7 +416,9 @@ class TestCommunicationsIntegration:
             time.sleep(0.3)  # Allow node to connect
 
             # ACT - Send operation from node
-            node.add_player("audioplayer-xyz", {"name": "audioplayer", "volume": 0.8})
+            node.add_player(
+                "audioplayer-xyz", {"name": "audioplayer", "volume": 0.8}
+            )
 
             # Wait for message to be received
             time.sleep(0.5)
@@ -416,11 +438,15 @@ class TestCommunicationsIntegration:
         assert op.data["name"] == "audioplayer"
 
     def test_multiple_operations_via_communications(self):
-        """Test multiple operations flow correctly through communications layer."""
+        """
+        Test multiple operations flow correctly through communications layer.
+        """
         import time
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from cuemsengine.comms.ControllerCommunications import ControllerCommunications
+        from cuemsengine.comms.ControllerCommunications import (
+            ControllerCommunications,
+        )
         from cuemsengine.comms.NodeCommunications import NodeCommunications
 
         NNG_ADDRESS = "tcp://127.0.0.1:15562"
@@ -434,7 +460,9 @@ class TestCommunicationsIntegration:
 
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_comm.responder_get_request = AsyncMock(
+            side_effect=asyncio.CancelledError
+        )
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",
@@ -475,11 +503,16 @@ class TestCommunicationsIntegration:
         assert received_operations[2].target == "player-1"
 
     def test_send_custom_operation_via_node_communications(self):
-        """Test sending custom NodeOperation via NodeCommunications.send_operation()."""
+        """
+        Test sending custom NodeOperation via
+        NodeCommunications.send_operation().
+        """
         import time
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from cuemsengine.comms.ControllerCommunications import ControllerCommunications
+        from cuemsengine.comms.ControllerCommunications import (
+            ControllerCommunications,
+        )
         from cuemsengine.comms.NodeCommunications import NodeCommunications
 
         NNG_ADDRESS = "tcp://127.0.0.1:15563"
@@ -493,7 +526,9 @@ class TestCommunicationsIntegration:
 
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_comm.responder_get_request = AsyncMock(
+            side_effect=asyncio.CancelledError
+        )
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",

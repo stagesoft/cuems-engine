@@ -51,7 +51,8 @@ def _make_action_cue(action_type: str, target: Cue) -> ActionCue:
 def handler():
     """Return a fresh CueHandler with mocked infrastructure.
 
-    ``ACTION_HANDLER`` is bound to this instance so ``arm`` / ``go`` patches apply.
+    ``ACTION_HANDLER`` is bound to this instance so ``arm`` / ``go`` patches
+    apply.
     """
     from cuemsengine.cues.ActionHandler import ACTION_HANDLER
     from cuemsengine.cues.CueHandler import CUE_HANDLER, CueHandler
@@ -87,7 +88,10 @@ class TestPlayAction:
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
@@ -99,7 +103,10 @@ class TestPlayAction:
         target = _make_target(enabled=False)
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -114,7 +121,10 @@ class TestPlayAction:
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             handler.execute_action(cue, mtc, 1234.5)
 
         mock_go.assert_called_once_with(target, mtc, 1234.5)
@@ -124,7 +134,10 @@ class TestPlayAction:
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             handler.execute_action(cue, mtc)
 
         mock_go.assert_called_once_with(target, mtc, None)
@@ -146,7 +159,9 @@ class TestPlayAction:
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go", side_effect=RuntimeError("not loaded to go")):
+        with patch.object(
+            handler, "go", side_effect=RuntimeError("not loaded to go")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -194,7 +209,9 @@ class TestStopAction:
         target = _make_target(_stop_requested=False)
         cue = _make_action_cue("stop", target)
 
-        with patch.object(handler, "disarm", side_effect=RuntimeError("disarm failed")):
+        with patch.object(
+            handler, "disarm", side_effect=RuntimeError("disarm failed")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -244,7 +261,10 @@ class TestFadeInAction:
         target = _make_target()
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
@@ -255,7 +275,10 @@ class TestFadeInAction:
         target = _make_target(enabled=False)
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -266,7 +289,9 @@ class TestFadeInAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        with patch.object(
+            handler, "arm", side_effect=RuntimeError("arm failed")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -277,7 +302,9 @@ class TestFadeInAction:
         target = _make_target()
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(handler, "go", side_effect=RuntimeError("not loaded to go")):
+        with patch.object(
+            handler, "go", side_effect=RuntimeError("not loaded to go")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -338,7 +365,9 @@ class TestGoToAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("go_to", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        with patch.object(
+            handler, "arm", side_effect=RuntimeError("arm failed")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -533,7 +562,9 @@ class TestActionHookDispatchOrder:
         ACTION_HANDLER.register_action_hook(
             "before_dispatch", before, source="cue_layer"
         )
-        ACTION_HANDLER.register_action_hook("after_dispatch", after, source="cue_layer")
+        ACTION_HANDLER.register_action_hook(
+            "after_dispatch", after, source="cue_layer"
+        )
         target = _make_target(enabled=False)
         cue = _make_action_cue("enable", target)
         handler.execute_action(cue, mtc)
@@ -599,7 +630,9 @@ class TestActionResultSink:
             ACTION_HANDLER.set_result_sink(None)
             ACTION_HANDLER.set_emit_enabled(False)
 
-    def test_default_path_calls_send_operation_when_sink_unset(self, handler, mtc):
+    def test_default_path_calls_send_operation_when_sink_unset(
+        self, handler, mtc
+    ):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         ACTION_HANDLER.set_emit_enabled(True)
@@ -617,13 +650,17 @@ class TestActionResultSink:
 
 
 class TestActionHookExceptions:
-    def test_before_dispatch_raises_failed_and_isolates_other_cues(self, handler, mtc):
+    def test_before_dispatch_raises_failed_and_isolates_other_cues(
+        self, handler, mtc
+    ):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         def boom(ctx):
             raise RuntimeError("hook boom")
 
-        ACTION_HANDLER.register_action_hook("before_dispatch", boom, source="cue_layer")
+        ACTION_HANDLER.register_action_hook(
+            "before_dispatch", boom, source="cue_layer"
+        )
         target = _make_target(enabled=True)
         bystander = _make_target(enabled=True, _stop_requested=False)
         snap = (
@@ -632,7 +669,9 @@ class TestActionHookExceptions:
             getattr(bystander, "_go_generation", 0),
         )
 
-        result = handler.execute_action(_make_action_cue("disable", target), mtc)
+        result = handler.execute_action(
+            _make_action_cue("disable", target), mtc
+        )
 
         assert result["status"] == "failed"
         assert target.enabled is True
@@ -644,7 +683,9 @@ class TestActionHookExceptions:
 
 
 class TestActionMidTransitionWithHook:
-    def test_pause_while_already_paused_deterministic_with_hook(self, handler, mtc):
+    def test_pause_while_already_paused_deterministic_with_hook(
+        self, handler, mtc
+    ):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         order = []
@@ -683,7 +724,9 @@ class TestFadeActionHandler:
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_action", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        with patch.object(
+            handler, "arm", side_effect=RuntimeError("arm failed")
+        ):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -728,11 +771,15 @@ def test_action_hot_path_regression_budget(handler, mtc):
 
 
 def test_rejected_action_warning_text_unchanged(handler, mtc, caplog):
-    """NFR-003 / SC-008: operator-visible rejection wording for unknown actions."""
+    """
+    NFR-003 / SC-008: operator-visible rejection wording for unknown actions.
+    """
     target = _make_target()
     with caplog.at_level(logging.WARNING):
         handler.execute_action(_make_action_cue("explode", target), mtc)
-    assert any("Unsupported action_type" in r.getMessage() for r in caplog.records)
+    assert any(
+        "Unsupported action_type" in r.getMessage() for r in caplog.records
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -760,7 +807,9 @@ def _make_action_target(**overrides) -> ActionCue:
 
 
 class TestGoRearm:
-    """Verify that go() re-arms a cue that was disarmed after a previous pass."""
+    """
+    Verify that go() re-arms a cue that was disarmed after a previous pass.
+    """
 
     def test_go_rearms_unloaded_cue(self, handler, mtc):
         """A cue with loaded=False should be re-armed before GO proceeds."""
@@ -821,7 +870,9 @@ class TestArmPlayTarget:
     """Verify ActionCue play-target pre-arming in arm()."""
 
     def test_arm_actioncue_play_prearms_action_target(self, handler, mtc):
-        """Arming an ActionCue(play) should also arm its _action_target_object."""
+        """
+        Arming an ActionCue(play) should also arm its _action_target_object.
+        """
         play_target = _make_action_target(loaded=False)
         play_target._target_object = None
         play_target._action_target_object = None
@@ -841,7 +892,9 @@ class TestArmPlayTarget:
         assert play_target.loaded is True
 
     def test_arm_actioncue_stop_does_not_prearm(self, handler, mtc):
-        """Arming an ActionCue(stop) should NOT arm its _action_target_object."""
+        """
+        Arming an ActionCue(stop) should NOT arm its _action_target_object.
+        """
         stop_target = _make_action_target(loaded=False)
         stop_target._target_object = None
 
@@ -898,7 +951,9 @@ class TestArmPlayTarget:
         assert cue.loaded is True
 
     def test_arm_loading_timeout_returns_false(self, handler, mtc):
-        """An init=True arm should return False if the in-progress arm times out."""
+        """
+        An init=True arm should return False if the in-progress arm times out.
+        """
         from threading import Event
 
         cue = _make_action_target(loaded=False)
@@ -912,7 +967,9 @@ class TestArmPlayTarget:
         assert not getattr(cue, "loaded", False)
 
     def test_arm_loading_non_init_returns_false(self, handler, mtc):
-        """A non-init arm on a cue being armed should return False immediately."""
+        """
+        A non-init arm on a cue being armed should return False immediately.
+        """
         from threading import Event
 
         cue = _make_action_target(loaded=False)
@@ -950,7 +1007,9 @@ class TestEffectiveDuration:
         from cuemsengine.cues.CueHandler import CueHandler
 
         cue = _make_target()
-        cue.media = Media({"file_name": "test.wav", "duration": "00:00:05.000"})
+        cue.media = Media(
+            {"file_name": "test.wav", "duration": "00:00:05.000"}
+        )
         # prewait=0, postwait=0, media=5s
         duration = CueHandler._effective_duration_ms(cue)
         assert duration >= 4900  # ~5000ms, allow rounding
@@ -994,7 +1053,9 @@ class TestEffectiveDuration:
 class TestArmAhead:
 
     def _make_chain(self, durations_ms, handler):
-        """Build a chain of ActionCues with given effective durations via prewait."""
+        """
+        Build a chain of ActionCues with given effective durations via prewait.
+        """
         from cuemsutils.tools.CTimecode import CTimecode
 
         cues = []
@@ -1082,7 +1143,9 @@ class TestArmAhead:
         assert getattr(cue_after, "loaded", False)
 
     def test_arm_ahead_uninit_loaded(self, handler, mtc):
-        """A cue without 'loaded' attribute should be armed (getattr fallback)."""
+        """
+        A cue without 'loaded' attribute should be armed (getattr fallback).
+        """
         cue = ActionCue()
         cue.enabled = True
         cue._local = True

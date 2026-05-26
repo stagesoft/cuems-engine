@@ -45,7 +45,12 @@ class AudioClient(PlayerClient):
 
 
 def start_audio_output(
-    port: int, path: str, args: list[str], media: str, uuid: str, timeout: float = 5.0
+    port: int,
+    path: str,
+    args: list[str],
+    media: str,
+    uuid: str,
+    timeout: float = 5.0,
 ) -> tuple[AudioPlayer, AudioClient]:
     """Starts an audio output
 
@@ -63,13 +68,16 @@ def start_audio_output(
     Raises:
         RuntimeError: If player fails to start within timeout or thread dies
     """
-    player = AudioPlayer(port=port, path=path, args=args, media=media, uuid=uuid)
+    player = AudioPlayer(
+        port=port, path=path, args=args, media=media, uuid=uuid
+    )
     player.start(timeout=timeout)
 
     try:
         client = AudioClient(player_port=port, name=f"audioplayer-{uuid}")
     except Exception:
-        # OSC client creation failed (e.g. port conflict); kill the subprocess so it doesn't linger
+        # OSC client creation failed (e.g. port conflict); kill the subprocess
+        # so it doesn't linger
         try:
             player.kill()
         except Exception:

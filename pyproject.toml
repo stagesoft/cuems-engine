@@ -57,6 +57,7 @@ coverage = {extras = ["toml"], version = "*"}
 black = "*"
 isort = "*"
 flake8 = "*"
+autopep8 = "^2.3.2"
 
 [tool.poetry.scripts]
 controller-engine = "cuemsengine.scripts.controller_engine:main"

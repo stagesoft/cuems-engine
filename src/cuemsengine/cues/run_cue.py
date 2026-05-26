@@ -23,7 +23,8 @@ def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
         cue: The cue to run
         mtc: The MTC listener (for framerate info)
         frozen_mtc_ms: Optional frozen MTC timestamp in milliseconds.
-                       When provided (e.g., for chained cues with post_go='go'),
+                       When provided (e.g., for chained cues with
+                       post_go='go'),
                        this timestamp is used instead of reading live MTC.
                        This ensures perfect sync between audio and video cues.
     """
@@ -40,7 +41,9 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 
 @run_cue.register
-def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
+def run_actionCue(
+    cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None
+):
     """Run an ActionCue by delegating to ActionHandler.execute_action.
 
     Forwards frozen_mtc_ms so a chained 'play' action triggered inside a
@@ -61,10 +64,13 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     Args:
         cue: The audio cue to run
         mtc: The MTC listener (for framerate info)
-        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
+        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with
+        chained cues
     """
-    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
-    # Otherwise read live MTC. This ensures audio and video cues share the same reference.
+    # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
+    # chains)
+    # Otherwise read live MTC. This ensures audio and video cues share the
+    # same reference.
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f"AudioCue {cue.id} using frozen MTC: {mtc_ms}ms")
@@ -98,23 +104,29 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
             uuid_slug = "".join(str(cue.id).split("-"))
-            # Actual JACK client name is Audio_Player-{uuid} with ports "outport 0", "outport 1"
+            # Actual JACK client name is Audio_Player-{uuid} with ports
+            # "outport 0", "outport 1"
             player_name = f"Audio_Player-{uuid_slug}"
 
-            # Resolve JACK port names from cue output IDs via audio output lookup
+            # Resolve JACK port names from cue output IDs via audio output
+            # lookup
             selected_outputs = []
             if hasattr(cue, "outputs") and cue.outputs:
                 for output in cue.outputs:
                     output_name = output.get("output_name", "")
                     if len(output_name) > 37:
                         output_id = output_name[37:]
-                        port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
+                        port_name = PLAYER_HANDLER.resolve_audio_port(
+                            output_id
+                        )
                         if port_name:
                             selected_outputs.append(port_name)
                         else:
                             selected_outputs.append(output_id)
 
-            Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
+            Logger.debug(
+                f"Audio cue {cue.id} selected outputs: {selected_outputs}"
+            )
 
             # If the player's outport 0 is missing, the subprocess died between
             # arm and GO. connect_player_to_outputs would block 15 s in its
@@ -134,7 +146,8 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                 selected_outputs=selected_outputs,
             ):
                 Logger.debug(
-                    f"Audio cue {cue.id}: graph already wired, skipping connect"
+                    f"Audio cue {cue.id}: graph already wired, skipping"
+                    f"connect"
                 )
             else:
                 Logger.warning(
@@ -155,7 +168,8 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
 
         cue._osc.set_value(key, offset_to_go)
         Logger.info(
-            f"offset {offset_to_go} to {key}: {str(cue._osc.get_node(key).parameter.value)}",
+            f"offset {offset_to_go} to {key}:"
+            f"{str(cue._osc.get_node(key).parameter.value)}",
             extra={"caller": cue.__class__.__name__},
         )
     except Exception as e:
@@ -183,7 +197,8 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             vol_value = max(0.0, min(1.0, float(master_vol) / 100.0))
             cue._osc.set_value("/volmaster", vol_value)
             Logger.info(
-                f"master_vol {master_vol}% -> {vol_value} set on audio cue {cue.id}",
+                f"master_vol {master_vol}% -> {vol_value} set on audio cue"
+                f"{cue.id}",
                 extra={"caller": cue.__class__.__name__},
             )
     except Exception as e:
@@ -199,17 +214,20 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
     Run a DmxCue
 
     Sends DMX scene bundle directly to the local DMX player.
-    Synchronized with MTC. The scene contains frame data, timing, and fade info.
+    Synchronized with MTC. The scene contains frame data, timing, and fade
+    info.
     DMX cues have no media duration - duration is inferred from fade times.
     Only fadein_time is used for now. fade_out defaults to 0
 
     Args:
         cue: The DMX cue to run
         mtc: The MTC listener (for framerate info)
-        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
+        frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with
+        chained cues
     """
     try:
-        # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
+        # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
+        # chains)
         if frozen_mtc_ms is not None:
             mtc_ms = frozen_mtc_ms
             Logger.debug(f"DmxCue {cue.id} using frozen MTC: {mtc_ms}ms")
@@ -237,8 +255,10 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         )
         cue._end_mtc = cue._start_mtc + duration
 
-        # Absolute MTC time for this cue (ms). DMX player expects mtc_time as absolute
-        # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead, time).
+        # Absolute MTC time for this cue (ms). DMX player expects mtc_time as
+        # absolute
+        # "0:0:S.sss" string so it can schedule m_mtcStart = max(playHead,
+        # time).
         offset_milliseconds = cue._start_mtc.milliseconds_exact
         mtc_time_str = f"0:0:{offset_milliseconds / 1000.0}"
 
@@ -252,7 +272,8 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             )
             return
 
-        # Convert fadein_time to seconds for the DMX player (only fadein is used for now)
+        # Convert fadein_time to seconds for the DMX player (only fadein is
+        # used for now)
         fade_time = fadein_ms / 1000.0
 
         # Check if we have an OSC client
@@ -267,14 +288,18 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         # advancing when MTC stops (e.g. on STOP command).
         cue._osc.enable_mtcfollow()
 
-        # Send DMX scene bundle to local player (mtc_time absolute so no overlap/loss)
+        # Send DMX scene bundle to local player (mtc_time absolute so no
+        # overlap/loss)
         cue._osc.send_dmx_scene(
-            universe_frames=universe_frames, mtc_time=mtc_time_str, fade_time=fade_time
+            universe_frames=universe_frames,
+            mtc_time=mtc_time_str,
+            fade_time=fade_time,
         )
 
         Logger.info(
             f"DMX scene sent to local player for cue {cue.id}: "
-            f"mtc_time={mtc_time_str} ({offset_milliseconds}ms), universes={len(universe_frames)}, fade={fade_time}s",
+            f"mtc_time={mtc_time_str} ({offset_milliseconds}ms),"
+            f"universes={len(universe_frames)}, fade={fade_time}s",
             extra={"caller": cue.__class__.__name__},
         )
 
@@ -321,7 +346,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
 
     client = cue._osc
 
-    # Re-apply position for each layer before making visible (layer may not have
+    # Re-apply position for each layer before making visible (layer may not
+    # have
     # been ready when position was set during arm)
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
 
@@ -332,17 +358,22 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         if index < len(output_names):
             output_name = output_names[index]
             try:
-                output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
+                output = PLAYER_HANDLER.resolve_video_output_for_cue(
+                    cue, output_name
+                )
                 x, y = output.get_layer_placement()
                 client.set_value(f"{layer_path}/position", [x, y])
                 sx, sy = output.get_layer_scale()
                 if sx != 1.0 or sy != 1.0:
                     client.set_value(f"{layer_path}/scale", [sx, sy])
             except (KeyError, RuntimeError, ValueError) as e:
-                Logger.warning(f"Could not re-apply position for layer {layer_id}: {e}")
+                Logger.warning(
+                    f"Could not re-apply position for layer {layer_id}: {e}"
+                )
             except Exception:
                 Logger.exception(
-                    f'Unexpected error re-applying position for layer {layer_id} (output "{output_name}")'
+                    f'Unexpected error re-applying position for layer'
+                    f'{layer_id} (output "{output_name}")'
                 )
 
         client.set_value(f"{layer_path}/offset", int(offset_to_go))
@@ -353,5 +384,6 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         client.set_value(f"{layer_path}/visible", 1)
 
     Logger.info(
-        f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}"
+        f"Video cue {cue.id} running: {len(layer_ids)} layer(s),"
+        f"offset={offset_to_go}"
     )

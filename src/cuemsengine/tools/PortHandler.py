@@ -30,14 +30,17 @@ class PortHandler(object):
             cls._instance._lock = RLock()
             cls._instance._ports = {None: {}}
             cls._instance._all_used_ports = []
-            cls._instance._all_available_ports = set(range(INITIAL_PORT, MAX_PORT))
+            cls._instance._all_available_ports = set(
+                range(INITIAL_PORT, MAX_PORT)
+            )
             cls._instance._random_ports = []
         return cls._instance
 
     def assign_ports(self, names: list[str], cue: CuemsDict = None) -> dict:
         """Assign free ports to a list of names
 
-        This method is thread-safe and should be the preferred way to assign ports to a list of names for a cue or config.
+        This method is thread-safe and should be the preferred way to assign
+        ports to a list of names for a cue or config.
 
         Args:
             names: The names to assign ports to
@@ -100,9 +103,12 @@ class PortHandler(object):
             Logger.debug(f"Random ports: {self._random_ports}")
             return set(self._all_used_ports) | set(self._random_ports)
 
-    def check_ports(self, ports: list | dict, check_range: bool = True) -> list:
+    def check_ports(
+        self, ports: list | dict, check_range: bool = True
+    ) -> list:
         """
-        Check the ports for a cue and return the list of ports if they are valid
+        Check the ports for a cue and return the list of ports if they are
+        valid
 
         Args:
             ports: The ports to check
@@ -123,7 +129,9 @@ class PortHandler(object):
             raise ValueError(f"Duplicate ports found")
         all_used_ports = set(self.get_all_used_ports())
         if all_used_ports & set(ports):
-            raise ValueError(f"Ports already in use: {all_used_ports & set(ports)}")
+            raise ValueError(
+                f"Ports already in use: {all_used_ports & set(ports)}"
+            )
         if check_range:
             self.check_port_range(ports)
         return ports
@@ -150,7 +158,9 @@ class PortHandler(object):
         Raises:
             ValueError: If no free ports are found
         """
-        available_ports = self._all_available_ports - set(self.get_all_used_ports())
+        available_ports = self._all_available_ports - set(
+            self.get_all_used_ports()
+        )
         if not available_ports:
             raise ValueError(f"No free ports found")
         return choice(list(available_ports))
@@ -199,7 +209,8 @@ class PortHandler(object):
 
     def remove_random_port(self, port: int):
         """
-        Remove a specific port from the random ports list, freeing it for reuse.
+        Remove a specific port from the random ports list, freeing it for
+        reuse.
         Called when an OSC client that owned the port is closed.
         """
         with self._lock:
@@ -210,13 +221,18 @@ class PortHandler(object):
 
     def clean_random_ports(self):
         """
-        Clean the random ports set by keeping only ports that are in use by the system
+        Clean the random ports set by keeping only ports that are in use by the
+        system
         """
         sys_ports = [
-            i for i in self.find_system_ports().values() if i in self._random_ports
+            i
+            for i in self.find_system_ports().values()
+            if i in self._random_ports
         ]
         with self._lock:
-            self._random_ports = [i for i in self._random_ports if i in sys_ports]
+            self._random_ports = [
+                i for i in self._random_ports if i in sys_ports
+            ]
 
 
 # ---------------------------

@@ -40,7 +40,8 @@ _STARTUP_DEADLINE_S = 10
 _INACTIVITY_S = 15
 
 
-# rsync 3.2+ --info=progress2: "  32,768   0%  0.00kB/s  0:00:00 (xfr#1, to-chk=0/1)"
+# rsync 3.2+ --info=progress2: "  32,768   0%  0.00kB/s  0:00:00 (xfr#1,
+# to-chk=0/1)"
 _PROGRESS2_RE = re.compile(
     r"^\s*([\d,]+)\s+(\d+)%\s+([\d.]+\s*[kMGT]?B/s)\s+(\d+:\d\d:\d\d)"
     r"(?:\s+\(xfr#(\d+),\s*to-chk=(\d+)/(\d+)\))?\s*$"
@@ -72,7 +73,8 @@ class CuemsDeploy:
                 (parsed from --info=progress2). Receives a dict with keys
                 bytes, pct, rate, eta, and optionally xfr, remaining, total.
                 Must be non-blocking — invoked from the asyncio loop.
-            loop: The asyncio event loop for run_coroutine_threadsafe(). Defaults
+            loop: The asyncio event loop for run_coroutine_threadsafe().
+            Defaults
                 to None; late-bind via NodeEngine.start().
         """
         self.library_path = library_path
@@ -83,7 +85,8 @@ class CuemsDeploy:
         self._on_progress = on_progress or (lambda parsed: None)
         self.loop = loop
 
-        # TODO: rebuild on network_map reload to pick up IP changes without restarting.
+        # TODO: rebuild on network_map reload to pick up IP changes without
+        # restarting.
         if controller_ip:
             self.main_ip = controller_ip
         elif hostname:
@@ -109,13 +112,15 @@ class CuemsDeploy:
         """Sync files from the controller to the node.
 
         Submits _deploy_all_async() to self.loop via run_coroutine_threadsafe()
-        and blocks until the coroutine completes. Watchdogs inside the coroutine
+        and blocks until the coroutine completes. Watchdogs inside the
+        coroutine
         handle all time bounds; no external timeout is needed here.
 
         Args:
             project: Project identifier used to build paths and log file names.
             tag: Transfer type — ``'project'`` or ``'media'``. Controls which
-                mandatory-path precheck runs and which default file list is used
+                mandatory-path precheck runs and which default file list is
+                used
                 when file_names is empty.
             file_names: Explicit list of rsync-relative paths to transfer. When
                 omitted (or empty) and tag is ``'project'``, defaults to the
@@ -151,7 +156,9 @@ class CuemsDeploy:
         log_file = self._deploy_log_path(project, tag)
 
         try:
-            coro = self._deploy_all_async(log_file, file_names, mandatory_paths)
+            coro = self._deploy_all_async(
+                log_file, file_names, mandatory_paths
+            )
             synced = asyncio.run_coroutine_threadsafe(coro, self.loop).result()
         except Exception as e:
             Logger.error(f"Unexpected error during deploy of {project!r}: {e}")
@@ -260,7 +267,11 @@ class CuemsDeploy:
                 timeout=5,
             )
             result.check_returncode()
-            ip = result.stdout.decode(self.encoding).replace(hostname, "").strip()
+            ip = (
+                result.stdout.decode(self.encoding)
+                .replace(hostname, "")
+                .strip()
+            )
             return ip if ip else None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
@@ -297,7 +308,8 @@ class CuemsDeploy:
         except OSError as e:
             Logger.warning(f"Could not create rsync log directory: {e}")
 
-        # -t: rsync shows >f..T...... without it; also breaks .idx mtime cache (2026-05-19).
+        # -t: rsync shows >f..T...... without it; also breaks .idx mtime cache
+        # (2026-05-19).
         cmd = [
             "rsync",
             "-rt",
@@ -332,14 +344,18 @@ class CuemsDeploy:
         deadline = asyncio.get_event_loop().time() + _STARTUP_DEADLINE_S
         pipes_done = 0
         rc: int | None = None
-        # Only pending tasks: avoids busy-loop once one pump finishes before the other.
+        # Only pending tasks: avoids busy-loop once one pump finishes before
+        # the other.
         pending = {t_out, t_err}
 
         try:
             while pipes_done < 2:
                 budget = deadline - asyncio.get_event_loop().time()
-                done, pending = await asyncio.wait(pending, timeout=max(budget, 0.1))
-                # Drain before watchdog: pump can push data without completing its task.
+                done, pending = await asyncio.wait(
+                    pending, timeout=max(budget, 0.1)
+                )
+                # Drain before watchdog: pump can push data without completing
+                # its task.
                 got_data = False
                 while not queue.empty():
                     tag, chunk = queue.get_nowait()
@@ -386,7 +402,8 @@ class CuemsDeploy:
         if rc == 0:
             self.errors = []
             return True
-        # Drop the positional "rsync error: ... at main.c(NNN)" trailer if present.
+        # Drop the positional "rsync error: ... at main.c(NNN)" trailer if
+        # present.
         self.errors = (
             stderr_lines[:-1]
             if stderr_lines and "rsync error:" in stderr_lines[-1]
@@ -394,7 +411,9 @@ class CuemsDeploy:
         )
         return False
 
-    def _dispatch_line(self, tag: str, line: str, stderr_lines: list[str]) -> None:
+    def _dispatch_line(
+        self, tag: str, line: str, stderr_lines: list[str]
+    ) -> None:
         if tag == "out":
             Logger.debug(f"rsync: {line}")
             parsed = self._parse_progress(line)
@@ -425,7 +444,9 @@ class CuemsDeploy:
         precheck passes (preserving the pre-refactor invariant).
         """
         if mandatory_paths:
-            mandatory_ok, missing = await self._check_mandatory_sources(mandatory_paths)
+            mandatory_ok, missing = await self._check_mandatory_sources(
+                mandatory_paths
+            )
             if not mandatory_ok:
                 if missing:
                     self.errors = [
@@ -466,20 +487,27 @@ class CuemsDeploy:
         return out
 
     def _deploy_log_path(self, project: str, tag: str = "project") -> str:
-        return os.path.join(self.tmp_path, f"rsync_request_{project}_{tag}.log")
+        return os.path.join(
+            self.tmp_path, f"rsync_request_{project}_{tag}.log"
+        )
 
-    def _create_deploy_log(self, log_file: str, file_names: list[str] = []) -> bool:
+    def _create_deploy_log(
+        self, log_file: str, file_names: list[str] = []
+    ) -> bool:
         """Create the rsync --files-from list file for a deploy request."""
         try:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             with open(log_file, "w") as f:
-                # Normalize to one-path-per-line; callers may omit the trailing newline.
+                # Normalize to one-path-per-line; callers may omit the trailing
+                # newline.
                 for name in file_names:
                     if not name.endswith("\n"):
                         name = name + "\n"
                     f.write(name)
         except Exception as e:
-            Logger.error(f"Exception raised when writing rsync request log file: {e}")
+            Logger.error(
+                f"Exception raised when writing rsync request log file: {e}"
+            )
             return False
         return True
 
@@ -496,7 +524,8 @@ class CuemsDeploy:
         ]
 
     def _media_files(self, bare_names: list[str]) -> list[str]:
-        """Expand bare media filenames to rsync-relative paths for --files-from.
+        """
+        Expand bare media filenames to rsync-relative paths for --files-from.
 
         Every file gets a media/<name> entry. Video files (.mp4 .mov .avi
         .mkv .mpg) also get a media/indexes/<name>.idx sidecar entry.

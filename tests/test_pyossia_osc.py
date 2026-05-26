@@ -106,8 +106,12 @@ def test_osc_bundle_sending():
     receiver = ossia.LocalDevice("receiver")
 
     # Create parameters
-    param1 = sender.root_node.add_node("/param1").create_parameter(ValueType.Int)
-    param2 = sender.root_node.add_node("/param2").create_parameter(ValueType.Float)
+    param1 = sender.root_node.add_node("/param1").create_parameter(
+        ValueType.Int
+    )
+    param2 = sender.root_node.add_node("/param2").create_parameter(
+        ValueType.Float
+    )
 
     # Act - Create and send bundle
     bundle = ossia.Bundle()
@@ -125,12 +129,17 @@ def test_osc_bundle_with_list_parameter():
     sender = ossia.OSCDevice("sender", "127.0.0.1", 20002, 20003)
 
     # Create list parameter for DMX-style data
-    frame_param = sender.root_node.add_node("/frame").create_parameter(ValueType.List)
-    fade_param = sender.root_node.add_node("/fade").create_parameter(ValueType.Float)
+    frame_param = sender.root_node.add_node("/frame").create_parameter(
+        ValueType.List
+    )
+    fade_param = sender.root_node.add_node("/fade").create_parameter(
+        ValueType.Float
+    )
 
     # Act - Create bundle with list data
     bundle = ossia.Bundle()
-    dmx_data = [1, 0, 255, 1, 128, 2, 64]  # universe 1, ch0=255, ch1=128, ch2=64
+    # universe 1, ch0=255, ch1=128, ch2=64
+    dmx_data = [1, 0, 255, 1, 128, 2, 64]
     bundle.append(frame_param, dmx_data)
     bundle.append(fade_param, 2.0)
 
@@ -189,7 +198,9 @@ def test_osc_bundle_multiple_messages():
     """Test bundle with multiple messages to same parameter."""
     # Arrange
     sender = ossia.OSCDevice("sender", "127.0.0.1", 20006, 20007)
-    param = sender.root_node.add_node("/frame").create_parameter(ValueType.List)
+    param = sender.root_node.add_node("/frame").create_parameter(
+        ValueType.List
+    )
 
     # Act - Multiple frames in one bundle
     bundle = ossia.Bundle()
@@ -238,13 +249,17 @@ def test_osc_parameter_types():
     assert int_param.value_type == ValueType.Int
 
     # Act & Assert - Float
-    float_param = root.add_node("/float_test").create_parameter(ValueType.Float)
+    float_param = root.add_node("/float_test").create_parameter(
+        ValueType.Float
+    )
     float_param.value = 3.14159
     assert abs(float_param.value - 3.14159) < 0.0001
     assert float_param.value_type == ValueType.Float
 
     # Act & Assert - String
-    string_param = root.add_node("/string_test").create_parameter(ValueType.String)
+    string_param = root.add_node("/string_test").create_parameter(
+        ValueType.String
+    )
     string_param.value = "test_string"
     assert string_param.value == "test_string"
     assert string_param.value_type == ValueType.String

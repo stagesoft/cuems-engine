@@ -47,7 +47,9 @@ class DmxPlayer(Player):
 
 
 class DmxClient(PlayerClient):
-    def __init__(self, player_port: int, client_name: str, host: str = "127.0.0.1"):
+    def __init__(
+        self, player_port: int, client_name: str, host: str = "127.0.0.1"
+    ):
         """Initialize the DMX client.
 
         Args:
@@ -56,12 +58,15 @@ class DmxClient(PlayerClient):
             host: Host IP address of the dmxplayer
         """
         super().__init__(
-            player_port=player_port, endpoints=OSC_DMXPLAYER_CONF, name=client_name
+            player_port=player_port,
+            endpoints=OSC_DMXPLAYER_CONF,
+            name=client_name,
         )
         self.host = host
         self.player_port = player_port
 
-        # Bundle parameters for building OSC bundles (pyossia now sends proper #bundle wire format)
+        # Bundle parameters for building OSC bundles (pyossia now sends proper
+        # #bundle wire format)
         self._create_bundle_parameters()
         Logger.debug(f"DMX bundle parameters created for {self.name}")
 
@@ -74,9 +79,9 @@ class DmxClient(PlayerClient):
         self._mtc_time_param = root.add_node("/mtc_time").create_parameter(
             ossia.ValueType.String
         )
-        self._start_offset_param = root.add_node("/start_offset").create_parameter(
-            ossia.ValueType.Int
-        )
+        self._start_offset_param = root.add_node(
+            "/start_offset"
+        ).create_parameter(ossia.ValueType.Int)
         self._fade_time_param = root.add_node("/fade_time").create_parameter(
             ossia.ValueType.Float
         )
@@ -90,7 +95,9 @@ class DmxClient(PlayerClient):
         Logger.debug("DMX mtcfollow enabled")
 
     def disable_mtcfollow(self) -> None:
-        """Disable MTC following so the dmxplayer stops advancing its playhead."""
+        """
+        Disable MTC following so the dmxplayer stops advancing its playhead.
+        """
         self._mtcfollow_param.push_value(0)
         Logger.debug("DMX mtcfollow disabled")
 
@@ -119,7 +126,8 @@ class DmxClient(PlayerClient):
                         frame_data.append(int(value))
                     bundle.append(self._frame_param, frame_data)
                     Logger.debug(
-                        f"Added frame for universe {universe_id} with {len(channels)} channels"
+                        f"Added frame for universe {universe_id} with"
+                        f"{len(channels)} channels"
                     )
 
             if isinstance(mtc_time, int):
@@ -145,7 +153,9 @@ class DmxClient(PlayerClient):
             raise
 
     @logged
-    def send_blackout(self, universe_ids: int | tuple[int, ...] = (0, 1)) -> None:
+    def send_blackout(
+        self, universe_ids: int | tuple[int, ...] = (0, 1)
+    ) -> None:
         """Send blackout: clear dmxplayer fades + direct OLA backup.
 
         Sends /blackout to the dmxplayer which clears all queued scenes,
@@ -178,14 +188,20 @@ class DmxClient(PlayerClient):
                     capture_output=True,
                 )
             except Exception as e:
-                Logger.error(f"Blackout ola_set_dmx failed for universe {uid}: {e}")
+                Logger.error(
+                    f"Blackout ola_set_dmx failed for universe {uid}: {e}"
+                )
 
         Logger.info(f"Sent DMX blackout for universe(s) {universe_ids}")
 
 
 @logged
 def start_dmx_player(
-    port: int, node_uuid: str, path: str, args: str | None = None, timeout: float = 5.0
+    port: int,
+    node_uuid: str,
+    path: str,
+    args: str | None = None,
+    timeout: float = 5.0,
 ) -> tuple[DmxPlayer, DmxClient]:
     """Start a DMX player and its OSC client.
 

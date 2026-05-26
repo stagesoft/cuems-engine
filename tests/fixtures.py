@@ -132,7 +132,8 @@ def mock_deploy_success():
     fail-fast guard in _load_project_inner would abort every test.
     """
     with patch(
-        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", return_value=True
+        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files",
+        return_value=True,
     ):
         yield
 
@@ -149,7 +150,9 @@ def mock_deploy_project_fail():
     def selective(self, project, tag, file_names=None):
         return tag != "project"
 
-    with patch("cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective):
+    with patch(
+        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective
+    ):
         yield
 
 
@@ -165,7 +168,9 @@ def mock_deploy_media_fail():
     def selective(self, project, tag, file_names=None):
         return tag != "media"
 
-    with patch("cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective):
+    with patch(
+        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective
+    ):
         yield
 
 
@@ -204,7 +209,9 @@ def mock_player_subprocess():
     call_records = []
 
     def mock_call_subprocess(self, call_args):
-        """Mock implementation that records the call without starting process"""
+        """
+        Mock implementation that records the call without starting process
+        """
         call_records.append(
             {
                 "player": self.__class__.__name__,
@@ -221,7 +228,8 @@ def mock_player_subprocess():
         self.error = None
 
     with patch(
-        "cuemsengine.players.Player.Player.call_subprocess", mock_call_subprocess
+        "cuemsengine.players.Player.Player.call_subprocess",
+        mock_call_subprocess,
     ):
         yield call_records
 
@@ -231,7 +239,9 @@ def mock_player_subprocess():
 
 @fixture
 def mock_player_clients():
-    """Mock PlayerClient creation to record commands without OSC communication"""
+    """
+    Mock PlayerClient creation to record commands without OSC communication
+    """
     from unittest.mock import MagicMock, Mock
 
     from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
@@ -256,7 +266,9 @@ def mock_player_clients():
                 {
                     "name": name,
                     "port": player_port,
-                    "endpoints": list(self.endpoints.keys()) if self.endpoints else [],
+                    "endpoints": (
+                        list(self.endpoints.keys()) if self.endpoints else []
+                    ),
                 }
             )
 
@@ -309,14 +321,18 @@ def mock_player_clients():
     class MockDmxClient(MockPlayerClientBase):
         """Mock DmxClient matching its signature"""
 
-        def __init__(self, player_port: int, client_name: str, host: str = "127.0.0.1"):
+        def __init__(
+            self, player_port: int, client_name: str, host: str = "127.0.0.1"
+        ):
             super().__init__(player_port, client_name)
             self.host = host
 
     class MockMixerClient(MockPlayerClientBase):
         """Mock MixerClient matching its signature"""
 
-        def __init__(self, player_port: int, channel_number: int, mixer_id: str):
+        def __init__(
+            self, player_port: int, channel_number: int, mixer_id: str
+        ):
             super().__init__(player_port, f"mixer-{mixer_id}")
             self.channel_number = channel_number
             self.client_name = f"audiomixer-{mixer_id}"
@@ -339,7 +355,8 @@ def mock_player_clients():
         patch("cuemsengine.players.DmxPlayer.DmxClient", MockDmxClient),
         patch("cuemsengine.players.AudioMixer.MixerClient", MockMixerClient),
         patch(
-            "cuemsengine.players.Player.Player.call_subprocess", mock_call_subprocess
+            "cuemsengine.players.Player.Player.call_subprocess",
+            mock_call_subprocess,
         ),
     ):
         yield client_records
@@ -351,11 +368,11 @@ def mock_player_clients():
 # @fixture
 # def mock_library_path():
 #     """Mock library path to use test XML files"""
-#     test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+# test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
 
 #     # Patch the library_path attribute after ConfigManager instantiation
 #     with patch('cuemsutils.tools.ConfigManager.ConfigManager.library_path',
-#                new_callable=PropertyMock, return_value=str(test_library_path)):
+# new_callable=PropertyMock, return_value=str(test_library_path)):
 #         yield test_library_path
 
 
@@ -379,7 +396,7 @@ def mock_library_path(monkeypatch):
 # @fixture
 # def mock_library_path():
 #     """Mock library path by patching the attribute value directly"""
-#     test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
+# test_library_path = Path(__file__).parent / '..' / 'dev' / 'test_xml_files'
 
 #     with patch('cuemsutils.tools.ConfigManager.ConfigManager.library_path'):
 #         yield test_library_path

@@ -50,7 +50,8 @@ class TestBaseEngineCPUUsage:
     @pytest.fixture
     def base_engine(self, env_config_path):
         """Create a BaseEngine instance with mocked dependencies"""
-        # Create engine with minimal initialization to avoid external dependencies
+        # Create engine with minimal initialization to avoid external
+        # dependencies
         engine = NodeEngine(with_cm=False, with_mtc=True, with_signals=False)
         return engine
 
@@ -77,7 +78,13 @@ class TestBaseEngineCPUUsage:
                 "readings": cpu_readings,
                 "duration": duration,
             }
-        return {"min": 0, "max": 0, "avg": 0, "readings": [], "duration": duration}
+        return {
+            "min": 0,
+            "max": 0,
+            "avg": 0,
+            "readings": [],
+            "duration": duration,
+        }
 
     @pytest.mark.slow
     @pytest.mark.integration
@@ -126,7 +133,9 @@ class TestBaseEngineCPUUsage:
         monitoring_complete = threading.Event()
 
         def monitor_cpu():
-            cpu_stats["data"] = self.monitor_cpu_usage(current_process, duration=10.0)
+            cpu_stats["data"] = self.monitor_cpu_usage(
+                current_process, duration=10.0
+            )
             monitoring_complete.set()
 
         monitor_thread = threading.Thread(target=monitor_cpu, daemon=True)
@@ -136,10 +145,15 @@ class TestBaseEngineCPUUsage:
         start_time = time.time()
         operation_count = 0
 
-        while not monitoring_complete.is_set() and (time.time() - start_time) < 12.0:
+        while (
+            not monitoring_complete.is_set()
+            and (time.time() - start_time) < 12.0
+        ):
             # Simulate periodic engine operations
             if hasattr(base_engine, "status"):
-                base_engine.set_status("test_property", f"value_{operation_count}")
+                base_engine.set_status(
+                    "test_property", f"value_{operation_count}"
+                )
                 operation_count += 1
 
             # Small delay to simulate work
@@ -152,7 +166,9 @@ class TestBaseEngineCPUUsage:
             stats = cpu_stats["data"]
 
             # Verify that CPU usage during operations is reasonable
-            assert stats["avg"] < 50.0, f"Operation CPU usage too high: {stats['avg']}%"
+            assert (
+                stats["avg"] < 50.0
+            ), f"Operation CPU usage too high: {stats['avg']}%"
             assert (
                 stats["max"] < 80.0
             ), f"Peak operation CPU usage too high: {stats['max']}%"
@@ -188,7 +204,9 @@ class TestBaseEngineCPUUsage:
         memory_increase = final_memory - initial_memory
 
         # Verify memory usage is reasonable
-        assert final_memory < 500, f"Memory usage too high: {final_memory:.2f} MB"
+        assert (
+            final_memory < 500
+        ), f"Memory usage too high: {final_memory:.2f} MB"
         assert (
             memory_increase < 100
         ), f"Memory increase too high: {memory_increase:.2f} MB"
@@ -228,19 +246,25 @@ class TestBaseEngineCPUUsage:
         # Verify CPU usage recovers to reasonable levels
         assert (
             recovery_stats["avg"] <= baseline_stats["avg"] * 2
-        ), f"CPU usage did not recover properly: {recovery_stats['avg']}% vs baseline {baseline_stats['avg']}%"
+        ), (
+            f"CPU usage did not recover properly: "
+            f"{recovery_stats['avg']}% vs baseline {baseline_stats['avg']}%"
+        )
 
         print(f"\nCPU Spike Recovery Test:")
         print(f"  Baseline average: {baseline_stats['avg']:.2f}%")
         print(f"  Recovery average: {recovery_stats['avg']:.2f}%")
         if baseline_stats["avg"] > 0:
             print(
-                f"  Recovery ratio: {recovery_stats['avg'] / baseline_stats['avg']:.2f}"
+                f"  Recovery ratio:"
+                f"{recovery_stats['avg'] / baseline_stats['avg']:.2f}"
             )
 
     @pytest.mark.slow
     @pytest.mark.integration
-    def test_base_engine_long_running_stability(self, base_engine, engine_cleanup):
+    def test_base_engine_long_running_stability(
+        self, base_engine, engine_cleanup
+    ):
         """Test CPU usage stability over a longer period"""
         # Register engine for cleanup
         engine_cleanup(base_engine)
@@ -255,7 +279,10 @@ class TestBaseEngineCPUUsage:
         # Verify long-term stability
         assert (
             long_term_stats["max"] - long_term_stats["min"] < 30.0
-        ), f"CPU usage too volatile: range {long_term_stats['max'] - long_term_stats['min']}%"
+        ), (
+            f"CPU usage too volatile: range "
+            f"{long_term_stats['max'] - long_term_stats['min']}%"
+        )
 
         # Check for any extreme outliers
         readings = long_term_stats["readings"]
@@ -264,14 +291,19 @@ class TestBaseEngineCPUUsage:
             outliers = [r for r in readings if abs(r - mean) > mean * 2]
             assert (
                 len(outliers) < len(readings) * 0.1
-            ), f"Too many CPU usage outliers: {len(outliers)} out of {len(readings)}"
+            ), (
+                f"Too many CPU usage outliers: "
+                f"{len(outliers)} out of {len(readings)}"
+            )
 
         print(f"\nLong-term Stability Test:")
         print(f"  Duration: {long_term_stats['duration']:.1f} seconds")
         print(f"  Average: {long_term_stats['avg']:.2f}%")
         print(f"  Min: {long_term_stats['min']:.2f}%")
         print(f"  Max: {long_term_stats['max']:.2f}%")
-        print(f"  Range: {long_term_stats['max'] - long_term_stats['min']:.2f}%")
+        print(
+            f"  Range: {long_term_stats['max'] - long_term_stats['min']:.2f}%"
+        )
         print(f"  Outliers: {len(outliers) if 'outliers' in locals() else 0}")
 
     def test_base_engine_cleanup_cpu_usage(self, base_engine, engine_cleanup):

@@ -22,7 +22,10 @@ class ComunicatorService(ABC):
 
     @abstractmethod
     def reply(self, request_processor: Callable[[dict], dict]) -> dict:
-        """Get request, give it to request processor, and return the response from it"""
+        """
+        Get request, give it to request processor, and return the response from
+        it
+        """
 
 
 class Nng_request_response(ComunicatorService):
@@ -30,13 +33,18 @@ class Nng_request_response(ComunicatorService):
 
     def __init__(self, address, resquester_dials=True):
         """
-        Initialize Nng_request_resopone instance with address and dialing/listening mode.
+        Initialize Nng_request_resopone instance with address and
+        dialing/listening mode.
 
         Parameters:
         - address (str): The address to connect or listen for connections.
-        - resquester_dials (bool, optional): If True, the instance requester will dial the address and replier will listen. If False, it will be the oposite way, requester listens and replier dials. Default is True.
+        - resquester_dials (bool, optional): If True, the instance requester
+          - will dial the address and replier will listen. If False, it will be
+          - the oposite way, requester listens and replier dials. Default is
+          - True.
 
-        The instance will set up the parameters for request and reply sockets based on the resquester_dials value.
+        The instance will set up the parameters for request and reply sockets
+        based on the resquester_dials value.
         """
         self.address = address
         if resquester_dials:
@@ -55,7 +63,8 @@ class Nng_request_response(ComunicatorService):
         - request (dict): The request to be sent. It should be a dictionary.
 
         Returns:
-        - dict: The response received from the address. It will be a dictionary.
+        - dict: The response received from the address. It will be a
+          - dictionary.
         """
         with Req0(**self.params_request) as socket:
             while await asyncio.sleep(0, result=True):
@@ -74,21 +83,28 @@ class Nng_request_response(ComunicatorService):
     @logged
     async def reply(self, request_processor):
         """
-        Asynchronously handle incoming requests and respond using the provided request processor.
+        Asynchronously handle incoming requests and respond using the provided
+        request processor.
 
-        This function sets up a Rep0 socket with parameters based on the instance's configuration.
-        It then enters a loop where it listens for incoming requests, processes them using the provided
+        This function sets up a Rep0 socket with parameters based on the
+        instance's configuration.
+        It then enters a loop where it listens for incoming requests, processes
+        them using the provided
         request processor, and sends the response back to the requester.
         Parameters:
-        - request_processor (Callable[[dict], dict]): A function that takes a request dictionary as input and returns a response dictionary.
+        - request_processor (Callable[[dict], dict]): A function that takes a
+          - request dictionary as input and returns a response dictionary.
 
         Returns:
-        - None: This function is designed to run indefinitely, handling incoming requests and responses.
+        - None: This function is designed to run indefinitely, handling
+          - incoming requests and responses.
         """
         with Rep0(**self.params_reply) as socket:
             while await asyncio.sleep(0, result=True):
                 request = await socket.arecv()
-                decoded_request = json.loads(request.decode())  # Parse the JSON request
+                decoded_request = json.loads(
+                    request.decode()
+                )  # Parse the JSON request
                 Logger.debug(f"Received: {decoded_request}")
                 response = request_processor(decoded_request)
                 encoded_response = json.dumps(response).encode()
@@ -99,29 +115,37 @@ class Nng_request_response(ComunicatorService):
 
     def sync_send_request(self, request):
         """
-        Synchronously send a request to the specified address and return the response.
+        Synchronously send a request to the specified address and return the
+        response.
 
-        This function is a wrapper around the asynchronous `send_request` method. It uses
-        `asyncio.run` to run the asynchronous function and wait for its completion.
+        This function is a wrapper around the asynchronous `send_request`
+        method. It uses
+        `asyncio.run` to run the asynchronous function and wait for its
+        completion.
 
         Parameters:
         - request (dict): The request to be sent. It should be a dictionary.
 
         Returns:
-        - dict: The response received from the address. It will be a dictionary.
+        - dict: The response received from the address. It will be a
+          - dictionary.
         """
         response = asyncio.run(self.send_request(request))
         return response
 
     def sync_reply(self, request_processor):
         """
-        Synchronously handle incoming requests and respond using the provided request processor.
+        Synchronously handle incoming requests and respond using the provided
+        request processor.
 
-        This function is a wrapper around the asynchronous `reply` method. It uses
-        `asyncio.run` to run the asynchronous function and wait for its completion.
+        This function is a wrapper around the asynchronous `reply` method. It
+        uses
+        `asyncio.run` to run the asynchronous function and wait for its
+        completion.
 
         Parameters:
-        - request_processor (Callable[[dict], dict]): A function that takes a request dictionary as input and returns a response dictionary.
+        - request_processor (Callable[[dict], dict]): A function that takes a
+          - request dictionary as input and returns a response dictionary.
 
         Returns:
         - None

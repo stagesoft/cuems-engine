@@ -29,7 +29,9 @@ class TestAudioMixer:
     @pytest.fixture
     def mock_conn_manager(self):
         """Mock JackConnectionManager."""
-        with patch("cuemsengine.players.AudioMixer.JackConnectionManager") as mock_conn:
+        with patch(
+            "cuemsengine.players.AudioMixer.JackConnectionManager"
+        ) as mock_conn:
             mock_instance = Mock()
             mock_instance.get_ports.return_value = [
                 "system:playback_1",
@@ -55,7 +57,9 @@ class TestAudioMixer:
             )
             return mixer
 
-    def test_audio_mixer_initialization(self, mock_audio_outputs, mock_conn_manager):
+    def test_audio_mixer_initialization(
+        self, mock_audio_outputs, mock_conn_manager
+    ):
         """Test AudioMixer initialization."""
         with (
             patch("cuemsengine.players.AudioMixer.sleep"),
@@ -63,7 +67,9 @@ class TestAudioMixer:
         ):
 
             mixer = AudioMixer(
-                audio_outputs=mock_audio_outputs, port=8000, node_uuid="test-node-123"
+                audio_outputs=mock_audio_outputs,
+                port=8000,
+                node_uuid="test-node-123",
             )
 
             assert mixer.node_uuid == "test-node-123"
@@ -71,7 +77,14 @@ class TestAudioMixer:
             assert mixer.channel_number == 2
             assert mixer.client_name == "test-node-123_mixer"
             assert mixer.path == "/usr/local/bin/jack-volume"
-            assert mixer.args == ["-c", "test-node-123_mixer", "-p", "8000", "-n", "2"]
+            assert mixer.args == [
+                "-c",
+                "test-node-123_mixer",
+                "-p",
+                "8000",
+                "-n",
+                "2",
+            ]
 
     def test_audio_mixer_initialization_with_custom_path(
         self, mock_audio_outputs, mock_conn_manager
@@ -178,7 +191,8 @@ class TestAudioMixer:
         # Test channel 1 (should map to inputs 3,4)
         audio_mixer.connect_player_to_mixer("test_player", "output", 1)
 
-        # Should connect to inputs 3,4 (channel 1 * 2 + 1 = 3, channel 1 * 2 + 2 = 4)
+        # Should connect to inputs 3,4 (channel 1 * 2 + 1 = 3, channel 1 * 2 +
+        # 2 = 4)
         expected_connect_calls = [
             (("test_player:output_0", "test-node-123_mixer:input_3"),),
             (("test_player:output_1", "test-node-123_mixer:input_4"),),
@@ -213,10 +227,14 @@ class TestAudioMixer:
 
         # Verify specific disconnections
         left_disconnects = [
-            call for call in disconnect_calls if call[0][0] == "test_player:output_0"
+            call
+            for call in disconnect_calls
+            if call[0][0] == "test_player:output_0"
         ]
         right_disconnects = [
-            call for call in disconnect_calls if call[0][0] == "test_player:output_1"
+            call
+            for call in disconnect_calls
+            if call[0][0] == "test_player:output_1"
         ]
 
         assert len(left_disconnects) == 2
@@ -253,7 +271,9 @@ class TestPlayerConnectionsCorrect:
         """edges: dict[source_port] -> list[destination_port]."""
         cm = Mock()
         cm.port_exists.side_effect = lambda p: p in existing_ports
-        cm.is_connected.side_effect = lambda src, dst: dst in edges.get(src, [])
+        cm.is_connected.side_effect = lambda src, dst: dst in edges.get(
+            src, []
+        )
         return cm
 
     def test_stereo_all_edges_correct_returns_true(self):
@@ -376,7 +396,8 @@ class TestPlayerConnectionsCorrect:
             "outport",
             ["system:playback_1", "system:playback_2"],
         )
-        # is_connected must never be called with outport 1 as source on a mono player.
+        # is_connected must never be called with outport 1 as source on a mono
+        # player.
         for c in cm.is_connected.call_args_list:
             assert (
                 c.args[0] != "Audio_Player-X:outport 1"
@@ -493,7 +514,9 @@ class TestMixerClient:
         with patch.object(mixer_client, "set_value") as mock_set_value:
             mixer_client.set_master_volume(0.5)
 
-            mock_set_value.assert_called_once_with("/audiomixer/test_mixer/master", 0.5)
+            mock_set_value.assert_called_once_with(
+                "/audiomixer/test_mixer/master", 0.5
+            )
 
     def test_set_master_volume_invalid(self, mixer_client):
         """Test setting master volume with invalid gain."""
@@ -509,12 +532,15 @@ class TestMixerClient:
         with patch.object(mixer_client, "set_value") as mock_set_value:
             mixer_client.set_channel_volume(2, 0.7)
 
-            mock_set_value.assert_called_once_with("/audiomixer/test_mixer/2", 0.7)
+            mock_set_value.assert_called_once_with(
+                "/audiomixer/test_mixer/2", 0.7
+            )
 
     def test_set_channel_volume_invalid_channel(self, mixer_client):
         """Test setting channel volume with invalid channel number."""
         with patch.object(mixer_client, "set_value") as mock_set_value:
-            mixer_client.set_channel_volume(5, 0.7)  # Invalid channel >= channel_number
+            # Invalid channel >= channel_number
+            mixer_client.set_channel_volume(5, 0.7)
 
             mock_set_value.assert_not_called()
 
@@ -527,7 +553,9 @@ class TestMixerClient:
 
     def test_set_all_channels_volume(self, mixer_client):
         """Test setting volume for all channels."""
-        with patch.object(mixer_client, "set_channel_volume") as mock_set_channel:
+        with patch.object(
+            mixer_client, "set_channel_volume"
+        ) as mock_set_channel:
             mixer_client.set_all_channels_volume(0.8)
 
             # Should call set_channel_volume for each channel (0, 1, 2, 3)
@@ -538,42 +566,54 @@ class TestMixerClient:
 
     def test_mute_channel(self, mixer_client):
         """Test muting a channel."""
-        with patch.object(mixer_client, "set_channel_volume") as mock_set_channel:
+        with patch.object(
+            mixer_client, "set_channel_volume"
+        ) as mock_set_channel:
             mixer_client.mute_channel(1)
 
             mock_set_channel.assert_called_once_with(1, 0.0)
 
     def test_unmute_channel(self, mixer_client):
         """Test unmuting a channel."""
-        with patch.object(mixer_client, "set_channel_volume") as mock_set_channel:
+        with patch.object(
+            mixer_client, "set_channel_volume"
+        ) as mock_set_channel:
             mixer_client.unmute_channel(1, 0.9)
 
             mock_set_channel.assert_called_once_with(1, 0.9)
 
     def test_unmute_channel_default_gain(self, mixer_client):
         """Test unmuting a channel with default gain."""
-        with patch.object(mixer_client, "set_channel_volume") as mock_set_channel:
+        with patch.object(
+            mixer_client, "set_channel_volume"
+        ) as mock_set_channel:
             mixer_client.unmute_channel(1)
 
             mock_set_channel.assert_called_once_with(1, 1.0)
 
     def test_mute_master(self, mixer_client):
         """Test muting master volume."""
-        with patch.object(mixer_client, "set_master_volume") as mock_set_master:
+        with patch.object(
+            mixer_client, "set_master_volume"
+        ) as mock_set_master:
             mixer_client.mute_master()
 
             mock_set_master.assert_called_once_with(0.0)
 
     def test_unmute_master(self, mixer_client):
         """Test unmuting master volume."""
-        with patch.object(mixer_client, "set_master_volume") as mock_set_master:
+        with patch.object(
+            mixer_client, "set_master_volume"
+        ) as mock_set_master:
             mixer_client.unmute_master(0.8)
 
             mock_set_master.assert_called_once_with(0.8)
 
     def test_unmute_master_default_gain(self, mixer_client):
         """Test unmuting master volume with default gain."""
-        with patch.object(mixer_client, "set_master_volume") as mock_set_master:
+        with patch.object(
+            mixer_client, "set_master_volume"
+        ) as mock_set_master:
             mixer_client.unmute_master()
 
             mock_set_master.assert_called_once_with(1.0)
@@ -588,7 +628,9 @@ class TestMixerClient:
         }
 
         with (
-            patch.object(mixer_client, "get_endpoints", return_value=mock_endpoints),
+            patch.object(
+                mixer_client, "get_endpoints", return_value=mock_endpoints
+            ),
             patch(
                 "cuemsengine.players.AudioMixer.add_callback_to_all"
             ) as mock_add_callback,
@@ -616,7 +658,8 @@ class TestBuildMixerOscEndpoints:
 
         for key in expected_keys:
             assert key in endpoints
-            assert len(endpoints[key]) == 3  # [ValueType, callback, default_value]
+            # [ValueType, callback, default_value]
+            assert len(endpoints[key]) == 3
             assert endpoints[key][2] == 1.0  # Default value should be 1.0
 
     def test_build_mixer_osc_endpoints_zero_channels(self):
@@ -636,8 +679,12 @@ class TestStartAudioMixer:
         mock_audio_outputs = [{"name": "output_1"}, {"name": "output_2"}]
 
         with (
-            patch("cuemsengine.players.AudioMixer.AudioMixer") as mock_mixer_class,
-            patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
+            patch(
+                "cuemsengine.players.AudioMixer.AudioMixer"
+            ) as mock_mixer_class,
+            patch(
+                "cuemsengine.players.AudioMixer.MixerClient"
+            ) as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
 
@@ -651,7 +698,9 @@ class TestStartAudioMixer:
             mock_client_class.return_value = mock_client
 
             mixer, client = start_audio_mixer(
-                audio_outputs=mock_audio_outputs, port=8000, node_uuid="test-node-123"
+                audio_outputs=mock_audio_outputs,
+                port=8000,
+                node_uuid="test-node-123",
             )
 
             # Verify mixer was created with correct parameters
@@ -664,7 +713,9 @@ class TestStartAudioMixer:
 
             # Verify client was created with correct parameters
             mock_client_class.assert_called_once_with(
-                player_port=8000, channel_number=2, client_name="test-node-123_mixer"
+                player_port=8000,
+                channel_number=2,
+                client_name="test-node-123_mixer",
             )
 
             assert mixer == mock_mixer
@@ -675,8 +726,12 @@ class TestStartAudioMixer:
         mock_audio_outputs = [{"name": "output_1"}]
 
         with (
-            patch("cuemsengine.players.AudioMixer.AudioMixer") as mock_mixer_class,
-            patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
+            patch(
+                "cuemsengine.players.AudioMixer.AudioMixer"
+            ) as mock_mixer_class,
+            patch(
+                "cuemsengine.players.AudioMixer.MixerClient"
+            ) as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
 

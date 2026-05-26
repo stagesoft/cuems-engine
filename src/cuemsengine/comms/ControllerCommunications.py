@@ -43,10 +43,13 @@ class ControllerCommunications(AsyncCommsThread):
         Initialize AsyncCommsThread for ControllerEngine.
 
         Parameters:
-        - nng_hub_address: TCP/IPC address for NNG hub (e.g., "tcp://127.0.0.1:5555")
+        - nng_hub_address: TCP/IPC address for NNG hub (e.g.,
+          - "tcp://127.0.0.1:5555")
         - editor_callback: Callback for editor messages
-        - node_operation_callback: Callback dictionary for received node operations
-        - websocket_osc_config: Optional dict with WebSocket OSC listener config:
+        - node_operation_callback: Callback dictionary for received node
+          - operations
+        - websocket_osc_config: Optional dict with WebSocket OSC listener
+          - config:
             - host: Host to bind to (default: "0.0.0.0")
             - port: Port to listen on (default: 9190)
             - node_id: Node identifier for NNG operations
@@ -62,7 +65,8 @@ class ControllerCommunications(AsyncCommsThread):
 
         # Initialize OSC hub based on mode
         Logger.info(
-            f"Initializing NNG hub: {nng_hub_address} in {NodesHub.Mode.LISTENER.value} mode"
+            f"Initializing NNG hub: {nng_hub_address} in"
+            f"{NodesHub.Mode.LISTENER.value} mode"
         )
         self.nng_hub = NodesHub(
             hub_address=nng_hub_address, mode=NodesHub.Mode.LISTENER
@@ -80,13 +84,15 @@ class ControllerCommunications(AsyncCommsThread):
         # WebSocket OSC router for message handling
         self._osc_router = WebSocketOscRouter()
 
-        # Track connected WebSocket clients for status broadcast (bidirectional)
+        # Track connected WebSocket clients for status broadcast
+        # (bidirectional)
         self._ws_clients: set = set()
 
         # Command handlers (set by ControllerEngine)
         self._command_handlers: dict[str, Callable] = {}
 
-        # Optional callback for new WebSocket client connections (late-join state dump)
+        # Optional callback for new WebSocket client connections (late-join
+        # state dump)
         self._on_client_connect: Optional[Callable] = None
 
     def create_all_tasks(self):
@@ -118,7 +124,8 @@ class ControllerCommunications(AsyncCommsThread):
         Args:
             osc_path: The OSC address to handle (e.g., '/engine/command/go')
             handler: Callback function to handle the command value
-            forward_to_nodes: If True, also forward the command to NodeEngine via NNG
+            forward_to_nodes: If True, also forward the command to NodeEngine
+            via NNG
         """
         self._command_handlers[osc_path] = {
             "handler": handler,
@@ -130,7 +137,8 @@ class ControllerCommunications(AsyncCommsThread):
             osc_path, lambda addr, args: self._handle_osc_command(addr, args)
         )
         Logger.debug(
-            f"Registered command handler for {osc_path} (forward={forward_to_nodes})"
+            f"Registered command handler for {osc_path}"
+            f"(forward={forward_to_nodes})"
         )
 
     def register_osc_handler(
@@ -158,7 +166,9 @@ class ControllerCommunications(AsyncCommsThread):
         # Get the value (first argument, or None for impulse)
         value = args[0] if args else None
 
-        Logger.info(f"WebSocket OSC command received: {address} = {repr(value)}")
+        Logger.info(
+            f"WebSocket OSC command received: {address} = {repr(value)}"
+        )
 
         # Call the handler
         try:
@@ -177,7 +187,8 @@ class ControllerCommunications(AsyncCommsThread):
             address: The OSC command address (e.g., '/engine/command/go')
             value: The command value
         """
-        # Extract command name from address (e.g., '/engine/command/go' -> 'go')
+        # Extract command name from address (e.g., '/engine/command/go' ->
+        # 'go')
         parts = address.strip("/").split("/")
         command_name = parts[-1] if parts else address
 
@@ -194,7 +205,9 @@ class ControllerCommunications(AsyncCommsThread):
             asyncio.run_coroutine_threadsafe(
                 self.nng_hub.send_operation(operation), self.event_loop
             )
-            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
+            Logger.debug(
+                f"Forwarded command to nodes: {command_name} = {repr(value)}"
+            )
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
@@ -220,7 +233,8 @@ class ControllerCommunications(AsyncCommsThread):
     def broadcast_osc(self, address: str, value: Any) -> None:
         """Send an OSC status message to all connected WebSocket clients.
 
-        Call from ControllerEngine when status changes (running, armed, load, timecode).
+        Call from ControllerEngine when status changes (running, armed, load,
+        timecode).
         Thread-safe: schedules send on the comms event loop.
 
         Args:
@@ -288,7 +302,8 @@ class ControllerCommunications(AsyncCommsThread):
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
 
         Returns:
-        - dict: Response from `nodeconf.send_request` via `run_coroutine` method
+        - dict: Response from `nodeconf.send_request` via `run_coroutine`
+          - method
 
         Raises:
         - AttributeError: If `nodeconf` is not initialized
@@ -312,12 +327,17 @@ class ControllerCommunications(AsyncCommsThread):
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
 
         Returns:
-        - dict: Response from `hwdiscovery.send_request` via `run_coroutine` method
+        - dict: Response from `hwdiscovery.send_request` via `run_coroutine`
+          - method
 
         Raises:
         - AttributeError: If `hwdiscovery` is not initialized
         """
         if not self.hw_discovery:
-            raise AttributeError("hw_discovery communicator is not initialized")
+            raise AttributeError(
+                "hw_discovery communicator is not initialized"
+            )
 
-        return self.run_coroutine(self.hw_discovery.send_request, message, timeout)
+        return self.run_coroutine(
+            self.hw_discovery.send_request, message, timeout
+        )

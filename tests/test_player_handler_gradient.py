@@ -52,7 +52,10 @@ class TestSetGradientClient:
         assert handler.get_gradient_client()._node_uuid == "node-002"
 
     def test_set_gradient_client_replaces_prior_instance(self):
-        """Re-calling set_gradient_client replaces the prior client (reconnection safe-guard)."""
+        """
+        Re-calling set_gradient_client replaces the prior client (reconnection
+        safe-guard).
+        """
         handler = _get_handler()
         handler.set_gradient_client(port=7100, node_uuid="node-001")
         first = handler.get_gradient_client()

@@ -6,7 +6,8 @@
 Pytest plugin for CUEMS engine testing.
 
 This plugin provides automatic cleanup of background processes, threads,
-and other resources when tests are interrupted with Ctrl+C or fail unexpectedly.
+and other resources when tests are interrupted with Ctrl+C or fail
+unexpectedly.
 """
 
 import multiprocessing
@@ -72,7 +73,9 @@ class CuemsTestCleaner:
                     engine.stop()
                 print(f"Stopped engine: {engine.__class__.__name__}")
             except Exception as e:
-                print(f"Error stopping engine {engine.__class__.__name__}: {e}")
+                print(
+                    f"Error stopping engine {engine.__class__.__name__}: {e}"
+                )
 
         # Terminate all registered processes
         for process in _active_processes:
@@ -184,5 +187,6 @@ def pytest_exception_interact(node, call, report):
 def pytest_configure(config):
     """Configure the plugin"""
     config.addinivalue_line(
-        "markers", "cuems: mark test as using CUEMS engines (automatic cleanup)"
+        "markers",
+        "cuems: mark test as using CUEMS engines (automatic cleanup)",
     )

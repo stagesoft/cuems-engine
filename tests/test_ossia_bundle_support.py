@@ -18,7 +18,10 @@ try:
     OSSIA_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️  Import error: {e}")
-    print("\nAttempting to inspect pyossia module structure despite import error...")
+    print(
+        "\nAttempting to inspect pyossia module structure despite import"
+        "error..."
+    )
     OSSIA_AVAILABLE = False
     ossia = None
 
@@ -29,7 +32,8 @@ except ImportError as e:
         print(f"\n✅ pyossia package found: {pyossia}")
         print(f"   Package location: {pyossia.__file__}")
         print(
-            f"   Package attributes: {[a for a in dir(pyossia) if not a.startswith('_')]}"
+            f"   Package attributes:"
+            f"{[a for a in dir(pyossia) if not a.startswith('_')]}"
         )
 
         # Try to see if we can access the module directly
@@ -38,12 +42,15 @@ except ImportError as e:
         try:
             ossia_module = importlib.import_module("pyossia.ossia_python")
             print(f"\n✅ ossia_python module found: {ossia_module}")
-            print(
-                f"   Module attributes: {[a for a in dir(ossia_module) if not a.startswith('_')][:30]}"
-            )
+            _pub = [
+                a for a in dir(ossia_module) if not a.startswith("_")
+            ]
+            print(f"   Module attributes: {_pub[:30]}")
 
             # Check for bundle-related items
-            bundle_items = [a for a in dir(ossia_module) if "bundle" in a.lower()]
+            bundle_items = [
+                a for a in dir(ossia_module) if "bundle" in a.lower()
+            ]
             if bundle_items:
                 print(f"   ✅ Bundle-related items found: {bundle_items}")
             else:
@@ -119,7 +126,9 @@ def test_osc_protocol():
 
         # Look for bundle-related methods
         bundle_methods = [
-            m for m in dir(device) if "bundle" in m.lower() or "push" in m.lower()
+            m
+            for m in dir(device)
+            if "bundle" in m.lower() or "push" in m.lower()
         ]
         if bundle_methods:
             print(f"\n✅ Bundle/push methods found: {bundle_methods}")
@@ -220,14 +229,17 @@ def test_libossia_bundle_element():
             bundle_elem = ossia.bundle_element
             print(f"   Type: {type(bundle_elem)}")
             print(
-                f"   Available attributes: {[a for a in dir(bundle_elem) if not a.startswith('_')]}"
+                f"   Available attributes:"
+                f"{[a for a in dir(bundle_elem) if not a.startswith('_')]}"
             )
         else:
             print("❌ ossia.bundle_element not found")
 
         # Check what's available in ossia module
         print("\nSearching for 'bundle' in ossia module...")
-        bundle_related = [item for item in dir(ossia) if "bundle" in item.lower()]
+        bundle_related = [
+            item for item in dir(ossia) if "bundle" in item.lower()
+        ]
         if bundle_related:
             print(f"✅ Found: {bundle_related}")
         else:

@@ -5,8 +5,10 @@
 """Unit tests for loop_fadeCue (Phase 6).
 
 Per FR-019: a FadeCue MUST occupy the cue runner for its `duration` so general
-cue lifecycle (auto-disarm of the FadeCue itself) fires only after gradient-motiond
-finishes. loop_fadeCue blocks until mtc.main_tc.milliseconds_rounded >= cue._end_mtc.milliseconds_rounded.
+cue lifecycle (auto-disarm of the FadeCue itself) fires only after
+gradient-motiond
+finishes. loop_fadeCue blocks until mtc.main_tc.milliseconds_rounded >=
+cue._end_mtc.milliseconds_rounded.
 """
 
 from __future__ import annotations
@@ -41,11 +43,15 @@ class _AdvancingMtc:
 
     @property
     def milliseconds_rounded(self) -> int:
-        return int(self._start_ms + (time.monotonic() - self._start_wall) * self._rate)
+        return int(
+            self._start_ms + (time.monotonic() - self._start_wall) * self._rate
+        )
 
 
 def test_fade_cue_registered_in_loop_cue_dispatch():
-    """FadeCue must have its own loop_cue branch (not inherit no-op ActionCue)."""
+    """
+    FadeCue must have its own loop_cue branch (not inherit no-op ActionCue).
+    """
     from cuemsengine.cues.loop_cue import loop_cue
 
     registry = loop_cue.registry
@@ -57,7 +63,10 @@ def test_fade_cue_registered_in_loop_cue_dispatch():
 
 
 def test_loop_fade_cue_blocks_until_end_mtc():
-    """loop_fadeCue MUST block until mtc.main_tc.milliseconds_rounded >= cue._end_mtc.milliseconds_rounded."""
+    """
+    loop_fadeCue MUST block until mtc.main_tc.milliseconds_rounded >=
+    cue._end_mtc.milliseconds_rounded.
+    """
     from cuemsengine.cues.loop_cue import loop_cue
 
     cue = _make_fade_cue()
@@ -72,19 +81,23 @@ def test_loop_fade_cue_blocks_until_end_mtc():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    # Should block ~0.2s (200ms of MTC at 1000ms/sec wall rate). Allow generous slack.
+    # Should block ~0.2s (200ms of MTC at 1000ms/sec wall rate). Allow
+    # generous slack.
     assert elapsed >= 0.15, f"loop_fadeCue returned too quickly: {elapsed}s"
     assert elapsed < 1.0, f"loop_fadeCue blocked too long: {elapsed}s"
 
 
 def test_loop_fade_cue_returns_early_on_stop_requested():
-    """loop_fadeCue MUST return promptly when cue._stop_requested becomes True."""
+    """
+    loop_fadeCue MUST return promptly when cue._stop_requested becomes True.
+    """
     from cuemsengine.cues.loop_cue import loop_cue
 
     cue = _make_fade_cue()
     cue._stop_requested = False
     end_mtc = MagicMock()
-    end_mtc.milliseconds_rounded = 10_000  # 10 seconds — would block forever otherwise
+    # 10 seconds — would block forever otherwise
+    end_mtc.milliseconds_rounded = 10_000
     cue._end_mtc = end_mtc
 
     mtc = _AdvancingMtc(start_ms=0, ms_per_second=1.0)  # MTC barely advances
@@ -99,11 +112,15 @@ def test_loop_fade_cue_returns_early_on_stop_requested():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    assert elapsed < 0.5, f"loop_fadeCue did not respect _stop_requested: {elapsed}s"
+    assert (
+        elapsed < 0.5
+    ), f"loop_fadeCue did not respect _stop_requested: {elapsed}s"
 
 
 def test_loop_fade_cue_no_end_mtc_returns_immediately():
-    """If _end_mtc is missing (defensive), loop_fadeCue must not loop forever."""
+    """
+    If _end_mtc is missing (defensive), loop_fadeCue must not loop forever.
+    """
     from cuemsengine.cues.loop_cue import loop_cue
 
     cue = _make_fade_cue()
@@ -116,4 +133,6 @@ def test_loop_fade_cue_no_end_mtc_returns_immediately():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    assert elapsed < 0.2, "loop_fadeCue without _end_mtc must return immediately"
+    assert (
+        elapsed < 0.2
+    ), "loop_fadeCue without _end_mtc must return immediately"

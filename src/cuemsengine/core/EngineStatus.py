@@ -9,7 +9,8 @@ class EngineStatus:
     """
 
     def __init__(self):
-        self.recieved = 0  # Initialize before test (test setter increments this)
+        # Initialize before test (test setter increments this)
+        self.recieved = 0
         self.load = ""
         self.loadcue = ""
         self.go = ""
@@ -161,7 +162,9 @@ class EngineStatus:
             Non-string values are converted to strings using str().
         """
         if not isinstance(value, (list, tuple)) or len(value) != 2:
-            raise ValueError("Current cue must be a list or tuple of two strings")
+            raise ValueError(
+                "Current cue must be a list or tuple of two strings"
+            )
         id, offset = str(value[0]), str(value[1])
         for item in self._currentcue:
             if item[0] == id:

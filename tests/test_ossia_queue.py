@@ -20,7 +20,10 @@ from .helpers import timeout
 def test_global_message_queue_receives_commands(
     ossia_server_factory, ossia_client_factory
 ):
-    """Test that GlobalMessageQueue receives command messages from ControllerEngine"""
+    """
+    Test that GlobalMessageQueue receives command messages from
+    ControllerEngine
+    """
     # ARRANGE
     SERVER_LOCAL = 9500
     SERVER_REMOTE = 9600
@@ -59,7 +62,9 @@ def test_global_message_queue_receives_commands(
 
             # Create GlobalMessageQueue and NodeCommunications
             with patch("cuemsengine.comms.NodeCommunications.NodesHub"):
-                with patch("cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"):
+                with patch(
+                    "cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"
+                ):
                     node_comm = NodeCommunications(
                         hub_address="tcp://127.0.0.1:5555",
                         commands_dict=commands_dict,
@@ -210,7 +215,8 @@ def test_global_message_queue_filters_players_by_node_id(
                     sleep(0.2)
 
                     # # Write to other node's players (should be filtered out)
-                    # server.set_value(player_path(other_node_id, 'video'), 0.9)
+                    # server.set_value(player_path(other_node_id, 'video'),
+                    # 0.9)
                     # sleep(0.2)
 
                     # Stop queue loop
@@ -245,7 +251,8 @@ def test_global_message_queue_filters_players_by_node_id(
     assert dmx_value == 255, f"Expected DMX value 255, got {dmx_value}"
 
     # Verify other node's messages were filtered (not in received lists)
-    # The other node's video message should not appear in received_video_messages
+    # The other node's video message should not appear in
+    # received_video_messages
     other_node_video_found = any(
         path == ["test", "path"] and value == 0.9
         for path, value in received_video_messages
@@ -258,7 +265,10 @@ def test_global_message_queue_filters_players_by_node_id(
 def test_global_message_queue_ignores_unused_paths(
     ossia_server_factory, ossia_client_factory
 ):
-    """Test that GlobalMessageQueue ignores paths that don't match command or players patterns"""
+    """
+    Test that GlobalMessageQueue ignores paths that don't match command or
+    players patterns
+    """
     # ARRANGE
     SERVER_LOCAL = 9504
     SERVER_REMOTE = 9604
@@ -292,7 +302,9 @@ def test_global_message_queue_ignores_unused_paths(
 
             # Create GlobalMessageQueue and NodeCommunications
             with patch("cuemsengine.comms.NodeCommunications.NodesHub"):
-                with patch("cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"):
+                with patch(
+                    "cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"
+                ):
                     node_comm = NodeCommunications(
                         hub_address="tcp://127.0.0.1:5555",
                         commands_dict=commands_dict,

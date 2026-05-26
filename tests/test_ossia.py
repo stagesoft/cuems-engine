@@ -15,7 +15,8 @@ from .fixtures import ossia_client_factory, ossia_server_factory
 
 def print_callback(node, value):
     print(
-        f"Parameter changed at {node} to {value} [node value: {node.parameter.value}]"
+        f"Parameter changed at {node} to {value} [node value:"
+        f"{node.parameter.value}]"
     )
 
 
@@ -91,7 +92,12 @@ def test_client_list_endpoints(ossia_client_factory):
     endpoints = ["/test1", "/test2", "/test3"]
     with ossia_client_factory(endpoints=endpoints, local_port=9002) as client:
         assert len(client.nodes) == 4
-        assert [i for i in client.nodes.keys()] == ["/", "/test1", "/test2", "/test3"]
+        assert [i for i in client.nodes.keys()] == [
+            "/",
+            "/test1",
+            "/test2",
+            "/test3",
+        ]
         assert len(client.device.root_node.children()) == 3
 
 
@@ -145,7 +151,9 @@ def test_client_init(capfd, ossia_client_factory):
         "/test3": [ValueType.Int, print_callback, 20],
         "/test4": [ValueType.Int, print_callback, 30],
     }
-    with ossia_client_factory(endpoints=test_endpoints, local_port=9095) as client:
+    with ossia_client_factory(
+        endpoints=test_endpoints, local_port=9095
+    ) as client:
         assert len(client.device.root_node.children()) == 4
         out, err = capfd.readouterr()
 
@@ -187,7 +195,9 @@ def test_osc_client_to_server_transmission():
     server = OssiaServer(endpoints=server_endpoints, remote_port=COMMON_PORT)
     sleep(0.5)
     client = OssiaClient(
-        endpoints=client_endpoints, remote_port=COMMON_PORT, local_port=LOCAL_PORT
+        endpoints=client_endpoints,
+        remote_port=COMMON_PORT,
+        local_port=LOCAL_PORT,
     )
     sleep(0.5)
     # ASSERT
@@ -222,7 +232,9 @@ def test_oscclient_in_separate_process(process_cleanup):
     # Create OssiaClient in separate process
     def run_client(result_queue):
         client = OssiaClient(
-            endpoints={"/test": [ValueType.Int, lambda x: result_queue.put(x), 10]},
+            endpoints={
+                "/test": [ValueType.Int, lambda x: result_queue.put(x), 10]
+            },
             remote_type=ClientDevices.OSC,
             local_port=LOCAL,
             remote_port=REMOTE,
@@ -231,7 +243,9 @@ def test_oscclient_in_separate_process(process_cleanup):
         client.set_value("/test", 80)
         sleep(0.5)  # Allow time for value to be set
 
-    client_process = process_cleanup(Process(target=run_client, args=(client_res,)))
+    client_process = process_cleanup(
+        Process(target=run_client, args=(client_res,))
+    )
     client_process.start()
 
     # ASSERT

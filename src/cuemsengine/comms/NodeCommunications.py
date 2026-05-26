@@ -27,7 +27,8 @@ class NodeCommunications(AsyncCommsThread):
         - Routes commands to NodeEngine handlers
 
         Parameters:
-        - hub_address: TCP/IPC address for OSC hub (e.g., "tcp://127.0.0.1:5555")
+        - hub_address: TCP/IPC address for OSC hub (e.g.,
+          - "tcp://127.0.0.1:5555")
         - node_id: Unique identifier for this node
         - command_callback: Optional callback for handling received commands.
                            Called with (command_name: str, value: Any)
@@ -43,7 +44,9 @@ class NodeCommunications(AsyncCommsThread):
             }
         )
 
-    def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:
+    def set_command_callback(
+        self, callback: Callable[[str, Any], None]
+    ) -> None:
         """Set the callback for handling received commands.
 
         Args:
@@ -58,9 +61,12 @@ class NodeCommunications(AsyncCommsThread):
         Logger.info("Starting all tasks in NodeCommunications")
         Logger.info(f"NNG hub mode: {self.nng_hub.mode}")
         Logger.info(f"NNG hub address: {self.nng_hub.address}")
-        Logger.info(
-            f'Command callbacks registered: {list(self.nng_hub._on_operation_received.keys()) if self.nng_hub._on_operation_received else "None"}'
+        callbacks = (
+            list(self.nng_hub._on_operation_received.keys())
+            if self.nng_hub._on_operation_received
+            else "None"
         )
+        Logger.info(f"Command callbacks registered: {callbacks}")
         return [
             asyncio.create_task(self.nng_hub.start()),
             asyncio.create_task(self.nng_hub.start_message_receiver()),
@@ -71,7 +77,8 @@ class NodeCommunications(AsyncCommsThread):
 
         IMPORTANT: Commands are executed in a separate thread to avoid blocking
         the NNG message receiver. Some commands like 'go' can block for the
-        duration of cue playback, which would prevent receiving STOP/LOAD commands.
+        duration of cue playback, which would prevent receiving STOP/LOAD
+        commands.
 
         Args:
             operation: The NodeOperation containing the command
@@ -100,11 +107,15 @@ class NodeCommunications(AsyncCommsThread):
         value = data.get("value")
         address = data.get("address", f"/engine/command/{command_name}")
 
-        Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
+        Logger.info(
+            f"Received command via NNG: {command_name} = {repr(value)}"
+        )
 
         if self._command_callback:
-            # Execute command in a separate thread to avoid blocking the NNG receiver
-            # This is critical because commands like 'go' block until cue playback completes
+            # Execute command in a separate thread to avoid blocking the NNG
+            # receiver
+            # This is critical because commands like 'go' block until cue
+            # playback completes
             import threading
 
             def run_command():
@@ -112,11 +123,14 @@ class NodeCommunications(AsyncCommsThread):
                     self._command_callback(command_name, value, address)
                 except Exception as e:
                     Logger.error(
-                        f"Error executing command callback for {command_name}: {e}"
+                        f"Error executing command callback for"
+                        f"{command_name}: {e}"
                     )
 
             thread = threading.Thread(
-                target=run_command, name=f"NNG-Command-{command_name}", daemon=True
+                target=run_command,
+                name=f"NNG-Command-{command_name}",
+                daemon=True,
             )
             thread.start()
             Logger.debug(f"Started command thread: {thread.name}")
@@ -126,7 +140,9 @@ class NodeCommunications(AsyncCommsThread):
     #########################
     # Nng comms to Controller
     #########################
-    def send_operation(self, operation: NodeOperation, timeout: Optional[float] = None):
+    def send_operation(
+        self, operation: NodeOperation, timeout: Optional[float] = None
+    ):
         """
         Send a NodeOperation to the controller (thread-safe).
 
@@ -134,9 +150,13 @@ class NodeCommunications(AsyncCommsThread):
         - operation: NodeOperation to send
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        return self.run_coroutine(self.nng_hub.send_operation, operation, timeout)
+        return self.run_coroutine(
+            self.nng_hub.send_operation, operation, timeout
+        )
 
-    def add_player(self, player_id: str, data: dict, timeout: Optional[float] = None):
+    def add_player(
+        self, player_id: str, data: dict, timeout: Optional[float] = None
+    ):
         """
         Add a player to the OSC hub (thread-safe).
 
@@ -171,7 +191,9 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
-    def add_cue(self, cue_id: str, offset: str, timeout: Optional[float] = None):
+    def add_cue(
+        self, cue_id: str, offset: str, timeout: Optional[float] = None
+    ):
         """
         Add a cue to the OSC hub (thread-safe).
 
@@ -222,15 +244,20 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
-    def update_cue(self, cue_id: str, percentage: int, timeout: Optional[float] = None):
-        """Send a cue percentage progress update to the controller (thread-safe).
+    def update_cue(
+        self, cue_id: str, percentage: int, timeout: Optional[float] = None
+    ):
+        """
+        Send a cue percentage progress update to the controller (thread-safe).
 
         Used during playback to report in-progress status (values 1-99).
 
-        Callers MUST throttle calls to CUE_STATUS_UPDATE_HZ (defined in loop_cue.py)
+        Callers MUST throttle calls to CUE_STATUS_UPDATE_HZ (defined in
+        loop_cue.py)
         before invoking this method to limit NNG traffic over the network in
         multi-node deployments (Tier 1 of the two-tier throttle strategy).
-        The controller applies a second throttle (CUE_BROADCAST_MIN_INTERVAL) before
+        The controller applies a second throttle (CUE_BROADCAST_MIN_INTERVAL)
+        before
         forwarding to the UI via WebSocket (Tier 2).
 
         Parameters:

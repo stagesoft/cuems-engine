@@ -32,7 +32,8 @@ class OssiaNodes(object):
         - `pyossia.ValueType`
         - callback function (*optional*)
         - initial / default value (*optional*)
-        - **Note**: to set a parameter value without a callback, pass None as the second argument
+        - **Note**: to set a parameter value without a callback, pass None as
+          - the second argument
 
     """
 
@@ -142,7 +143,8 @@ class OssiaNodes(object):
                 node = self.nodes[node]
             except KeyError:
                 raise ValueError("Node not found")
-        # Impulse parameters: pyossia rejects None — use True to trigger the send
+        # Impulse parameters: pyossia rejects None — use True to trigger the
+        # send
         if node.parameter.value_type == ValueType.Impulse:
             node.parameter.push_value(True)
             return
@@ -150,10 +152,13 @@ class OssiaNodes(object):
         stored = node.parameter.value
         # Float parameters go through float32 (OSC wire format), so an exact
         # Python float64 equality check produces false negatives (e.g. 0.66).
-        # Use a tolerance-based comparison for floats; strict equality for all others.
+        # Use a tolerance-based comparison for floats; strict equality for all
+        # others.
         if isinstance(value, float):
             if abs(stored - value) > 1e-5:
-                raise ValueError(f"Could not set {str(node)} to {value} (got {stored})")
+                raise ValueError(
+                    f"Could not set {str(node)} to {value} (got {stored})"
+                )
         elif stored != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
@@ -186,7 +191,9 @@ class OssiaNodes(object):
                 self.set_parameter(self.nodes[path], *param_args)
             Logger.debug(f"Created endpoint: {path}")
         except Exception as e:
-            Logger.error(f"Failed to create endpoint {path}: {type(e).__name__}: {e}")
+            Logger.error(
+                f"Failed to create endpoint {path}: {type(e).__name__}: {e}"
+            )
             raise
 
     @logged
@@ -219,7 +226,8 @@ class OssiaNodes(object):
         if is_root:
             node = self.device.root_node
         Logger.debug(
-            f"{self.__class__.__name__} Node {node.name} has {len(node.children())} children"
+            f"{self.__class__.__name__} Node {node.name} has"
+            f"{len(node.children())} children"
         )
         if len(node.children()) == 0:
             if not is_root:

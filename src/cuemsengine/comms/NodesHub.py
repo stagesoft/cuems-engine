@@ -73,7 +73,12 @@ class NodeOperation:
         }
 
     def __str__(self):
-        return f"{type(self).__name__} by {self.sender}: {self.action.value} on {self.type.value} {self.target} (with{'out' if not self.data else ''} data)"
+        data_str = "without" if not self.data else "with"
+        return (
+            f"{type(self).__name__} by {self.sender}: "
+            f"{self.action.value} on {self.type.value} "
+            f"{self.target} ({data_str} data)"
+        )
 
 
 class NodesHub(NngBusHub):
@@ -93,19 +98,24 @@ class NodesHub(NngBusHub):
         - hub_address: The address for the bus communication
         - mode: LISTENER or DIALER mode
 
-        Note: We use the base class queues (self.outgoing and self.incoming) to send and receive Message objects that are translated into NodeOperations.
+        Note: We use the base class queues (self.outgoing and self.incoming) to
+        send and receive Message objects that are translated into
+        NodeOperations.
         """
         super().__init__(hub_address, mode)
 
         # Callback for when operations are received
-        self._on_operation_received: Optional[dict[OperationType, Callable]] = None
+        self._on_operation_received: Optional[
+            dict[OperationType, Callable]
+        ] = None
 
     #########################
     # Nodes communication
     #########################
     async def get_operation(self) -> NodeOperation | None:
         """
-        Get the next operation from the queue and return it as a NodeOperation object.
+        Get the next operation from the queue and return it as a NodeOperation
+        object.
         """
         message = await self.get_message()
         if not message:
@@ -119,15 +129,20 @@ class NodesHub(NngBusHub):
         message = Message(sender=operation.sender, data=operation.__dict__())
         await self.send_message(message)
         Logger.debug(
-            f"Queued {operation.action.value} operation for {operation.type.value} {operation.target}"
+            f"Queued {operation.action.value} operation for"
+            f"{operation.type.value} {operation.target}"
         )
 
-    def set_receive_callbacks(self, callback_dict: dict[OperationType, Callable]):
+    def set_receive_callbacks(
+        self, callback_dict: dict[OperationType, Callable]
+    ):
         """
         Set the callbacks to be invoked when nodes send operations.
 
-        The keys of the dictionary are the operation types to perform, and the values are the callbacks.
-        The callbacks must take the following argument: (operation: NodeOperation)
+        The keys of the dictionary are the operation types to perform, and the
+        values are the callbacks.
+        The callbacks must take the following argument: (operation:
+        NodeOperation)
         """
         self._on_operation_received = callback_dict
 
@@ -152,7 +167,9 @@ class NodesHub(NngBusHub):
                     Logger.debug(f"Received {operation}")
 
                     # Invoke callback if set (lookup by enum, not string value)
-                    message_function = self._on_operation_received.get(operation.type)
+                    message_function = self._on_operation_received.get(
+                        operation.type
+                    )
                     if message_function:
                         if asyncio.iscoroutinefunction(message_function):
                             await message_function(operation)

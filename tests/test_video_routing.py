@@ -78,7 +78,9 @@ def _cue(outputs):
 
 def test_make_custom_video_output_converts_to_pixels(handler):
     """Normalized (0.1,0.1,0.5,0.5) on 1920x1080 -> pixel (192,108,960,540)."""
-    vo = handler.make_custom_video_output(_custom_output(x=0.1, y=0.1, w=0.5, h=0.5))
+    vo = handler.make_custom_video_output(
+        _custom_output(x=0.1, y=0.1, w=0.5, h=0.5)
+    )
     assert vo.canvas_region == {
         "x": 192,
         "y": 108,
@@ -91,12 +93,16 @@ def test_make_custom_video_output_converts_to_pixels(handler):
 
 def test_make_custom_video_output_matches_video_output_kwargs(handler):
     """Regression against 0.5 // 2 == 0: placement must be non-zero."""
-    vo = handler.make_custom_video_output(_custom_output(x=0.25, y=0.25, w=0.5, h=0.5))
+    vo = handler.make_custom_video_output(
+        _custom_output(x=0.25, y=0.25, w=0.5, h=0.5)
+    )
     x, y = vo.get_layer_placement()
     # Region center is at (0.5, 0.5) normalized = (960, 540) pixels;
     # canvas center is (960, 540). Offset from center should be (0, 0).
     # Shift to test something non-trivial:
-    vo2 = handler.make_custom_video_output(_custom_output(x=0.0, y=0.0, w=0.5, h=0.5))
+    vo2 = handler.make_custom_video_output(
+        _custom_output(x=0.0, y=0.0, w=0.5, h=0.5)
+    )
     x2, y2 = vo2.get_layer_placement()
     # Region center at (480, 270); canvas center at (960, 540);
     # return (region_cx - canvas_cx, canvas_cy - region_cy) = (-480, 270).

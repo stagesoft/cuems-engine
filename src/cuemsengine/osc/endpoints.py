@@ -29,10 +29,12 @@ OSC_AUDIOMIXER_CONF = {
 OSC_DMXPLAYER_CONF = {
     "/quit": [ValueType.Impulse, None],
     "/check": [ValueType.Impulse, None],
-    "/blackout": [ValueType.Impulse, None],  # Clear all scenes/fades, send zeros to OLA
+    # Clear all scenes/fades, send zeros to OLA
+    "/blackout": [ValueType.Impulse, None],
     "/stoponlost": [ValueType.Bool, None],
     "/mtcfollow": [ValueType.Bool, None],
-    "/frame": [ValueType.List, None],  # [universe_id, ch0, val0, ch1, val1, ...]
+    # [universe_id, ch0, val0, ch1, val1, ...]
+    "/frame": [ValueType.List, None],
     "/fade_time": [ValueType.Float, None],  # Fade duration in seconds
     "/mtc_time": [
         ValueType.String,
@@ -41,7 +43,8 @@ OSC_DMXPLAYER_CONF = {
     "/start_offset": [ValueType.Int, None],  # Start offset in milliseconds
 }
 
-# Endpoint format: path : [ValueType, callback, default_value, repetition_filter]
+# Endpoint format: path : [ValueType, callback, default_value,
+# repetition_filter]
 # Impulse endpoints must always use False for repetition_filter (also enforced
 # in OssiaNodes.set_parameter) — pyossia silently drops repeated Impulse sends
 # when the filter is ON.
@@ -68,7 +71,7 @@ OSC_VIDEOPLAYER_CONF = {
     "/videocomposer/display/resolution_mode": [
         ValueType.String,
         None,
-    ],  # e.g. "1080p", "native", "maximum", "720p", "4k", "" empty string shows available modes
+    ],  # e.g. "1080p", "native", "720p", "4k"; "" shows available modes
     "/videocomposer/display/mode": [
         ValueType.List,
         None,
@@ -81,7 +84,8 @@ OSC_VIDEOPLAYER_CONF = {
         ValueType.List,
         None,
     ],  # [output_name, left, right, top, bottom, gamma]
-    "/videocomposer/display/warp": [ValueType.List, None],  # [output_name, mesh_path]
+    # [output_name, mesh_path]
+    "/videocomposer/display/warp": [ValueType.List, None],
     "/videocomposer/display/save": [ValueType.String, None],  # [file_path]
     "/videocomposer/display/load": [ValueType.String, None],  # [file_path]
     "/videocomposer/reset": [
@@ -89,7 +93,7 @@ OSC_VIDEOPLAYER_CONF = {
         None,
         None,
         False,
-    ],  # Remove all layers, cancel loads, reset master — no RepetitionFilter (Impulse)
+    ],  # Remove all layers, cancel loads, reset master (Impulse)
     "/videocomposer/layer/load": [
         ValueType.List,
         None,
@@ -101,7 +105,7 @@ OSC_VIDEOPLAYER_CONF = {
         None,
         None,
         False,
-    ],  # [file_path, layer_id, driver_layer_id] — shared decoder (same cue, multiple outputs)
+    ],  # [file_path, layer_id, driver_layer_id] — shared decoder
     "/videocomposer/layer/unload": [
         ValueType.String,
         None,
@@ -128,7 +132,8 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
         ValueType.Int,
         None,
     ],  # 1 = enable loop, 0 = disable
-    "/videocomposer/layer/{}/opacity": [ValueType.Float, None],  # opacity (0.0 to 1.0)
+    # opacity (0.0 to 1.0)
+    "/videocomposer/layer/{}/opacity": [ValueType.Float, None],
     "/videocomposer/layer/{}/position": [
         ValueType.List,
         None,
@@ -137,7 +142,8 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
         ValueType.List,
         None,
     ],  # [x, y] (x and y are scale ratio of the layer)
-    "/videocomposer/layer/{}/rotation": [ValueType.Float, None],  # rotation in degrees
+    # rotation in degrees
+    "/videocomposer/layer/{}/rotation": [ValueType.Float, None],
     "/videocomposer/layer/{}/zorder": [
         ValueType.Int,
         None,
@@ -145,7 +151,7 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     "/videocomposer/layer/{}/corner_deform": [
         ValueType.List,
         None,
-    ],  # [x0, y0, offset0, ..., x3, y3, offset3] (x and y are pixel coordinates of the corner, offset is the deformation amount)
+    ],  # [x0, y0, offset0, ..., x3, y3, offset3] corner pixel coords
     "/videocomposer/layer/{}/corner_deform_enable": [
         ValueType.Int,
         None,

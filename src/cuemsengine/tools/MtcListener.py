@@ -87,12 +87,15 @@ class MtcListener(Thread):
             )
             if delta < -frames_per_hour and near_24h_boundary:
                 self._24h_offset_frames += frames_per_24h
+                _offset_h = (
+                    self._24h_offset_frames / decoded._int_framerate / 3600
+                )
                 Logger.info(
                     f"MtcListener: detected 24h MTC rollover "
                     f"(prev frames={self._last_decoded_frames}, "
                     f"new={decoded.frames}, delta={delta}); "
-                    f"accumulated offset = {self._24h_offset_frames} frames "
-                    f"({self._24h_offset_frames / decoded._int_framerate / 3600:.1f}h)"
+                    f"accumulated offset = {self._24h_offset_frames} frames"
+                    f" ({_offset_h:.1f}h)"
                 )
             elif delta < -frames_per_hour:
                 Logger.info(
@@ -114,7 +117,10 @@ class MtcListener(Thread):
         return self.main_tc
 
     def milliseconds(self):
-        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))  # type: ignore[attr-defined]
+        # type: ignore[attr-defined]
+        return int(
+            self.main_tc.frames * (1000 / float(self.main_tc._framerate))
+        )
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
@@ -127,7 +133,8 @@ class MtcListener(Thread):
     def __open_port(self, port):
         # HEADLESS/CLOUD: get_input_names() can throw when no MIDI subsystem is
         # present; catch and treat as empty list so the engine keeps running.
-        # port_name is left as None and re-detected later in ControllerEngine.start()
+        # port_name is left as None and re-detected later in
+        # ControllerEngine.start()
         # once the timecode sender has created the virtual MIDI port.
         try:
             ports = mido.get_input_names()  # type: ignore[attr-defined]
@@ -138,16 +145,21 @@ class MtcListener(Thread):
         if port is not None:
             # Exact match first; fall back to substring match because ALSA/JACK
             # port names include the client name and ID suffix
-            # e.g. "Midi Through Port-0" → "Midi Through:Midi Through Port-0 14:0"
+            # e.g. "Midi Through Port-0" → "Midi Through:Midi Through Port-0
+            # 14:0"
             if port in ports:
                 self.port_name = port
             else:
                 matches = [p for p in ports if port in p]
                 if matches:
                     self.port_name = matches[0]
-                    Logger.info(f'MIDI port "{port}" matched as "{self.port_name}"')
+                    Logger.info(
+                        f'MIDI port "{port}" matched as "{self.port_name}"'
+                    )
                 else:
-                    Logger.warning(f'MIDI port "{port}" not found, auto-detecting...')
+                    Logger.warning(
+                        f'MIDI port "{port}" not found, auto-detecting...'
+                    )
                     port = None  # fall through to auto-detect
 
         if port is None:
@@ -170,7 +182,9 @@ class MtcListener(Thread):
         self.port = mido.open_input(  # type: ignore[attr-defined]
             self.port_name, callback=self.__handle_message
         )
-        Logger.info("Listening to MIDI messages on > {} <".format(self.port_name))
+        Logger.info(
+            "Listening to MIDI messages on > {} <".format(self.port_name)
+        )
 
     def stop(self):
         if self.port is not None:
@@ -188,7 +202,12 @@ class MtcListener(Thread):
                 self.__update_timecode(tc)
         elif message.type == "sysex":
             # check to see if this is a timecode frame
-            if len(message.data) == 8 and message.data[0:4] == (127, 127, 1, 1):
+            if len(message.data) == 8 and message.data[0:4] == (
+                127,
+                127,
+                1,
+                1,
+            ):
                 data = message.data[4:]
                 tc = self.__mtc_decode(data)
                 Logger.debug("FF:" + tc.__str__())
@@ -203,10 +222,15 @@ class MtcListener(Thread):
         rateflag = rhh >> 5
         hrs = rhh & 31
         fps = ["24", "25", "29.97", "30"][rateflag]
-        # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60) //  TODO: goes to frame 0 in tc, non existent frame, changed to tc 0:0:0:0 = frame 1
-        decoded = CTimecode("{}:{}:{}:{}".format(hrs, mins, secs, frs), framerate=fps)
+        # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60)
+        # //  TODO: goes to frame 0 in tc, non existent frame, changed to tc
+        # 0:0:0:0 = frame 1
+        decoded = CTimecode(
+            "{}:{}:{}:{}".format(hrs, mins, secs, frs), framerate=fps
+        )
         # Route through 24h-wrap detection so main_tc stays monotonic past 24h.
-        # See _apply_24h_offset docstring for heuristic details (closes 869cpdbzy).
+        # See _apply_24h_offset docstring for heuristic details (closes
+        # 869cpdbzy).
         return self._apply_24h_offset(decoded)
 
     def __mtc_decode_full_frame(self, full_frame_bytes):

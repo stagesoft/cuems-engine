@@ -65,7 +65,9 @@ def _parse_canvas_size_override(preamble: str) -> Optional[Tuple[int, int]]:
         w = int(parts[0])
         h = int(parts[1])
     except ValueError:
-        raise DisplayConfValueError(f"canvas_size={raw!r} has non-integer components")
+        raise DisplayConfValueError(
+            f"canvas_size={raw!r} has non-integer components"
+        )
     if w <= 0 or h <= 0:
         raise DisplayConfValueError(
             f"canvas_size={raw!r} must be positive (got {w}x{h})"
@@ -73,7 +75,9 @@ def _parse_canvas_size_override(preamble: str) -> Optional[Tuple[int, int]]:
     return (w, h)
 
 
-def read_display_conf(path: str = DEFAULT_DISPLAY_CONF) -> Tuple[dict, Tuple[int, int]]:
+def read_display_conf(
+    path: str = DEFAULT_DISPLAY_CONF,
+) -> Tuple[dict, Tuple[int, int]]:
     """Parse display.conf and return ``(regions, canvas_size)``.
 
     Returns a 2-tuple:

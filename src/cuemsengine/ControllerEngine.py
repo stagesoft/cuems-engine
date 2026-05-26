@@ -21,7 +21,8 @@ class ControllerEngine(BaseEngine):
     """
     The main engine class for the CUEMS system.
 
-    An object of this class runs all the inner logical part of communications with:
+    An object of this class runs all the inner logical part of communications
+    with:
       - The WebSocket system
       - The Ossia System
       - The MTC System
@@ -41,10 +42,13 @@ class ControllerEngine(BaseEngine):
     """
 
     # Controller→UI WebSocket throttle for cue percentage updates.
-    # State transitions (0, 1, 100) always bypass this and broadcast immediately.
+    # State transitions (0, 1, 100) always bypass this and broadcast
+    # immediately.
     # Only in-progress percentage values (2-99) are throttled.
-    # Two-tier throttle: Tier 1 is node-side (CUE_STATUS_UPDATE_HZ in loop_cue.py);
-    # Tier 2 is here, capping WS broadcasts even when multiple nodes send updates
+    # Two-tier throttle: Tier 1 is node-side (CUE_STATUS_UPDATE_HZ in
+    # loop_cue.py);
+    # Tier 2 is here, capping WS broadcasts even when multiple nodes send
+    # updates
     # in quick succession.
     CUE_BROADCAST_MIN_INTERVAL = 0.25  # seconds — max 4 Hz to UI per cue
 
@@ -52,9 +56,12 @@ class ControllerEngine(BaseEngine):
         # Must be set before super().__init__() because BaseEngine sets
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
-        self._last_timecode_second: int = -1  # last whole-second value broadcast to UI
+        self._last_timecode_second: int = (
+            -1
+        )  # last whole-second value broadcast to UI
         # Per-cue status dict: maps cue uuid → int status value.
-        # Values: 0=unplayed, 1-99=playing (1 until percentage enabled), 100=played, -1=error
+        # Values: 0=unplayed, 1-99=playing (1 until percentage enabled),
+        # 100=played, -1=error
         self.cue_status: dict[str, int] = {}
         # Per-cue enabled status: maps cue uuid → bool.
         # Initialised from XML on load_project, updated by show-time toggles.
@@ -62,17 +69,23 @@ class ControllerEngine(BaseEngine):
         self.cue_enabled_status: dict[str, bool] = {}
         # Per-cue last-broadcast timestamps for WS throttle (Tier 2).
         self._cue_broadcast_timestamps: dict[str, float] = {}
-        # Per-mixer-channel volume state: maps "{node_uuid}/{output_index}/{channel}"
-        # to float 0.0-1.0. Channel is "master" or a stringified index. Persists
+        # Per-mixer-channel volume state: maps
+        # "{node_uuid}/{output_index}/{channel}"
+        # to float 0.0-1.0. Channel is "master" or a stringified index.
+        # Persists
         # across project loads; resets only on engine restart. All access is on
         # the asyncio event loop (WS receive handler + _on_ws_client_connect),
         # so no lock is needed — keep it that way.
         self.mixer_status: dict[str, float] = {}
 
-        # Cluster-state tracking. Populated at load time by _resolve_cluster_state
-        # (chunk 3); used to gate the armed=yes flip on all required nodes having
-        # reported armed_ready. _pong_responses is populated by the comms thread
-        # via status_operation_callback as pong replies arrive. All set mutations
+        # Cluster-state tracking. Populated at load time by
+        # _resolve_cluster_state
+        # (chunk 3); used to gate the armed=yes flip on all required nodes
+        # having
+        # reported armed_ready. _pong_responses is populated by the comms
+        # thread
+        # via status_operation_callback as pong replies arrive. All set
+        # mutations
         # and the read in _probe_cluster_liveness happen under _cluster_lock.
         self._adopted_nodes: set[str] = set()
         self._required_nodes: set[str] = set()
@@ -105,8 +118,12 @@ class ControllerEngine(BaseEngine):
         self.mtc_listener.start()
         super().start()
 
-    def set_status(self, property: str, value: str, strict: bool = False) -> None:
-        """Set status and push to UI via WebSocket when running, armed, or load."""
+    def set_status(
+        self, property: str, value: str, strict: bool = False
+    ) -> None:
+        """
+        Set status and push to UI via WebSocket when running, armed, or load.
+        """
         super().set_status(property, value, strict)
         if property in ("running", "armed", "load", "nextcue"):
             self._broadcast_status(property, value)
@@ -128,16 +145,21 @@ class ControllerEngine(BaseEngine):
         # Get NNG hub port from config (must match NodeEngine)
         if hasattr(self, "cm") and self.cm and hasattr(self.cm, "node_conf"):
             nng_hub_port = self.cm.node_conf.get("nng_hub_port", 9093)
-            # Use port 9190 for WebSocket OSC - we start BEFORE pyossia to claim this port
-            # This allows UI to send commands via Apache's /realtime proxy to ws://127.0.0.1:9190
-            websocket_osc_port = self.cm.node_conf.get("oscquery_ws_port", 9190)
+            # Use port 9190 for WebSocket OSC - we start BEFORE pyossia to
+            # claim this port
+            # This allows UI to send commands via Apache's /realtime proxy to
+            # ws://127.0.0.1:9190
+            websocket_osc_port = self.cm.node_conf.get(
+                "oscquery_ws_port", 9190
+            )
             node_id = self.cm.node_conf.get("uuid", "controller")
         else:
             nng_hub_port = 9093
             websocket_osc_port = 9190  # Take port 9190 for WebSocket OSC
             node_id = "controller"
 
-        # LISTENER binds to all interfaces (0.0.0.0) so it does not depend on the
+        # LISTENER binds to all interfaces (0.0.0.0) so it does not depend on
+        # the
         # avahi link-local address (169.254.x.x) being assigned before startup.
         # NodeEngine (DIALER) still targets the specific controller_url IP.
         nng_hub_address = f"tcp://0.0.0.0:{nng_hub_port}"
@@ -163,11 +185,14 @@ class ControllerEngine(BaseEngine):
 
         # Register command handlers for WebSocket OSC
         self._register_osc_command_handlers()
-        self.communications_thread.set_on_client_connect(self._on_ws_client_connect)
+        self.communications_thread.set_on_client_connect(
+            self._on_ws_client_connect
+        )
 
         self.communications_thread.start()
 
-        # Wait for NNG thread to initialize (prevents race condition in nni_random)
+        # Wait for NNG thread to initialize (prevents race condition in
+        # nni_random)
         from time import sleep
 
         max_wait = 5.0  # seconds
@@ -178,12 +203,16 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.is_alive()
                 and self.communications_thread.event_loop is not None
             ):
-                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
+                Logger.info(
+                    f"NNG communications thread ready after {waited:.1f}s"
+                )
                 break
             sleep(wait_interval)
             waited += wait_interval
         else:
-            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
+            Logger.warning(
+                f"NNG communications thread not ready after {max_wait}s"
+            )
 
     def _register_osc_command_handlers(self):
         """Register OSC command handlers for WebSocket OSC receiving.
@@ -217,27 +246,35 @@ class ControllerEngine(BaseEngine):
             "/engine/players/*", self._handle_player_osc_message
         )
 
-        # Register direct player handler for every adopted node in the network map.
-        # UI sends /{node_uuid}/<type>/... for both controller and worker nodes;
+        # Register direct player handler for every adopted node in the network
+        # map.
+        # UI sends /{node_uuid}/<type>/... for both controller and worker
+        # nodes;
         # without per-node registration the WS dispatcher silently drops the
         # message and the NNG forward never happens.
         # The set deduplicates so the controller's own UUID isn't registered
         # twice (it appears in both node_conf and network_map['node_list']).
         node_uuids: set[str] = set()
         own_uuid = (
-            self.cm.node_conf.get("uuid", "") if hasattr(self, "cm") and self.cm else ""
+            self.cm.node_conf.get("uuid", "")
+            if hasattr(self, "cm") and self.cm
+            else ""
         )
         if own_uuid:
             node_uuids.add(own_uuid)
         try:
             if self.cm and self.cm.network_map:
-                adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
+                adopted, _new = NetworkMap.get_nodes_by_adoption(
+                    self.cm.network_map
+                )
                 for entry in adopted:
                     nuuid = (entry.get("node") or {}).get("uuid")
                     if nuuid:
                         node_uuids.add(nuuid)
         except Exception as e:
-            Logger.warning(f"Could not enumerate node UUIDs from network_map: {e}")
+            Logger.warning(
+                f"Could not enumerate node UUIDs from network_map: {e}"
+            )
 
         for nuuid in node_uuids:
             self.communications_thread.register_osc_handler(
@@ -281,11 +318,16 @@ class ControllerEngine(BaseEngine):
             except (TypeError, ValueError):
                 vol = None
             if vol is not None and math.isfinite(vol):
-                node_uuid_part, output_index, channel = parts[0], parts[3], parts[4]
+                node_uuid_part, output_index, channel = (
+                    parts[0],
+                    parts[3],
+                    parts[4],
+                )
                 key = f"{node_uuid_part}/{output_index}/{channel}"
                 self.mixer_status[key] = vol
                 self._broadcast_status(
-                    f"audio/mixer/{node_uuid_part}/{output_index}/{channel}/volume",
+                    f"audio/mixer/{node_uuid_part}/"
+                    f"{output_index}/{channel}/volume",
                     vol,
                 )
 
@@ -310,7 +352,8 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.event_loop,
             )
             Logger.debug(
-                f"Forwarded direct player OSC to nodes: {address} = {repr(value)}"
+                f"Forwarded direct player OSC to nodes: {address} ="
+                f"{repr(value)}"
             )
         except Exception as e:
             Logger.error(f"Error forwarding direct player OSC to nodes: {e}")
@@ -344,7 +387,9 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.nng_hub.send_operation(operation),
                 self.communications_thread.event_loop,
             )
-            Logger.debug(f"Forwarded player OSC to nodes: {address} = {repr(value)}")
+            Logger.debug(
+                f"Forwarded player OSC to nodes: {address} = {repr(value)}"
+            )
         except Exception as e:
             Logger.error(f"Error forwarding player OSC to nodes: {e}")
 
@@ -409,9 +454,11 @@ class ControllerEngine(BaseEngine):
         """Callback invoked when cues are received from nodes.
 
         Handles three action types:
-        - ADD:    cue started playing on a node → status 1, broadcast immediately
-        - REMOVE: cue finished playing on a node → status 100, broadcast immediately
-        - UPDATE: percentage progress from a node (future) → throttled broadcast
+        - ADD: cue started playing on a node → status 1, broadcast immediately
+        - REMOVE: cue finished playing on a node → status 100, broadcast
+          - immediately
+        - UPDATE: percentage progress from a node (future) → throttled
+          - broadcast
         """
         Logger.info(f"Cue operation received: {operation}")
         cue_id = operation.data.get("id") if operation.data else None
@@ -422,12 +469,14 @@ class ControllerEngine(BaseEngine):
         # to the UI as unknown UUIDs.
         if cue_id and cue_id not in self.cue_status:
             Logger.debug(
-                f"Ignoring cue operation for unknown/stale cue_id {cue_id} (action={operation.action})"
+                f"Ignoring cue operation for unknown/stale cue_id {cue_id}"
+                f"(action={operation.action})"
             )
             return
 
         if operation.action == ActionType.ADD:
-            # Cue started playing: mark as playing (1) and broadcast immediately.
+            # Cue started playing: mark as playing (1) and broadcast
+            # immediately.
             if cue_id:
                 self.cue_status[cue_id] = 1
                 self._broadcast_cue_status(cue_id, 1, force=True)
@@ -441,31 +490,41 @@ class ControllerEngine(BaseEngine):
                 Logger.error(f"Error updating currentcue: {e}")
 
         elif operation.action == ActionType.REMOVE:
-            # Cue finished playing: mark as played (100) and broadcast immediately.
-            # Only transition to 100 if the cue was actually playing (status == 1).
-            # REMOVEs that arrive while status is 0 (e.g. NodeEngine disarming the
-            # previous project after a reload) are stale and must be silently dropped.
+            # Cue finished playing: mark as played (100) and broadcast
+            # immediately.
+            # Only transition to 100 if the cue was actually playing (status ==
+            # 1).
+            # REMOVEs that arrive while status is 0 (e.g. NodeEngine disarming
+            # the
+            # previous project after a reload) are stale and must be silently
+            # dropped.
             if cue_id:
                 if self.cue_status.get(cue_id) == 1:
                     self.cue_status[cue_id] = 100
                     self._broadcast_cue_status(cue_id, 100, force=True)
                 else:
                     Logger.debug(
-                        f"Ignoring stale REMOVE for cue {cue_id} (status={self.cue_status.get(cue_id)}, expected 1)"
+                        f"Ignoring stale REMOVE for cue {cue_id}"
+                        f"(status={self.cue_status.get(cue_id)}, expected 1)"
                     )
             self.status.remove_currentcue(operation.data["id"])
-            Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
+            Logger.debug(
+                f"Cue removed from currentcue: {operation.data['id']}"
+            )
 
         elif operation.action == ActionType.UPDATE:
-            # Future: percentage progress updates from loop_cue() during playback.
+            # Future: percentage progress updates from loop_cue() during
+            # playback.
             # Throttled by _broadcast_cue_status (Tier 2 / controller-side).
-            # The node-side Tier 1 throttle (CUE_STATUS_UPDATE_HZ) limits NNG traffic.
+            # The node-side Tier 1 throttle (CUE_STATUS_UPDATE_HZ) limits NNG
+            # traffic.
             if cue_id:
                 pct = operation.data.get("percentage", 1)
                 self.cue_status[cue_id] = pct
                 self._broadcast_cue_status(cue_id, pct)  # throttled
             Logger.debug(
-                f"Cue percentage update: {cue_id} = {operation.data.get('percentage')}"
+                f"Cue percentage update: {cue_id} ="
+                f"{operation.data.get('percentage')}"
             )
 
         else:
@@ -480,7 +539,8 @@ class ControllerEngine(BaseEngine):
         Logger.info(f"Status operation received: {operation}")
         if operation.target == "pong":
             # Cluster liveness probe reply. Runs on the AsyncCommsThread event
-            # loop; _probe_cluster_liveness on the main thread waits on the event.
+            # loop; _probe_cluster_liveness on the main thread waits on the
+            # event.
             with self._cluster_lock:
                 self._pong_responses.add(operation.sender)
                 if self._pong_responses >= self._pong_expected:
@@ -495,7 +555,8 @@ class ControllerEngine(BaseEngine):
                 sender = operation.sender
                 if sender not in self._adopted_nodes:
                     Logger.debug(
-                        f"Ignoring script_finished from non-adopted node {sender}"
+                        f"Ignoring script_finished from non-adopted node"
+                        f"{sender}"
                     )
                     return
                 with self._cluster_lock:
@@ -506,8 +567,13 @@ class ControllerEngine(BaseEngine):
                     f"Node {sender} script_finished "
                     f"({len(finished_now)}/{len(required)})"
                 )
-                if finished_now >= required and self.get_status("running") == "yes":
-                    Logger.info("All required nodes finished — updating running status")
+                if (
+                    finished_now >= required
+                    and self.get_status("running") == "yes"
+                ):
+                    Logger.info(
+                        "All required nodes finished — updating running status"
+                    )
                     self.set_status("running", "no")
         elif operation.target == "armed_ready":
             if operation.data and operation.data.get("armed") == "yes":
@@ -516,17 +582,22 @@ class ControllerEngine(BaseEngine):
                 # tracker bounded.
                 sender = operation.sender
                 if sender not in self._adopted_nodes:
-                    Logger.debug(f"Ignoring armed_ready from non-adopted node {sender}")
+                    Logger.debug(
+                        f"Ignoring armed_ready from non-adopted node {sender}"
+                    )
                     return
                 with self._cluster_lock:
                     self._armed_nodes.add(sender)
                     armed_now = set(self._armed_nodes)
                     required = set(self._required_nodes)
-                Logger.info(f"Node {sender} armed ({len(armed_now)}/{len(required)})")
+                Logger.info(
+                    f"Node {sender} armed ({len(armed_now)}/{len(required)})"
+                )
                 if armed_now >= required and self.get_status("armed") != "yes":
                     if self.go_offset is None:
                         Logger.info(
-                            "Re-arm after stop complete — restarting timecode and enabling GO"
+                            "Re-arm after stop complete — restarting timecode"
+                            "and enabling GO"
                         )
                         self.start_timecode()
                         self.go_offset = 0
@@ -535,16 +606,22 @@ class ControllerEngine(BaseEngine):
                     self.set_status("armed", "yes")
                     self._cancel_arm_watchdog()
         elif operation.target == "nextcue":
-            nextcue_id = operation.data.get("nextcue", "") if operation.data else ""
+            nextcue_id = (
+                operation.data.get("nextcue", "") if operation.data else ""
+            )
             self.set_status("nextcue", nextcue_id)
             Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
         elif operation.target == "cue_enabled":
             cue_id = operation.data.get("cue_id") if operation.data else None
-            enabled = operation.data.get("enabled", True) if operation.data else True
+            enabled = (
+                operation.data.get("enabled", True) if operation.data else True
+            )
             if cue_id and cue_id in self.cue_enabled_status:
                 self.cue_enabled_status[cue_id] = enabled
                 self._broadcast_cue_enabled(cue_id, enabled)
-                Logger.info(f"Cue {cue_id} enabled status updated from node: {enabled}")
+                Logger.info(
+                    f"Cue {cue_id} enabled status updated from node: {enabled}"
+                )
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
 
@@ -553,7 +630,9 @@ class ControllerEngine(BaseEngine):
     #########################
 
     def editor_command_callback(self, item: dict, context):
-        Logger.debug(f"Received editor command: {item}, with context: {context}")
+        Logger.debug(
+            f"Received editor command: {item}, with context: {context}"
+        )
         _item_keys = item.keys()
         if "value" not in _item_keys:
             item["value"] = ""
@@ -577,7 +656,9 @@ class ControllerEngine(BaseEngine):
             request_uuid = self.get_editor_request()
             self.set_editor_request("")
             self.error_to_editor(
-                context, value=f"Command {type(e)}: {e}", request_uuid=request_uuid
+                context,
+                value=f"Command {type(e)}: {e}",
+                request_uuid=request_uuid,
             )
 
     def handle_editor_command(self, action, value, context=None):
@@ -614,10 +695,16 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"{type(e)} confirming to editor: {e}")
 
-    def error_to_editor(self, context, value=None, request_uuid=None, action=None):
+    def error_to_editor(
+        self, context, value=None, request_uuid=None, action=None
+    ):
         if not request_uuid:
             request_uuid = self.get_editor_request()
-        return_message = {"type": "error", "value": value, "action_uuid": request_uuid}
+        return_message = {
+            "type": "error",
+            "value": value,
+            "action_uuid": request_uuid,
+        }
         if action:
             return_message["action"] = action
         Logger.debug(f"Sending error to editor: {return_message}")
@@ -680,7 +767,8 @@ class ControllerEngine(BaseEngine):
         cue's output_name.
 
         output_name format depends on cue type:
-          - video / audio: "<36-char UUID>_<index>" (e.g. "07131798-...-...d18f_0")
+          - video / audio: "<36-char UUID>_<index>" (e.g.
+            - "07131798-...-...d18f_0")
           - DMX:           "<UUID>" (no suffix)
         In both cases, output_name[:36] is the node UUID. We validate with a
         cheap UUID-shape check (hyphens at positions 8/13/18/23) so garbage
@@ -713,7 +801,10 @@ class ControllerEngine(BaseEngine):
         return nodes
 
     def _collect_cue_ids(self, cuelist) -> list[str]:
-        """Recursively collect all cue IDs from a cuelist (including nested CueLists)."""
+        """
+        Recursively collect all cue IDs from a cuelist (including nested
+        CueLists).
+        """
         from cuemsutils.cues import CueList
 
         ids = []
@@ -741,7 +832,10 @@ class ControllerEngine(BaseEngine):
         return result
 
     def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
-        """Broadcast per-cue enabled status to UI at /engine/status/cue_enabled/{uuid}."""
+        """
+        Broadcast per-cue enabled status to UI at
+        /engine/status/cue_enabled/{uuid}.
+        """
         if (
             hasattr(self, "communications_thread")
             and self.communications_thread
@@ -754,14 +848,21 @@ class ControllerEngine(BaseEngine):
     def _broadcast_cue_status(
         self, cue_id: str, value: int, force: bool = False
     ) -> None:
-        """Broadcast per-cue status to UI via WebSocket OSC at /engine/status/cue/{uuid}.
+        """
+        Broadcast per-cue status to UI via WebSocket OSC at
+        /engine/status/cue/{uuid}.
 
-        Values: 0=unplayed, 1-99=playing (1 until percentage is enabled), 100=played, -1=error.
+        Values: 0=unplayed, 1-99=playing (1 until percentage is enabled),
+        100=played, -1=error.
 
-        State transitions (force=True: values 0, 1, 100) bypass throttle and broadcast
-        immediately. In-progress percentage updates (2-99) are throttled per-cue to
-        CUE_BROADCAST_MIN_INTERVAL to limit WS traffic even when multiple remote nodes
-        send updates in quick succession (Tier 2 of the two-tier throttle strategy).
+        State transitions (force=True: values 0, 1, 100) bypass throttle and
+        broadcast
+        immediately. In-progress percentage updates (2-99) are throttled
+        per-cue to
+        CUE_BROADCAST_MIN_INTERVAL to limit WS traffic even when multiple
+        remote nodes
+        send updates in quick succession (Tier 2 of the two-tier throttle
+        strategy).
         """
         if not force:
             now = time.monotonic()
@@ -785,7 +886,9 @@ class ControllerEngine(BaseEngine):
             and self.communications_thread
             and hasattr(self.communications_thread, "broadcast_osc")
         ):
-            self.communications_thread.broadcast_osc(f"/engine/status/{key}", value)
+            self.communications_thread.broadcast_osc(
+                f"/engine/status/{key}", value
+            )
 
     async def _on_ws_client_connect(self, websocket) -> None:
         """Send full state dump to a newly connected WebSocket client."""
@@ -819,14 +922,19 @@ class ControllerEngine(BaseEngine):
         # exceeds that (e.g. 8 nodes × 64 channels), switch to a single OSC
         # bundle via build_osc_bundle() instead of per-message sends.
         for key, vol in self.mixer_status.items():
-            data = build_osc_message(f"/engine/status/audio/mixer/{key}/volume", vol)
+            data = build_osc_message(
+                f"/engine/status/audio/mixer/{key}/volume", vol
+            )
             if data:
                 await websocket.send(data)
 
         Logger.info(f"Late-join state dump sent to new WebSocket client")
 
     def on_timecode_change(self, value) -> None:
-        """Broadcast timecode to UI as integer ms (whole seconds only), once per second."""
+        """
+        Broadcast timecode to UI as integer ms (whole seconds only), once per
+        second.
+        """
         try:
             ms = int(value) if value is not None else 0
         except (TypeError, ValueError):
@@ -838,7 +946,8 @@ class ControllerEngine(BaseEngine):
             Logger.debug(f"Timecode broadcast {current_second}s")
 
     def _clear_playback_state(self):
-        """Clear runtime playback tracking: timestamps, timecode, armed, nextcue.
+        """
+        Clear runtime playback tracking: timestamps, timecode, armed, nextcue.
 
         Also clears the per-node armed/finished accumulators. The
         _required_nodes / _adopted_nodes snapshots stay — they belong to
@@ -864,7 +973,8 @@ class ControllerEngine(BaseEngine):
         # Don't allow loading while script is running
         if self.get_status("running") == "yes":
             Logger.warning(
-                f"Cannot load project {project_name} while script is running. Stop first."
+                f"Cannot load project {project_name} while script is running."
+                f"Stop first."
             )
             return False
 
@@ -910,22 +1020,30 @@ class ControllerEngine(BaseEngine):
         self.script.unix_name = project_name
 
         # Initialise per-cue status: every cue starts as unplayed (0).
-        # Broadcasts one WS message per cue so the UI can populate its cue list.
-        self.cue_status = {cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)}
+        # Broadcasts one WS message per cue so the UI can populate its cue
+        # list.
+        self.cue_status = {
+            cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)
+        }
         for cid in self.cue_status:
             self._broadcast_cue_status(cid, 0, force=True)
         Logger.info(f"Cue status initialised for {len(self.cue_status)} cues")
 
-        # Initialise per-cue enabled status from XML (resets show-time overrides).
-        self.cue_enabled_status = self._collect_cue_enabled(self.script.cuelist)
+        # Initialise per-cue enabled status from XML (resets show-time
+        # overrides).
+        self.cue_enabled_status = self._collect_cue_enabled(
+            self.script.cuelist
+        )
         for cid, enabled in self.cue_enabled_status.items():
             self._broadcast_cue_enabled(cid, enabled)
         Logger.info(
-            f"Cue enabled status initialised for {len(self.cue_enabled_status)} cues"
+            f"Cue enabled status initialised for"
+            f"{len(self.cue_enabled_status)} cues"
         )
 
         # Update internal status
-        # TODO: send project UUID instead of name for robustness (would break UI contract)
+        # TODO: send project UUID instead of name for robustness (would break
+        # UI contract)
         self.set_status("load", project_name)
 
         # Probe cluster, derive _required_nodes for GO gating, refresh <online>
@@ -938,15 +1056,20 @@ class ControllerEngine(BaseEngine):
 
         # Timecode starts on load; runs until next load or engine shutdown
         self.start_timecode()
-        self.go_offset = 0  # Enable mtc_callback → on_timecode_change → broadcast
-        # armed=yes is NOT set here -- it's set when NodeEngine reports armed_ready
-        # via status_operation_callback, ensuring cues are actually armed before
+        self.go_offset = (
+            0  # Enable mtc_callback → on_timecode_change → broadcast
+        )
+        # armed=yes is NOT set here -- it's set when NodeEngine reports
+        # armed_ready
+        # via status_operation_callback, ensuring cues are actually armed
+        # before
         # the UI shows GO as available
 
         # Confirm the project is loaded
         self.set_show_lock_file()
         Logger.info(f"Project {project_name} loaded")
-        # Note: Don't clear editor_request here - handle_editor_command will clear it after confirmation
+        # Note: Don't clear editor_request here - handle_editor_command will
+        # clear it after confirmation
         return True
 
     def deploy_project(self, project_name):
@@ -972,7 +1095,10 @@ class ControllerEngine(BaseEngine):
         return True
 
     def _setnextcue_handler(self, value):
-        """Handle setnextcue from UI — forward to NodeEngine which owns the pointer."""
+        """
+        Handle setnextcue from UI — forward to NodeEngine which owns the
+        pointer.
+        """
         self._forward_command_to_nodes("/engine/command/setnextcue", value)
 
     def _cue_enabled_handler(self, value):
@@ -987,7 +1113,8 @@ class ControllerEngine(BaseEngine):
         parts = value.split(" ", 1)
         if len(parts) != 2 or parts[1] not in ("0", "1"):
             Logger.warning(
-                f'Invalid cue_enabled format (expected "uuid 0|1"): {repr(value)}'
+                f'Invalid cue_enabled format (expected "uuid 0|1"):'
+                f'{repr(value)}'
             )
             return
 
@@ -1005,9 +1132,13 @@ class ControllerEngine(BaseEngine):
 
     def _forward_command_to_nodes(self, address: str, value) -> None:
         """Forward a generic command to NodeEngine via NNG."""
-        if not hasattr(self, "communications_thread") or not self.communications_thread:
+        if (
+            not hasattr(self, "communications_thread")
+            or not self.communications_thread
+        ):
             Logger.warning(
-                "Cannot forward command to nodes: communications thread not available"
+                "Cannot forward command to nodes: communications thread not"
+                "available"
             )
             return
 
@@ -1031,7 +1162,9 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.nng_hub.send_operation(operation),
                 self.communications_thread.event_loop,
             )
-            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
+            Logger.debug(
+                f"Forwarded command to nodes: {command_name} = {repr(value)}"
+            )
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
@@ -1087,8 +1220,13 @@ class ControllerEngine(BaseEngine):
             Logger.debug("Cluster probe: no remote nodes to ping")
             return {controller_uuid}
 
-        if not hasattr(self, "communications_thread") or not self.communications_thread:
-            Logger.warning("Cluster probe skipped: communications thread not available")
+        if (
+            not hasattr(self, "communications_thread")
+            or not self.communications_thread
+        ):
+            Logger.warning(
+                "Cluster probe skipped: communications thread not available"
+            )
             return {controller_uuid}
 
         ping_op = NodeOperation(
@@ -1162,7 +1300,8 @@ class ControllerEngine(BaseEngine):
             else:
                 Logger.warning(
                     f"node {uuid} is adopted but did not respond to ping; "
-                    f"not required by this project — investigate why it is offline"
+                    f"not required by this project — investigate why it is"
+                    f"offline"
                 )
 
         # Project nodes that are NOT adopted at all — script is broken for
@@ -1207,7 +1346,9 @@ class ControllerEngine(BaseEngine):
         still-pending UUIDs so operator sees what's wedged.
         """
         self._cancel_arm_watchdog()
-        timer = threading.Timer(self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire)
+        timer = threading.Timer(
+            self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire
+        )
         timer.daemon = True
         self._arm_watchdog = timer
         timer.start()
@@ -1231,7 +1372,10 @@ class ControllerEngine(BaseEngine):
         )
 
     def stop_script(self, value):
-        """Handle STOP command - stop timecode, update status and forward to nodes."""
+        """
+        Handle STOP command - stop timecode, update status and forward to
+        nodes.
+        """
         if self.get_status("running") != "yes":
             Logger.info("Script not running, nothing to stop.")
             return
@@ -1247,7 +1391,9 @@ class ControllerEngine(BaseEngine):
 
         self._forward_command_to_nodes("/engine/command/stop", value)
 
-        Logger.info("STOP command processed - timecode stopped; nodes will re-arm")
+        Logger.info(
+            "STOP command processed - timecode stopped; nodes will re-arm"
+        )
         return True
 
     def get_project_status(self, value, context=None):
@@ -1255,13 +1401,17 @@ class ControllerEngine(BaseEngine):
         running = self.get_status("running") == "yes"
         return {
             "status": "running" if running else "none",
-            "project_uuid": str(self.script.id) if running and self.script else "",
+            "project_uuid": (
+                str(self.script.id) if running and self.script else ""
+            ),
         }
 
     def unload_project(self, value, context=None):
         """Unload the current project. Rejects if playback is running."""
         if self.get_status("running") == "yes":
-            raise RuntimeError("Cannot unload while running. Stop playback first.")
+            raise RuntimeError(
+                "Cannot unload while running. Stop playback first."
+            )
         self._clear_playback_state()
         self.reset_script()
         self.cue_status = {}

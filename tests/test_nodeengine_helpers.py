@@ -31,11 +31,15 @@ class TestAppendOutputLatencyFlag:
 
     def test_audioplayer_shape_int(self):
         """audioplayer: args='-w -1', int value → both concatenated."""
-        result = _append_output_latency_flag("-w -1", {"output_latency_ms": 42})
+        result = _append_output_latency_flag(
+            "-w -1", {"output_latency_ms": 42}
+        )
         assert result == "-w -1 --output-latency-ms 42"
 
     def test_dmxplayer_shape_empty_args_int(self):
-        """dmxplayer: <args></args> decodes to None + int → no literal 'None'."""
+        """
+        dmxplayer: <args></args> decodes to None + int → no literal 'None'.
+        """
         result = _append_output_latency_flag(None, {"output_latency_ms": 35})
         assert result == "--output-latency-ms 35"
         assert "None" not in result
@@ -47,7 +51,9 @@ class TestAppendOutputLatencyFlag:
 
     def test_auto_suppresses_flag(self):
         """'auto' → don't emit the flag; args returned unchanged."""
-        result = _append_output_latency_flag("-w -1", {"output_latency_ms": "auto"})
+        result = _append_output_latency_flag(
+            "-w -1", {"output_latency_ms": "auto"}
+        )
         assert result == "-w -1"
         assert "--output-latency-ms" not in result
 
@@ -58,7 +64,10 @@ class TestAppendOutputLatencyFlag:
 
     def test_none_args_auto(self):
         """None args + 'auto' → empty string, no flag."""
-        assert _append_output_latency_flag(None, {"output_latency_ms": "auto"}) == ""
+        assert (
+            _append_output_latency_flag(None, {"output_latency_ms": "auto"})
+            == ""
+        )
 
     def test_none_args_absent(self):
         """None args + absent key → empty string."""
@@ -99,7 +108,9 @@ class TestSubprocessArgvComposition:
 
     def test_audioplayer_argv_with_auto(self):
         """With 'auto', audio spawn argv has no latency flag."""
-        args = _append_output_latency_flag("-w -1", {"output_latency_ms": "auto"})
+        args = _append_output_latency_flag(
+            "-w -1", {"output_latency_ms": "auto"}
+        )
         argv = self._build_argv("/usr/bin/cuems-audioplayer", args, [])
         assert argv == ["/usr/bin/cuems-audioplayer", "-w", "-1"]
         assert "--output-latency-ms" not in argv
@@ -117,11 +128,19 @@ class TestSubprocessArgvComposition:
         assert argv[argv.index("--output-latency-ms") + 1] == "35"
 
     def test_dmxplayer_argv_with_absent_key(self):
-        """dmx with absent output_latency_ms → binary's 35 ms default applies."""
+        """
+        dmx with absent output_latency_ms → binary's 35 ms default applies.
+        """
         args = _append_output_latency_flag(None, {})
         argv = self._build_argv(
             "/usr/bin/cuems-dmxplayer",
             args,
             ["--port", "9000", "--uuid", "abc"],
         )
-        assert argv == ["/usr/bin/cuems-dmxplayer", "--port", "9000", "--uuid", "abc"]
+        assert argv == [
+            "/usr/bin/cuems-dmxplayer",
+            "--port",
+            "9000",
+            "--uuid",
+            "abc",
+        ]

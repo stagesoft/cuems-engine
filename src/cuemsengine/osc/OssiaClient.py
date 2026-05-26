@@ -37,14 +37,17 @@ class OssiaClient(OssiaNodes):
             self.create_endpoints(endpoints)
 
     def bind_device(self, remote_type: ClientSetupFunction):
-        Logger.info(f"Using remote device: {remote_type.__annotations__['return']}")
+        Logger.info(
+            f"Using remote device: {remote_type.__annotations__['return']}"
+        )
         self.device = remote_type(self)
         sleep(STARTUP_DELAY)
         if not self.device:
             raise RuntimeError("OssiaClient device not bound")
         Logger.debug(f"OssiaClient device bound: {self.device}")
 
-        # Skip nodes_from_device() for OSCQuery clients to preserve GMQ functionality
+        # Skip nodes_from_device() for OSCQuery clients to preserve GMQ
+        # functionality
         if remote_type == ClientDevices.OSCQUERY:
             self.nodes = {}
         else:
@@ -70,7 +73,9 @@ class NodeClient(OssiaClient):
 
 
 class PlayerClient(OssiaClient):
-    def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
+    def __init__(
+        self, player_port: int, endpoints: dict, name: str = "player"
+    ):
         super().__init__(
             local_port=PORT_HANDLER.new_random_port(),
             remote_port=player_port,

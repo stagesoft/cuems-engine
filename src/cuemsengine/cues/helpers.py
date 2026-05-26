@@ -16,7 +16,8 @@ def find_timing(
     Args:
         cue (Cue): The cue with _start_mtc defined to find the timing
         mtc (Mtc): The main timecode object
-        in_frames (bool): If True, return the offset in frames instead of milliseconds
+        in_frames (bool): If True, return the offset in frames instead of
+        milliseconds
 
     Returns:
         tuple[int, CTimecode]: The offset in frames and the duration
@@ -38,9 +39,11 @@ def find_timing(
     duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
     # Set cue end timecode
     cue._end_mtc = cue._start_mtc + duration
-    in_time_fr_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
+    in_time_fr_adjusted = cue.media.regions[
+        0
+    ].in_time.return_in_other_framerate(mtc.main_tc.framerate)
     # Calculate offset to go
-    offset_to_go = in_time_fr_adjusted[time_attribute] - cue._start_mtc[time_attribute]
+    offset_to_go = (
+        in_time_fr_adjusted[time_attribute] - cue._start_mtc[time_attribute]
+    )
     return offset_to_go, duration

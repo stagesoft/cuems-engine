@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
-"""Integration tests for CuemsDeploy async/NNG heartbeat coexistence (SC-001)."""
+"""
+Integration tests for CuemsDeploy async/NNG heartbeat coexistence (SC-001).
+"""
 
 import asyncio
 import threading
@@ -10,13 +12,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# All tests in this module are integration-class (excluded from fast unit runs).
+# All tests in this module are integration-class (excluded from fast unit
+# runs).
 pytestmark = pytest.mark.integration
 
 
 def _make_chunked_proc(n_chunks=5, chunk_interval=0.05):
-    """Return a fake asyncio subprocess that emits n_chunks progress lines then exits."""
-    progress_line = b"    32,768  50%    1.00MB/s    0:00:01 (xfr#1, to-chk=0/1)\r"
+    """
+    Return a fake asyncio subprocess that emits n_chunks progress lines then
+    exits.
+    """
+    progress_line = (
+        b"    32,768  50%    1.00MB/s    0:00:01 (xfr#1, to-chk=0/1)\r"
+    )
 
     async def _read_out(size):
         await asyncio.sleep(chunk_interval)
@@ -45,7 +53,8 @@ def _make_chunked_proc(n_chunks=5, chunk_interval=0.05):
     proc.returncode = 0
 
     async def _wait():
-        # Only complete after both pump tasks have seen EOF (stdout returns b'').
+        # Only complete after both pump tasks have seen EOF (stdout returns
+        # b'').
         await asyncio.sleep(chunk_interval * (n_chunks + 2))
         proc.returncode = 0
         return 0
@@ -57,10 +66,12 @@ def _make_chunked_proc(n_chunks=5, chunk_interval=0.05):
 
 
 def test_nng_heartbeat_not_blocked_during_deploy():
-    """SC-001: NNG heartbeats are not blocked while CuemsDeploy.sync_files() runs.
+    """
+    SC-001: NNG heartbeats are not blocked while CuemsDeploy.sync_files() runs.
 
     Spins up a real asyncio event loop in a background thread, binds it to
-    CuemsDeploy.loop, mocks asyncio.create_subprocess_exec to return a slow fake
+    CuemsDeploy.loop, mocks asyncio.create_subprocess_exec to return a slow
+    fake
     process, and concurrently schedules a heartbeat coroutine that records
     loop.time() at 1 Hz. After sync_files() returns, asserts:
       (a) sync_files returned True
@@ -114,7 +125,8 @@ def test_nng_heartbeat_not_blocked_during_deploy():
             patch.object(d, "_reset_deploy_log"),
         ):
             # tag='media' has no mandatory paths, so precheck is skipped.
-            # The test focuses on heartbeat coexistence during the rsync transfer.
+            # The test focuses on heartbeat coexistence during the rsync
+            # transfer.
             r = d.sync_files("test_project", "media", ["media/clip.mp4"])
             result_holder.append(r)
 
@@ -128,9 +140,13 @@ def test_nng_heartbeat_not_blocked_during_deploy():
     loop_thread.join(timeout=5)
 
     assert result_holder, "sync_files() did not return within 10 s"
-    assert result_holder[0] is True, f"sync_files() returned False; errors={d.errors}"
+    assert (
+        result_holder[0] is True
+    ), f"sync_files() returned False; errors={d.errors}"
 
-    assert len(heartbeat_times) >= 2, "heartbeat recorded fewer than 2 timestamps"
+    assert (
+        len(heartbeat_times) >= 2
+    ), "heartbeat recorded fewer than 2 timestamps"
     intervals = [
         heartbeat_times[i + 1] - heartbeat_times[i]
         for i in range(len(heartbeat_times) - 1)

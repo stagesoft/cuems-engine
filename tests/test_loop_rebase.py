@@ -6,7 +6,8 @@
 
 Exercises the exact `_start_mtc`/`_end_mtc` rebase arithmetic used inside
 `loop_audioCue` and `loop_videoCue` when a cue loops. Before the fix, the
-rebase went through `CTimecode(start_seconds=_end_mtc.milliseconds_rounded/1000)`,
+rebase went through
+`CTimecode(start_seconds=_end_mtc.milliseconds_rounded/1000)`,
 which loses one frame of the target framerate on every iteration (40 ms at
 25 fps MTC). The fix assigns `_start_mtc` directly from the previous
 `_end_mtc.frames`, skipping the lossy ms->s->frames round-trip.
@@ -50,7 +51,8 @@ def test_rebase_preserves_30s_duration_over_10_iterations(framerate):
     duration = CTimecode("00:00:30.000").return_in_other_framerate(framerate)
     duration_ms = 30000
 
-    start_mtc = CTimecode(framerate=framerate, frames=1)  # simulate cue GO at MTC=0
+    # simulate cue GO at MTC=0
+    start_mtc = CTimecode(framerate=framerate, frames=1)
     end_mtc = start_mtc + duration
 
     prev_start_ms = start_mtc.milliseconds_rounded
@@ -83,7 +85,10 @@ def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
 
     assert all(
         d == -40 for d in drifts
-    ), f"expected buggy path to lose exactly 40 ms/iter at 25 fps, got {drifts}"
+    ), (
+        f"expected buggy path to lose exactly 40 ms/iter at 25 fps,"
+        f" got {drifts}"
+    )
 
 
 def test_fixed_rebase_matches_absolute_anchor():
@@ -92,7 +97,8 @@ def test_fixed_rebase_matches_absolute_anchor():
     exact in the working framerate."""
     framerate = "25"
     duration = CTimecode("00:00:30.000").return_in_other_framerate(framerate)
-    initial_frames = 1 + 33040 // 40  # simulate cue GO at MTC=33040 ms (25 fps)
+    # simulate cue GO at MTC=33040 ms (25 fps)
+    initial_frames = 1 + 33040 // 40
 
     start_mtc = CTimecode(framerate=framerate, frames=initial_frames)
     end_mtc = start_mtc + duration
@@ -104,5 +110,6 @@ def test_fixed_rebase_matches_absolute_anchor():
             anchor = anchor + duration
         assert start_mtc.milliseconds_rounded == anchor.milliseconds_rounded, (
             f"iter {i}: chained rebase ({start_mtc.milliseconds_rounded} ms) "
-            f"disagrees with absolute anchor ({anchor.milliseconds_rounded} ms)"
+            f"disagrees with absolute anchor ({anchor.milliseconds_rounded}"
+            f"ms)"
         )

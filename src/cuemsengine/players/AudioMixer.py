@@ -15,7 +15,8 @@ from .JackConnectionManager import JackConnectionManager
 from .Player import Player
 
 JACK_VOLUME_PATH = "/usr/local/bin/jack-volume"
-# usage: jack-volume [-c <jack_client_name>] [-s <jack_server_name>] [-p <osc_port>] [-n <number_of_channels>]
+# usage: jack-volume [-c <jack_client_name>] [-s <jack_server_name>] [-p
+# <osc_port>] [-n <number_of_channels>]
 
 
 class AudioMixer(Player):
@@ -29,7 +30,12 @@ class AudioMixer(Player):
     """
 
     def __init__(
-        self, audio_outputs, port, mixer_id: str, path=None, args: str | None = None
+        self,
+        audio_outputs,
+        port,
+        mixer_id: str,
+        path=None,
+        args: str | None = None,
     ):
         """Initialize the AudioMixer.
 
@@ -37,7 +43,8 @@ class AudioMixer(Player):
             audio_outputs: List of audio output configurations
             port: OSC port for jack-volume communication
             mixer_id: Unique identifier for this mixer
-            path: Optional path to jack-volume binary (defaults to JACK_VOLUME_PATH)
+            path: Optional path to jack-volume binary (defaults to
+            JACK_VOLUME_PATH)
         """
         super().__init__()
         self.conn_man = JackConnectionManager()
@@ -60,7 +67,8 @@ class AudioMixer(Player):
         ]
 
         # Note: start() will be called by start_audio_mixer() with timeout
-        # self.connect_to_jack() will be called after start() in start_audio_mixer()
+        # self.connect_to_jack() will be called after start() in
+        # start_audio_mixer()
 
     @logged
     def run(self):
@@ -76,24 +84,28 @@ class AudioMixer(Player):
     def connect_to_jack(self, max_retries: int = 10, retry_delay: float = 0.5):
         """Connect mixer outputs to the configured playback ports.
 
-        Retries if ports are not yet registered (race with jack-volume startup).
+        Retries if ports are not yet registered (race with jack-volume
+        startup).
         """
         for i, playback_port in enumerate(self.audio_outputs):
             output_port = f"{self.client_name}:output_{i+1}"
             # Wait for both ports to be available
             for attempt in range(max_retries):
-                if self.conn_man.port_exists(output_port) and self.conn_man.port_exists(
-                    playback_port
-                ):
+                if self.conn_man.port_exists(
+                    output_port
+                ) and self.conn_man.port_exists(playback_port):
                     break
                 if attempt < max_retries - 1:
                     Logger.debug(
-                        f"Waiting for JACK ports {output_port} / {playback_port} (attempt {attempt + 1}/{max_retries})"
+                        f"Waiting for JACK ports {output_port} /"
+                        f" {playback_port}"
+                        f" (attempt {attempt + 1}/{max_retries})"
                     )
                     sleep(retry_delay)
             else:
                 Logger.warning(
-                    f"JACK ports not available after {max_retries} attempts: {output_port} -> {playback_port}"
+                    f"JACK ports not available after {max_retries} attempts:"
+                    f"{output_port} -> {playback_port}"
                 )
                 continue
             Logger.debug(f"Connecting {output_port} to {playback_port}")
@@ -120,7 +132,8 @@ class AudioMixer(Player):
 
         Args:
             player_name: Name of the player JACK client to connect
-            player_output_prefix: Prefix for player's output ports (e.g., 'output')
+            player_output_prefix: Prefix for player's output ports (e.g.,
+            'output')
             mixer_channel: Mixer input channel number (0-indexed)
             max_retries: Maximum number of connection attempts (default 10)
             retry_delay: Delay between retries in seconds (default 0.2)
@@ -129,7 +142,8 @@ class AudioMixer(Player):
 
         if mixer_channel >= self.channel_number:
             Logger.error(
-                f"Invalid mixer channel: {mixer_channel}. Max: {self.channel_number - 1}"
+                f"Invalid mixer channel: {mixer_channel}. Max:"
+                f"{self.channel_number - 1}"
             )
             return
 
@@ -144,37 +158,55 @@ class AudioMixer(Player):
         for attempt in range(max_retries):
             # Check if ports exist by trying to get connections
             connections = self.conn_man.get_connections(channel_0_output)
-            if connections is not None or self.conn_man.port_exists(channel_0_output):
+            if connections is not None or self.conn_man.port_exists(
+                channel_0_output
+            ):
                 break
             if attempt < max_retries - 1:
                 Logger.debug(
-                    f"Waiting for JACK port {channel_0_output} (attempt {attempt + 1}/{max_retries})"
+                    f"Waiting for JACK port {channel_0_output} (attempt"
+                    f"{attempt + 1}/{max_retries})"
                 )
                 sleep(retry_delay)
         else:
             Logger.warning(
-                f"JACK port {channel_0_output} not available after {max_retries} attempts"
+                f"JACK port {channel_0_output} not available after"
+                f"{max_retries} attempts"
             )
 
         # Check if player is stereo (has output_1) or mono (only output_0)
         is_stereo = self.conn_man.port_exists(channel_1_output)
-        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
+        Logger.debug(
+            f"Player {player_name} is {'stereo' if is_stereo else 'mono'}"
+        )
 
         # First, disconnect any existing connections from player outputs
         # Guard with port_exists to avoid sending disconnect requests for
         # ports that were destroyed by a concurrent /quit.
         if self.conn_man.port_exists(channel_0_output):
-            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
-            channel_0_connections = self.conn_man.get_connections(channel_0_output)
+            Logger.debug(
+                f"Disconnecting existing connections from {channel_0_output}"
+            )
+            channel_0_connections = self.conn_man.get_connections(
+                channel_0_output
+            )
             for connection in channel_0_connections:
-                Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
+                Logger.debug(
+                    f"Disconnecting {channel_0_output} from {connection}"
+                )
                 self.conn_man.disconnect_by_name(channel_0_output, connection)
 
         if is_stereo and self.conn_man.port_exists(channel_1_output):
-            Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
-            channel_1_connections = self.conn_man.get_connections(channel_1_output)
+            Logger.debug(
+                f"Disconnecting existing connections from {channel_1_output}"
+            )
+            channel_1_connections = self.conn_man.get_connections(
+                channel_1_output
+            )
             for connection in channel_1_connections:
-                Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
+                Logger.debug(
+                    f"Disconnecting {channel_1_output} from {connection}"
+                )
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
         # Connect to mixer inputs
@@ -191,12 +223,16 @@ class AudioMixer(Player):
         # Connect second channel (if mixer has it)
         if self.conn_man.port_exists(mixer_input_2):
             if is_stereo:
-                Logger.debug(f"Connecting {channel_1_output} to {mixer_input_2}")
+                Logger.debug(
+                    f"Connecting {channel_1_output} to {mixer_input_2}"
+                )
                 self.conn_man.connect_by_name(channel_1_output, mixer_input_2)
             else:
-                # Mono player: connect output_0 to both mixer inputs for centered sound
+                # Mono player: connect output_0 to both mixer inputs for
+                # centered sound
                 Logger.debug(
-                    f"Mono player: Connecting {channel_0_output} to {mixer_input_2}"
+                    f"Mono player: Connecting {channel_0_output} to"
+                    f"{mixer_input_2}"
                 )
                 self.conn_man.connect_by_name(channel_0_output, mixer_input_2)
         else:
@@ -213,7 +249,8 @@ class AudioMixer(Player):
         max_retries: int = 30,
         retry_delay: float = 0.5,
     ):
-        """Connect a player to specific system outputs based on cue configuration.
+        """
+        Connect a player to specific system outputs based on cue configuration.
 
         Maps selected output port names to mixer inputs:
         - system:playback_1 → mixer input_1
@@ -224,8 +261,10 @@ class AudioMixer(Player):
 
         Args:
             player_name: Name of the player JACK client to connect
-            player_output_prefix: Prefix for player's output ports (e.g., 'outport')
-            selected_outputs: List of output port names (e.g., ['system:playback_1'])
+            player_output_prefix: Prefix for player's output ports (e.g.,
+            'outport')
+            selected_outputs: List of output port names (e.g.,
+            ['system:playback_1'])
             max_retries: Maximum number of connection attempts
             retry_delay: Delay between retries in seconds
         """
@@ -235,10 +274,12 @@ class AudioMixer(Player):
         if not selected_outputs:
             selected_outputs = ["system:playback_1", "system:playback_2"]
             Logger.debug(
-                f"No outputs specified, defaulting to stereo: {selected_outputs}"
+                f"No outputs specified, defaulting to stereo:"
+                f"{selected_outputs}"
             )
 
-        # Define player output ports - cuems-audioplayer uses "outport 0", "outport 1"
+        # Define player output ports - cuems-audioplayer uses "outport 0",
+        # "outport 1"
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
 
@@ -251,33 +292,45 @@ class AudioMixer(Player):
         # Wait for player JACK ports to be available
         for attempt in range(max_retries):
             connections = self.conn_man.get_connections(channel_0_output)
-            if connections is not None or self.conn_man.port_exists(channel_0_output):
+            if connections is not None or self.conn_man.port_exists(
+                channel_0_output
+            ):
                 break
             if attempt < max_retries - 1:
                 Logger.debug(
-                    f"Waiting for JACK port {channel_0_output} (attempt {attempt + 1}/{max_retries})"
+                    f"Waiting for JACK port {channel_0_output} (attempt"
+                    f"{attempt + 1}/{max_retries})"
                 )
                 sleep(retry_delay)
         else:
             Logger.warning(
-                f"JACK port {channel_0_output} not available after {max_retries} attempts"
+                f"JACK port {channel_0_output} not available after"
+                f"{max_retries} attempts"
             )
             return
 
         # Check if player is stereo
         is_stereo = self.conn_man.port_exists(channel_1_output)
-        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
+        Logger.debug(
+            f"Player {player_name} is {'stereo' if is_stereo else 'mono'}"
+        )
 
         # First, disconnect any existing connections from player outputs
         # Guard with port_exists to avoid operating on destroyed ports.
         if self.conn_man.port_exists(channel_0_output):
-            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
-            channel_0_connections = self.conn_man.get_connections(channel_0_output)
+            Logger.debug(
+                f"Disconnecting existing connections from {channel_0_output}"
+            )
+            channel_0_connections = self.conn_man.get_connections(
+                channel_0_output
+            )
             for connection in channel_0_connections:
                 self.conn_man.disconnect_by_name(channel_0_output, connection)
 
         if is_stereo and self.conn_man.port_exists(channel_1_output):
-            channel_1_connections = self.conn_man.get_connections(channel_1_output)
+            channel_1_connections = self.conn_man.get_connections(
+                channel_1_output
+            )
             for connection in channel_1_connections:
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
@@ -292,11 +345,14 @@ class AudioMixer(Player):
                     Logger.warning(f"Mixer input {mixer_input} does not exist")
 
         if not target_inputs:
-            Logger.error(f"No valid mixer inputs found for outputs: {selected_outputs}")
+            Logger.error(
+                f"No valid mixer inputs found for outputs: {selected_outputs}"
+            )
             return
 
         Logger.info(
-            f"Connecting {player_name} to outputs: {selected_outputs} -> {target_inputs}"
+            f"Connecting {player_name} to outputs: {selected_outputs} ->"
+            f"{target_inputs}"
         )
 
         # Fan-out routing: treat target_inputs as alternating L/R pairs.
@@ -311,10 +367,14 @@ class AudioMixer(Player):
             else:
                 if is_stereo:
                     Logger.debug(f"R → {mixer_input}")
-                    self.conn_man.connect_by_name(channel_1_output, mixer_input)
+                    self.conn_man.connect_by_name(
+                        channel_1_output, mixer_input
+                    )
                 else:
                     Logger.debug(f"Mono → {mixer_input}")
-                    self.conn_man.connect_by_name(channel_0_output, mixer_input)
+                    self.conn_man.connect_by_name(
+                        channel_0_output, mixer_input
+                    )
 
     def player_connections_correct(
         self,
@@ -322,7 +382,9 @@ class AudioMixer(Player):
         player_output_prefix: str = "outport",
         selected_outputs: list = None,
     ) -> bool:
-        """Verify the player's outputs are wired exactly as connect_player_to_outputs would wire them.
+        """
+        Verify the player's outputs are wired exactly as
+        connect_player_to_outputs would wire them.
 
         Mirrors the routing in connect_player_to_outputs: same output_to_input
         mapping (built from audio_outputs), same alternating L/R fan-out walk,
@@ -374,7 +436,8 @@ class AudioMixer(Player):
     ):
         """Disconnect a player's outputs from the mixer.
 
-        Must be called BEFORE the player's JACK client is destroyed (i.e. before
+        Must be called BEFORE the player's JACK client is destroyed (i.e.
+        before
         sending /quit), otherwise JACK receives disconnect requests for ports
         that no longer exist, which can corrupt its shared memory registry.
 
@@ -397,7 +460,8 @@ class AudioMixer(Player):
 def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
     """Build OSC endpoint configuration for audio mixer.
 
-    Creates OSC addresses in the format expected by jack-volume (audiomixer_routes branch):
+    Creates OSC addresses in the format expected by jack-volume
+    (audiomixer_routes branch):
     /audiomixer/{client_name}/master
     /audiomixer/{client_name}/0
     /audiomixer/{client_name}/1
@@ -426,7 +490,8 @@ def build_mixer_osc_endpoints(client_name: str, channel_number: int) -> dict:
 class MixerClient(PlayerClient):
     """OSC Client for controlling the AudioMixer via jack-volume.
 
-    Provides methods to control volume for individual channels and master volume.
+    Provides methods to control volume for individual channels and master
+    volume.
     Uses OSC addresses: /audiomixer/<instance>/<channel>
     where channel can be 'master' or '0', '1', '2', etc.
     """
@@ -446,7 +511,9 @@ class MixerClient(PlayerClient):
         endpoints = build_mixer_osc_endpoints(self.client_name, channel_number)
 
         super().__init__(
-            player_port=player_port, endpoints=endpoints, name=f"mixer-{mixer_id}"
+            player_port=player_port,
+            endpoints=endpoints,
+            name=f"mixer-{mixer_id}",
         )
 
     @logged
@@ -457,7 +524,9 @@ class MixerClient(PlayerClient):
             gain: Volume gain (0.0 to 1.0)
         """
         if not 0.0 <= gain <= 1.0:
-            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
+            Logger.error(
+                f"Invalid gain value: {gain}. Must be between 0.0 and 1.0"
+            )
             return
 
         path = f"/audiomixer/{self.client_name}/master"
@@ -473,11 +542,15 @@ class MixerClient(PlayerClient):
             gain: Volume gain (0.0 to 1.0)
         """
         if not 0.0 <= gain <= 1.0:
-            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
+            Logger.error(
+                f"Invalid gain value: {gain}. Must be between 0.0 and 1.0"
+            )
             return
 
         if channel >= self.channel_number:
-            Logger.error(f"Invalid channel: {channel}. Max: {self.channel_number - 1}")
+            Logger.error(
+                f"Invalid channel: {channel}. Max: {self.channel_number - 1}"
+            )
             return
 
         path = f"/audiomixer/{self.client_name}/{channel}"
@@ -558,7 +631,8 @@ class MixerClient(PlayerClient):
         def server_to_client_callback(value):
             """Forward OSC values from server to mixer client."""
             Logger.debug(f"Forwarding value to mixer: {value}")
-            # The value will be automatically sent to jack-volume via the OSC client
+            # The value will be automatically sent to jack-volume via the OSC
+            # client
 
         # Add callback to all endpoints
         endpoints_with_callbacks = add_callback_to_all(
@@ -569,7 +643,8 @@ class MixerClient(PlayerClient):
         oscquery_server.add_endpoints(endpoints_with_callbacks)
 
         Logger.info(
-            f"Mixer {self.client_name} added to OSCQuery server with {len(endpoints)} endpoints"
+            f"Mixer {self.client_name} added to OSCQuery server with"
+            f"{len(endpoints)} endpoints"
         )
 
 
@@ -603,7 +678,11 @@ def start_audio_mixer(
     """
     # Create the mixer
     mixer = AudioMixer(
-        audio_outputs=audio_outputs, port=port, mixer_id=mixer_id, path=path, args=args
+        audio_outputs=audio_outputs,
+        port=port,
+        mixer_id=mixer_id,
+        path=path,
+        args=args,
     )
 
     # Start with timeout handling

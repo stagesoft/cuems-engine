@@ -65,7 +65,8 @@ def parse_osc_message(data: bytes) -> tuple[str, list[Any]] | None:
         return None
 
     try:
-        # OSC message format: address (null-padded to 4 bytes), type tag string, arguments
+        # OSC message format: address (null-padded to 4 bytes), type tag
+        # string, arguments
         # Use pythonosc's parsing utilities
         address, index = osc_types.get_string(data, 0)
 
@@ -136,10 +137,13 @@ async def handle_websocket_connection(
         message_handler: Callback function to handle parsed OSC messages.
                         Called with (address: str, args: list)
         stop_check: Function that returns True when the listener should stop
-        client_set: Optional set to track connected clients for broadcast. If provided,
+        client_set: Optional set to track connected clients for broadcast. If
+        provided,
                     websocket is added on connect and removed on disconnect.
-        on_connect: Optional async callback called with the websocket after connection
-                    is established. Used for sending initial state to new clients.
+        on_connect: Optional async callback called with the websocket after
+        connection
+                    is established. Used for sending initial state to new
+                    clients.
     """
     if client_set is not None:
         client_set.add(websocket)
@@ -170,11 +174,14 @@ async def handle_websocket_connection(
                     try:
                         message_handler(address, args)
                     except Exception as e:
-                        Logger.error(f"Error in OSC message handler for {address}: {e}")
+                        Logger.error(
+                            f"Error in OSC message handler for {address}: {e}"
+                        )
             else:
                 # Text message - might be JSON for OSCQuery protocol
                 Logger.debug(
-                    f"WebSocket text message received (ignored): {message[:100] if len(message) > 100 else message}"
+                    f"WebSocket text message received (ignored):"
+                    f"{message[:100] if len(message) > 100 else message}"
                 )
 
     except ConnectionClosed:
@@ -192,7 +199,8 @@ def build_osc_message(address: str, value: Any) -> Optional[bytes]:
 
     Args:
         address: OSC address (e.g. '/engine/status/running')
-        value: Value to send. Type is inferred: str -> 's', int -> 'i', float -> 'f'.
+        value: Value to send. Type is inferred: str -> 's', int -> 'i', float
+        -> 'f'.
 
     Returns:
         Bytes to send over WebSocket, or None if building failed.
@@ -241,7 +249,8 @@ async def websocket_osc_listener(
         message_handler: Callback function to handle parsed OSC messages.
                         Called with (address: str, args: list)
         stop_check: Function that returns True when the listener should stop
-        existing_server_check: Optional function that returns True if an existing
+        existing_server_check: Optional function that returns True if an
+        existing
                               server is already listening on the port. If True,
                               the listener will not start its own server.
 
@@ -258,13 +267,15 @@ async def websocket_osc_listener(
     """
     if not websockets:
         Logger.error(
-            "websockets library not available - cannot start WebSocket OSC listener"
+            "websockets library not available - cannot start WebSocket OSC"
+            "listener"
         )
         return
 
     if existing_server_check and existing_server_check():
         Logger.info(
-            f"Existing server detected on {host}:{port}, WebSocket OSC listener not starting own server"
+            f"Existing server detected on {host}:{port}, WebSocket OSC"
+            f"listener not starting own server"
         )
         return
 
@@ -283,7 +294,9 @@ async def websocket_osc_listener(
             ping_interval=20,
             ping_timeout=20,
         ):
-            Logger.info(f"WebSocket OSC listener started on ws://{host}:{port}")
+            Logger.info(
+                f"WebSocket OSC listener started on ws://{host}:{port}"
+            )
             # Keep running until stop is requested
             while not stop_check():
                 await asyncio.sleep(0.1)
@@ -291,10 +304,12 @@ async def websocket_osc_listener(
     except OSError as e:
         if "already in use" in str(e).lower() or e.errno == 98:
             Logger.warning(
-                f"WebSocket port {port} already in use (likely by pyossia OSCQuery server)"
+                f"WebSocket port {port} already in use (likely by pyossia"
+                f"OSCQuery server)"
             )
             Logger.info(
-                "WebSocket OSC listener will not start - pyossia is handling WebSocket connections"
+                "WebSocket OSC listener will not start - pyossia is handling"
+                "WebSocket connections"
             )
             Logger.info("Commands will be received via HTTP polling fallback")
         else:
@@ -323,13 +338,18 @@ class WebSocketOscRouter:
 
     def __init__(self):
         self._handlers: dict[str, Callable[[str, list[Any]], None]] = {}
-        self._wildcard_handlers: list[tuple[str, Callable[[str, list[Any]], None]]] = []
+        self._wildcard_handlers: list[
+            tuple[str, Callable[[str, list[Any]], None]]
+        ] = []
 
-    def register(self, pattern: str, handler: Callable[[str, list[Any]], None]) -> None:
+    def register(
+        self, pattern: str, handler: Callable[[str, list[Any]], None]
+    ) -> None:
         """Register a handler for an OSC address pattern.
 
         Args:
-            pattern: OSC address or pattern. Use '*' at the end for wildcard matching.
+            pattern: OSC address or pattern. Use '*' at the end for wildcard
+            matching.
                     e.g., '/engine/command/go' for exact match
                     e.g., '/engine/command/*' for prefix match
             handler: Callback function to handle messages matching the pattern.
@@ -369,7 +389,9 @@ class WebSocketOscRouter:
                     handler(address, args)
                     return True
                 except Exception as e:
-                    Logger.error(f"Error in wildcard OSC handler for {address}: {e}")
+                    Logger.error(
+                        f"Error in wildcard OSC handler for {address}: {e}"
+                    )
                     return False
 
         Logger.debug(f"No handler registered for OSC address: {address}")

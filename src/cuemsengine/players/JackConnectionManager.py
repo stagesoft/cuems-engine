@@ -28,7 +28,8 @@ class JackConnectionManager:
         """Initialize the JACK connection manager.
 
         Args:
-            client_name: Name for the JACK client (default: 'cuems_connection_manager')
+            client_name: Name for the JACK client (default:
+            'cuems_connection_manager')
         """
         self.client_name = client_name
         self._client = None
@@ -38,7 +39,8 @@ class JackConnectionManager:
         """Initialize the JACK client."""
         if jack is None:
             Logger.warning(
-                "JACK library not available -- JackConnectionManager running in no-op mode"
+                "JACK library not available -- JackConnectionManager running"
+                "in no-op mode"
             )
             self._client = None
             return
@@ -46,7 +48,8 @@ class JackConnectionManager:
             # Create a client without ports, just for connection management
             self._client = jack.Client(self.client_name, no_start_server=True)
             Logger.debug(
-                f"JACK connection manager client '{self.client_name}' initialized"
+                f"JACK connection manager client '{self.client_name}'"
+                f"initialized"
             )
         except jack.JackError as e:
             Logger.error(f"Failed to initialize JACK client: {e}")
@@ -152,7 +155,8 @@ class JackConnectionManager:
             try:
                 if self.is_connected(source_port, destination_port):
                     Logger.debug(
-                        f"Ports already connected: {source_port} -> {destination_port}"
+                        f"Ports already connected: {source_port} ->"
+                        f"{destination_port}"
                     )
                     return True
                 self.client.connect(source_port, destination_port)
@@ -161,12 +165,14 @@ class JackConnectionManager:
             except jack.JackError as e:
                 if attempt == 0:
                     Logger.warning(
-                        f"connect failed, retrying with fresh client: {source_port} -> {destination_port}: {e}"
+                        f"connect failed, retrying with fresh client:"
+                        f"{source_port} -> {destination_port}: {e}"
                     )
                     self._reset_client()
                     continue
                 Logger.warning(
-                    f"Failed to connect {source_port} -> {destination_port}: {e}"
+                    f"Failed to connect {source_port} -> {destination_port}:"
+                    f"{e}"
                 )
                 return False
             except Exception as e:
@@ -175,7 +181,9 @@ class JackConnectionManager:
         return False
 
     @logged
-    def disconnect_by_name(self, source_port: str, destination_port: str) -> bool:
+    def disconnect_by_name(
+        self, source_port: str, destination_port: str
+    ) -> bool:
         """Disconnect two JACK ports by name.
 
         Args:
@@ -191,17 +199,21 @@ class JackConnectionManager:
                 return False
             try:
                 self.client.disconnect(source_port, destination_port)
-                Logger.info(f"Disconnected {source_port} -> {destination_port}")
+                Logger.info(
+                    f"Disconnected {source_port} -> {destination_port}"
+                )
                 return True
             except jack.JackError as e:
                 if attempt == 0:
                     Logger.warning(
-                        f"disconnect failed, retrying with fresh client: {source_port} -> {destination_port}: {e}"
+                        f"disconnect failed, retrying with fresh client:"
+                        f"{source_port} -> {destination_port}: {e}"
                     )
                     self._reset_client()
                     continue
                 Logger.warning(
-                    f"Failed to disconnect {source_port} -> {destination_port}: {e}"
+                    f"Failed to disconnect {source_port} ->"
+                    f"{destination_port}: {e}"
                 )
                 return False
             except Exception as e:
@@ -239,7 +251,9 @@ class JackConnectionManager:
             return connection_names
 
         except jack.JackError as e:
-            Logger.error(f"Error getting connections for port {port_name}: {e}")
+            Logger.error(
+                f"Error getting connections for port {port_name}: {e}"
+            )
             return []
         except Exception as e:
             Logger.error(f"Unexpected error getting connections: {e}")
@@ -265,7 +279,8 @@ class JackConnectionManager:
             try:
                 self._client.close()
                 Logger.debug(
-                    f"JACK connection manager client '{self.client_name}' closed"
+                    f"JACK connection manager client '{self.client_name}'"
+                    f"closed"
                 )
             except Exception as e:
                 Logger.debug(f"Error closing JACK client: {e}")

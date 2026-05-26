@@ -30,7 +30,10 @@ def _watchdog():
         if _cleanup_start_time:
             cleanup_time = time.time() - _cleanup_start_time
             if cleanup_time > 5:
-                print(f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting")
+                print(
+                    f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force"
+                    f"exiting"
+                )
                 sys.stdout.flush()
                 sys.stderr.flush()
                 os._exit(0)
@@ -39,14 +42,17 @@ def _watchdog():
         runtime = time.time() - _test_start_time
         if runtime > 40:
             print(
-                f"\n⚠️  WATCHDOG: Total runtime {runtime:.0f}s exceeded, force exiting"
+                f"\n⚠️  WATCHDOG: Total runtime {runtime:.0f}s exceeded,"
+                f"force exiting"
             )
             sys.stdout.flush()
             sys.stderr.flush()
             os._exit(1)
 
 
-_watchdog_thread = threading.Thread(target=_watchdog, daemon=True, name="Watchdog")
+_watchdog_thread = threading.Thread(
+    target=_watchdog, daemon=True, name="Watchdog"
+)
 _watchdog_thread.start()
 
 
@@ -92,7 +98,9 @@ signal.signal(signal.SIGINT, signal_handler)
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_on_exit():
-    """Session-level fixture that ensures cleanup happens even on interruption"""
+    """
+    Session-level fixture that ensures cleanup happens even on interruption
+    """
     global _pytest_finished, _cleanup_start_time
 
     yield
@@ -116,7 +124,10 @@ def cleanup_on_exit():
 
 @pytest.fixture
 def engine_cleanup():
-    """Fixture to ensure engine instances are properly cleaned up - AGGRESSIVE MODE"""
+    """
+    Fixture to ensure engine instances are properly cleaned up - AGGRESSIVE
+    MODE
+    """
     import threading
 
     engines = []

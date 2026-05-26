@@ -9,7 +9,9 @@ from typing import Callable, Optional, Union
 
 from cuemsutils.log import Logger
 from pyossia import Node, ValueType
-from pyossia.ossia_python import OSCDevice, OSCQueryDevice  # type: ignore[attr-defined]
+
+# type: ignore[attr-defined]
+from pyossia.ossia_python import OSCDevice, OSCQueryDevice
 
 # Type aliases for device setup functions
 ServerSetupFunction = Callable[..., bool]
@@ -17,20 +19,25 @@ ClientSetupFunction = Callable[..., Union[OSCDevice, OSCQueryDevice]]
 
 
 def new_osc_device(cls) -> OSCDevice:
-    """An OSC device is required to deal with a remote application using OSC protocol
+    """
+    An OSC device is required to deal with a remote application using OSC
+    protocol
 
     Args:
         name (str): name of the device
         host (str): host ip address
-        remote_port (int): port where osc messages have to be sent to be catch by a remote client to listen to the local device
-        local_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
+        remote_port (int): port where osc messages have to be sent to be catch
+        by a remote client to listen to the local device
+        local_port (int): port where OSC requests have to be sent by any remote
+        client to deal with the local device
 
     Returns:
         OSCDevice: an OSC device
     """
     x = OSCDevice(cls.name, cls.host, cls.remote_port, cls.local_port)
     Logger.debug(
-        f"OSCDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port}"
+        f"OSCDevice created: {x}, remote_port: {cls.remote_port}, local_port:"
+        f"{cls.local_port}"
     )
     return x
 
@@ -41,7 +48,9 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
             cls.name, f"ws://{cls.host}:{cls.remote_port}", cls.local_port
         )
     except Exception as e:
-        Logger.exception(f"Failed to create OSCQueryDevice: {e}, type: {type(e)}")
+        Logger.exception(
+            f"Failed to create OSCQueryDevice: {e}, type: {type(e)}"
+        )
         return
     Logger.info(f"Added OSCQueryDevice: {cls.name}")
     try:
@@ -50,13 +59,17 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
             result = x.update()
             sleep(0.5)
             Logger.debug(
-                f"Waiting for remote device ws://{cls.host}:{cls.remote_port} to be ready..."
+                f"Waiting for remote device ws://{cls.host}:{cls.remote_port}"
+                f"to be ready..."
             )
     except Exception as e:
-        Logger.exception(f"Failed to update OSCQueryDevice: {e}, type: {type(e)}")
+        Logger.exception(
+            f"Failed to update OSCQueryDevice: {e}, type: {type(e)}"
+        )
         return
     Logger.debug(
-        f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port}, local_port: {cls.local_port} {datetime.now()}"
+        f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port},"
+        f"local_port: {cls.local_port} {datetime.now()}"
     )
     return x
 
@@ -74,15 +87,18 @@ def set_osc_server(cls) -> bool:
 
     Args:
         host (str): host ip address
-        remote_port (int): port where osc messages have to be sent to be catch by a remote client to listen to the local device
-        local_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
+        remote_port (int): port where osc messages have to be sent to be catch
+        by a remote client to listen to the local device
+        local_port (int): port where OSC requests have to be sent by any remote
+        client to deal with the local device
         log (bool): enable protocol logging
 
     Returns:
         bool: True if the server has been created successfully
     """
     Logger.debug(
-        f"creating osc server for {cls.name} on {cls.host}:{cls.local_port} -> {cls.remote_port}"
+        f"creating osc server for {cls.name} on {cls.host}:{cls.local_port}"
+        f"-> {cls.remote_port}"
     )
     return cls.device.create_osc_server(
         cls.host, cls.remote_port, cls.local_port, cls.logging
@@ -95,15 +111,18 @@ def set_oscquery_server(cls) -> bool:
     Make the local device able to handle oscquery request
 
     Args:
-        osc_port (int): port where OSC requests have to be sent by any remote client to deal with the local device
-        ws_port (int) port where WebSocket requests have to be sent by any remote client to deal with the local device
+        osc_port (int): port where OSC requests have to be sent by any remote
+        client to deal with the local device
+        ws_port (int) port where WebSocket requests have to be sent by any
+        remote client to deal with the local device
         log (bool): enable protocol logging
 
     Returns:
         bool: True if the server has been created successfully
     """
     Logger.debug(
-        f"creating oscquery server on {cls.host}:{cls.remote_port} -> {cls.local_port}"
+        f"creating oscquery server on {cls.host}:{cls.remote_port} ->"
+        f"{cls.local_port}"
     )
 
     try:
@@ -124,7 +143,9 @@ class ServerDevices(Enum):
 ## --------- HELPERS --------- ##
 
 
-def add_callbacks_from_dict(endpoints: dict, cmd_dict: dict[str, Callable]) -> dict:
+def add_callbacks_from_dict(
+    endpoints: dict, cmd_dict: dict[str, Callable]
+) -> dict:
     """Include the function endpoints in the endpoints dictionary
 
     Args:
@@ -161,7 +182,9 @@ def add_prefix_to_all(endpoints: dict, prefix: str) -> dict:
     return {prefix + key: value for key, value in endpoints.items()}
 
 
-def deserialize_node(node_data: dict, parent_node: Optional[Node] = None) -> Node:
+def deserialize_node(
+    node_data: dict, parent_node: Optional[Node] = None
+) -> Node:
     """
     Deserialize a dictionary structure into pyossia nodes.
 
@@ -188,7 +211,9 @@ def deserialize_node(node_data: dict, parent_node: Optional[Node] = None) -> Nod
             try:
                 param.value = param_dict["value"]
             except:
-                Logger.warning(f"Could not set value for parameter at {node.name}")
+                Logger.warning(
+                    f"Could not set value for parameter at {node.name}"
+                )
 
     # Recursively create children
     for child_data in node_data.get("children", []):
@@ -215,7 +240,9 @@ def serialize_node(node: Node) -> dict:
         param_dict = {
             "access": str(param.access_mode),
             "bounding": str(param.bounding_mode),
-            "type": str(param.value_type) if hasattr(param, "value_type") else None,
+            "type": (
+                str(param.value_type) if hasattr(param, "value_type") else None
+            ),
         }
 
         # Try to get current value
@@ -234,7 +261,9 @@ def serialize_node(node: Node) -> dict:
             param_dict["domain"] = (
                 str(param.domain) if hasattr(param, "domain") else None
             )
-            param_dict["unit"] = str(param.unit) if hasattr(param, "unit") else None
+            param_dict["unit"] = (
+                str(param.unit) if hasattr(param, "unit") else None
+            )
         except:
             pass
 

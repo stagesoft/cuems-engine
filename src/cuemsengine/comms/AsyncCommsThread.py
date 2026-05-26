@@ -18,7 +18,8 @@ class AsyncCommsThread(Thread):
     thread. Subclasses must implement `create_all_tasks()` to define the async
     tasks that will be executed concurrently.
 
-    The event loop runs in the background thread and can be safely accessed from
+    The event loop runs in the background thread and can be safely accessed
+    from
     other threads using `run_coroutine()`.
 
     Attributes:
@@ -99,15 +100,19 @@ class AsyncCommsThread(Thread):
         self.stop_requested = True
         if self.event_loop and self.is_alive():
             try:
-                asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
+                asyncio.run_coroutine_threadsafe(
+                    self.stop_async(), self.event_loop
+                )
             except Exception as e:
                 Logger.debug(f"Error stopping {self.name}: {e}")
 
     async def stop_async(self) -> None:
         """Async stop handler.
 
-        Cancels all running tasks, waits for cleanup, then stops the event loop.
-        This is called internally by `stop()` and should not be called directly.
+        Cancels all running tasks, waits for cleanup, then stops the event
+        loop.
+        This is called internally by `stop()` and should not be called
+        directly.
 
         Note:
             This coroutine must run in the same event loop that it stops.
@@ -127,7 +132,9 @@ class AsyncCommsThread(Thread):
         # Wait for all tasks to complete cancellation
         if pending_tasks:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
-            Logger.debug(f"{self.name} cancelled {len(pending_tasks)} pending tasks")
+            Logger.debug(
+                f"{self.name} cancelled {len(pending_tasks)} pending tasks"
+            )
 
         # Now stop the event loop
         self.event_loop.call_soon_threadsafe(self.event_loop.stop)
@@ -153,7 +160,8 @@ class AsyncCommsThread(Thread):
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 Logger.error(
-                    f"{self.name} task {i} failed with {type(result).__name__}: {result}"
+                    f"{self.name} task {i} failed with"
+                    f"{type(result).__name__}: {result}"
                 )
         Logger.info(f"{self.name} asyncio communications finished")
 
@@ -182,7 +190,10 @@ class AsyncCommsThread(Thread):
         raise NotImplementedError("create_all_tasks is not implemented")
 
     def run_coroutine(
-        self, coroutine: Callable, message: dict, timeout: Optional[float] = None
+        self,
+        coroutine: Callable,
+        message: dict,
+        timeout: Optional[float] = None,
     ) -> Any:
         """Run a coroutine in the event loop from another thread.
 
@@ -197,7 +208,8 @@ class AsyncCommsThread(Thread):
             coroutine: A coroutine function to execute. Must be a coroutine
                 function (not a regular function).
             message: Dictionary to pass as argument to the coroutine.
-            timeout: Optional timeout in seconds (defaults to self.timeout). -1 means no timeout.
+            timeout: Optional timeout in seconds (defaults to self.timeout). -1
+            means no timeout.
 
         Returns:
             Any: The return value from the coroutine.
@@ -246,10 +258,14 @@ class AsyncCommsThread(Thread):
             Logger.debug(f"{self.name} {function_name} returned: {result!r}")
             return result
         except TimeoutError:
-            Logger.error(f"{self.name} {function_name} timed out after {timeout}s")
+            Logger.error(
+                f"{self.name} {function_name} timed out after {timeout}s"
+            )
             send_task.cancel()
             raise
         except Exception as exc:
-            Logger.error(f"{self.name} {function_name} raised an exception: {exc!r}")
+            Logger.error(
+                f"{self.name} {function_name} raised an exception: {exc!r}"
+            )
             send_task.cancel()
             raise

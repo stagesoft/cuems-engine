@@ -14,13 +14,15 @@ class VideoPlayer(Player):
 
     This class restarts the videocomposer service.
 
-    IMPORTANT: This class should not be used, since videocomposer is a systemd service and not a subprocess.
+    IMPORTANT: This class should not be used, since videocomposer is a systemd
+    service and not a subprocess.
     """
 
     def __init__(self):
         super().__init__()
         Logger.warning(
-            "Restarting the videocomposer service. Use VideoClient only to control videocomposer."
+            "Restarting the videocomposer service. Use VideoClient only to"
+            "control videocomposer."
         )
 
     @logged
@@ -39,7 +41,8 @@ class VideoClient(PlayerClient):
     def create_layer_endpoints(self, layer_id: str) -> None:
         """Register per-layer OSC endpoints for the given layer_id."""
         layer_endpoints = {
-            k.format(layer_id): v for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
+            k.format(layer_id): v
+            for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
         }
         self.create_endpoints(layer_endpoints)
 
@@ -77,7 +80,8 @@ class VideoOutput:
     def get_layer_placement(self) -> tuple[int, int]:
         """Returns (x, y) offset from canvas center to this output's center.
 
-        The videocomposer uses center-relative coordinates: (0, 0) = canvas center.
+        The videocomposer uses center-relative coordinates: (0, 0) = canvas
+        center.
         The renderer negates Y (glTranslatef(x, -y, 0)) because OpenGL Y points
         up while screen Y points down.  The canvas FBO also has Y=0 at the
         bottom, so we negate Y here to compensate — positive Y in the returned
@@ -91,11 +95,14 @@ class VideoOutput:
         return (output_cx - canvas_cx, canvas_cy - output_cy)
 
     def get_layer_scale(self) -> tuple[float, float]:
-        """Returns (scaleX, scaleY) to fit the video layer within this output's region.
+        """
+        Returns (scaleX, scaleY) to fit the video layer within this output's
+        region.
 
         The videocomposer renders layers at full canvas size with letterboxing.
         For typical setups (ultra-wide canvas, 16:9 video), the video fills the
-        canvas height and is letterboxed horizontally.  The height ratio therefore
+        canvas height and is letterboxed horizontally. The height ratio
+        therefore
         determines the correct uniform scale to fit the output region.
         """
         s = (
@@ -106,7 +113,8 @@ class VideoOutput:
         return (s, s)
 
     def apply_config(self, video_client: VideoClient) -> None:
-        """No-op: videocomposer reads display config from display.conf at startup.
+        """
+        No-op: videocomposer reads display config from display.conf at startup.
 
         /run/cuems/display.conf is the shared contract between engine and
         videocomposer for canvas geometry. cuems-generate-display-conf
@@ -119,5 +127,6 @@ class VideoOutput:
         edit-mode OSC handlers.
         """
         Logger.info(
-            f"VideoOutput {self.mapped_to}: region ({self.x},{self.y} {self.width}x{self.height})"
+            f"VideoOutput {self.mapped_to}: region ({self.x},{self.y}"
+            f"{self.width}x{self.height})"
         )

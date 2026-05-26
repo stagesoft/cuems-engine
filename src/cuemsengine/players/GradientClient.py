@@ -40,7 +40,8 @@ class GradientClient:
     ) -> None:
         builder = OscMessageBuilder(address="/gradient/start_fade")
         builder.add_arg(motion_id, arg_type="s")
-        builder.add_arg(self._node_uuid, arg_type="s")  # node_name — self-injected
+        # node_name — self-injected
+        builder.add_arg(self._node_uuid, arg_type="s")
         builder.add_arg(osc_host, arg_type="s")
         builder.add_arg(int(osc_port), arg_type="i")
         builder.add_arg(osc_path, arg_type="s")

@@ -136,7 +136,9 @@ class PlayerHandler:
     def set_audio_output_generator(self, path: str, args: str):
         """Sets the audio player generator"""
         Logger.info(f"Setting audio output generator to {path} {args}")
-        self._audio_output_generator = partial(start_audio_output, path=path, args=args)
+        self._audio_output_generator = partial(
+            start_audio_output, path=path, args=args
+        )
 
     def set_audio_outputs(self, audio_outputs: dict[str, dict]) -> None:
         """Store audio output configs keyed by <id>."""
@@ -193,12 +195,14 @@ class PlayerHandler:
 
         The order is critical: disconnect JACK ports first, THEN send /quit.
         If /quit is sent first the player destroys its JACK client immediately,
-        and subsequent disconnect calls hit non-existent ports which can corrupt
+        and subsequent disconnect calls hit non-existent ports which can
+        corrupt
         JACK's shared-memory semaphore registry.
 
         Returns:
             True if the process was successfully killed (or was already dead),
-            False if the process could not be killed (still alive after timeout).
+            False if the process could not be killed (still alive after
+            timeout).
         """
         if player is None:
             return True
@@ -211,13 +215,17 @@ class PlayerHandler:
                 self._audio_mixer.disconnect_player(player_name)
                 Logger.debug(f"Disconnected {player_name} from mixer")
             except Exception as e:
-                Logger.warning(f"Failed to disconnect audio player from mixer: {e}")
+                Logger.warning(
+                    f"Failed to disconnect audio player from mixer: {e}"
+                )
 
         # 2. Send /quit OSC command to gracefully stop the player
         if osc_client is not None:
             try:
                 osc_client.set_value("/quit", True)
-                Logger.debug(f"Sent /quit command to audio player for cue {cue_id}")
+                Logger.debug(
+                    f"Sent /quit command to audio player for cue {cue_id}"
+                )
             except Exception as e:
                 Logger.warning(f"Failed to send /quit to audio player: {e}")
 
@@ -233,10 +241,13 @@ class PlayerHandler:
             if player.p is not None:
                 player.p.kill()
                 player.p.wait(timeout=1.0)
-                Logger.debug(f"Killed audio player subprocess for cue {cue_id}")
+                Logger.debug(
+                    f"Killed audio player subprocess for cue {cue_id}"
+                )
         except subprocess.TimeoutExpired:
             Logger.error(
-                f"Audio player process for cue {cue_id} did not die after SIGKILL — port may still be bound"
+                f"Audio player process for cue {cue_id} did not die after"
+                f"SIGKILL — port may still be bound"
             )
             process_dead = False
         except Exception as e:
@@ -261,7 +272,9 @@ class PlayerHandler:
                     break
                 sleep(0.1)
             else:
-                Logger.warning(f"JACK client {player_name} still has ports after kill")
+                Logger.warning(
+                    f"JACK client {player_name} still has ports after kill"
+                )
 
         return process_dead
 
@@ -283,7 +296,9 @@ class PlayerHandler:
                 self._cue_players.pop(cue, None)
                 players_to_kill.append((str(cue.id), player, osc_client))
 
-        Logger.info(f"Killing {len(players_to_kill)} audio players during cleanup")
+        Logger.info(
+            f"Killing {len(players_to_kill)} audio players during cleanup"
+        )
         for entry in players_to_kill:
             if len(entry) == 3:
                 cue_id, player, osc_client = entry
@@ -313,7 +328,8 @@ class PlayerHandler:
         if not all_ports:
             return 0
 
-        # Extract unique client names from port names (e.g. "Audio_Player-abc123:outport 0" → "Audio_Player-abc123")
+        # Extract unique client names from port names (e.g.
+        # "Audio_Player-abc123:outport 0" → "Audio_Player-abc123")
         jack_clients = set()
         for port_name in all_ports:
             client_name = port_name.split(":")[0]
@@ -330,13 +346,17 @@ class PlayerHandler:
         if not zombies:
             return 0
 
-        Logger.warning(f"Found {len(zombies)} zombie JACK audio clients: {zombies}")
+        Logger.warning(
+            f"Found {len(zombies)} zombie JACK audio clients: {zombies}"
+        )
         for client_name in zombies:
             try:
                 self._audio_mixer.disconnect_player(client_name)
                 Logger.info(f"Disconnected zombie JACK client {client_name}")
             except Exception as e:
-                Logger.warning(f"Failed to disconnect zombie {client_name}: {e}")
+                Logger.warning(
+                    f"Failed to disconnect zombie {client_name}: {e}"
+                )
 
         return len(zombies)
 
@@ -351,7 +371,9 @@ class PlayerHandler:
         import signal
 
         result = subprocess.run(
-            ["pgrep", "-f", "cuems-audioplayer"], capture_output=True, text=True
+            ["pgrep", "-f", "cuems-audioplayer"],
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             return
@@ -380,8 +402,10 @@ class PlayerHandler:
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
 
-        The player is stored in the player handler and the osc client is assigned to the cue.
-        After creating the player, it will be automatically connected to the audio mixer if one exists.
+        The player is stored in the player handler and the osc client is
+        assigned to the cue.
+        After creating the player, it will be automatically connected to the
+        audio mixer if one exists.
 
         Args:
             cue: The cue to create the audio output for
@@ -411,7 +435,9 @@ class PlayerHandler:
             # except AttributeError handler and exit silently).
             existing_osc = getattr(cue, "_osc", None)
             cue._osc = None
-            killed = self._kill_audio_player(existing_player, existing_osc, cue_id)
+            killed = self._kill_audio_player(
+                existing_player, existing_osc, cue_id
+            )
             # Free assigned port AFTER process is dead to avoid Bug 2's race.
             # Skip if kill failed — process still holds the port.
             if killed:
@@ -436,28 +462,37 @@ class PlayerHandler:
             uuid_slug = "".join(str(cue.id).split("-"))
             player_name = f"Audio_Player-{uuid_slug}"
 
-            # Resolve each output_name to its JACK port via the ID in the mappings.
-            # output_name format: "{node_uuid}_{output_id}"  (e.g. "a3811d78-..._6")
-            # resolve_audio_port maps the numeric ID → JACK port name (e.g. "usb_audio:playback_1")
+            # Resolve each output_name to its JACK port via the ID in the
+            # mappings.
+            # output_name format: "{node_uuid}_{output_id}" (e.g.
+            # "a3811d78-..._6")
+            # resolve_audio_port maps the numeric ID → JACK port name (e.g.
+            # "usb_audio:playback_1")
             selected_outputs = []
             for output in getattr(cue, "outputs", []):
                 raw = output.get("output_name", "")
-                output_id = raw[37:] if len(raw) > 37 else None  # strip "{uuid}_"
+                output_id = (
+                    raw[37:] if len(raw) > 37 else None
+                )  # strip "{uuid}_"
                 if output_id is not None:
                     jack_port = self.resolve_audio_port(output_id)
                     if jack_port:
                         selected_outputs.append(jack_port)
                     else:
                         Logger.warning(
-                            f'Cannot resolve audio output ID "{output_id}" to a JACK port'
+                            f'Cannot resolve audio output ID "{output_id}" to'
+                            f'a JACK port'
                         )
 
             if not selected_outputs:
                 Logger.warning(
-                    f"No valid audio outputs resolved for cue {cue.id}, skipping mixer connection"
+                    f"No valid audio outputs resolved for cue {cue.id},"
+                    f"skipping mixer connection"
                 )
             else:
-                Logger.info(f"Connecting {player_name} to outputs: {selected_outputs}")
+                Logger.info(
+                    f"Connecting {player_name} to outputs: {selected_outputs}"
+                )
                 self._audio_mixer.connect_player_to_outputs(
                     player_name=player_name,
                     player_output_prefix="outport",
@@ -502,7 +537,8 @@ class PlayerHandler:
     # def new_dmx_output(cls, cue: DmxCue) -> None:
     #     """Creates a new audio output for the given cue
 
-    #     The player is stored in the player handler and the osc client is assigned to the cue.
+    # The player is stored in the player handler and the osc client is
+    # assigned to the cue.
 
     #     Args:
     #         cue: The cue to create the dmx output for
@@ -534,7 +570,9 @@ class PlayerHandler:
         self._video_client = VideoClient(player_port=port)
 
     def get_gradient_client(self) -> "GradientClient | None":
-        """Returns the GradientClient instance, or None if not yet initialised."""
+        """
+        Returns the GradientClient instance, or None if not yet initialised.
+        """
         return self._gradient_client
 
     def set_gradient_client(self, port: int, node_uuid: str) -> None:
@@ -551,7 +589,9 @@ class PlayerHandler:
             port=port,
             node_uuid=node_uuid,
         )
-        Logger.info(f"GradientClient: bound to 127.0.0.1:{port} node_uuid={node_uuid}")
+        Logger.info(
+            f"GradientClient: bound to 127.0.0.1:{port} node_uuid={node_uuid}"
+        )
 
     def start_video_outputs(
         self,
@@ -579,8 +619,10 @@ class PlayerHandler:
             cw, ch = canvas_override
             if cw < bbox_w or ch < bbox_h:
                 raise ValueError(
-                    f"canvas_override {cw}x{ch} is smaller than the per-output "
-                    f"bounding box {bbox_w}x{bbox_h}; monitors would be cropped"
+                    f"canvas_override {cw}x{ch} is smaller than the"
+                    f"per-output "
+                    f"bounding box {bbox_w}x{bbox_h}; monitors would be"
+                    f"cropped"
                 )
             canvas_w, canvas_h = cw, ch
         else:
@@ -637,7 +679,9 @@ class PlayerHandler:
             height=region_px["height"],
         )
 
-    def resolve_video_output_for_cue(self, cue, output_name: str) -> VideoOutput:
+    def resolve_video_output_for_cue(
+        self, cue, output_name: str
+    ) -> VideoOutput:
         """Resolve an output_name suffix to a VideoOutput.
 
         For alias suffixes (<int>) looks up the cached VideoOutput.
@@ -666,7 +710,10 @@ class PlayerHandler:
             self._loaded_layer_ids.discard(layer_id)
 
     def reset_videocomposer(self):
-        """Send atomic reset to videocomposer (removes all layers + resets master)."""
+        """
+        Send atomic reset to videocomposer (removes all layers + resets
+        master).
+        """
         Logger.debug("Sending atomic reset to videocomposer")
         if self._video_client is not None:
             try:
@@ -679,12 +726,17 @@ class PlayerHandler:
                     try:
                         self._video_client.remove_layer_endpoints(layer_id)
                     except Exception as e:
-                        Logger.debug(f"Error removing layer endpoints {layer_id}: {e}")
+                        Logger.debug(
+                            f"Error removing layer endpoints {layer_id}: {e}"
+                        )
         with self._lock:
             self._loaded_layer_ids.clear()
 
     def reset_video_layers(self):
-        """Unload all tracked video layers (video blackout). Legacy per-layer method."""
+        """
+        Unload all tracked video layers (video blackout). Legacy per-layer
+        method.
+        """
         Logger.debug("Resetting video layers")
         with self._lock:
             if self._video_client is None:
@@ -729,7 +781,9 @@ class PlayerHandler:
         try:
             self._player_endpoints_generator(cue)
         except Exception as e:
-            Logger.error(f"Error setting player endpoints for cue {cue.id}: {e}")
+            Logger.error(
+                f"Error setting player endpoints for cue {cue.id}: {e}"
+            )
 
     def set_outputs_map(self, outputs_map: dict):
         """Set the outputs map for the player handler"""
@@ -742,7 +796,8 @@ class PlayerHandler:
             cue: The cue to get the output name for
 
         Returns:
-            The output name for the given cue or None if the cue is not found in the outputs map
+            The output name for the given cue or None if the cue is not found
+            in the outputs map
 
         Raises:
             AttributeError: If the outputs map is not set

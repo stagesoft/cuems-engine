@@ -31,7 +31,9 @@ class TestMtcListener:
         step_callback = MagicMock()
         reset_callback = MagicMock()
         listener = MtcListener(
-            step_callback=step_callback, reset_callback=reset_callback, port=1234
+            step_callback=step_callback,
+            reset_callback=reset_callback,
+            port=1234,
         )
         yield listener
         listener.stop()
@@ -200,11 +202,15 @@ class TestMtcListener24hRollover:
     def test_two_24h_wraps_double_offset(self, listener):
         # Walk: just-before-wrap → wrap1 → just-before-wrap → wrap2.
         FRAMES_24H_25 = 25 * 3600 * 24
-        listener._apply_24h_offset(CTimecode(framerate=25, frames=FRAMES_24H_25 - 1))
+        listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=FRAMES_24H_25 - 1)
+        )
         listener._apply_24h_offset(CTimecode(framerate=25, frames=1))  # wrap 1
         # The previous decoded frames (per heuristic) is the raw decoded
         # frames=1, NOT the offset-adjusted frames. Walk forward to ~24h.
-        listener._apply_24h_offset(CTimecode(framerate=25, frames=FRAMES_24H_25 - 1))
+        listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=FRAMES_24H_25 - 1)
+        )
         adjusted = listener._apply_24h_offset(
             CTimecode(framerate=25, frames=1)
         )  # wrap 2
@@ -234,15 +240,21 @@ class TestMtcListener24hRollover:
         assert listener._24h_offset_frames == 0
 
     def test_wrap_at_29_97fps(self, listener):
-        # At 29.97 NTSC, _int_framerate=30, frames_per_24h = 30 * 86400 = 2_592_000.
+        # At 29.97 NTSC, _int_framerate=30, frames_per_24h = 30 * 86400 =
+        # 2_592_000.
         FRAMES_24H_30 = 30 * 86400
-        listener._apply_24h_offset(CTimecode(framerate=29.97, frames=FRAMES_24H_30 - 1))
-        adjusted = listener._apply_24h_offset(CTimecode(framerate=29.97, frames=1))
+        listener._apply_24h_offset(
+            CTimecode(framerate=29.97, frames=FRAMES_24H_30 - 1)
+        )
+        adjusted = listener._apply_24h_offset(
+            CTimecode(framerate=29.97, frames=1)
+        )
         assert listener._24h_offset_frames == FRAMES_24H_30
         assert adjusted.frames == 1 + FRAMES_24H_30
 
     def test_wrap_preserves_polling_loop_termination(self, listener):
-        # Bug 869cpdbzy symptom: `while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded`
+        # Bug 869cpdbzy symptom: `while mtc.main_tc.milliseconds_rounded <
+        # cue._end_mtc.milliseconds_rounded`
         # would never exit after MTC wrapped (mtc reset to ~0, end_mtc still
         # at large value). With Layer 2 fix, main_tc stays monotonic.
         FRAMES_24H = 25 * 3600 * 24
@@ -258,15 +270,22 @@ class TestMtcListener24hRollover:
         mtc_at_wrap_minus_1 = listener._apply_24h_offset(
             CTimecode(framerate=25, frames=FRAMES_24H - 1)
         )
-        assert mtc_at_wrap_minus_1.milliseconds_rounded < cue_end.milliseconds_rounded
+        assert (
+            mtc_at_wrap_minus_1.milliseconds_rounded
+            < cue_end.milliseconds_rounded
+        )
 
         # MIDI wraps; raw decoded is ~1; after offset it's at ~24h+1.
-        mtc_post_wrap = listener._apply_24h_offset(CTimecode(framerate=25, frames=1))
+        mtc_post_wrap = listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=1)
+        )
         assert (
             mtc_post_wrap.milliseconds_rounded
             > mtc_at_wrap_minus_1.milliseconds_rounded
         )
 
         # MTC continues to walk; eventually exceeds cue_end → loop terminates.
-        mtc_past_end = listener._apply_24h_offset(CTimecode(framerate=25, frames=800))
+        mtc_past_end = listener._apply_24h_offset(
+            CTimecode(framerate=25, frames=800)
+        )
         assert mtc_past_end.milliseconds_rounded > cue_end.milliseconds_rounded

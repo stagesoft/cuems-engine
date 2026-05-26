@@ -46,7 +46,8 @@ def controller():
 
         engine = ControllerEngine(with_mtc=False)
 
-        # Mock communications_thread for _broadcast_status and _forward_command_to_nodes
+        # Mock communications_thread for _broadcast_status and
+        # _forward_command_to_nodes
         engine.communications_thread = Mock()
         engine.communications_thread.broadcast_osc = Mock()
         engine.communications_thread.nng_hub = Mock()
@@ -240,12 +241,16 @@ class TestUnloadProject:
 
 class TestHandleEditorCommandDictReturn:
     def test_dict_return_passed_as_value(self, controller):
-        """When command returns a dict, confirm_to_editor gets that dict as value."""
+        """
+        When command returns a dict, confirm_to_editor gets that dict as value.
+        """
         with (
             patch.object(controller, "confirm_to_editor") as mock_confirm,
             patch.object(controller, "set_editor_request"),
         ):
-            controller.handle_editor_command("project_status", None, context="ctx")
+            controller.handle_editor_command(
+                "project_status", None, context="ctx"
+            )
             mock_confirm.assert_called_once()
             call_kwargs = mock_confirm.call_args
             # value should be a dict, not 'OK'
@@ -260,7 +265,9 @@ class TestHandleEditorCommandDictReturn:
             patch.object(controller, "set_editor_request"),
             patch.object(controller, "_forward_command_to_nodes"),
         ):
-            controller.handle_editor_command("project_unload", None, context="ctx")
+            controller.handle_editor_command(
+                "project_unload", None, context="ctx"
+            )
             mock_confirm.assert_called_once()
             assert mock_confirm.call_args[1]["value"] == "OK"
 

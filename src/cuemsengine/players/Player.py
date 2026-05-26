@@ -21,10 +21,13 @@ class Player(Thread):
     """
 
     def __init__(self, daemon: bool = True):
-        """Initializes the Player object and a Thread object with the daemon attribute set to True.
+        """
+        Initializes the Player object and a Thread object with the daemon
+        attribute set to True.
 
         Args:
-            daemon (bool, optional): Sets the daemon attribute of the Thread object. Defaults to True.
+            daemon (bool, optional): Sets the daemon attribute of the Thread
+            object. Defaults to True.
         """
         super().__init__(daemon=daemon)
         self.p = None
@@ -80,7 +83,8 @@ class Player(Thread):
             timeout: Maximum time to wait for player to start (seconds)
 
         Raises:
-            RuntimeError: If player fails to start within timeout or thread dies
+            RuntimeError: If player fails to start within timeout or thread
+            dies
         """
         # Start the thread
         if self.firstrun:
