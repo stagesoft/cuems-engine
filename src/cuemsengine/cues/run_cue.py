@@ -296,6 +296,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # Re-apply position for each layer before making visible (layer may not have
     # been ready when position was set during arm)
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media.file_name)
 
     for index, layer_id in enumerate(layer_ids):
         layer_path = f'/videocomposer/layer/{layer_id}'
@@ -307,9 +308,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f'{layer_path}/position', [x, y])
-                sx, sy = output.get_layer_scale()
-                if sx != 1.0 or sy != 1.0:
-                    client.set_value(f'{layer_path}/scale', [sx, sy])
+                sx, sy = output.get_layer_scale(media_w, media_h)
+                client.set_value(f'{layer_path}/scale', [sx, sy])
             except (KeyError, RuntimeError, ValueError) as e:
                 Logger.warning(f'Could not re-apply position for layer {layer_id}: {e}')
             except Exception:
