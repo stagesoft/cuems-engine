@@ -609,6 +609,15 @@ class NodeEngine(BaseEngine):
 
         # Disarm all cues from the previous project.
         CUE_HANDLER.disarm_all()
+
+        # Clear the engine's 24h MTC wrap accumulator on this project transition,
+        # co-orchestrated with the DMX blackout + videocomposer reset above (which
+        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
+        # reload's small backward wire delta can't trip the wire-driven reset, so
+        # do it explicitly here — else a project loaded after a >24h run starts
+        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
         
         # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
