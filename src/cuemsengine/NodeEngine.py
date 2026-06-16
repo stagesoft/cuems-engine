@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 from functools import partial
 from time import sleep
 import os
@@ -14,10 +16,10 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
-from .display_conf import read_display_conf, DisplayConfNotFoundError
 from .osc.helpers import add_prefix_to_all
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.PortHandler import PORT_HANDLER
+from .tools.display_conf import read_display_conf, DisplayConfNotFoundError
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 
@@ -91,6 +93,7 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
+        self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
         self.set_players()  # Creates player devices - must be before NNG callback
         self._setup_nng_command_callback()  # Set up NNG command receiving (after players ready)
@@ -345,6 +348,12 @@ class NodeEngine(BaseEngine):
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
+        self.set_gradient_client()
+
+    def set_gradient_client(self) -> None:
+        """Wire GradientClient into PLAYER_HANDLER using settings from node_conf."""
+        port = int(self.cm.node_conf['gradient_osc_port'])
+        PLAYER_HANDLER.set_gradient_client(port=port, node_uuid=self.cm.node_uuid)
 
     # Audio functions
     def set_audio_players(self):
@@ -577,6 +586,15 @@ class NodeEngine(BaseEngine):
             )
             return False
 
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f'gradient send_cancel_all failed on project load: {exc}')
+        else:
+            Logger.debug('gradient_client not initialised, skipping cancel_all on project load')
+
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
         CUE_HANDLER.stop_all_cues()
@@ -609,6 +627,15 @@ class NodeEngine(BaseEngine):
 
         # Disarm all cues from the previous project.
         CUE_HANDLER.disarm_all()
+
+        # Clear the engine's 24h MTC wrap accumulator on this project transition,
+        # co-orchestrated with the DMX blackout + videocomposer reset above (which
+        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
+        # reload's small backward wire delta can't trip the wire-driven reset, so
+        # do it explicitly here — else a project loaded after a >24h run starts
+        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
         
         # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
@@ -668,23 +695,7 @@ class NodeEngine(BaseEngine):
         if len(bare_names) == 0:
             Logger.info('No media files to deploy')
             return True
-        # The rsync module 'cuems' maps to /opt/cuems_library on the
-        # controller. Media files live in <module>/media/<name>; their
-        # .idx sidecars live in <module>/media/indexes/<name>.idx.
-        # get_own_media_filenames returns the bare filename, so we
-        # prepend the module-relative path here.
-        # Also include .idx sidecar files for video assets — rsync with
-        # --ignore-missing-args silently skips entries that don't exist
-        # on the source, so this is safe even when the index hasn't been
-        # created yet.
-        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
-        media_entries = [f'media/{name}' for name in bare_names]
-        idx_entries = [
-            f'media/indexes/{name}.idx'
-            for name in bare_names
-            if os.path.splitext(name)[1].lower() in video_exts
-        ]
-        if not self.deploy_manager.sync_files(project, 'media', media_entries + idx_entries):
+        if not self.deploy_manager.sync_files(project, 'media', bare_names):
             Logger.error(
                 f'Media deploy failed for {project} — continuing with cached '
                 f'files; cues whose media is missing locally will fail on GO'
@@ -714,11 +725,29 @@ class NodeEngine(BaseEngine):
             if not os.path.exists(idx_path):
                 unindexed.append(full_path)
         if unindexed:
-            Logger.info(f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx')
+            Logger.info(
+                f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx: '
+                f'{[os.path.basename(p) for p in unindexed]}'
+            )
             try:
-                subprocess.run(['cuems-videoindexer'] + unindexed, timeout=600)
+                result = subprocess.run(
+                    ['cuems-videoindexer'] + unindexed,
+                    timeout=600,
+                    capture_output=True,
+                    text=True,
+                )
             except Exception as e:
                 Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
+                return
+            if result.returncode == 0:
+                Logger.info(f'ensure_video_indexes: indexer ok (rc=0)')
+                if result.stdout:
+                    Logger.debug(f'ensure_video_indexes stdout: {result.stdout.strip()}')
+            else:
+                Logger.warning(
+                    f'ensure_video_indexes: indexer returned rc={result.returncode}. '
+                    f'stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}'
+                )
 
     #########################
     # Nextcue
@@ -917,8 +946,35 @@ class NodeEngine(BaseEngine):
                 return
 
         if not cue_to_go._local:
-            Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
-            return
+            # First cue in the GO target isn't ours, but a post_go='go' chain
+            # may include local cues further down. Walk forward through the
+            # chain to find our first local cue and start there. Each cue in a
+            # post_go='go' chain shares the same frozen MTC snapshot, so every
+            # node fires its own local cues from the same GO press in parallel.
+            # Stop walking if the chain breaks (post_go != 'go' on a non-local
+            # cue) — that's an explicit hand-off point waiting for the next GO.
+            original = cue_to_go
+            walked = 0
+            while cue_to_go is not None and not cue_to_go._local:
+                if cue_to_go.post_go != 'go':
+                    cue_to_go = None
+                    break
+                cue_to_go = getattr(cue_to_go, '_target_object', None)
+                walked += 1
+                if walked > 1024:
+                    Logger.error('GO chain walk hit safety limit; aborting')
+                    cue_to_go = None
+                    break
+
+            if cue_to_go is None:
+                Logger.info(
+                    f'No local cues in post_go="go" chain from {original.id}; '
+                    f'nothing to play on this node for this GO')
+                return
+
+            Logger.info(
+                f'GO: skipped {walked} non-local cue(s); starting from local '
+                f'cue {cue_to_go.id}')
 
         if not cue_to_go.enabled:
             Logger.info(f'Cue {cue_to_go.id} is disabled, advancing to next enabled cue')
@@ -962,8 +1018,17 @@ class NodeEngine(BaseEngine):
         ready_script(). Notifies Controller when armed (GO button green).
         """
         Logger.info('STOP command received. Stopping playback.')
-        
+
         self.set_status('running', "no")
+
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f'gradient send_cancel_all failed on stop: {exc}')
+        else:
+            Logger.debug('gradient_client not initialised, skipping cancel_all on stop')
 
         # Signal all running cue threads to stop immediately.
         # Must happen BEFORE blackout/reset so loop_cue threads don't

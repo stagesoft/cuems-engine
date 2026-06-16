@@ -10,7 +10,8 @@ Owns all `ActionCue` processing — validation, dispatch, hooks, and result deli
 
 See [action-handler-extensibility contract](../specs/003-action-handler-extract/contracts/action-handler-extensibility.md) for integration details.
 
-::: cuemsengine.cues.action_handler
+::: cuemsengine.cues.ActionHandler
 ::: cuemsengine.cues.CueHandler
 ::: cuemsengine.cues.arm_cue
+::: cuemsengine.cues.loop_cue
 ::: cuemsengine.cues.run_cue

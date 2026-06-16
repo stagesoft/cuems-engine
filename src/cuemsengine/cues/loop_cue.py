@@ -1,28 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 import time
 from functools import singledispatch
 from time import sleep
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
+from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
 from ..tools.MtcListener import MtcListener, CTimecode
-
-# #region DEBUG
-import os as _dbg_os
-from datetime import datetime as _dbg_dt
-_DBG_LOG = '/tmp/.claude/debug.log'
-try:
-    _dbg_os.makedirs(_dbg_os.path.dirname(_DBG_LOG), exist_ok=True)
-except Exception:
-    pass
-def _dbg(msg):
-    try:
-        with open(_DBG_LOG, 'a') as _f:
-            _f.write(f"[{_dbg_dt.now().isoformat()}] [ENGINE] [DEBUG H3 H4 H6 H7] {msg}\n")
-    except Exception:
-        pass
-# #endregion DEBUG
 
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).
@@ -55,6 +44,27 @@ def loop_actionCue(cue: ActionCue, mtc: MtcListener):
     Loop an ActionCue
     """
     pass
+
+@loop_cue.register
+def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
+    """Hold a FadeCue in the cue runner for its full duration.
+
+    The actual fade is driven by gradient-motiond over OSC; this loop simply
+    blocks until the FadeCue's _end_mtc is reached so general cue lifecycle
+    (auto-disarm of the FadeCue itself in go_threaded's end-of-cue path) only
+    fires after the fade has elapsed. _start_mtc / _end_mtc are set by
+    ActionHandler._handle_fade_action at dispatch time.
+    """
+    end_mtc = getattr(cue, '_end_mtc', None)
+    if end_mtc is None:
+        Logger.warning(f'FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting immediately')
+        return
+
+    while mtc.main_tc.milliseconds_rounded < end_mtc.milliseconds_rounded:
+        if getattr(cue, '_stop_requested', False):
+            Logger.info(f'FadeCue {cue.id} loop cancelled by stop request')
+            return
+        sleep(0.02)
 
 @loop_cue.register
 def loop_audioCue(cue: AudioCue, mtc: MtcListener):
@@ -110,12 +120,9 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                 # Drift-sensitive: use _exact (float) rather than _rounded (int)
                 # to preserve sub-ms precision at NTSC framerates (29.97/23.976).
                 offset_to_go = -cue._start_mtc.milliseconds_exact
-                
+
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_to_go} (MTC={mtc.main_tc.milliseconds_rounded}ms, _start_mtc={cue._start_mtc.milliseconds_rounded}ms, _end_mtc={cue._end_mtc.milliseconds_rounded}ms)')
-                
-                # #region DEBUG
-                _dbg(f"AUDIO send /offset cue={cue.id} loop={loop_counter} mtc_ms={mtc.main_tc.milliseconds_rounded} start_mtc_ms={cue._start_mtc.milliseconds_rounded} offset_ms={offset_to_go}")
-                # #endregion DEBUG
+
                 try:
                     cue._osc.set_value('/offset', offset_to_go)
                     Logger.info(f"Audio offset sent: {offset_to_go}", extra={"caller": cue.__class__.__name__})
@@ -228,10 +235,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                 offset_change_frames = -cue._start_mtc.frame_number
                 
                 Logger.info(f'Loop {loop_counter}: setting offset={offset_change_frames}')
-                
-                # #region DEBUG
-                _dbg(f"VIDEO send /offset cue={cue.id} loop={loop_counter} mtc_ms={mtc.main_tc.milliseconds_rounded} start_mtc_ms={cue._start_mtc.milliseconds_rounded} start_mtc_frame={cue._start_mtc.frame_number} offset_frames={int(offset_change_frames)} fr={mtc.main_tc.framerate} layers={layer_ids}")
-                # #endregion DEBUG
+
                 for layer_id in layer_ids:
                     try:
                         cue._osc.set_value(f'/videocomposer/layer/{layer_id}/offset', int(offset_change_frames))

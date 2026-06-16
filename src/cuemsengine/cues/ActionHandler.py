@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Dedicated action-cue execution, extension hooks, and optional result sink."""
 
 from __future__ import annotations
@@ -12,9 +16,9 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
 from .CueHandler import CueHandler
-
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
+from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
 
 # Actions supported by the engine runtime.
@@ -27,6 +31,7 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "stop",
         "enable",
         "disable",
+        "fade_action",
         "fade_in",
         "fade_out",
         "go_to",
@@ -257,7 +262,7 @@ class ActionHandler:
         ch = self._cue_handler
 
         def run_default() -> dict:
-            return handler(ch, target, mtc, frozen_mtc_ms)
+            return handler(ch, cue, target, mtc, frozen_mtc_ms)
 
         def apply_wraps() -> dict:
             inner: Callable[[], dict] = run_default
@@ -367,12 +372,17 @@ def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | Non
 
 
 # ---------------------------------------------------------------------------
-# Per-action handlers (module-level; signature: (cue_handler, target, mtc))
+# Per-action handlers (module-level; signature: (cue_handler, action_cue, target, mtc, frozen_mtc_ms))
+#
+# action_cue is the originating ActionCue/FadeCue (cue.action_type drives dispatch);
+# target is the resolved cue._action_target_object. Most handlers only need target;
+# fade_action needs both (action_cue carries fade params, target is what gets faded).
 # ---------------------------------------------------------------------------
 
 
 def _handle_play(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -393,6 +403,7 @@ def _handle_play(
 
 def _handle_pause(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -408,6 +419,7 @@ def _handle_pause(
 
 def _handle_stop(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -430,6 +442,7 @@ def _handle_stop(
 
 def _handle_enable(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -445,6 +458,7 @@ def _handle_enable(
 
 def _handle_disable(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -460,6 +474,7 @@ def _handle_disable(
 
 def _handle_fade_in(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -480,6 +495,7 @@ def _handle_fade_in(
 
 def _handle_fade_out(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -497,6 +513,7 @@ def _handle_fade_out(
 
 def _handle_go_to(
     ch: CueHandler,
+    _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
@@ -510,14 +527,159 @@ def _handle_go_to(
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
+def _handle_fade_action(
+    ch: CueHandler,
+    action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    """Execute a FadeCue: arm target if needed, dispatch FadeCommand, set _end_mtc.
+
+    action_cue is the FadeCue (curve_type, target_value, duration). target is the
+    resolved AudioCue/VideoCue that will be faded. The handler MUST NOT disarm
+    target, set _fade_initial_volume, or call ch.go(target, mtc) — target is
+    expected to be already playing. The FadeCue itself is held in the cue runner
+    by loop_fadeCue until _end_mtc.
+    """
+    from cuemsutils.tools.CTimecode import CTimecode
+
+    target_id = getattr(target, "id", None)
+    motion_id = str(action_cue.id)
+
+    fail = _ready_action_target("fade_action", target, ch)
+    if fail is not None:
+        return fail
+
+    gradient_client = PLAYER_HANDLER.get_gradient_client()
+    if gradient_client is None:
+        Logger.error(f"FadeCue {motion_id}: GradientClient not initialised")
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, "GradientClient not initialised"
+        )
+
+    if frozen_mtc_ms is not None:
+        start_mtc_ms = int(frozen_mtc_ms)
+    else:
+        start_mtc_ms = mtc.main_tc.milliseconds_rounded
+
+    try:
+        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
+    except ValueError as exc:
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, str(exc)
+        )
+
+    # Dispatch ALL entries before mutating anything. If any OSC send fails the
+    # target / FadeCue state must remain unchanged. Failure of one layer aborts
+    # the rest — the partial dispatch will be cleared by the next cancel_all
+    # (project stop or load).
+    for entry in payloads:
+        entry_motion_id = entry.pop("motion_id")
+        try:
+            gradient_client.send_fade(
+                motion_id=entry_motion_id,
+                osc_host='127.0.0.1',
+                osc_port=entry['osc_port'],
+                osc_path=entry['osc_path'],
+                start_value=entry['start_value'],
+                end_value=entry['end_value'],
+                start_mtc_ms=entry['start_mtc_ms'],
+                duration_ms=entry['duration_ms'],
+                curve_type=entry['curve_type'],
+                curve_params_json='{}',
+            )
+        except Exception as exc:
+            Logger.error(
+                f"FadeCue {motion_id}: OSC dispatch to gradient-motiond failed "
+                f"(target={target_id} motion_id={entry_motion_id} "
+                f"osc={entry['osc_path']}): {exc}"
+            )
+            return ActionHandler._action_result(
+                "failed", "fade_action", target_id,
+                f"OSC dispatch failed: {exc}"
+            )
+
+    # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
+    # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
+    framerate = mtc.main_tc.framerate
+    action_cue._start_mtc = CTimecode(framerate=framerate, start_seconds=start_mtc_ms / 1000.0)
+    action_cue._end_mtc = action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
+
+    Logger.info(
+        f"FadeCue {motion_id}: dispatched {len(payloads)} start_fade(s) "
+        f"target={target_id} target_value={action_cue.target_value} "
+        f"duration={action_cue.duration.milliseconds_rounded}ms"
+    )
+    return ActionHandler._action_result("applied", "fade_action", target_id)
+
+
+def _build_fade_payload(target_cue: Cue, fade_cue: Any, start_mtc_ms: int,
+                        motion_id: str) -> list[dict]:
+    """Build FadeCommand body dicts from target_cue + fade_cue.
+
+    Returns a list of dicts (one per OSC endpoint). For AudioCue this is a
+    single-element list; for VideoCue, one entry per layer in `_layer_ids`,
+    each with its own osc_path and a layer-suffixed `motion_id` so gradient-motiond
+    can track per-layer completion.
+
+    Field names mirror the C++ parser at gradient-motion-engine
+    src/signal/FadeCommand.cpp parseStartFade: end_value (not target_value),
+    start_mtc_ms (not start_time). end_value is normalised to OSC scale
+    0.0–1.0 from FadeCue.target_value's UI scale 0–100; gradient-motiond
+    forwards end_value directly to OSC without further unit conversion.
+    """
+    from cuemsutils.cues import AudioCue, VideoCue
+
+    curve_type = fade_cue.curve_type
+    curve_type_str = curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+    duration_ms = fade_cue.duration.milliseconds_rounded
+    end_value = float(fade_cue.target_value) / 100.0
+
+    def _entry(osc_path: str, entry_motion_id: str) -> dict:
+        return {
+            "motion_id": entry_motion_id,
+            "osc_port": target_cue._osc.remote_port,
+            "osc_path": osc_path,
+            "start_value": target_cue._osc.get_value(osc_path),
+            "end_value": end_value,
+            "start_mtc_ms": start_mtc_ms,
+            "duration_ms": duration_ms,
+            "curve_type": curve_type_str,
+        }
+
+    if isinstance(target_cue, AudioCue):
+        return [_entry("/volmaster", motion_id)]
+
+    if isinstance(target_cue, VideoCue):
+        layer_ids = getattr(target_cue, "_layer_ids", []) or []
+        if not layer_ids:
+            raise ValueError(
+                f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
+            )
+        return [
+            _entry(
+                f"/videocomposer/layer/{layer_id}/opacity",
+                f"{motion_id}_{layer_id}",
+            )
+            for layer_id in layer_ids
+        ]
+
+    raise ValueError(
+        f"FadeCue target is not an AudioCue or VideoCue: "
+        f"{type(target_cue).__name__}"
+    )
+
+
 _ACTION_HANDLERS: dict[
-    str, Callable[[CueHandler, Cue, MtcListener, float | None], dict]
+    str, Callable[[Any, Any, Cue, MtcListener, "float | None"], dict]
 ] = {
     "play": _handle_play,
     "pause": _handle_pause,
     "stop": _handle_stop,
     "enable": _handle_enable,
     "disable": _handle_disable,
+    "fade_action": _handle_fade_action,
     "fade_in": _handle_fade_in,
     "fade_out": _handle_fade_out,
     "go_to": _handle_go_to,

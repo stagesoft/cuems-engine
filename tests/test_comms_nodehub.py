@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Test NodeOperation communication between NodeEngine and ControllerEngine.
 
 This test documents the expected flow of NodeOperation messages via NngHub

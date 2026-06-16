@@ -1,0 +1,15 @@
+# CODEOWNERS — every PR requires approval from at least one owner.
+# Syntax: <path pattern> <GitHub username(s)>
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: all files require owner review
+* @ibiltari @backenv
+
+# Production source — both owners must be notified
+src/ @ibiltari @backenv
+
+# Constitution and governance — both owners must be notified
+.specify/ @ibiltari @backenv
+specs/planning/ @ibiltari @backenv
+CONTRIBUTORS.md @ibiltari @backenv
+.github/ @ibiltari @backenv
