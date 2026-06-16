@@ -1,8 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Regression test for engine loop-period drift.
 
 Exercises the exact `_start_mtc`/`_end_mtc` rebase arithmetic used inside
 `loop_audioCue` and `loop_videoCue` when a cue loops. Before the fix, the
-rebase went through `CTimecode(start_seconds=_end_mtc.milliseconds/1000)`,
+rebase went through `CTimecode(start_seconds=_end_mtc.milliseconds_rounded/1000)`,
 which loses one frame of the target framerate on every iteration (40 ms at
 25 fps MTC). The fix assigns `_start_mtc` directly from the previous
 `_end_mtc.frames`, skipping the lossy ms->s->frames round-trip.
@@ -28,7 +32,7 @@ def _rebase_fixed(end_mtc: CTimecode, duration: CTimecode) -> tuple[CTimecode, C
 def _rebase_buggy(end_mtc: CTimecode, duration: CTimecode, framerate) -> tuple[CTimecode, CTimecode]:
     """Mirror of the pre-fix rebase — kept for contrast so the test documents
     the drift the fix eliminates."""
-    start_mtc = CTimecode(framerate=framerate, start_seconds=end_mtc.milliseconds / 1000)
+    start_mtc = CTimecode(framerate=framerate, start_seconds=end_mtc.milliseconds_rounded / 1000)
     new_end_mtc = start_mtc + duration
     return start_mtc, new_end_mtc
 
@@ -43,15 +47,15 @@ def test_rebase_preserves_30s_duration_over_10_iterations(framerate):
     start_mtc = CTimecode(framerate=framerate, frames=1)  # simulate cue GO at MTC=0
     end_mtc = start_mtc + duration
 
-    prev_start_ms = start_mtc.milliseconds
+    prev_start_ms = start_mtc.milliseconds_rounded
     for i in range(1, 11):
         start_mtc, end_mtc = _rebase_fixed(end_mtc, duration)
-        delta = start_mtc.milliseconds - prev_start_ms
+        delta = start_mtc.milliseconds_rounded - prev_start_ms
         assert delta == duration_ms, (
             f"iter {i} @ {framerate} fps: _start_mtc advanced by {delta} ms, "
             f"expected {duration_ms} ms (drift = {delta - duration_ms} ms)"
         )
-        prev_start_ms = start_mtc.milliseconds
+        prev_start_ms = start_mtc.milliseconds_rounded
 
 
 def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
@@ -64,12 +68,12 @@ def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
     end_mtc = start_mtc + duration
 
     drifts = []
-    prev_start_ms = start_mtc.milliseconds
+    prev_start_ms = start_mtc.milliseconds_rounded
     for _ in range(5):
         start_mtc, end_mtc = _rebase_buggy(end_mtc, duration, framerate)
-        delta = start_mtc.milliseconds - prev_start_ms
+        delta = start_mtc.milliseconds_rounded - prev_start_ms
         drifts.append(delta - 30000)
-        prev_start_ms = start_mtc.milliseconds
+        prev_start_ms = start_mtc.milliseconds_rounded
 
     assert all(d == -40 for d in drifts), (
         f"expected buggy path to lose exactly 40 ms/iter at 25 fps, got {drifts}"
@@ -92,7 +96,7 @@ def test_fixed_rebase_matches_absolute_anchor():
         anchor = CTimecode(framerate=framerate, frames=initial_frames)
         for _ in range(i):
             anchor = anchor + duration
-        assert start_mtc.milliseconds == anchor.milliseconds, (
-            f"iter {i}: chained rebase ({start_mtc.milliseconds} ms) "
-            f"disagrees with absolute anchor ({anchor.milliseconds} ms)"
+        assert start_mtc.milliseconds_rounded == anchor.milliseconds_rounded, (
+            f"iter {i}: chained rebase ({start_mtc.milliseconds_rounded} ms) "
+            f"disagrees with absolute anchor ({anchor.milliseconds_rounded} ms)"
         )

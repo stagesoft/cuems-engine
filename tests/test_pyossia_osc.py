@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Tests for pyossia OSC client and server functionality.
 
 These tests verify basic OSC communication using pyossia, replacing

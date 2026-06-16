@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 from dis import hasconst
 from functools import partial
 from typing import Any, Callable
@@ -458,7 +462,28 @@ class BaseEngine(SignalEngine):
                 if c.enabled:
                     first_cue = c
                     break
-            if first_cue and getattr(first_cue, '_local', False):
-                Logger.info(f'Arming first enabled cue + lookahead for {type(cuelist).__name__}: {cuelist.id}')
-                CUE_HANDLER.arm(first_cue, True)
-                CUE_HANDLER._arm_ahead(first_cue)
+            # If the cuelist's first cue isn't ours, walk the post_go='go' chain
+            # to find our first local cue — same shape as NodeEngine.go_script.
+            # Without this, slaves don't pre-arm anything at load time and the
+            # /videocomposer/layer/load only fires when GO is hit, producing
+            # staggered starts as the async loads complete in arrival order.
+            first_local = first_cue
+            walked = 0
+            while first_local is not None and not getattr(first_local, '_local', False):
+                if first_local.post_go != 'go':
+                    first_local = None
+                    break
+                first_local = getattr(first_local, '_target_object', None)
+                walked += 1
+                if walked > 1024:
+                    first_local = None
+                    break
+            if first_local is not None:
+                if first_local is not first_cue:
+                    Logger.info(
+                        f'Pre-arm: skipped {walked} non-local cue(s); arming first '
+                        f'local cue {first_local.id} + lookahead')
+                else:
+                    Logger.info(f'Arming first enabled cue + lookahead for {type(cuelist).__name__}: {cuelist.id}')
+                CUE_HANDLER.arm(first_local, True)
+                CUE_HANDLER._arm_ahead(first_local)

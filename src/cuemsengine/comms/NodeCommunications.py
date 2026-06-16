@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 import asyncio
 from typing import Optional, Callable, Any
 
@@ -31,9 +35,8 @@ class NodeCommunications(AsyncCommsThread):
         self.node_id = node_id
         self._command_callback = command_callback
         
-        # Set up receive callback for COMMAND operations
         self.nng_hub.set_receive_callbacks({
-            OperationType.COMMAND: self._handle_command_operation
+            OperationType.COMMAND: self._handle_command_operation,
         })
 
     def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:

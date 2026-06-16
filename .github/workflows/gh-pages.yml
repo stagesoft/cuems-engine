@@ -1,27 +1,42 @@
 name: Deploy MkDocs site
 
+# Triggered after CI completes so the coverage badge is already published
+# to gh-pages before mkdocs rebuilds the site (prevents the badge being wiped).
 on:
-  push:
-    branches:
-      - main
-      - master
-      - format/module_extraction
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [master, rc_1]
 
 jobs:
   deploy:
+    # Only deploy when the CI run that triggered this actually passed.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository at the triggering commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      # Pull the coverage badge that ci.yml just pushed to gh-pages and drop it
+      # into docs/badges/ so mkdocs gh-deploy carries it forward in the new build.
+      - name: Restore coverage badge from gh-pages
+        run: |
+          mkdir -p docs/badges
+          git fetch origin gh-pages --depth=1 2>/dev/null || true
+          git show origin/gh-pages:badges/coverage.svg \
+            > docs/badges/coverage.svg 2>/dev/null \
+            || echo "No badge yet — first deploy will generate it."
 
-    - name: Install dependencies
-      run: pip install mkdocs mkdocs-material mkdocstrings-python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Deploy to GitHub Pages
-      run: mkdocs gh-deploy --force
+      - name: Install MkDocs dependencies
+        run: pip install mkdocs mkdocs-material mkdocstrings-python
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force

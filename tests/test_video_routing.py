@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Routing coverage for VideoCueOutput custom regions.
 
 Tests the engine-side fork that resolves `<uuid>_custom_<n>` output_names by

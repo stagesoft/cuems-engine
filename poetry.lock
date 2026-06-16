@@ -294,14 +294,14 @@ toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
 name = "cuemsutils"
-version = "0.1.0rc4"
+version = "0.1.0rc8"
 description = "Reusable classes and methods for CueMS system"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "cuemsutils-0.1.0rc4-py3-none-any.whl", hash = "sha256:eff42d0fb6e7ab942dd3b10716cc65f81aff8f822a21bd23be7bcd0f2c0fa4ea"},
-    {file = "cuemsutils-0.1.0rc4.tar.gz", hash = "sha256:d032fc3887c5e0a230536eb263a7ea2315f5e54f4f3a7d3777198c47401b4132"},
+    {file = "cuemsutils-0.1.0rc8-py3-none-any.whl", hash = "sha256:2a75d49d2528d42a8c0ba169b8b72b63d948148ba8d98bef2c846bcc6ca3d25a"},
+    {file = "cuemsutils-0.1.0rc8.tar.gz", hash = "sha256:a269037ae1da5398def3e3a686030af68a40d96db058af3fccf73d834411949b"},
 ]
 
 [package.dependencies]
@@ -311,13 +311,13 @@ json-fix = "1.0.0"
 lxml = "5.3.0"
 peewee = "3.17.8"
 pynng = "0.8.1"
-systemd-python = "235"
 timecode = "*"
 websockets = "14.1"
 xmlschema = "3.4.3"
 
 [package.extras]
-systemd = ["systemd (==235)"]
+all = ["pynng (==0.8.1)", "systemd-python (==235)"]
+systemd = ["systemd-python (==235)"]
 
 [[package]]
 name = "deprecated"
@@ -880,21 +880,6 @@ dev = ["pytest", "pytest-asyncio", "pytest-trio", "trio"]
 docs = ["sphinx", "sphinx-rtd-theme", "sphinxcontrib-trio"]
 
 [[package]]
-name = "pyossia"
-version = "2.0.0rc6"
-description = "libossia is a modern C++, cross-environment distributed object model for creative coding and interaction scoring Edit"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "pyossia-2.0.0rc6-cp311-cp311-linux_x86_64.whl", hash = "sha256:dbd6345b64e01eae70eb033e03bfeefd2e4e4474bb58607c71355b427bc998ca"},
-]
-
-[package.source]
-type = "file"
-url = "../libossia/build/src/ossia-python/dist/pyossia-2.0.0rc6-cp311-cp311-linux_x86_64.whl"
-
-[[package]]
 name = "pytest"
 version = "9.0.1"
 description = "pytest: simple powerful testing with Python"
@@ -1048,17 +1033,6 @@ groups = ["main"]
 files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
-]
-
-[[package]]
-name = "systemd-python"
-version = "235"
-description = "Python interface for libsystemd"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "systemd-python-235.tar.gz", hash = "sha256:4e57f39797fd5d9e2d22b8806a252d7c0106c936039d1e71c8c6b8008e695c0a"},
 ]
 
 [[package]]
@@ -1265,4 +1239,4 @@ docs = ["Sphinx", "elementpath (>=4.4.0,<5.0.0)", "jinja2", "sphinx-rtd-theme"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "43a6c7593829d6db44ab087d7606e71f99c43d66b94750201a7f668d49333c8d"
+content-hash = "0f1a6c786da8f77ae6303352eeecea2ce02fb75f783c1f6299d58021aa415213"

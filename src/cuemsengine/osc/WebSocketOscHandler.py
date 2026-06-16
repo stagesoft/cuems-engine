@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """WebSocket OSC Handler for receiving OSC messages via WebSocket.
 
 This module provides an async WebSocket listener that receives and parses

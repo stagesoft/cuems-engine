@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 import os
 import shutil
 import subprocess
@@ -41,6 +45,7 @@ class PlayerHandler:
     _dmx_player_client: DmxClient | None
     _player_endpoints_generator: partial | None
     _video_client: VideoClient | None
+    _gradient_client: 'GradientClient | None'
     _video_outputs: dict[str, VideoOutput]
     _audio_outputs: dict[str, dict]
     _loaded_layer_ids: set[str]
@@ -64,6 +69,7 @@ class PlayerHandler:
             cls._instance._dmx_player_client = None
             cls._instance._player_endpoints_generator = None
             cls._instance._video_client = None
+            cls._instance._gradient_client = None
             cls._instance._video_outputs = {}
             cls._instance._audio_outputs = {}
             cls._instance._loaded_layer_ids = set()
@@ -516,6 +522,25 @@ class PlayerHandler:
         """Sets the video client for this node."""
         Logger.info(f'Setting video client for node {self._node_uuid}')
         self._video_client = VideoClient(player_port=port)
+
+    def get_gradient_client(self) -> 'GradientClient | None':
+        """Returns the GradientClient instance, or None if not yet initialised."""
+        return self._gradient_client
+
+    def set_gradient_client(self, port: int, node_uuid: str) -> None:
+        """Construct (or replace) the GradientClient for this node.
+
+        Safe to call multiple times: any new call replaces the prior client.
+        PyOscClient is fire-and-forget UDP with no held resources, so no
+        teardown of the prior client is needed.
+        """
+        from .GradientClient import GradientClient
+        self._gradient_client = GradientClient(
+            host='127.0.0.1', port=port, node_uuid=node_uuid,
+        )
+        Logger.info(
+            f'GradientClient: bound to 127.0.0.1:{port} node_uuid={node_uuid}'
+        )
 
     def start_video_outputs(
         self,

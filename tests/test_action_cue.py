@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 """Unit tests for ActionCue execution through ActionHandler.
 
 Tests cover all supported cue-level actions (FR-002a), idempotency (FR-004),
@@ -307,12 +311,10 @@ class TestGoToAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("go_to", target)
 
-        with patch.object(handler, "arm") as mock_arm:
-            # arm is a no-op mock; loaded stays False → helper returns failed.
-            # Set loaded=True after arm to simulate a successful arm.
-            def _do_arm(t, *, init):
-                t.loaded = True
-            mock_arm.side_effect = _do_arm
+        def _do_arm(t, *, init):
+            t.loaded = True
+
+        with patch.object(handler, "arm", side_effect=_do_arm) as mock_arm:
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "applied"
@@ -652,6 +654,47 @@ class TestActionMidTransitionWithHook:
 
         assert result["status"] == "applied_no_change"
         assert order == ["hook"]
+
+
+# ---------------------------------------------------------------------------
+# fade_action — error paths (arm guard via _ready_action_target)
+# ---------------------------------------------------------------------------
+
+
+class TestFadeActionHandler:
+    def test_fade_action_disabled_target_fails(self, handler, mtc):
+        target = _make_target(enabled=False)
+        cue = _make_action_cue("fade_action", target)
+
+        with patch.object(handler, "arm") as mock_arm:
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "failed"
+        assert result["action_type"] == "fade_action"
+        assert "disabled" in result["reason"]
+        mock_arm.assert_not_called()
+
+    def test_fade_action_arm_raises_returns_failed(self, handler, mtc):
+        target = _make_target(loaded=False)
+        cue = _make_action_cue("fade_action", target)
+
+        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "failed"
+        assert result["action_type"] == "fade_action"
+        assert "arm failed" in result["reason"]
+
+    def test_fade_action_arm_not_loaded_returns_failed(self, handler, mtc):
+        target = _make_target(loaded=False)
+        cue = _make_action_cue("fade_action", target)
+
+        with patch.object(handler, "arm"):  # succeeds but loaded stays False
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "failed"
+        assert result["action_type"] == "fade_action"
+        assert "could not be armed" in result["reason"]
 
 
 # ---------------------------------------------------------------------------

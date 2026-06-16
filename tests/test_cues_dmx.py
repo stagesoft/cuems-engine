@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock, PropertyMock
 from time import sleep
@@ -184,7 +188,7 @@ class TestRunDmxCue:
         """Create a mock MTC listener."""
         mtc = Mock()
         mtc.main_tc = Mock()
-        mtc.main_tc.milliseconds = 10000  # 10 seconds
+        mtc.main_tc.milliseconds_rounded = 10000  # 10 seconds
         return mtc
     
     def test_run_dmx_cue_success(self, mock_dmx_cue, mock_mtc):
@@ -201,7 +205,7 @@ class TestRunDmxCue:
         # Verify call parameters
         call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
         assert call_args.kwargs['universe_frames'] == {1: {0: 255, 1: 128, 2: 64}}
-        assert call_args.kwargs['mtc_time'] == mock_dmx_cue._start_mtc.milliseconds
+        assert call_args.kwargs['mtc_time'] == mock_dmx_cue._start_mtc.milliseconds_rounded
         assert call_args.kwargs['fade_time'] == 2.0  # 2000ms / 1000
     
     def test_run_dmx_cue_no_frames(self, mock_dmx_cue, mock_mtc):
@@ -257,19 +261,19 @@ class TestRunDmxCue:
     def test_run_dmx_cue_mtc_offset_calculation(self, mock_dmx_cue, mock_mtc):
         """Test MTC offset calculation."""
         mtc_time = 15000  # 15 seconds
-        mock_mtc.main_tc.milliseconds = mtc_time
+        mock_mtc.main_tc.milliseconds_rounded = mtc_time
         
         run_dmxCue(mock_dmx_cue, mock_mtc)
         
         # Verify start and end MTC were calculated
         # Allow for small rounding differences (CTimecode may round slightly)
-        assert abs(mock_dmx_cue._start_mtc.milliseconds - mtc_time) <= 1
+        assert abs(mock_dmx_cue._start_mtc.milliseconds_rounded - mtc_time) <= 1
         
         # End MTC should be greater than start MTC
         # Duration is calculated from fadein_time + fadeout_time (2000 + 1000 = 3000ms)
         # Allow for small rounding differences
         expected_duration = 3000  # fadein_time + fadeout_time
-        assert abs((mock_dmx_cue._end_mtc.milliseconds - mock_dmx_cue._start_mtc.milliseconds) - expected_duration) <= 1
+        assert abs((mock_dmx_cue._end_mtc.milliseconds_rounded - mock_dmx_cue._start_mtc.milliseconds_rounded) - expected_duration) <= 1
     
     def test_run_dmx_cue_multiple_universes(self, mock_dmx_cue, mock_mtc):
         """Test running DMX cue with multiple universes."""
@@ -314,14 +318,14 @@ class TestLoopDmxCue:
         """Create a mock MTC listener."""
         mtc = Mock()
         mtc.main_tc = Mock()
-        mtc.main_tc.milliseconds = 10000  # Start at 10 seconds
+        mtc.main_tc.milliseconds_rounded = 10000  # Start at 10 seconds
         return mtc
     
     def test_loop_dmx_cue_waits_for_duration(self, mock_dmx_cue, mock_mtc):
         """Test that loop_dmxCue waits for cue duration."""
         # Set up MTC with a simple attribute that can be updated
         mock_main_tc = Mock()
-        mock_main_tc.milliseconds = 10000  # Start at 10 seconds
+        mock_main_tc.milliseconds_rounded = 10000  # Start at 10 seconds
         mock_mtc.main_tc = mock_main_tc
         
         # Set _end_mtc to a value that requires waiting
@@ -335,7 +339,7 @@ class TestLoopDmxCue:
                 call_count[0] += 1
                 if call_count[0] == 1:
                     # After first sleep call, advance MTC past end time
-                    mock_main_tc.milliseconds = 15000
+                    mock_main_tc.milliseconds_rounded = 15000
             
             mock_sleep.side_effect = advance_mtc
             
@@ -387,7 +391,7 @@ class TestLoopDmxCue:
             current_time[0] += 1000  # Advance 1 second per check
             return current_time[0]
         
-        type(mock_mtc.main_tc).milliseconds = property(lambda self: advance_time())
+        type(mock_mtc.main_tc).milliseconds_rounded = property(lambda self: advance_time())
         
         with patch('cuemsengine.cues.loop_cue.sleep') as mock_sleep:
             mock_dmx_cue._end_mtc = CTimecode(start_seconds=14.0)  # End at 14 seconds
@@ -442,7 +446,7 @@ class TestDmxCueIntegration:
         # Create a mock main_tc object with milliseconds as a simple attribute
         # We'll update it directly when needed
         mock_main_tc = Mock()
-        mock_main_tc.milliseconds = 1000
+        mock_main_tc.milliseconds_rounded = 1000
         mock_mtc.main_tc = mock_main_tc
         
         with patch('cuemsengine.cues.arm_cue.PLAYER_HANDLER') as mock_handler, \
@@ -467,16 +471,15 @@ class TestDmxCueIntegration:
             # _start_mtc should be ~1000ms, _end_mtc should be start + (fadein + fadeout)
             # fadein_time=2000ms, fadeout_time=3000ms, so duration=5000ms
             expected_duration = 5000
-            assert abs((dmx_cue._end_mtc.milliseconds - dmx_cue._start_mtc.milliseconds) - expected_duration) <= 1
+            assert abs((dmx_cue._end_mtc.milliseconds_rounded - dmx_cue._start_mtc.milliseconds_rounded) - expected_duration) <= 1
             
             # Step 3: Loop/wait for duration
             # Set MTC to well past end time so loop exits immediately
             # Use a value that's definitely greater than _end_mtc
-            mock_main_tc.milliseconds = dmx_cue._end_mtc.milliseconds + 10000
+            mock_main_tc.milliseconds_rounded = dmx_cue._end_mtc.milliseconds_rounded + 10000
             loop_dmxCue(dmx_cue, mock_mtc)
             
             # Since MTC is already past end time, sleep should not be called
             # (or called very few times if there's a race condition)
             # Complete workflow executed successfully
             assert True
-

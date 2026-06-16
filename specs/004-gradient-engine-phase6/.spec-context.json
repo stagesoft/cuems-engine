@@ -1,0 +1,10 @@
+{
+  "workflow": "speckit",
+  "specName": "004-gradient-engine-phase6",
+  "branch": "004-gradient-engine-phase6",
+  "selectedAt": "2026-04-27T09:31:07.987Z",
+  "currentStep": "specify",
+  "status": "draft",
+  "stepHistory": {},
+  "transitions": []
+}

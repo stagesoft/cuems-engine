@@ -1,8 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 from __future__ import annotations
 
 from threading import Event, Lock, Thread
 from time import sleep
-from typing import TYPE_CHECKING
 
 from cuemsutils.cues import ActionCue, CueList, DmxCue, VideoCue, AudioCue
 from cuemsutils.cues.Cue import Cue
@@ -13,8 +16,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from .run_cue import run_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
-from ..osc.OssiaClient import PlayerClient
-from ..players import VideoPlayer, VideoClient
+from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 from .arm_cue import arm_cue
@@ -280,13 +282,11 @@ class CueHandler:
             if cue._target_object.enabled:
                 self.arm(cue._target_object, init)
 
-        # ActionCue(play) + target = 1 unit. Arm target so it's ready
-        # when the action fires (ActionCue has zero duration).
-        # NOTE: fade_in/fade_out are being implemented and will target
-        # already-playing cues — no pre-arm needed yet. Revisit if
-        # fade_in semantics change to start-from-zero like play.
+        # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm target
+        # so it's ready when the action fires (ActionCue has zero duration; FadeCue
+        # expects target_cue already armed before reading its OSC cache).
         if isinstance(cue, ActionCue) and cue._action_target_object:
-            if cue.action_type == 'play':
+            if cue.action_type in ('play', 'fade_action'):
                 self.arm(cue._action_target_object, init)
 
         return True

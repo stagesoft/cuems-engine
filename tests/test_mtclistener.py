@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 #!/usr/bin/env python3
 
 import pytest
@@ -45,7 +49,7 @@ class TestMtcListener:
         mtc_listener.main_tc = test_tc
         
         assert mtc_listener.timecode() == test_tc
-        assert mtc_listener.milliseconds() == int(test_tc.frames * (1000 / float(test_tc._framerate)))
+        assert mtc_listener.milliseconds_rounded() == int(test_tc.frames * (1000 / float(test_tc._framerate)))
 
     def test_quarter_frame_handling(self, mtc_listener):
         """Test handling of quarter frame messages"""
@@ -146,6 +150,16 @@ class TestMtcListener24hRollover:
         listener = MtcListener(port='MTC Port 1')
         yield listener
 
+    @pytest.fixture
+    def listener_cb(self, mock_mido):
+        """Listener WITH step + reset callbacks mocked (for cascade / resync)."""
+        step = MagicMock()
+        reset = MagicMock()
+        l = MtcListener(port='MTC Port 1', step_callback=step, reset_callback=reset)
+        l._step_mock = step
+        l._reset_mock = reset
+        yield l
+
     def test_initial_state_no_offset(self, listener):
         assert listener._24h_offset_frames == 0
         assert listener._last_decoded_frames is None
@@ -212,12 +226,20 @@ class TestMtcListener24hRollover:
         assert listener._24h_offset_frames == 0
 
     def test_wrap_at_29_97fps(self, listener):
-        # At 29.97 NTSC, _int_framerate=30, frames_per_24h = 30 * 86400 = 2_592_000.
-        FRAMES_24H_30 = 30 * 86400
-        listener._apply_24h_offset(CTimecode(framerate=29.97, frames=FRAMES_24H_30 - 1))
+        # 29.97 DF: the 24h offset MUST be the REAL-rate frame count
+        # round(86400*29.97) = 2_589_408 — NOT the label-rate 30*86400 = 2_592_000.
+        # The old label-rate value reconverted to 86,486,453 ms (86.5 s too long,
+        # desyncing from the C++ ms-domain receiver); the real-rate value
+        # reconverts to a true ~86,400,000 ms. (Plan 4 / audit BLOCKER)
+        FRAMES_24H_2997 = round(86400.0 * 29.97)
+        assert FRAMES_24H_2997 == 2_589_408
+        listener._apply_24h_offset(CTimecode(framerate=29.97, frames=FRAMES_24H_2997 - 1))
         adjusted = listener._apply_24h_offset(CTimecode(framerate=29.97, frames=1))
-        assert listener._24h_offset_frames == FRAMES_24H_30
-        assert adjusted.frames == 1 + FRAMES_24H_30
+        assert listener._24h_offset_frames == FRAMES_24H_2997
+        assert adjusted.frames == 1 + FRAMES_24H_2997
+        # Parity with the C++ receiver (DAY_MS = 86_400_000): the post-wrap head
+        # is a true 24h in ms (within one frame of rounding), NOT 86,486,453.
+        assert abs(adjusted.milliseconds_rounded - 86_400_000) <= 40
 
     def test_wrap_preserves_polling_loop_termination(self, listener):
         # Bug 869cpdbzy symptom: `while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded`
@@ -245,3 +267,103 @@ class TestMtcListener24hRollover:
         # MTC continues to walk; eventually exceeds cue_end → loop terminates.
         mtc_past_end = listener._apply_24h_offset(CTimecode(framerate=25, frames=800))
         assert mtc_past_end.milliseconds_rounded > cue_end.milliseconds_rounded
+
+    # ---------------- Plan 4: reset / control-plane / cascade / resync ----------------
+
+    F24 = 25 * 3600 * 24   # 2_160_000
+    FPH = 25 * 3600        # 90_000
+
+    def test_wire_driven_reset_zeroes_active_offset(self, listener):
+        # 4.1: after a wrap, an AUTHORITATIVE return to ~0 from a non-boundary
+        # previous position zeroes the offset (the wire-driven fallback).
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=self.F24 - 50))
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=5))   # wrap
+        assert listener._24h_offset_frames == self.F24
+        # walk to a mid-range position, then jump back into the first hour
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=300000))  # ~3.3h raw
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=20))      # return ~0
+        assert listener._24h_offset_frames == 0
+
+    def test_real_wrap_not_classified_as_reset(self, listener):
+        # 4.1 ordering: a genuine 23:59→00:00 wrap must accumulate, not reset
+        # (wrap is tested before reset; both fire on delta < -1h).
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=self.F24 - 1))
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=1))
+        assert listener._24h_offset_frames == self.F24
+
+    def test_mid_range_seek_does_not_reset_offset(self, listener):
+        # 4.1 guard: a large backward seek NOT landing in the first hour
+        # (14h→3h) must leave the offset untouched (decoded.frames < fph is False).
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=self.F24 - 50))
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=5))   # wrap → offset
+        assert listener._24h_offset_frames == self.F24
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=25 * 3600 * 14))  # 14h
+        before = listener._24h_offset_frames
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=25 * 3600 * 3))   # 3h
+        assert listener._24h_offset_frames == before   # unchanged (seek, not reset)
+
+    def test_reset_24h_state_clears_both_fields(self, listener):
+        # 4.4: control-plane reset zeroes the offset AND the last-pos memory
+        # (None sentinel) so the next decode does not re-wrap.
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=self.F24 - 50))
+        listener._apply_24h_offset(CTimecode(framerate=25, frames=5))
+        assert listener._24h_offset_frames == self.F24
+        assert listener._last_decoded_frames == 5
+        listener.reset_24h_state()
+        assert listener._24h_offset_frames == 0
+        assert listener._last_decoded_frames is None
+        adj = listener._apply_24h_offset(CTimecode(framerate=25, frames=100))
+        assert listener._24h_offset_frames == 0
+        assert adj.frames == 100
+
+    def test_reset_callback_rearms_after_offset_cleared(self, listener_cb):
+        # 4.3: while an offset is live, main_tc >= 24h so reset_callback is
+        # silenced; after a control-plane reset, a decode at 0 re-arms it.
+        l = listener_cb
+        l._apply_24h_offset(CTimecode(framerate=25, frames=self.F24 - 50))
+        l._apply_24h_offset(CTimecode(framerate=25, frames=5))   # offset live
+        tc_high = l._apply_24h_offset(CTimecode(framerate=25, frames=10))  # >= 24h
+        l._MtcListener__update_timecode(tc_high)
+        assert l._reset_mock.call_count == 0      # silenced (ms != 0)
+        l.reset_24h_state()
+        tc_zero = l._apply_24h_offset(CTimecode('00:00:00:00', framerate=25))
+        l._MtcListener__update_timecode(tc_zero)
+        assert l._reset_mock.call_count == 1      # re-armed (ms == 0)
+
+    def test_periodic_resync_train_no_false_trigger(self, listener_cb):
+        # 4.5: libmtcmaster's ~2s periodic full-frame resync (advancing position)
+        # must NOT accumulate an offset, must NOT fire reset_callback, and
+        # main_tc must stay monotonic.
+        l = listener_cb
+        prev_ms = -1
+        for sec in (2, 4, 6, 8, 10):
+            msg = MagicMock()
+            msg.type = 'sysex'
+            msg.data = (127, 127, 1, 1, (1 << 5) | 0, 0, sec, 0)  # 25fps, 00:00:0s:00
+            l._MtcListener__handle_message(msg)
+            cur = l.main_tc.milliseconds_rounded
+            assert cur >= prev_ms
+            prev_ms = cur
+        assert l._24h_offset_frames == 0
+        assert l._reset_mock.call_count == 0
+
+    def test_resync_fullframe_does_not_flush_qf_buffer(self, listener_cb):
+        # 4.2: a full frame (seek or resync) must NOT clear the quarter-frame
+        # buffer. Send QF 0..3, a resync full frame mid-sequence, then QF 4..7;
+        # all 8 nibbles must survive (a C++-style unconditional flush would zero
+        # indices 0..3 and corrupt the next decode).
+        l = listener_cb
+        def qf(ft, fv):
+            m = MagicMock(); m.type = 'quarter_frame'; m.frame_type = ft; m.frame_value = fv
+            return m
+        def ff(h, mi, s, fr):
+            m = MagicMock(); m.type = 'sysex'
+            m.data = (127, 127, 1, 1, (1 << 5) | h, mi, s, fr)
+            return m
+        qf_vals = [0, 1, 2, 3, 4, 5, 6, 7]
+        for ft in range(4):
+            l._MtcListener__handle_message(qf(ft, qf_vals[ft]))
+        l._MtcListener__handle_message(ff(0, 0, 1, 0))   # resync mid-sequence
+        for ft in range(4, 8):
+            l._MtcListener__handle_message(qf(ft, qf_vals[ft]))
+        assert l._MtcListener__quarter_frames == qf_vals
