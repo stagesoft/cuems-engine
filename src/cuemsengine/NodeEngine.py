@@ -967,9 +967,19 @@ class NodeEngine(BaseEngine):
                     break
 
             if cue_to_go is None:
+                # This GO is spent on a cue owned by another node — nothing
+                # local to play. Still advance our own next_cue_pointer in
+                # lockstep with the node that DID play; otherwise this node
+                # stays wedged on a cue it can never play and every subsequent
+                # GO re-evaluates the same non-local cue. (next_cue_pointer is a
+                # global sequence property — it depends only on post_go/enabled,
+                # never on locality — so every node must hold the same value.)
+                self.next_cue_pointer = original.get_next_cue()
+                self._broadcast_nextcue()
                 Logger.info(
                     f'No local cues in post_go="go" chain from {original.id}; '
-                    f'nothing to play on this node for this GO')
+                    f'nothing to play on this node. Advanced next cue to '
+                    f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
                 return
 
             Logger.info(
