@@ -44,9 +44,10 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     ActionCue-mediated chains capture live MTC inside CueHandler.go and
     drift relative to the chain's other cues.
     """
-    from .ActionHandler import ACTION_HANDLER
-
-    ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
+    # Prepare-only: an ActionCue has no media to preload. The action is
+    # EXECUTED in reveal_cue() at the cue's start_mtc, so a chained action fires
+    # at its own timeline slot (not a full body early). See reveal_cue below.
+    return
 
 
 @run_cue.register
@@ -59,6 +60,11 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         mtc: The MTC listener (for framerate info)
         frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with chained cues
     """
+    # Set True only once /offset is sent below. If setup aborts early (e.g. mixer
+    # / JACK ports missing), reveal_audioCue sees this False and no-ops instead of
+    # asserting mtcfollow on a player that never got set up.
+    cue._reveal_ready = False
+
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go' chains)
     # Otherwise read live MTC. This ensures audio and video cues share the same reference.
     if frozen_mtc_ms is not None:
@@ -151,17 +157,16 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             f'Error setting offset in run_audioCue: {e}',
             extra = {"caller": cue.__class__.__name__}
         )
+    else:
+        # Setup reached the offset send → safe for reveal_cue to start following.
+        cue._reveal_ready = True
 
-    # Connect to mtc signal
-    try:
-        key = '/mtcfollow'
-        cue._osc.set_value(key, 1)
-    except Exception as e:
-        Logger.warning(
-            f'Error setting mtcfollow in run_audioCue: {e}',
-            extra = {"caller": cue.__class__.__name__}
-        )
-    
+    # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). Following early
+    # with a future-negative offset hits the audioplayer's "Out of file
+    # boundaries" path and TERMINATES the cue before it plays. The offset above
+    # is harmless while not following; reveal_cue turns following on at
+    # start_mtc, where the seek position is ~0.
+
     # Apply master volume from cue settings
     try:
         master_vol = getattr(cue, 'master_vol', None)
@@ -320,10 +325,81 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 Logger.exception(f'Unexpected error re-applying position for layer {layer_id} (output "{output_name}")')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
-        # Send mtcfollow before visible so the videocomposer loads the
-        # correct frame (using offset + MTC position) while the layer is
-        # still invisible. This prevents rendering a stale frame.
+        # Preload the correct frame while INVISIBLE: offset+mtcfollow let the
+        # videocomposer decode the frame at this MTC position, but the layer
+        # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
+        # at the cue's start_mtc) — this is what makes prewait/postwait gaps real.
         client.set_value(f'{layer_path}/mtcfollow', 1)
-        client.set_value(f'{layer_path}/visible', 1)
 
-    Logger.info(f"Video cue {cue.id} running: {len(layer_ids)} layer(s), offset={offset_to_go}")
+    Logger.info(f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s), offset={offset_to_go}")
+
+
+# ---------------------------------------------------------------------------
+# reveal_cue: second phase. run_cue() prepares a cue HELD (video invisible,
+# audio not-following, action not-yet-run); go_threaded waits until live MTC
+# reaches the cue's start_mtc, then calls reveal_cue to make it appear / play /
+# execute. This is what turns prewait/postwait offsets into real timeline gaps.
+# DmxCue self-schedules (absolute mtc_time) and CueList have nothing → no-op.
+# ---------------------------------------------------------------------------
+@singledispatch
+def reveal_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
+    """Reveal a held cue at its start_mtc. Default no-op (DmxCue self-schedules)."""
+    pass
+
+
+@reveal_cue.register
+def reveal_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
+    layer_ids = getattr(cue, '_layer_ids', [])
+    if not layer_ids or getattr(cue, '_osc', None) is None:
+        return
+    for layer_id in layer_ids:
+        try:
+            cue._osc.set_value(f'/videocomposer/layer/{layer_id}/visible', 1)
+        except Exception as e:
+            Logger.warning(f'reveal_videoCue: /visible failed for layer {layer_id}: {e}')
+    Logger.info(f'Video cue {cue.id} revealed: {len(layer_ids)} layer(s) visible')
+
+
+@reveal_cue.register
+def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
+    if getattr(cue, '_osc', None) is None:
+        return
+    if not getattr(cue, '_reveal_ready', True):
+        # run_audioCue aborted setup before /offset (e.g. player ports missing);
+        # don't assert mtcfollow on a player that never got set up.
+        Logger.info(f'Audio cue {cue.id} reveal skipped (setup aborted)')
+        return
+    # Re-assert offset (MTC is now at start_mtc → seek position ~0), then follow.
+    try:
+        start = getattr(cue, '_start_mtc', None)
+        if start is not None:
+            cue._osc.set_value('/offset', -start.milliseconds_exact)
+    except Exception as e:
+        Logger.warning(f'reveal_audioCue: /offset failed: {e}')
+    try:
+        cue._osc.set_value('/mtcfollow', 1)
+    except Exception as e:
+        Logger.warning(f'reveal_audioCue: /mtcfollow failed: {e}')
+    Logger.info(f'Audio cue {cue.id} revealed: following MTC')
+
+
+@reveal_cue.register
+def reveal_actionCue(cue: ActionCue, mtc, frozen_mtc_ms: float = None):
+    # ActionCues EXECUTE here (at start_mtc), not in run_cue — so a chained
+    # action fires at its own timeline slot, not a full body early.
+    from .ActionHandler import ACTION_HANDLER
+    ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
+
+
+@reveal_cue.register
+def reveal_cueList(cue: CueList, mtc, frozen_mtc_ms: float = None):
+    """Reveal a CueList target by revealing its first enabled child.
+
+    Mirrors run_cueList: run_cue set the child up HELD, so reveal must recurse to
+    the same child — otherwise a CueList used as a post_go='go'/'go_at_end' target
+    would leave its child's video invisible / audio silent forever (no error).
+    """
+    if getattr(cue, 'contents', None):
+        first_enabled = next((c for c in cue.contents if c.enabled), None)
+        if first_enabled:
+            reveal_cue(first_enabled, mtc, frozen_mtc_ms)

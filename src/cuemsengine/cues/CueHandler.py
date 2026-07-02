@@ -13,7 +13,7 @@ from cuemsutils.log import logged, Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
-from .run_cue import run_cue
+from .run_cue import run_cue, reveal_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from ..players import VideoPlayer
@@ -21,7 +21,7 @@ from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
-from .run_cue import run_cue
+from .run_cue import run_cue, reveal_cue
 
 
 class CueHandler:
@@ -403,6 +403,32 @@ class CueHandler:
         self._arm_ahead(cue)
         return thread
 
+    def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
+        """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
+
+        run_cue() sets a cue up HELD (video invisible / audio not-following /
+        action not-yet-run). This gates the reveal on MTC so prewait/postwait
+        offsets become real timeline gaps. Cues with no _start_mtc (ActionCue, or
+        a CueList used as a target) reveal immediately. DmxCue DOES set _start_mtc
+        but self-schedules (its reveal is a no-op), so it merely exits this wait
+        once MTC passes start.
+
+        Deliberately does NOT bail on an MTC stall: a recoverable stall
+        self-recovers (reveal fires late when timecode resumes); bailing would
+        leave the cue permanently held and frees nothing (loop_cue would hang on
+        the same stall). STOP always exits via _stop_requested; a newer GO/reload
+        exits via _go_generation.
+        """
+        start = getattr(cue, '_start_mtc', None)
+        if start is None:
+            return 'reached'
+        target = start.milliseconds_rounded
+        while mtc.main_tc.milliseconds_rounded < target:
+            if getattr(cue, '_stop_requested', False) or getattr(cue, '_go_generation', 0) != go_gen:
+                return 'stopped'
+            sleep(0.02)
+        return 'reached'
+
     def go_threaded(self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0):
         """Runs a cue based on its properties.
         
@@ -440,6 +466,15 @@ class CueHandler:
                 pass
 
             run_cue(cue, mtc, frozen_mtc_ms)
+
+            # MTC-gated reveal: run_cue set the cue up HELD (video invisible /
+            # audio not-following / action not-yet-run). Wait until live MTC
+            # reaches the cue's start_mtc, then reveal (visible / follow /
+            # execute). With the current anchor (start_mtc == GO instant) this
+            # is immediate; once the chain advances anchors (next commit) it
+            # becomes the real prewait/postwait gap.
+            if self._reveal_wait(cue, mtc, go_gen) != 'stopped':
+                reveal_cue(cue, mtc, frozen_mtc_ms)
 
         if cue.postwait > 0:
             sleep(cue.postwait.milliseconds_rounded / 1000)
