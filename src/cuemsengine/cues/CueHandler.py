@@ -157,11 +157,12 @@ class CueHandler:
             except Exception:
                 body = 0
         elif isinstance(cue, DmxCue):
-            # fadein_time/fadeout_time stored as float seconds.
+            # fadein_time/fadeout_time stored in MILLISECONDS (authoritative:
+            # run_dmxCue in run_cue.py reads fadein_ms then fade_time = fadein_ms/1000).
             # fadeout_time exists in model but not yet implemented (always 0.0).
             fadein = getattr(cue, 'fadein_time', 0) or 0
             fadeout = getattr(cue, 'fadeout_time', 0) or 0
-            body = (fadein + fadeout) * 1000  # convert seconds → ms
+            body = fadein + fadeout  # already ms
         elif isinstance(cue, ActionCue):
             # play/stop/enable/disable/go_to = instant
             # TODO: use fade duration once fade_in/fade_out implemented
