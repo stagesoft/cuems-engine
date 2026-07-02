@@ -6,13 +6,28 @@ export DH_VIRTUALENV_INSTALL_ROOT=/usr/lib
 	dh $@ --with python-virtualenv
 
 override_dh_virtualenv:
-	# Use existing venv at /usr/lib/cuems (created by cuems-utils)
-	# Install package into it
-	dh_virtualenv --python python3 \
+	# Only install venv for cuems-engine; cuems-engine-mock has no venv content
+	dh_virtualenv -pcuems-engine --python python3 \
 		--install-suffix cuems \
 		--use-system-packages
 	# Ensure packaging is installed in venv (mido requires it)
 	/usr/lib/cuems/bin/pip install --force-reinstall packaging || true
+
+override_dh_install:
+	dh_install
+	# Stage mock wrapper scripts for cuems-engine-mock package
+	install -d debian/cuems-engine-mock/usr/bin
+	install -m 755 debian/mock-scripts/audioplayer-cuems \
+	    debian/cuems-engine-mock/usr/bin/audioplayer-cuems
+	install -m 755 debian/mock-scripts/jack-volume \
+	    debian/cuems-engine-mock/usr/bin/jack-volume
+	install -m 755 debian/mock-scripts/dmxplayer-cuems \
+	    debian/cuems-engine-mock/usr/bin/dmxplayer-cuems
+	# Stage no-op rsync shim + node-engine PATH drop-in (mock deploy bypass)
+	install -d debian/cuems-engine-mock/usr/lib/cuems/mock-bin
+	install -m 755 debian/mock-scripts/rsync debian/cuems-engine-mock/usr/lib/cuems/mock-bin/rsync
+	install -d debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d
+	install -m 644 debian/mock-rsync-dropin.conf debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d/10-mock-rsync.conf
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info

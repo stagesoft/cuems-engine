@@ -1,3 +1,20 @@
+cuems-engine (0.1.0rc2-3) bookworm; urgency=medium
+
+  * cuems-engine-mock: ship no-op rsync shim (/usr/lib/cuems/mock-
+    bin/rsync) + cuems-node-engine PATH drop-in so the mandatory project
+    deploy is a local no-op on headless mock boxes; node arms without an
+    rsync daemon. prerm cleans up the drop-in.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 17 Jun 2026 11:41:22 +0000
+
+cuems-engine (0.1.0rc2-2) bookworm; urgency=medium
+
+  * cuems-engine-mock: fix wrapper install path from /usr/local/bin to /usr/bin
+    - /etc/cuems/settings.xml configures player paths under /usr/bin/
+    - wrappers at /usr/local/bin/ were never found by the node engine
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 11 Mar 2026 13:00:00 +0100
+
 cuems-engine (0.1.0rc2-1) bookworm; urgency=medium
 
   * Fixed EngineStatus initialization order bug
