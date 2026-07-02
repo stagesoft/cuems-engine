@@ -77,7 +77,7 @@ class TestRevealWait:
         cue._stop_requested = True
         cue._go_generation = 0
         mtc = Mock()
-        mtc.main_tc.milliseconds_rounded = 0
+        mtc.main_tc.milliseconds_exact = 0
         assert CueHandler._reveal_wait(None, cue, mtc, 0) == 'stopped'
 
     def test_generation_change_returns_stopped(self):
@@ -86,7 +86,7 @@ class TestRevealWait:
         cue._stop_requested = False
         cue._go_generation = 5  # != go_gen passed below
         mtc = Mock()
-        mtc.main_tc.milliseconds_rounded = 0
+        mtc.main_tc.milliseconds_exact = 0
         assert CueHandler._reveal_wait(None, cue, mtc, 0) == 'stopped'
 
     def test_reaches_when_mtc_past_start(self):
@@ -95,5 +95,5 @@ class TestRevealWait:
         cue._stop_requested = False
         cue._go_generation = 0
         mtc = Mock()
-        mtc.main_tc.milliseconds_rounded = 5000  # already past start
+        mtc.main_tc.milliseconds_exact = 5000  # already past start
         assert CueHandler._reveal_wait(None, cue, mtc, 0) == 'reached'

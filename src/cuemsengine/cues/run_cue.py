@@ -44,9 +44,14 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     ActionCue-mediated chains capture live MTC inside CueHandler.go and
     drift relative to the chain's other cues.
     """
-    # Prepare-only: an ActionCue has no media to preload. The action is
-    # EXECUTED in reveal_cue() at the cue's start_mtc, so a chained action fires
-    # at its own timeline slot (not a full body early). See reveal_cue below.
+    # Prepare-only: an ActionCue has no media to preload. But it MUST carry a
+    # _start_mtc so CueHandler._reveal_wait gates it — otherwise the action would
+    # fire at dispatch (a full body early) instead of at its own timeline slot.
+    # The action is EXECUTED in reveal_cue() once live MTC reaches _start_mtc.
+    if frozen_mtc_ms is not None:
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=frozen_mtc_ms/1000)
+    else:
+        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
     return
 
 

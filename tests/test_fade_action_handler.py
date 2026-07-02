@@ -73,6 +73,10 @@ def _make_mtc(ms: int = 5000, framerate: float = 25.0):
     mtc.main_tc = MagicMock()
     mtc.main_tc.framerate = framerate
     mtc.main_tc.milliseconds_rounded = ms
+    mtc.main_tc.milliseconds_exact = float(ms)
+    # Real int frames so run_cue's live-MTC CTimecode construction (now used by
+    # run_actionCue to stamp _start_mtc) doesn't choke on a MagicMock.
+    mtc.main_tc.frames = int(round(ms / 1000 * framerate))
     return mtc
 
 
