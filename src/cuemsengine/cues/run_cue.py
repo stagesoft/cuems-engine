@@ -307,6 +307,18 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
 
     client = cue._osc
 
+    # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
+    # enabled on the videocomposer BEFORE the layer starts following MTC below.
+    # Otherwise there's a race: the layer follows MTC (mtcfollow=1) from here,
+    # but /loop is only sent later by loop_videoCue() — which go_threaded calls
+    # AFTER the postwait sleep. In that window the VC has wraparound_=false, so
+    # when the media frame overshoots its length it CLAMPS to the last frame
+    # (LayerPlayback: adjustedFrame = totalFrames-1) and the video visibly
+    # freezes on the final frame until loop_videoCue() finally sends /loop.
+    # Sending it here closes the race so the first loop wraps cleanly. Finite
+    # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
+    loop_early = getattr(cue, 'loop', 1) < 1
+
     # Re-apply position for each layer before making visible (layer may not have
     # been ready when position was set during arm)
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
@@ -330,6 +342,10 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 Logger.exception(f'Unexpected error re-applying position for layer {layer_id} (output "{output_name}")')
 
         client.set_value(f'{layer_path}/offset', int(offset_to_go))
+        # Enable wraparound early for infinite loops, BEFORE mtcfollow, so the
+        # first loop wraps instead of freezing on the clamped last frame.
+        if loop_early:
+            client.set_value(f'{layer_path}/loop', 1)
         # Preload the correct frame while INVISIBLE: offset+mtcfollow let the
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
