@@ -6,6 +6,8 @@ from dis import hasconst
 from functools import partial
 from typing import Any, Callable
 from os import path, remove
+import ipaddress
+import socket
 
 from cuemsutils.log import Logger, logged
 from cuemsutils.xml import XmlReaderWriter
@@ -286,7 +288,61 @@ class BaseEngine(SignalEngine):
             exit(-1)
 
     def get_controller_ip(self) -> str:
-        """Set the controller IP address"""
+        """Resolve the controller's NNG-hub IP.
+
+        Resolution order (Phase 2 — late-binding to controller.local):
+          1. mDNS: resolve CONTROLLER_HOST (controller.local). cuems-nodeconf
+             publishes the controller's cluster-interface address under this
+             name, so a node always discovers the *live* IP — no correct
+             <ip> needed in network_map.xml, and IPv4LL renegotiation
+             self-heals on the next engine start.
+          2. Fallback: the network_map.xml <ip> of the NodeType.master node
+             (operator/nodeconf-maintained), used when mDNS is unusable.
+
+        A loopback result from (1) is rejected on purpose: it means "this host
+        IS the controller" (avahi short-circuits the own-hostname query to
+        127.0.0.1), in which case the map <ip> is the deterministic local
+        path (the controller's hub binds 0.0.0.0, reachable either way).
+        """
+        resolved = self._resolve_controller_host()
+        if resolved:
+            Logger.info(f'Controller IP resolved via mDNS ({CONTROLLER_HOST}): {resolved}')
+            return resolved
+        mapped = self._controller_ip_from_map()
+        Logger.info(f'Controller IP resolved via network_map: {mapped}')
+        return mapped
+
+    def _resolve_controller_host(self) -> str | None:
+        """Resolve CONTROLLER_HOST to a usable remote unicast IPv4, or None.
+
+        Returns None (→ caller falls back to the map) on any of:
+          - resolution failure (NXDOMAIN/timeout — the normal fast path when
+            mDNS can't answer, e.g. avahi down),
+          - a loopback / unspecified address (means this host is the
+            controller; see get_controller_ip).
+        Never raises — a resolution problem must degrade to the map, not
+        crash engine startup.
+        """
+        try:
+            ip = socket.gethostbyname(CONTROLLER_HOST)
+        except (socket.gaierror, OSError) as e:
+            Logger.debug(f'mDNS resolution of {CONTROLLER_HOST} failed: {e}')
+            return None
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            Logger.warning(f'{CONTROLLER_HOST} resolved to non-IP {ip!r}; ignoring')
+            return None
+        if addr.is_loopback or addr.is_unspecified:
+            Logger.debug(
+                f'{CONTROLLER_HOST} resolved to {ip} (loopback/self); '
+                f'using network_map instead'
+            )
+            return None
+        return ip
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
         if not hasattr(self, 'cm') or not self.cm.network_map:
             raise AttributeError('No network map found')
         nodes = self.cm.network_map['node_list']
@@ -295,7 +351,10 @@ class BaseEngine(SignalEngine):
         for node_item in nodes:
             node = node_item.get('node', {}) if isinstance(node_item, dict) else {}
             if node.get('node_type') == CONTROLLER_NETWORK_FLAG:
-                return node.get('ip')
+                ip = node.get('ip')
+                if not ip:
+                    raise ValueError('Controller node in network map has no <ip>')
+                return ip
         raise ValueError('No controller node found in network map')
 
     def find_hosts(self) -> list[dict[str, str | bool]]:
