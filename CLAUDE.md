@@ -100,13 +100,23 @@ and stays lit for:
   `go_threaded` walks on via `_next_local_fire` to this node's next local+enabled
   cue. Disabled cues are transparent (`Σ += 0`); a `post_go != 'go'` cue breaks the
   chain (hand-off — wait for next GO).
-- The per-cue slot contribution is `CueHandler._effective_duration_ms`. **Intended:**
-  for auto-continue (`go`) it must be `prewait + postwait` (**body excluded** — the
-  overlapping cue keeps playing on its own); auto-follow gets its body wait from
-  `loop_cue` naturally (it fires the next cue *after* the media finishes).
+- The per-cue slot contribution for auto-continue chains is
+  `CueHandler._chain_advance_ms` = `prewait + postwait` (**body excluded** — the
+  overlapping cue keeps playing on its own). `_effective_duration_ms`
+  (pre+body+post) survives only for arm-ahead lookahead.
+- **Auto-follow / auto-pause postwait = an MTC-gated tail after the body**: when
+  `loop_cue` returns, the engine blanks the video (`blank_cue`: `/visible 0`,
+  cue stays armed → STOP-reachable), waits until `body_end + postwait` on the
+  MTC timeline, then ends illumination (`remove_cue`) and — for follow — fires
+  the target via `go_from` at exactly that seed. A manual GO during the tail
+  **preempts** the auto-fire (target-generation snapshot: the tail yields if
+  someone else started the target). Follow therefore fires at
+  `body_end + postwait`, not at media end.
 - `prewait` is applied at exactly one point (`start = arrival + prewait`), never as
-  a wall-clock `sleep`. The postwait `sleep` in `go_threaded` is **dispatch pacing
-  only** (avoids arming the whole chain at once) — the real timing comes from the
+  a wall-clock `sleep`. The postwait `sleep` in `go_threaded` applies to
+  **auto-continue only**: dispatch pacing (avoids arming the whole chain at once)
+  plus it holds the thread past the body when `post > body`, producing continue's
+  `pre + max(body, post)` illumination — the real chain timing comes from the
   arrival/reveal math, not that sleep.
 
 Cross-cutting invariants: never auto-stop a running project; `_reveal_wait` exits

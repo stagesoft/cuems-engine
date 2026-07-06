@@ -424,3 +424,31 @@ def reveal_cueList(cue: CueList, mtc, frozen_mtc_ms: float = None):
         first_enabled = next((c for c in cue.contents if c.enabled), None)
         if first_enabled:
             reveal_cue(first_enabled, mtc, frozen_mtc_ms)
+
+
+@singledispatch
+def blank_cue(cue: Cue, mtc: MtcListener):
+    """Hide a cue's output at its body end, WITHOUT disarming it.
+
+    Used by the pause/go_at_end postwait tail: loop_videoCue leaves /loop 1 on,
+    so an undisarmed video keeps visibly wrap-looping after the body ends —
+    blank_cue hides it while the cue stays in _armed_cues (STOP-reachable
+    through the whole tail; disarming here instead would make the tail
+    unreachable by stop_all_cues → ghost fire after STOP). Default no-op:
+    audio is already silent (loop_audioCue sends /mtcfollow 0 at loop end),
+    DMX scenes have ended, actions/CueLists have nothing to hide.
+    """
+    pass
+
+
+@blank_cue.register
+def blank_videoCue(cue: VideoCue, mtc):
+    layer_ids = getattr(cue, '_layer_ids', [])
+    if not layer_ids or getattr(cue, '_osc', None) is None:
+        return
+    for layer_id in layer_ids:
+        try:
+            cue._osc.set_value(f'/videocomposer/layer/{layer_id}/visible', 0)
+        except Exception as e:
+            Logger.warning(f'blank_videoCue: /visible 0 failed for layer {layer_id}: {e}')
+    Logger.info(f'Video cue {cue.id} blanked for postwait tail: {len(layer_ids)} layer(s) hidden')

@@ -13,15 +13,12 @@ from cuemsutils.log import logged, Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
-from .run_cue import run_cue, reveal_cue
+from .run_cue import run_cue, reveal_cue, blank_cue
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
-from .arm_cue import arm_cue
-from .loop_cue import loop_cue
-from .run_cue import run_cue, reveal_cue
 
 
 class CueHandler:
@@ -223,6 +220,11 @@ class CueHandler:
             if getattr(cue, '_stop_requested', False) or getattr(cue, '_go_generation', 0) != go_gen:
                 return 'stopped'
             sleep(0.02)
+        # Final flag check AFTER the loop: a STOP landing in the last poll
+        # interval (~20ms) would otherwise be reported as 'reached' and let the
+        # caller proceed to reveal/fire right after the operator stopped.
+        if getattr(cue, '_stop_requested', False) or getattr(cue, '_go_generation', 0) != go_gen:
+            return 'stopped'
         return 'reached'
 
     def _arm_ahead(self, start_cue: Cue) -> None:
@@ -603,10 +605,14 @@ class CueHandler:
         # the generation check, so we only guard the outward actions here.
         superseded = getattr(cue, '_go_generation', 0) != go_gen
 
-        # Postwait: DISPATCH pacing only — paces the fire of the next cue so we
-        # don't arm the whole chain at once. The next cue's timeline slot is set
-        # by the arrival math below, not by this sleep.
-        if cue.postwait > 0 and not cue._stop_requested and not superseded:
+        # Postwait for AUTO-CONTINUE only: DISPATCH pacing — paces the fire of
+        # the next cue so we don't arm the whole chain at once (the next cue's
+        # timeline slot is set by the arrival math below, not by this sleep),
+        # and it holds this thread past the body when post > body, which is what
+        # produces continue's `pre + max(body, post)` illumination. For
+        # pause/go_at_end the postwait is a REAL gap AFTER the body — handled by
+        # the MTC-gated tail below loop_cue, not by this sleep.
+        if cue.post_go == 'go' and cue.postwait > 0 and not cue._stop_requested and not superseded:
             sleep(cue.postwait.milliseconds_rounded / 1000)
 
         post_go_thread = None
@@ -635,6 +641,45 @@ class CueHandler:
             Logger.info(f'Cue {cue.id} generation changed ({go_gen} → {cue._go_generation}), skipping cleanup')
             return
 
+        # ---- pause/go_at_end postwait tail -------------------------------
+        # Spec: postwait is a real gap AFTER the body (follow: pre→body→post→
+        # next; pause: pre→body→post→standby), and the cue stays illuminated
+        # through it. Base end of the body on the MTC timeline; fallbacks for
+        # cues that never set _end_mtc (plain ActionCue body=0; aborted A/V
+        # setup; CueList) — and guard against a stale _end_mtc left by a
+        # previous GO of this object. (FadeCue DOES set a real _end_mtc via
+        # _handle_fade_action — used as-is.)
+        end_attr = getattr(cue, '_end_mtc', None)
+        base_end_ms = end_attr.milliseconds_exact if end_attr is not None else start_ms
+        if base_end_ms < start_ms:
+            base_end_ms = start_ms  # stale from a previous run
+        fire_seed_ms = base_end_ms + cue.postwait.milliseconds_exact
+
+        tail = (cue.post_go in ('pause', 'go_at_end')
+                and cue.postwait > 0
+                and not cue._stop_requested)
+        # Snapshot the follow target's generation BEFORE the tail: next_cue_pointer
+        # was set to this very target at OUR dispatch, so a manual GO during the
+        # (black-screen) tail starts the same object — the auto-fire below must
+        # then YIELD or the target runs twice. GO preempts the tail.
+        target_gen0 = getattr(cue._target_object, '_go_generation', 0) if cue._target_object else 0
+        if tail:
+            # Hide output at body end WITHOUT disarming (cue must stay in
+            # _armed_cues so STOP can reach this wait — disarming here would
+            # let the tail expire and ghost-fire after an operator STOP).
+            blank_cue(cue, mtc)
+            self._wait_mtc(cue, mtc, fire_seed_ms, go_gen)
+            if getattr(cue, '_go_generation', 0) != go_gen:
+                # Real STOP (stop_all_cues bumps gen) / newer GO owns the cue:
+                # no remove_cue (controller's stop already reset status), no
+                # fire, no disarm (mirrors the post-loop generation guard).
+                Logger.info(f'Cue {cue.id} postwait tail cancelled (stop/newer GO), skipping cleanup')
+                return
+            # A pure _stop_requested exit (action-pause: sets the flag WITHOUT a
+            # gen bump) falls through: remove_cue and the follow fire are already
+            # guarded on _stop_requested below, and disarm still runs — exactly
+            # today's behavior for an action-pause landing mid-body.
+
         # Notify the controller that the cue finished playing (status → 100).
         # Done here (after loop_cue) so the status only changes to 100 when the
         # cue has actually completed its full duration, not just when playback started.
@@ -646,9 +691,20 @@ class CueHandler:
                 pass
 
         go_at_end_thread = None
-        if cue.post_go == 'go_at_end' and cue._target_object and not cue._stop_requested:
+        if (cue.post_go == 'go_at_end' and cue._target_object
+                and not cue._stop_requested
+                and getattr(cue._target_object, '_go_generation', 0) == target_gen0):
             Logger.info(f'Running go at end for {cue.__class__.__name__}:{cue.id}')
-            go_at_end_thread = self.go(cue._target_object, mtc)
+            # go_from (not go): a non-local follow target is walked past to THIS
+            # node's next local cue (go() would bail — same defect class as the
+            # play-action loop-back). Explicit seed = body_end + postwait: exact
+            # arrival on the shared timeline; go_threaded adds the target's own
+            # prewait on top. The target_gen0 compare makes this auto-fire YIELD
+            # if a manual GO already started the target during the tail.
+            go_at_end_thread = self.go_from(cue._target_object, mtc, fire_seed_ms)
+        elif (cue.post_go == 'go_at_end' and cue._target_object
+                and not cue._stop_requested):
+            Logger.info(f'go_at_end fire for {cue.id} yielded: target already started by a newer GO')
 
         self.disarm(cue)
 
