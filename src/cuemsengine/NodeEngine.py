@@ -953,8 +953,9 @@ class NodeEngine(BaseEngine):
 
         # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
         # accumulating the timeline offset Σ of the cues we skip. A non-local
-        # ENABLED cue advances the timeline (Σ += eff) so our first local cue
-        # lands at its true slot; a disabled cue is transparent (Σ += 0). A cue
+        # ENABLED cue advances the timeline (Σ += chain_advance = prewait+postwait,
+        # body EXCLUDED — Auto continue overlaps) so our first local cue lands at
+        # its true slot; a disabled cue is transparent (Σ += 0). A cue
         # that breaks the chain (post_go != 'go') is a hand-off point — stop and
         # wait for the next GO. This lets every node fire its own local cues from
         # the same GO press, each at its correct MTC slot, and (Σ += 0 on
@@ -968,7 +969,7 @@ class NodeEngine(BaseEngine):
                 cue_to_go = None
                 break
             if cue_to_go.enabled:
-                sigma_ms += CUE_HANDLER._effective_duration_ms(cue_to_go)
+                sigma_ms += CUE_HANDLER._chain_advance_ms(cue_to_go)
             cue_to_go = getattr(cue_to_go, '_target_object', None)
             walked += 1
             if walked > 1024:

@@ -388,12 +388,21 @@ def _handle_play(
     frozen_mtc_ms: float | None = None,
 ) -> dict:
     target_id = target.id
-    fail = _ready_action_target("play", target, ch)
-    if fail is not None:
-        return fail
+    # Readiness gates the cue we would play locally. For a NON-local target,
+    # go_from walks PAST it to THIS node's own local cue (which go() re-arms),
+    # so don't gate on the non-local target — it can never arm here, and doing
+    # so silently dropped the controller's own cues on a cross-node loop-back.
+    if getattr(target, "_local", False):
+        fail = _ready_action_target("play", target, ch)
+        if fail is not None:
+            return fail
     target._stop_requested = False
     try:
-        ch.go(target, mtc, frozen_mtc_ms)
+        # go_from (not go): walk the target's post_go='go' chain to THIS node's
+        # first local+enabled cue. A plain go() bails when `target` is local to
+        # another node, dropping this node's own cues on a cross-node loop-back
+        # (circular project). See CueHandler.go_from.
+        ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result(
             "failed", "play", target_id, str(exc)
@@ -482,12 +491,17 @@ def _handle_fade_in(
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
-    fail = _ready_action_target("fade_in", target, ch)
-    if fail is not None:
-        return fail
+    # Only gate on a local target (see _handle_play) — non-local targets are
+    # walked past by go_from.
+    if getattr(target, "_local", False):
+        fail = _ready_action_target("fade_in", target, ch)
+        if fail is not None:
+            return fail
     target._stop_requested = False
     try:
-        ch.go(target, mtc, frozen_mtc_ms)
+        # go_from (not go): same cross-node walk as play — a plain go() would
+        # drop other nodes' cues on a chain owned by the target's node.
+        ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
     return ActionHandler._action_result("applied", "fade_in", target_id)
