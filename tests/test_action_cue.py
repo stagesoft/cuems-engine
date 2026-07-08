@@ -121,13 +121,16 @@ class TestPlayAction:
 
     def test_play_without_frozen_mtc_passes_none(self, handler, mtc):
         # Standalone ActionCue (no chain) → frozen_mtc_ms defaults to None.
+        # The handler must pass None THROUGH to go_from (which then seeds
+        # from live MTC itself) — patch go_from, not go: _handle_play calls
+        # go_from, and go_from substitutes live MTC for a None seed.
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(handler, "go") as mock_go, patch.object(handler, "arm"):
+        with patch.object(handler, "go_from") as mock_go_from, patch.object(handler, "arm"):
             handler.execute_action(cue, mtc)
 
-        mock_go.assert_called_once_with(target, mtc, None)
+        mock_go_from.assert_called_once_with(target, mtc, None)
 
     def test_play_arm_raises_returns_failed(self, handler, mtc):
         target = _make_target(loaded=False)

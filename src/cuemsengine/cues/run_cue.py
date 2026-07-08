@@ -140,11 +140,17 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                     f"Audio cue {cue.id}: graph not wired correctly at GO; "
                     f"repairing via connect_player_to_outputs"
                 )
-                mixer.connect_player_to_outputs(
+                repaired = mixer.connect_player_to_outputs(
                     player_name=player_name,
                     player_output_prefix='outport',
                     selected_outputs=selected_outputs,
                 )
+                if repaired is False:
+                    Logger.error(
+                        f"Audio cue {cue.id}: mixer repair failed at GO — "
+                        f"cue will be SILENT despite showing armed (player "
+                        f"ports missing or mixer inputs unavailable)."
+                    )
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
     

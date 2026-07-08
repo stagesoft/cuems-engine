@@ -129,7 +129,8 @@ class AudioMixer(Player):
                 sleep(retry_delay)
         else:
             Logger.warning(f"JACK port {channel_0_output} not available after {max_retries} attempts")
-        
+            return False
+
         # Check if player is stereo (has output_1) or mono (only output_0)
         is_stereo = self.conn_man.port_exists(channel_1_output)
         Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
