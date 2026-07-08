@@ -445,11 +445,21 @@ class PlayerHandler:
                 Logger.warning(f'No valid audio outputs resolved for cue {cue.id}, skipping mixer connection')
             else:
                 Logger.info(f'Connecting {player_name} to outputs: {selected_outputs}')
-                self._audio_mixer.connect_player_to_outputs(
+                connected = self._audio_mixer.connect_player_to_outputs(
                     player_name=player_name,
                     player_output_prefix='outport',
                     selected_outputs=selected_outputs
                 )
+                if connected is False:
+                    # Route to the mixer failed: the cue would show armed/green
+                    # in the UI but produce no sound. Surface it loudly rather
+                    # than proceeding silently. (Not raised on purpose: aborting
+                    # the arm here could disrupt an in-progress GO chain.)
+                    Logger.error(
+                        f'Audio cue {cue.id} failed to route {player_name} to the mixer — '
+                        f'it will be SILENT despite showing armed (player ports may not have '
+                        f'registered in time, or mixer inputs are missing).'
+                    )
 
 
     # ---------------------------
