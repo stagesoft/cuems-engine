@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
+import os
+import shutil
 import subprocess
-from time import sleep
+from time import sleep, monotonic
 
 from cuemsutils.log import Logger
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
@@ -51,6 +53,7 @@ class PlayerHandler:
     _lock: RLock
     _media_folder: str
     _node_uuid: str | None
+    _media_dims_cache: dict
 
     def __new__(cls, *args, **kwargs):
         """Singleton pattern: Ensure only one instance is created"""
@@ -74,6 +77,7 @@ class PlayerHandler:
             cls._instance._lock = RLock()
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
+            cls._instance._media_dims_cache = {}
         return cls._instance
 
 
@@ -128,6 +132,7 @@ class PlayerHandler:
         self._outputs_map = None
         with self._lock:
             self._loaded_layer_ids.clear()
+            self._media_dims_cache = {}
 
 
     # ---------------------------
@@ -773,6 +778,49 @@ class PlayerHandler:
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""
         return self._media_folder + '/' + file_name
+
+    def media_dimensions(self, file_name: str) -> tuple[int | None, int | None]:
+        """Return (width, height) px of the media's first video stream via
+        ffprobe, cached by (path, st_mtime). Returns (None, None) on any
+        failure (ffprobe missing/error/timeout, non-video media, file gone),
+        in which case callers fall back to the legacy region-ratio scale.
+        """
+        file_path = self.media_path(file_name)
+        try:
+            key = (file_path, os.stat(file_path).st_mtime)
+        except OSError:
+            return (None, None)
+        with self._lock:
+            if key in self._media_dims_cache:
+                return self._media_dims_cache[key]
+        # Probe OUTSIDE the lock so a slow ffprobe never blocks other arms.
+        # Two cues with the same file may both miss and both probe: a benign
+        # double-probe (NOT a real race) — leave it, do not "fix" with a lock
+        # held across the subprocess.
+        dims: tuple[int | None, int | None] = (None, None)
+        ffprobe = shutil.which('ffprobe')
+        if ffprobe:
+            t0 = monotonic()
+            try:
+                out = subprocess.run(
+                    [ffprobe, '-v', 'error', '-select_streams', 'v:0',
+                     '-show_entries', 'stream=width,height',
+                     '-of', 'csv=p=0', file_path],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    timeout=5, text=True)
+                parts = out.stdout.strip().split(',')
+                if out.returncode == 0 and len(parts) == 2:
+                    w, h = int(parts[0]), int(parts[1])
+                    if w > 0 and h > 0:
+                        dims = (w, h)
+            except (subprocess.TimeoutExpired, ValueError, OSError) as e:
+                Logger.warning(f'ffprobe failed for {file_path}: {e}')
+            Logger.debug(f'ffprobe {file_path} -> {dims} in {monotonic() - t0:.3f}s')
+        else:
+            Logger.warning('ffprobe not found; video layers use legacy region scale')
+        with self._lock:
+            self._media_dims_cache[key] = dims
+        return dims
 
     def add_node_uuid(self, uuid: str):
         """Adds a node uuid to the player handler"""

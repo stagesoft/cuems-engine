@@ -86,15 +86,44 @@ class VideoOutput:
         canvas_cy = self.canvas_height // 2
         return (output_cx - canvas_cx, canvas_cy - output_cy)
 
-    def get_layer_scale(self) -> tuple[float, float]:
-        """Returns (scaleX, scaleY) to fit the video layer within this output's region.
+    def get_layer_scale(self, media_w: int | None = None,
+                        media_h: int | None = None) -> tuple[float, float]:
+        """Returns a uniform (s, s) that renders the media at its NATIVE pixel
+        size, clamped so the layer never exceeds this output's region.
 
-        The videocomposer renders layers at full canvas size with letterboxing.
-        For typical setups (ultra-wide canvas, 16:9 video), the video fills the
-        canvas height and is letterboxed horizontally.  The height ratio therefore
-        determines the correct uniform scale to fit the output region.
+        The videocomposer base-renders each layer letterboxed against the whole
+        canvas (fills canvas height) and applies scale as quad geometry sampling
+        the source texture, so s = media_h/canvas_h reproduces the media 1:1 (no
+        resample, no stretch). The two clamp terms keep an oversized / wider-
+        aspect media inside this region instead of bleeding onto neighbouring
+        outputs:
+          - (region_w * media_h) / (media_w * canvas_h): clamp width to region
+          - region_h / canvas_h: clamp height to region
+        The min() is ESSENTIAL — for oversized media the media_h/canvas_h term
+        alone could be > 1 and scale the layer UP, causing bleed. Do not remove it.
+
+        Falls back to the legacy region-height ratio when media dims are unknown
+        (ffprobe failed / non-video media). NOTE: that fallback reproduces the
+        original overflow for an output whose aspect != media aspect, so it is
+        logged at WARNING to make a silent re-bleed visible.
         """
-        s = self.canvas_region['height'] / self.canvas_height if self.canvas_height else 1.0
+        ch = self.canvas_height
+        if not ch:
+            return (1.0, 1.0)
+        region_w = self.canvas_region['width']
+        region_h = self.canvas_region['height']
+        if media_w and media_h:
+            s = min(
+                media_h / ch,
+                (region_w * media_h) / (media_w * ch),
+                region_h / ch,
+            )
+        else:
+            s = region_h / ch
+            Logger.warning(
+                f'VideoOutput {self.mapped_to}: media dims unknown, using legacy '
+                f'region-height scale {s:.4f} (may overflow if media aspect != region)'
+            )
         return (s, s)
 
     def apply_config(self, video_client: VideoClient) -> None:

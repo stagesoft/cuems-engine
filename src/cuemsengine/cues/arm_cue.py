@@ -137,6 +137,7 @@ def arm_videoCue(cue: VideoCue):
         return
 
     video_path = PLAYER_HANDLER.media_path(cue.media['file_name'])
+    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media['file_name'])
     cue._layer_ids = []
 
     driver_layer_id = None
@@ -161,9 +162,8 @@ def arm_videoCue(cue: VideoCue):
             output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
             x, y = output.get_layer_placement()
             client.set_value(f'{layer_path}/position', [x, y])
-            sx, sy = output.get_layer_scale()
-            if sx != 1.0 or sy != 1.0:
-                client.set_value(f'{layer_path}/scale', [sx, sy])
+            sx, sy = output.get_layer_scale(media_w, media_h)
+            client.set_value(f'{layer_path}/scale', [sx, sy])
         except (KeyError, RuntimeError, ValueError) as e:
             Logger.warning(f'Video output "{output_name}" placement/scale failed ({type(e).__name__}: {e}), skipping for layer {layer_id}')
         except Exception:
