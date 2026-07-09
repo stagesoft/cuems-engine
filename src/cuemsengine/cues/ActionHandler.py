@@ -456,6 +456,9 @@ def _handle_enable(
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
 ) -> dict:
+    # Pure flag flip. The arm/pre-load side effect for the newly enabled cue
+    # (async ReArm) lives in NodeEngine._action_result_sink, which reacts to
+    # this handler's 'applied' outcome.
     target_id = target.id
     if target.enabled:
         return ActionHandler._action_result(
@@ -472,6 +475,9 @@ def _handle_disable(
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
 ) -> dict:
+    # Pure flag flip. The disarm-if-idle side effect for the disabled cue
+    # lives in NodeEngine._action_result_sink, which reacts to this handler's
+    # 'applied' outcome (guarded by the cue's _playing lifecycle flag).
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(

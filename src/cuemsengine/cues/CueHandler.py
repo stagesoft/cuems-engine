@@ -349,6 +349,7 @@ class CueHandler:
 
     def disarm(self, cue: Cue) -> bool:
         """Disarms a cue by removing it from the armed_cues list."""
+        cue._playing = False
         if hasattr(cue, 'loaded') and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
@@ -389,6 +390,7 @@ class CueHandler:
             for cue in self._armed_cues:
                 cue._stop_requested = True
                 cue._go_generation = getattr(cue, '_go_generation', 0) + 1
+                cue._playing = False
 
     def disarm_all(self) -> None:
         """Disarms all cues."""
@@ -444,6 +446,11 @@ class CueHandler:
         cue._stop_requested = False
         go_gen = getattr(cue, '_go_generation', 0) + 1
         cue._go_generation = go_gen
+        # Lifecycle flag: True while a GO owns this cue; cleared by disarm()
+        # and stop_all_cues(). Unlike _go_generation (increment-only), this is
+        # a sound "currently playing" signal — the disable-action path uses it
+        # to decide whether disarming would cut live playback.
+        cue._playing = True
 
         thread = Thread(
             name=f'GO:{cue.__class__.__name__}:{cue.id}',
