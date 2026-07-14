@@ -729,6 +729,15 @@ class NodeEngine(BaseEngine):
         # Disarm all cues from the previous project.
         CUE_HANDLER.disarm_all()
 
+        # Clear the engine's 24h MTC wrap accumulator on this project transition,
+        # co-orchestrated with the DMX blackout + videocomposer reset above (which
+        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
+        # reload's small backward wire delta can't trip the wire-driven reset, so
+        # do it explicitly here — else a project loaded after a >24h run starts
+        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
+        
         # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
 
@@ -1098,47 +1107,57 @@ class NodeEngine(BaseEngine):
                 Logger.info("No more cues. Press STOP to restart.")
                 return
 
-        if not cue_to_go._local:
-            # First cue in the GO target isn't ours, but a post_go='go' chain
-            # may include local cues further down. Walk forward through the
-            # chain to find our first local cue and start there. Each cue in a
-            # post_go='go' chain shares the same frozen MTC snapshot, so every
-            # node fires its own local cues from the same GO press in parallel.
-            # Stop walking if the chain breaks (post_go != 'go' on a non-local
-            # cue) — that's an explicit hand-off point waiting for the next GO.
-            original = cue_to_go
-            walked = 0
-            while cue_to_go is not None and not cue_to_go._local:
-                if cue_to_go.post_go != "go":
-                    cue_to_go = None
-                    break
-                cue_to_go = getattr(cue_to_go, "_target_object", None)
-                walked += 1
-                if walked > 1024:
-                    Logger.error("GO chain walk hit safety limit; aborting")
-                    cue_to_go = None
-                    break
+        # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
+        # timeline accumulator) AND as the drift baseline (go_offset). Every node
+        # captures its own GO_mtc off the shared MTC timeline, so the anchors it
+        # derives agree with every other node's.
+        GO_mtc = self.mtc_listener.main_tc.milliseconds_exact
 
-            if cue_to_go is None:
-                Logger.info(
-                    f'No local cues in post_go="go" chain from {original.id}; '
-                    f"nothing to play on this node for this GO"
-                )
-                return
+        # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
+        # accumulating the timeline offset Σ of the cues we skip. A non-local
+        # ENABLED cue advances the timeline (Σ += chain_advance = prewait+postwait,
+        # body EXCLUDED — Auto continue overlaps) so our first local cue lands at
+        # its true slot; a disabled cue is transparent (Σ += 0). A cue
+        # that breaks the chain (post_go != 'go') is a hand-off point — stop and
+        # wait for the next GO. This lets every node fire its own local cues from
+        # the same GO press, each at its correct MTC slot, and (Σ += 0 on
+        # disabled) fixes the old local-disabled early-return that made a
+        # post-disabled cue never play.
+        original = cue_to_go
+        sigma_ms = 0.0
+        walked = 0
+        while cue_to_go is not None and not (cue_to_go._local and cue_to_go.enabled):
+            if cue_to_go.post_go != 'go':
+                cue_to_go = None
+                break
+            if cue_to_go.enabled:
+                sigma_ms += CUE_HANDLER._chain_advance_ms(cue_to_go)
+            cue_to_go = getattr(cue_to_go, '_target_object', None)
+            walked += 1
+            if walked > 1024:
+                Logger.error('GO chain walk hit safety limit; aborting')
+                cue_to_go = None
+                break
 
-            Logger.info(
-                f"GO: skipped {walked} non-local cue(s); starting from local "
-                f"cue {cue_to_go.id}"
-            )
-
-        if not cue_to_go.enabled:
-            Logger.info(
-                f"Cue {cue_to_go.id} is disabled, advancing to next enabled"
-                f"cue"
-            )
-            self.next_cue_pointer = cue_to_go.get_next_cue()
+        if cue_to_go is None:
+            # No local+enabled cue reachable in this GO's chain (spent on cues
+            # owned by other nodes, or a standalone disabled cue). Advance our
+            # next_cue_pointer in lockstep with the node that DID play; otherwise
+            # this node wedges on a cue it can never play and every subsequent GO
+            # re-evaluates it. (next_cue_pointer is a global sequence property —
+            # depends only on post_go/enabled, never on locality.)
+            self.next_cue_pointer = original.get_next_cue()
             self._broadcast_nextcue()
+            Logger.info(
+                f'No local+enabled cue in post_go="go" chain from {original.id}; '
+                f'nothing to play on this node. Advanced next cue to '
+                f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
             return
+
+        if walked:
+            Logger.info(
+                f'GO: skipped {walked} cue(s) (Σ={sigma_ms:.1f}ms); starting from '
+                f'local cue {cue_to_go.id}')
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
@@ -1150,15 +1169,20 @@ class NodeEngine(BaseEngine):
         # Update state
         self.set_status("running", "yes")
         self.ongoing_cue = cue_to_go
-
-        # Start the cue
-        main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener)
+        
+        # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
+        # adds this cue's own prewait to derive the reveal anchor (start).
+        main_thread = CUE_HANDLER.go(
+            cue_to_go,
+            self.mtc_listener,
+            GO_mtc + sigma_ms
+        )
 
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         # Drift baseline; consumed by BaseEngine.timecode = mtc - go_offset.
-        # _exact for sub-ms precision at NTSC framerates.
-        self.go_offset = self.mtc_listener.main_tc.milliseconds_exact
+        # The GO press instant itself (not the first local cue's arrival).
+        self.go_offset = GO_mtc
 
         # Broadcast nextcue to UI
         self._broadcast_nextcue()

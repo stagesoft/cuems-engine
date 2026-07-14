@@ -78,6 +78,10 @@ def _make_mtc(ms: int = 5000, framerate: float = 25.0):
     mtc.main_tc = MagicMock()
     mtc.main_tc.framerate = framerate
     mtc.main_tc.milliseconds_rounded = ms
+    mtc.main_tc.milliseconds_exact = float(ms)
+    # Real int frames so run_cue's live-MTC CTimecode construction (now used by
+    # run_actionCue to stamp _start_mtc) doesn't choke on a MagicMock.
+    mtc.main_tc.frames = int(round(ms / 1000 * framerate))
     return mtc
 
 
@@ -576,15 +580,18 @@ def test_run_cue_has_no_explicit_fade_cue_branch():
     )
 
 
-def test_run_cue_fade_cue_resolves_to_run_actionCue():
-    """run_cue(FadeCue) MUST dispatch to the ActionCue branch (via MRO)."""
-    from cuemsengine.cues.run_cue import run_cue
-
+def test_run_cue_fade_cue_prepare_only_reveal_executes():
+    """FadeCue dispatches to the ActionCue branch (via MRO) for BOTH run_cue and
+    reveal_cue. The action now EXECUTES at reveal_cue (start_mtc), not run_cue:
+    run_cue is prepare-only; reveal_cue fires execute_action."""
+    from cuemsengine.cues.run_cue import run_cue, reveal_cue
     target_cue = _make_audio_cue()
     cue = _make_fade_cue(target_cue)
     mtc = _make_mtc()
     with patch("cuemsengine.cues.ActionHandler.ACTION_HANDLER") as mock_ah:
         run_cue(cue, mtc)
+        mock_ah.execute_action.assert_not_called()  # prepare-only
+        reveal_cue(cue, mtc)
         # rc_1 threads frozen_mtc_ms through execute_action; default is None.
         mock_ah.execute_action.assert_called_once_with(cue, mtc, None)
 

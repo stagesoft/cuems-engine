@@ -2,6 +2,7 @@
 set -e
 
 CUEMS_VENV="/usr/lib/cuems"
+ENGINE_SERVICES="cuems-controller-engine cuems-node-engine"
 
 case "$1" in
     configure)
@@ -11,60 +12,45 @@ case "$1" in
             echo "Please ensure cuems-utils package is properly installed." >&2
             exit 1
         fi
-        
+
         # Verify console scripts were installed
-        if [ ! -f "$CUEMS_VENV/bin/controller-engine" ]; then
-            echo "WARNING: Console script controller-engine not found" >&2
-        fi
-        if [ ! -f "$CUEMS_VENV/bin/node-engine" ]; then
-            echo "WARNING: Console script node-engine not found" >&2
-        fi
-        
+        for script in controller-engine node-engine; do
+            if [ ! -f "$CUEMS_VENV/bin/$script" ]; then
+                echo "WARNING: Console script $script not found at $CUEMS_VENV/bin/" >&2
+            fi
+        done
+
         # Reload systemd (service files from cuems-common)
-        if command -v deb-systemd-helper >/dev/null 2>&1; then
-            deb-systemd-helper update-state >/dev/null 2>&1 || true
-        elif command -v systemctl >/dev/null 2>&1; then
+        if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
-        
+
         echo "cuems-engine installed successfully."
         echo "Package: cuemsengine installed to $CUEMS_VENV/lib/python*/site-packages/"
         echo "Console scripts: $CUEMS_VENV/bin/controller-engine, $CUEMS_VENV/bin/node-engine, $CUEMS_VENV/bin/system-ports"
         echo "Service files provided by cuems-common package."
-        
-        # Enable and start the services
-        if command -v systemctl >/dev/null 2>&1; then
-            # Enable and start cuems-controller-engine (controller-engine)
-            if systemctl is-enabled cuems-controller-engine >/dev/null 2>&1; then
-                echo "Service cuems-controller-engine is already enabled."
-            else
-                systemctl enable cuems-controller-engine || echo "WARNING: Failed to enable cuems-controller-engine service" >&2
-            fi
-            
-            if systemctl is-active --quiet cuems-controller-engine 2>/dev/null; then
-                echo "Service cuems-controller-engine is already running."
-            else
-                systemctl start cuems-controller-engine || echo "WARNING: Failed to start cuems-controller-engine service" >&2
-            fi
-            
-            # Enable and start cuems-node-engine
-            if systemctl is-enabled cuems-node-engine >/dev/null 2>&1; then
-                echo "Service cuems-node-engine is already enabled."
-            else
-                systemctl enable cuems-node-engine || echo "WARNING: Failed to enable cuems-node-engine service" >&2
-            fi
-            
-            if systemctl is-active --quiet cuems-node-engine 2>/dev/null; then
-                echo "Service cuems-node-engine is already running."
-            else
-                systemctl start cuems-node-engine || echo "WARNING: Failed to start cuems-node-engine service" >&2
-            fi
+
+        # Enable and (re)start the services
+        if [ -d /run/systemd/system ]; then
+            for svc in $ENGINE_SERVICES; do
+                if ! systemctl is-enabled "$svc" >/dev/null 2>&1; then
+                    systemctl enable "$svc" || echo "WARNING: Failed to enable $svc service" >&2
+                fi
+
+                # $2 is the previously-configured version (set on upgrade, empty on fresh install)
+                if [ -n "$2" ]; then
+                    echo "Upgrade from $2 detected, restarting $svc..."
+                    systemctl restart "$svc" || echo "WARNING: Failed to restart $svc service" >&2
+                else
+                    systemctl start "$svc" || echo "WARNING: Failed to start $svc service" >&2
+                fi
+            done
         fi
         ;;
-        
+
     abort-upgrade|abort-remove|abort-deconfigure)
         ;;
-        
+
     *)
         echo "postinst called with unknown argument \`$1'" >&2
         exit 1

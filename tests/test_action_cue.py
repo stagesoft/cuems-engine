@@ -1033,16 +1033,21 @@ class TestEffectiveDuration:
         duration = CueHandler._effective_duration_ms(cue)
         assert duration >= 1900  # ~2000ms
 
-    def test_dmx_cue_fadein_seconds_to_ms(self):
+    def test_dmx_cue_fadein_is_milliseconds(self):
+        # fadein_time/fadeout_time are stored in MILLISECONDS (authoritative:
+        # run_dmxCue reads fadein_ms then fade_time = fadein_ms/1000; project
+        # data uses <fadein_time>1000</fadein_time> for a 1 s fade). So a 3 s
+        # fade == 3000 ms and _effective_duration_ms must NOT multiply by 1000.
+        from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues import DmxCue
 
         from cuemsengine.cues.CueHandler import CueHandler
 
         cue = DmxCue()
-        cue.fadein_time = 3.0  # 3 seconds
+        cue.fadein_time = 3000  # 3 s expressed in ms
         cue.fadeout_time = 0.0
         duration = CueHandler._effective_duration_ms(cue)
-        assert duration >= 2900  # 3000ms
+        assert duration == 3000
 
 
 # ---------------------------------------------------------------------------

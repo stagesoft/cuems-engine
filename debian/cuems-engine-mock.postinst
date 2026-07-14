@@ -1,0 +1,70 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+
+            if systemctl is-enabled cuems-mock-videocomposer >/dev/null 2>&1; then
+                echo "Service cuems-mock-videocomposer is already enabled."
+            else
+                systemctl enable cuems-mock-videocomposer || \
+                    echo "WARNING: Failed to enable cuems-mock-videocomposer service" >&2
+            fi
+
+            if systemctl is-active --quiet cuems-mock-videocomposer 2>/dev/null; then
+                echo "Service cuems-mock-videocomposer is already running."
+            else
+                systemctl start cuems-mock-videocomposer || \
+                    echo "WARNING: Failed to start cuems-mock-videocomposer service" >&2
+            fi
+
+            # jackd-dummy: provides JACK + virtual MIDI ports on headless/cloud
+            # servers that have no sound hardware (/dev/snd absent).
+            # On nodes with real hardware jackd-cuems.service is used instead.
+            #
+            # If jackd-cuems.service exists and is running/enabled it will
+            # conflict with the dummy driver -- stop and disable it first.
+            if systemctl is-active --quiet jackd-cuems 2>/dev/null; then
+                echo "Stopping jackd-cuems.service (replaced by jackd-dummy on this node)..."
+                systemctl stop jackd-cuems || true
+            fi
+            if systemctl is-enabled jackd-cuems >/dev/null 2>&1; then
+                echo "Disabling jackd-cuems.service (replaced by jackd-dummy on this node)..."
+                systemctl disable jackd-cuems || true
+            fi
+
+            if systemctl is-enabled jackd-dummy >/dev/null 2>&1; then
+                echo "Service jackd-dummy is already enabled."
+            else
+                systemctl enable jackd-dummy || \
+                    echo "WARNING: Failed to enable jackd-dummy service" >&2
+            fi
+
+            if systemctl is-active --quiet jackd-dummy 2>/dev/null; then
+                echo "Service jackd-dummy is already running."
+            else
+                systemctl start jackd-dummy || \
+                    echo "WARNING: Failed to start jackd-dummy service" >&2
+            fi
+        fi
+
+        echo "cuems-engine-mock installed."
+        echo "Mock wrappers installed to /usr/local/bin/: audioplayer-cuems, jack-volume, dmxplayer-cuems"
+        echo "Mock videocomposer service: cuems-mock-videocomposer (port 7000)"
+        echo "JACK dummy service: jackd-dummy (dummy driver, no sound hardware required)"
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

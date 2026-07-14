@@ -23,15 +23,18 @@ any asyncio loop exists, so subprocess.run() (short timeout) is correct.
 """
 
 import asyncio
+import fcntl
 import os
 import re
+import selectors
+import subprocess
 import sys
 import tempfile
+import time
 from typing import Callable, ClassVar
 
 from cuemsutils.log import Logger
 
-from ..core.BaseEngine import CONTROLLER_HOST
 
 # Armed at startup; resets on first byte — catches pre-fork/getaddrinfo hangs.
 _STARTUP_DEADLINE_S = 10
@@ -60,6 +63,7 @@ class CuemsDeploy:
         log_file: str = "/run/cuems/rsync.log",
         on_progress: Callable[[dict], None] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
+            is_async: bool = False,
     ):
         """Construct a deploy manager.
 
@@ -84,6 +88,7 @@ class CuemsDeploy:
         self.encoding = sys.getfilesystemencoding()
         self._on_progress = on_progress or (lambda parsed: None)
         self.loop = loop
+        self._is_async = is_async
 
         # TODO: rebuild on network_map reload to pick up IP changes without
         # restarting.
@@ -111,25 +116,16 @@ class CuemsDeploy:
     ) -> bool:
         """Sync files from the controller to the node.
 
-        Submits _deploy_all_async() to self.loop via run_coroutine_threadsafe()
-        and blocks until the coroutine completes. Watchdogs inside the
-        coroutine
-        handle all time bounds; no external timeout is needed here.
+        Dispatches to _sync_files_async (event-loop path) or _sync_files_blocking
+        (subprocess path) based on self._is_async.
 
         Args:
             project: Project identifier used to build paths and log file names.
-            tag: Transfer type — ``'project'`` or ``'media'``. Controls which
-                mandatory-path precheck runs and which default file list is
-                used
-                when file_names is empty.
-            file_names: Explicit list of rsync-relative paths to transfer. When
-                omitted (or empty) and tag is ``'project'``, defaults to the
-                standard project file set (script, mappings, settings).
+            tag: Transfer type — ``'project'`` or ``'media'``.
+            file_names: Explicit list of rsync-relative paths to transfer.
 
         Returns:
-            True on success; False if disabled, loop unbound, precheck failed,
-            rsync exited non-zero, or any unexpected exception occurred. On
-            failure, self.errors contains one or more diagnostic strings.
+            True on success; False on any failure. self.errors populated on failure.
         """
         if not self.enabled:
             Logger.error(
@@ -138,6 +134,13 @@ class CuemsDeploy:
             )
             return False
 
+        file_names = list(file_names or [])
+        if self._is_async:
+            return self._sync_files_async(project, tag, file_names)
+        return self._sync_files_blocking(project, tag, file_names)
+
+    def _sync_files_async(self, project: str, tag: str, file_names: list[str]) -> bool:
+        """Async deploy path — requires self.loop to be bound."""
         if self.loop is None:
             Logger.error(
                 f"CuemsDeploy event loop not bound (NodeEngine.start() not "
@@ -146,7 +149,6 @@ class CuemsDeploy:
             self.errors = ["event loop not bound"]
             return False
 
-        file_names = list(file_names or [])
         if tag == "project" and len(file_names) == 0:
             file_names = self._project_files(project)
         elif tag == "media" and len(file_names) > 0:
@@ -177,6 +179,296 @@ class CuemsDeploy:
                 Logger.error(error)
         return synced
 
+    def _sync_files_blocking(self, project: str, tag: str, file_names: list[str]) -> bool:
+        """Synchronous deploy path — no event loop required."""
+        if not self.enabled:
+            Logger.error(
+                f'CuemsDeploy is disabled (no controller IP) — '
+                f'skipping {tag} sync for project {project!r}'
+            )
+            return False
+
+        if tag == 'project' and len(file_names) == 0:
+            file_names = self._project_files(project)
+        elif tag == 'media' and len(file_names) > 0:
+            file_names = self._media_files(file_names)
+
+        log_file = self._deploy_log_path(project, tag)
+        self._create_deploy_log(log_file, file_names)
+        synced = self._sync_blocking(log_file)
+
+        if synced:
+            self._reset_deploy_log(log_file)
+            self.errors = []
+        else:
+            Logger.error(
+                f"Failed to sync {tag} files for project {project!r} "
+                f"from {self.address} (log: {log_file})"
+            )
+            for error in self.errors:
+                Logger.error(error)
+        return synced
+
+    def _kill_blocking(self, proc) -> None:
+        """Terminate proc gracefully, escalating to SIGKILL after 2 s."""
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def _sync_blocking(self, path: str) -> bool:
+        """Blocking rsync with selectors-based I/O supervision and watchdog."""
+        try:
+            os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+        except OSError as e:
+            Logger.warning(f'Could not create rsync log directory: {e}')
+
+        cmd = [
+            'rsync', '-rt',
+            '--delete',
+            '--delete-delay',
+            '--info=progress2,name0',
+            '--stats',
+            '--contimeout=2',
+            '--timeout=5',
+            '--ignore-missing-args',
+            f'--files-from={path}',
+            f'--log-file={self.log_file}',
+            self.address,
+            self.library_path,
+        ]
+        env = dict(os.environ, RSYNC_PASSWORD=self._RSYNC_PASSWORD)
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            bufsize=0,
+        )
+
+        for fd in (proc.stdout.fileno(), proc.stderr.fileno()):
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ, 'out')
+        sel.register(proc.stderr, selectors.EVENT_READ, 'err')
+
+        bufs = {'out': '', 'err': ''}
+        stderr_lines: list[str] = []
+        started = False
+        deadline = time.monotonic() + _STARTUP_DEADLINE_S
+        rc: int | None = None
+
+        try:
+            while sel.get_map():
+                budget = (
+                    (deadline - time.monotonic()) if not started
+                    else _INACTIVITY_S
+                )
+                events = sel.select(timeout=max(budget, 0.1))
+                if not events:
+                    reason = (
+                        'no output within startup deadline' if not started
+                        else 'no output within inactivity threshold'
+                    )
+                    self._kill_blocking(proc)
+                    self.errors = [f'rsync {reason} (target: {self.address})']
+                    return False
+
+                for key, _ in events:
+                    tag = key.data
+                    try:
+                        chunk = os.read(key.fd, 4096)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        sel.unregister(key.fileobj)
+                        if bufs[tag]:
+                            self._dispatch_line(tag, bufs[tag], stderr_lines)
+                            bufs[tag] = ''
+                        continue
+                    started = True
+                    bufs[tag] += chunk.decode(errors='replace')
+                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    for p in parts:
+                        if p:
+                            self._dispatch_line(tag, p, stderr_lines)
+
+            try:
+                rc = proc.wait(timeout=_INACTIVITY_S)
+            except subprocess.TimeoutExpired:
+                self._kill_blocking(proc)
+                self.errors = [
+                    f'rsync closed pipes but did not exit within '
+                    f'{_INACTIVITY_S}s (target: {self.address})'
+                ]
+                return False
+        finally:
+            if proc.poll() is None:
+                self._kill_blocking(proc)
+            sel.close()
+
+        if rc == 0:
+            self.errors = []
+            return True
+        self.errors = (
+            stderr_lines[:-1]
+            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            else stderr_lines
+        )
+        return False
+    def _sync_files_blocking(self, project: str, tag: str, file_names: list[str]) -> bool:
+        """Synchronous deploy path — no event loop required."""
+        if not self.enabled:
+            Logger.error(
+                f'CuemsDeploy is disabled (no controller IP) — '
+                f'skipping {tag} sync for project {project!r}'
+            )
+            return False
+
+        if tag == 'project' and len(file_names) == 0:
+            file_names = self._project_files(project)
+        elif tag == 'media' and len(file_names) > 0:
+            file_names = self._media_files(file_names)
+
+        log_file = self._deploy_log_path(project, tag)
+        self._create_deploy_log(log_file, file_names)
+        synced = self._sync_blocking(log_file)
+
+        if synced:
+            self._reset_deploy_log(log_file)
+            self.errors = []
+        else:
+            Logger.error(
+                f"Failed to sync {tag} files for project {project!r} "
+                f"from {self.address} (log: {log_file})"
+            )
+            for error in self.errors:
+                Logger.error(error)
+        return synced
+
+    def _kill_blocking(self, proc) -> None:
+        """Terminate proc gracefully, escalating to SIGKILL after 2 s."""
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def _sync_blocking(self, path: str) -> bool:
+        """Blocking rsync with selectors-based I/O supervision and watchdog."""
+        try:
+            os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+        except OSError as e:
+            Logger.warning(f'Could not create rsync log directory: {e}')
+
+        cmd = [
+            'rsync', '-rt',
+            '--delete',
+            '--delete-delay',
+            '--info=progress2,name0',
+            '--stats',
+            '--contimeout=2',
+            '--timeout=5',
+            '--ignore-missing-args',
+            f'--files-from={path}',
+            f'--log-file={self.log_file}',
+            self.address,
+            self.library_path,
+        ]
+        env = dict(os.environ, RSYNC_PASSWORD=self._RSYNC_PASSWORD)
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            bufsize=0,
+        )
+
+        for fd in (proc.stdout.fileno(), proc.stderr.fileno()):
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ, 'out')
+        sel.register(proc.stderr, selectors.EVENT_READ, 'err')
+
+        bufs = {'out': '', 'err': ''}
+        stderr_lines: list[str] = []
+        started = False
+        deadline = time.monotonic() + _STARTUP_DEADLINE_S
+        rc: int | None = None
+
+        try:
+            while sel.get_map():
+                budget = (
+                    (deadline - time.monotonic()) if not started
+                    else _INACTIVITY_S
+                )
+                events = sel.select(timeout=max(budget, 0.1))
+                if not events:
+                    reason = (
+                        'no output within startup deadline' if not started
+                        else 'no output within inactivity threshold'
+                    )
+                    self._kill_blocking(proc)
+                    self.errors = [f'rsync {reason} (target: {self.address})']
+                    return False
+
+                for key, _ in events:
+                    tag = key.data
+                    try:
+                        chunk = os.read(key.fd, 4096)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        sel.unregister(key.fileobj)
+                        if bufs[tag]:
+                            self._dispatch_line(tag, bufs[tag], stderr_lines)
+                            bufs[tag] = ''
+                        continue
+                    started = True
+                    bufs[tag] += chunk.decode(errors='replace')
+                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    for p in parts:
+                        if p:
+                            self._dispatch_line(tag, p, stderr_lines)
+
+            try:
+                rc = proc.wait(timeout=_INACTIVITY_S)
+            except subprocess.TimeoutExpired:
+                self._kill_blocking(proc)
+                self.errors = [
+                    f'rsync closed pipes but did not exit within '
+                    f'{_INACTIVITY_S}s (target: {self.address})'
+                ]
+                return False
+        finally:
+            if proc.poll() is None:
+                self._kill_blocking(proc)
+            sel.close()
+
+        if rc == 0:
+            self.errors = []
+            return True
+        self.errors = (
+            stderr_lines[:-1]
+            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            else stderr_lines
+        )
+        return False
     def _mandatory_paths(self, project: str, tag: str) -> list[str]:
         if tag != "project":
             return []
@@ -257,8 +549,6 @@ class CuemsDeploy:
         Stays synchronous: called from __init__() before any asyncio loop
         exists. Returns the IP string on success, or None on failure.
         """
-        import subprocess
-
         try:
             result = subprocess.run(
                 ["avahi-resolve-host-name", "-n", hostname],

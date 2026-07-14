@@ -106,6 +106,7 @@ def test_nng_heartbeat_not_blocked_during_deploy():
     d.encoding = "utf-8"
     d._on_progress = lambda _: None
     d.loop = loop
+    d._is_async = True
     d.enabled = True
     d.main_ip = "127.0.0.1"
     d.address = "rsync://cuems_library_rsync@127.0.0.1/cuems"

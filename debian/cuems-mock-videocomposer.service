@@ -1,0 +1,11 @@
+[Unit]
+Description=CUEMS Mock Videocomposer
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/cuems/bin/mock-videocomposer --port 7000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

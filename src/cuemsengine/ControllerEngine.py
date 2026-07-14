@@ -960,6 +960,12 @@ class ControllerEngine(BaseEngine):
         self.set_status("armed", "no")
         self.set_status("nextcue", "")
         self.stop_timecode()
+        # Clear THIS process's 24h MTC wrap accumulator on the project transition.
+        # ControllerEngine inherits BaseEngine directly (NOT NodeEngine), so it
+        # does not go through _load_project_inner — its own MtcListener must be
+        # reset here, co-orchestrated with stop_timecode above. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
         with self._cluster_lock:
             self._armed_nodes.clear()
             self._finished_nodes.clear()

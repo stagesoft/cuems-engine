@@ -33,3 +33,20 @@ Description: CUEMS Engine - Engine infrastructure of the CueMS system
  .
  The systemd service files are provided by cuems-common and run the
  respective console scripts.
+
+Package: cuems-engine-mock
+Architecture: all
+Depends: ${misc:Depends},
+         cuems-engine (>= 0.1.0rc2)
+Conflicts: cuems-audioplayer
+Description: CUEMS Engine Mock Players
+ Mock replacement binaries for audioplayer-cuems, jack-volume,
+ dmxplayer-cuems and videocomposer. Install alongside cuems-engine
+ on headless or cloud servers where audio and video hardware is absent.
+ .
+ Installs log-only OSC services at the binary paths configured in
+ /etc/cuems/settings.xml so the engine operates normally without
+ any media hardware or real player binaries.
+ .
+ Includes a cuems-mock-videocomposer systemd service that listens on
+ the videocomposer OSC port (default 7000).

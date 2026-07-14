@@ -5,7 +5,7 @@
 #!/usr/bin/env python3
 
 import os
-from threading import Thread
+from threading import Thread, Lock
 from typing import Callable
 
 import mido
@@ -49,6 +49,13 @@ class MtcListener(Thread):
         # received MTC would reset to ~frames=1 every 24h regardless.
         self._24h_offset_frames: int = 0
         self._last_decoded_frames: int | None = None
+        # Guards _24h_offset_frames + _last_decoded_frames against the race
+        # between this listener's mido callback thread (running _apply_24h_offset
+        # on every authoritative decode) and the engine's load thread (calling
+        # reset_24h_state on project load). The read-modify-write
+        # `_24h_offset_frames +=` is NOT atomic under the GIL. Mirrors the C++
+        # receiver's wrapStateMutex_.
+        self._wrap_lock = Lock()
 
         super().__init__(name="mtclistener")
         self.daemon = True
@@ -78,40 +85,81 @@ class MtcListener(Thread):
         Returns the offset-adjusted CTimecode (or the original if no offset
         is active).
         """
-        if self._last_decoded_frames is not None:
-            delta = decoded.frames - self._last_decoded_frames
-            frames_per_hour = decoded._int_framerate * 3600
-            frames_per_24h = decoded._int_framerate * 86400
-            near_24h_boundary = (
-                self._last_decoded_frames > frames_per_24h - frames_per_hour
-            )
-            if delta < -frames_per_hour and near_24h_boundary:
-                self._24h_offset_frames += frames_per_24h
-                _offset_h = (
-                    self._24h_offset_frames / decoded._int_framerate / 3600
+        with self._wrap_lock:
+            if self._last_decoded_frames is not None:
+                delta = decoded.frames - self._last_decoded_frames
+                # Real-rate constants, NOT decoded._int_framerate (the LABEL rate,
+                # 30 for 29.97). At 29.97 the label rate would make a 24h offset of
+                # 30*86400 = 2,592,000 frames, which CTimecode reconverts (÷ the
+                # real 29.97) to 86,486,453 ms instead of a true 86,400,000 ms — an
+                # 86.5s divergence from the C++ ms-domain receiver. round(...*real)
+                # keeps 25/30 fps identical and corrects 29.97. (Plan 4 / audit)
+                fps = float(decoded.framerate)
+                frames_per_hour = round(3600.0 * fps)
+                frames_per_24h = round(86400.0 * fps)
+                near_24h_boundary = (
+                    self._last_decoded_frames > frames_per_24h - frames_per_hour
                 )
-                Logger.info(
-                    f"MtcListener: detected 24h MTC rollover "
-                    f"(prev frames={self._last_decoded_frames}, "
-                    f"new={decoded.frames}, delta={delta}); "
-                    f"accumulated offset = {self._24h_offset_frames} frames"
-                    f" ({_offset_h:.1f}h)"
-                )
-            elif delta < -frames_per_hour:
-                Logger.info(
-                    f"MtcListener: large backward MTC jump ignored as "
-                    f"manual seek (prev frames={self._last_decoded_frames}, "
-                    f"new={decoded.frames}, delta={delta}); not a 24h wrap "
-                    f"(prev < {frames_per_24h - frames_per_hour})"
-                )
-        self._last_decoded_frames = decoded.frames
+                if delta < -frames_per_hour and near_24h_boundary:
+                    # 24h MTC rollover: prev was in the last hour of the day and
+                    # the head jumped back > 1h → accumulate a full day.
+                    self._24h_offset_frames += frames_per_24h
+                    Logger.info(
+                        f"MtcListener: detected 24h MTC rollover "
+                        f"(prev frames={self._last_decoded_frames}, "
+                        f"new={decoded.frames}, delta={delta}); "
+                        f"accumulated offset = {self._24h_offset_frames} frames "
+                        f"({self._24h_offset_frames / fps / 3600:.1f}h)"
+                    )
+                elif delta < -frames_per_hour and decoded.frames < frames_per_hour:
+                    # Transport reset: an authoritative return to ~0 (new pos in
+                    # the first hour) from a NON-boundary previous position. The
+                    # exact inverse of the wrap predicate, so wrap vs reset stay
+                    # mutually exclusive (wrap is tested first). The
+                    # `decoded.frames < frames_per_hour` guard is MANDATORY — it
+                    # stops a mid-range seek (e.g. 14h→3h) from wrongly zeroing.
+                    # Mirrors the C++ applyWrap reset branch (wireMs < HOUR_MS).
+                    self._24h_offset_frames = 0
+                    Logger.info(
+                        f"MtcListener: transport reset to ~0 "
+                        f"(prev frames={self._last_decoded_frames}, "
+                        f"new={decoded.frames}); cleared 24h offset"
+                    )
+                elif delta < -frames_per_hour:
+                    Logger.info(
+                        f"MtcListener: large backward MTC jump ignored as "
+                        f"manual seek (prev frames={self._last_decoded_frames}, "
+                        f"new={decoded.frames}, delta={delta}); not a 24h wrap "
+                        f"(prev < {frames_per_24h - frames_per_hour})"
+                    )
+            self._last_decoded_frames = decoded.frames
 
-        if self._24h_offset_frames > 0:
-            return CTimecode(
-                framerate=decoded.framerate,
-                frames=decoded.frames + self._24h_offset_frames,
-            )
-        return decoded
+            if self._24h_offset_frames > 0:
+                return CTimecode(
+                    framerate=decoded.framerate,
+                    frames=decoded.frames + self._24h_offset_frames,
+                )
+            return decoded
+
+    def reset_24h_state(self) -> None:
+        """Clear the 24h-wrap accumulator (control-plane reset).
+
+        Called from the engine's project-load/reset orchestration (NOT off the
+        wire): a graceful reload sends MTC back toward 0 with only a SMALL
+        backward delta, which the wire-driven reset in _apply_24h_offset cannot
+        catch (it requires delta < -1h). Without this, a project loaded after a
+        >24h run would start at hour 24+ and the cue-sequence reset_callback
+        (gated on milliseconds_rounded == 0) would stay silenced forever.
+
+        Zeroes both the offset and the last-position memory (None sentinel,
+        mirroring the C++ resetWrapOffset() → lastWireMs_ = -1) under the same
+        lock the decode path uses, so it cannot interleave with a concurrent
+        wrap accumulation on the callback thread.
+        """
+        with self._wrap_lock:
+            self._24h_offset_frames = 0
+            self._last_decoded_frames = None
+
 
     def timecode(self):
         return self.main_tc
@@ -212,6 +260,15 @@ class MtcListener(Thread):
                 tc = self.__mtc_decode(data)
                 Logger.debug("FF:" + tc.__str__())
                 self.__update_timecode(tc)
+                # Deliberately do NOT clear self.__quarter_frames here. Full
+                # frames (a seek, or libmtcmaster's ~2s periodic resync) never
+                # touch the QF buffer, and the QF decode fires only at
+                # frame_type==7 reading all 8 in-order-refreshed indices — so no
+                # stale-nibble decode occurs. The C++ receiver clears its decoder
+                # state on every full frame, but that resets C++-only
+                # sequence-validity fields (qfCount/direction/flags) this
+                # index-based decoder lacks; flushing here would instead corrupt
+                # the next decode when a resync lands mid-QF-sequence. (Plan 4)
         else:
             Logger.debug(message)
             raise (NotImplementedError)

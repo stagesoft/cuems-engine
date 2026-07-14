@@ -13,12 +13,12 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
+from .run_cue import run_cue, reveal_cue, blank_cue
+from .arm_cue import arm_cue
+from .loop_cue import loop_cue
 from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
-from .arm_cue import arm_cue
-from .loop_cue import loop_cue
-from .run_cue import run_cue
 
 
 class CueHandler:
@@ -151,7 +151,12 @@ class CueHandler:
         post = cue.postwait.milliseconds_exact
 
         if isinstance(cue, CueList):
-            body = 0  # container — duration is its contents
+            # container — body is intentionally 0 for chain-anchoring Σ math.
+            # A CueList mid-chain therefore contributes only its own pre+post;
+            # its children's duration does not push following cues' anchors.
+            # (CueLists rarely appear as post_go='go' targets; revisit if that
+            # changes — compute body from children then.)
+            body = 0
         elif isinstance(cue, (AudioCue, VideoCue)):
             try:
                 body = (
@@ -161,13 +166,29 @@ class CueHandler:
                 )
             except Exception:
                 body = 0
+            if (body == 0 and getattr(cue, 'enabled', True)
+                    and not getattr(cue, '_body0_logged', False)):
+                # An enabled A/V cue with zero body feeds a zero-length slot into
+                # the chain anchors — every following cue shifts earlier on THIS
+                # node only (media missing/unreadable here but present elsewhere)
+                # → silent cross-node desync. Surface it loudly (Fable 3.5).
+                # Log ONCE per cue: this runs per arm pass / GO walk / chain hop,
+                # so an unguarded log would flood the journal for one broken cue.
+                Logger.error(
+                    f'{type(cue).__name__} {cue.id} enabled but body==0 '
+                    f'(media missing/unreadable?); chain anchor timing will be '
+                    f'wrong on this node.')
+                try:
+                    cue._body0_logged = True
+                except Exception:
+                    pass
         elif isinstance(cue, DmxCue):
-            # fadein_time/fadeout_time stored as float seconds.
-            # fadeout_time exists in model but not yet implemented (always
-            # 0.0).
+            # fadein_time/fadeout_time stored in MILLISECONDS (authoritative:
+            # run_dmxCue in run_cue.py reads fadein_ms then fade_time = fadein_ms/1000).
+            # fadeout_time exists in model but not yet implemented (always 0.0).
             fadein = getattr(cue, "fadein_time", 0) or 0
             fadeout = getattr(cue, "fadeout_time", 0) or 0
-            body = (fadein + fadeout) * 1000  # convert seconds → ms
+            body = fadein + fadeout  # already ms
         elif isinstance(cue, ActionCue):
             # play/stop/enable/disable/go_to = instant
             # TODO: use fade duration once fade_in/fade_out implemented
@@ -176,6 +197,43 @@ class CueHandler:
             body = 0
 
         return pre + body + post
+
+    @staticmethod
+    def _chain_advance_ms(cue: Cue) -> float:
+        """Timeline advance a cue contributes to a post_go='go' (Auto continue)
+        chain: prewait + postwait, **excluding the media body**.
+
+        Auto continue overlaps: the next cue starts `postwait` after THIS cue's
+        play-start (not after it finishes), so the cue's own duration must NOT
+        push the next cue's slot. This is the ONLY difference from
+        _effective_duration_ms (which keeps body for arm-ahead lookahead).
+
+        Auto follow (post_go='go_at_end') breaks the chain walk and fires its
+        next cue from loop_cue *after* the body, so it never reaches this
+        accumulator — its body wait is real, not anchored. See CLAUDE.md
+        "Cue play modes & pre/post-wait semantics".
+        """
+        return cue.prewait.milliseconds_exact + cue.postwait.milliseconds_exact
+
+    def _wait_mtc(self, cue: Cue, mtc: MtcListener, target_ms: float, go_gen: int = 0) -> str:
+        """Block until live MTC reaches target_ms; return 'reached' or 'stopped'.
+
+        Shared timeline gate used both to illuminate a cue at its arrival and to
+        reveal it at its start. Exits early on STOP (`_stop_requested`) or a
+        newer GO/reload (`_go_generation` changed). Deliberately does NOT bail on
+        a recoverable MTC stall — it self-recovers (fires late when timecode
+        resumes). milliseconds_exact is wrap-accumulated → 24h-safe.
+        """
+        while mtc.main_tc.milliseconds_exact < target_ms:
+            if getattr(cue, '_stop_requested', False) or getattr(cue, '_go_generation', 0) != go_gen:
+                return 'stopped'
+            sleep(0.02)
+        # Final flag check AFTER the loop: a STOP landing in the last poll
+        # interval (~20ms) would otherwise be reported as 'reached' and let the
+        # caller proceed to reveal/fire right after the operator stopped.
+        if getattr(cue, '_stop_requested', False) or getattr(cue, '_go_generation', 0) != go_gen:
+            return 'stopped'
+        return 'reached'
 
     def _arm_ahead(self, start_cue: Cue) -> None:
         """Arm ahead in the target chain until 2 cues with meaningful
@@ -439,12 +497,99 @@ class CueHandler:
         self._arm_ahead(cue)
         return thread
 
+    def go_from(self, start_cue: Cue, mtc: MtcListener, seed_ms: float = None) -> Thread | None:
+        """Re-enter a post_go='go' chain from start_cue (inclusive), firing THIS
+        node's first local+enabled cue at seed_ms + Σ(chain advance of the
+        enabled cues skipped on the way). Returns the Thread, or None if no
+        local+enabled cue is reachable before a chain break.
+
+        Mirrors NodeEngine.go_script's cross-node walk, but for an IN-CHAIN
+        re-entry — specifically an ActionCue 'play' that restarts a sequence
+        (e.g. a circular project's loop-back). Plain go() bails on a non-local
+        target (returns None), which drops every cue local to a DIFFERENT node
+        than the play target: a loop-back 'play' aimed at node01's cue would
+        never re-fire the controller's own cues. Walking here makes each engine
+        re-enter its own local segment, exactly as it does on a GO.
+        """
+        if seed_ms is None:
+            seed_ms = mtc.main_tc.milliseconds_exact
+        cue = start_cue
+        sigma_ms = 0.0
+        walked = 0
+        while cue is not None and not (getattr(cue, "_local", False) and getattr(cue, "enabled", False)):
+            if getattr(cue, "post_go", None) != "go":
+                # chain break before any local cue — nothing for this node to do
+                cue = None
+                break
+            if getattr(cue, "enabled", False):
+                sigma_ms += self._chain_advance_ms(cue)
+            cue = getattr(cue, "_target_object", None)
+            walked += 1
+            if walked > 1024:
+                Logger.error("go_from walk hit safety limit; aborting")
+                return None
+        if cue is None:
+            return None
+        return self.go(cue, mtc, seed_ms + sigma_ms)
+
+    def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
+        """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
+
+        run_cue() sets a cue up HELD (video invisible / audio not-following /
+        action not-yet-run). This gates the reveal on MTC so prewait/postwait
+        offsets become real timeline gaps. Cues with no _start_mtc (ActionCue, or
+        a CueList used as a target) reveal immediately. DmxCue DOES set _start_mtc
+        but self-schedules (its reveal is a no-op), so it merely exits this wait
+        once MTC passes start.
+
+        Deliberately does NOT bail on an MTC stall: a recoverable stall
+        self-recovers (reveal fires late when timecode resumes); bailing would
+        leave the cue permanently held and frees nothing (loop_cue would hang on
+        the same stall). STOP always exits via _stop_requested; a newer GO/reload
+        exits via _go_generation.
+        """
+        start = getattr(cue, "_start_mtc", None)
+        if start is None:
+            return "reached"
+        # milliseconds_exact is wrap-accumulated by MtcListener → 24h-safe on
+        # long shows (Fable 4.4); rounded would false-trip near a frame boundary.
+        return self._wait_mtc(cue, mtc, start.milliseconds_exact, go_gen)
+
+    def _next_local_fire(self, cue: Cue, arrival_ms: float) -> tuple['Cue | None', float]:
+        """From a just-played cue, walk its post_go='go' chain to THIS node's
+        next local+enabled cue and return (that_cue_or_None, its_arrival_ms).
+
+        The arrival of the immediate target is arrival_ms + chain_advance(cue)
+        (prewait+postwait — Auto continue overlaps, body excluded). Cues we skip
+        along the way advance the accumulator: non-local ENABLED cues add their
+        chain advance (so the found cue lands at its true slot — the A-B-A case,
+        §3c Option 1); disabled cues add nothing (transparent). The
+        walk stops at a chain break (post_go != 'go') — an explicit hand-off
+        point — and is bounded against all-disabled/all-remote cycles.
+        """
+        acc = arrival_ms + self._chain_advance_ms(cue)
+        node = getattr(cue, "_target_object", None)
+        walked = 0
+        while node is not None:
+            if getattr(node, "_local", False) and getattr(node, "enabled", False):
+                return node, acc
+            if getattr(node, "post_go", None) != "go":
+                return None, acc
+            if getattr(node, "enabled", False):
+                acc += self._chain_advance_ms(node)
+            node = getattr(node, "_target_object", None)
+            walked += 1
+            if walked > 1024:
+                Logger.error("post_go fire-walk hit safety limit; aborting")
+                return None, acc
+        return None, acc
+
     def go_threaded(
         self,
         cue: Cue,
         mtc: MtcListener,
         frozen_mtc_ms: float = None,
-        go_gen: int = 0,
+        go_gen: int = 0
     ):
         """Runs a cue based on its properties.
 
@@ -457,51 +602,95 @@ class CueHandler:
                     go/stop cycle occurred and this thread must not touch the
                     cue.
         """
-        if cue.prewait > 0:
-            # Notify controller before pre-wait so UI shows "playing"
-            # immediately
-            if cue._local and not cue._stop_requested:
-                try:
-                    offset = frozen_mtc_ms if frozen_mtc_ms is not None else 0
-                    self.communications_thread.add_cue(
-                        cue.id, str(offset), timeout=0.1
-                    )
-                except Exception:
-                    pass
-            sleep(cue.prewait.milliseconds_rounded / 1000)
-            # Bail out if stop arrived during pre-wait
-            if cue._stop_requested:
-                return
-
+        # frozen_mtc_ms is this cue's ARRIVAL on the MTC timeline:
+        # GO_mtc + Σ(effective durations of preceding cues in the chain).
+        # None → manual GO / go_at_end: arrival = live MTC now (so those paths
+        # keep their prewait — Fable 1.4).
         if frozen_mtc_ms is None:
-            # GO-time MTC capture is used by BaseEngine.timecode = mtc -
-            # go_offset
-            # for drift measurement; _exact preserves sub-ms precision at NTSC.
+            # Used by BaseEngine.timecode = mtc - go_offset for drift; _exact
+            # preserves sub-ms precision at NTSC framerates.
             frozen_mtc_ms = mtc.main_tc.milliseconds_exact
             Logger.debug(
                 f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms"
             )
 
+        arrival_ms = frozen_mtc_ms
+        # Single prewait application point (Fable 1.2): the cue's media and reveal
+        # are anchored at start = arrival + prewait. prewait is NO LONGER a
+        # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
+        start_ms = arrival_ms + cue.prewait.milliseconds_exact
+
+        arrival_ms = frozen_mtc_ms
+        # Single prewait application point (Fable 1.2): the cue's media and reveal
+        # are anchored at start = arrival + prewait. prewait is NO LONGER a
+        # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
+        start_ms = arrival_ms + cue.prewait.milliseconds_exact
+
+        arrival_ms = frozen_mtc_ms
+        # Single prewait application point (Fable 1.2): the cue's media and reveal
+        # are anchored at start = arrival + prewait. prewait is NO LONGER a
+        # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
+        start_ms = arrival_ms + cue.prewait.milliseconds_exact
+
         if cue._local:
-            try:
-                self.communications_thread.add_cue(
-                    cue.id, str(frozen_mtc_ms), timeout=0.1
-                )
-            except Exception:
-                pass
+            # Set up HELD at start_ms (video invisible / audio not-following /
+            # action not-yet-run / dmx self-scheduled from absolute mtc_time).
+            # Done at dispatch so the frame is pre-loaded before reveal.
+            run_cue(cue, mtc, start_ms)
 
-            run_cue(cue, mtc, frozen_mtc_ms)
+            # Illuminate (sequence-view highlight) at the cue's ARRIVAL — the
+            # start of its prewait — NOT at dispatch. A post_go='go' cue is
+            # dispatched at the GO instant (cross-node walk fires local cues
+            # immediately), so highlighting at dispatch lit the cue up seconds
+            # before it actually starts. Gate on live MTC so it lights at its
+            # real slot, identically on every node.
+            if self._wait_mtc(cue, mtc, arrival_ms, go_gen) != "stopped":
+                try:
+                    self.communications_thread.add_cue(cue.id, str(start_ms), timeout=0.1)
+                except Exception:
+                    pass
 
-        if cue.postwait > 0:
+            # MTC-gated reveal: wait until live MTC reaches start_ms, then reveal
+            # (video /visible; audio /mtcfollow; action EXECUTE; dmx no-op). This
+            # is what makes prewait/body/postwait real timeline gaps, honored
+            # identically on every node.
+            if self._reveal_wait(cue, mtc, go_gen) != 'stopped':
+                reveal_cue(cue, mtc, start_ms)
+
+        # A superseding GO/reload (new _go_generation, without _stop_requested)
+        # can arrive during the now-MTC-gated reveal wait — that fresh thread
+        # owns the chain. This stale thread must NOT pace postwait or fire the
+        # next cue, or the next cue would be go()'d twice (once here with a stale
+        # arrival, once by the fresh thread). Cleanup below is already gated by
+        # the generation check, so we only guard the outward actions here.
+        superseded = getattr(cue, '_go_generation', 0) != go_gen
+
+        # Postwait for AUTO-CONTINUE only: DISPATCH pacing — paces the fire of
+        # the next cue so we don't arm the whole chain at once (the next cue's
+        # timeline slot is set by the arrival math below, not by this sleep),
+        # and it holds this thread past the body when post > body, which is what
+        # produces continue's `pre + max(body, post)` illumination. For
+        # pause/go_at_end the postwait is a REAL gap AFTER the body — handled by
+        # the MTC-gated tail below loop_cue, not by this sleep.
+        if cue.post_go == 'go' and cue.postwait > 0 and not cue._stop_requested and not superseded:
             sleep(cue.postwait.milliseconds_rounded / 1000)
 
+        post_go_thread = None
         if (
-            cue.post_go == "go"
-            and cue._target_object
+            cue.post_go == 'go'
             and not cue._stop_requested
+            and not superseded
         ):
-            Logger.info(f"Running post go for next cue:{cue.target}")
-            post_go_thread = self.go(cue._target_object, mtc, frozen_mtc_ms)
+            # Walk the chain to THIS node's next local+enabled cue, accumulating
+            # the timeline offset for the cues we skip (non-local: +eff so the
+            # slot is right; disabled: +0). Every node walks the full chain and
+            # fires its own local segments at their correct slots (§3c Opt 1).
+            next_cue, next_arrival = self._next_local_fire(cue, arrival_ms)
+            if next_cue is not None:
+                Logger.info(
+                    f"Running post go for next local cue: {next_cue.id}"
+                )
+                post_go_thread = self.go(next_cue, mtc, next_arrival)
 
         # Pre-arm go_at_end targets during playback. Runs after
         # run_cue() so current cue is already playing. The arm happens
@@ -521,6 +710,45 @@ class CueHandler:
             )
             return
 
+        # ---- pause/go_at_end postwait tail -------------------------------
+        # Spec: postwait is a real gap AFTER the body (follow: pre→body→post→
+        # next; pause: pre→body→post→standby), and the cue stays illuminated
+        # through it. Base end of the body on the MTC timeline; fallbacks for
+        # cues that never set _end_mtc (plain ActionCue body=0; aborted A/V
+        # setup; CueList) — and guard against a stale _end_mtc left by a
+        # previous GO of this object. (FadeCue DOES set a real _end_mtc via
+        # _handle_fade_action — used as-is.)
+        end_attr = getattr(cue, '_end_mtc', None)
+        base_end_ms = end_attr.milliseconds_exact if end_attr is not None else start_ms
+        if base_end_ms < start_ms:
+            base_end_ms = start_ms  # stale from a previous run
+        fire_seed_ms = base_end_ms + cue.postwait.milliseconds_exact
+
+        tail = (cue.post_go in ('pause', 'go_at_end')
+                and cue.postwait > 0
+                and not cue._stop_requested)
+        # Snapshot the follow target's generation BEFORE the tail: next_cue_pointer
+        # was set to this very target at OUR dispatch, so a manual GO during the
+        # (black-screen) tail starts the same object — the auto-fire below must
+        # then YIELD or the target runs twice. GO preempts the tail.
+        target_gen0 = getattr(cue._target_object, '_go_generation', 0) if cue._target_object else 0
+        if tail:
+            # Hide output at body end WITHOUT disarming (cue must stay in
+            # _armed_cues so STOP can reach this wait — disarming here would
+            # let the tail expire and ghost-fire after an operator STOP).
+            blank_cue(cue, mtc)
+            self._wait_mtc(cue, mtc, fire_seed_ms, go_gen)
+            if getattr(cue, '_go_generation', 0) != go_gen:
+                # Real STOP (stop_all_cues bumps gen) / newer GO owns the cue:
+                # no remove_cue (controller's stop already reset status), no
+                # fire, no disarm (mirrors the post-loop generation guard).
+                Logger.info(f'Cue {cue.id} postwait tail cancelled (stop/newer GO), skipping cleanup')
+                return
+            # A pure _stop_requested exit (action-pause: sets the flag WITHOUT a
+            # gen bump) falls through: remove_cue and the follow fire are already
+            # guarded on _stop_requested below, and disarm still runs — exactly
+            # today's behavior for an action-pause landing mid-body.
+
         # Notify the controller that the cue finished playing (status → 100).
         # Done here (after loop_cue) so the status only changes to 100 when the
         # cue has actually completed its full duration, not just when playback
@@ -538,11 +766,27 @@ class CueHandler:
             cue.post_go == "go_at_end"
             and cue._target_object
             and not cue._stop_requested
+            and getattr(cue._target_object, "_go_generation", 0) == target_gen0
         ):
             Logger.info(
                 f"Running go at end for {cue.__class__.__name__}:{cue.id}"
             )
-            go_at_end_thread = self.go(cue._target_object, mtc)
+            # go_from (not go): a non-local follow target is walked past to THIS
+            # node's next local cue (go() would bail — same defect class as the
+            # play-action loop-back). Explicit seed = body_end + postwait: exact
+            # arrival on the shared timeline; go_threaded adds the target's own
+            # prewait on top. The target_gen0 compare makes this auto-fire YIELD
+            # if a manual GO already started the target during the tail.
+            go_at_end_thread = self.go_from(cue._target_object, mtc, fire_seed_ms)
+        elif (
+            cue.post_go == "go_at_end"
+            and cue._target_object
+            and not cue._stop_requested
+        ):
+            Logger.info(
+                f"go_at_end fire for {cue.id} yielded: "
+                "target already started by a newer GO"
+            )
 
         self.disarm(cue)
 
