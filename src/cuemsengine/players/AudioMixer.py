@@ -153,14 +153,13 @@ class AudioMixer(Player):
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
         mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
         mixer_input_2 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
-
-        # Wait for player JACK ports to be available (retry mechanism)
+        
+        # Wait for player JACK ports to be available (retry mechanism).
+        # Gate ONLY on port_exists(); get_connections() returns [] (not None)
+        # for a missing port, so the old guard broke the loop immediately and
+        # connected a not-yet-registered port -> jackd Unknown source port.
         for attempt in range(max_retries):
-            # Check if ports exist by trying to get connections
-            connections = self.conn_man.get_connections(channel_0_output)
-            if connections is not None or self.conn_man.port_exists(
-                channel_0_output
-            ):
+            if self.conn_man.port_exists(channel_0_output):
                 break
             if attempt < max_retries - 1:
                 Logger.debug(
@@ -173,6 +172,7 @@ class AudioMixer(Player):
                 f"JACK port {channel_0_output} not available after"
                 f"{max_retries} attempts"
             )
+            return False
 
         # Check if player is stereo (has output_1) or mono (only output_0)
         is_stereo = self.conn_man.port_exists(channel_1_output)
@@ -267,6 +267,11 @@ class AudioMixer(Player):
             ['system:playback_1'])
             max_retries: Maximum number of connection attempts
             retry_delay: Delay between retries in seconds
+
+        Returns:
+            True if every required player→mixer connection was made, False if
+            the player ports never registered, no mixer inputs resolved, or any
+            connection failed (caller should treat False as a silent cue).
         """
         from time import sleep
 
@@ -288,13 +293,14 @@ class AudioMixer(Player):
             name: f"{self.client_name}:input_{i+1}"
             for i, name in enumerate(self.audio_outputs)
         }
-
-        # Wait for player JACK ports to be available
+        
+        # Wait for player JACK ports to be available.
+        # NOTE: gate ONLY on port_exists(); get_connections() returns [] (not
+        # None) for a missing port, so the old 'connections is not None' guard
+        # made this loop break immediately and connect a not-yet-registered
+        # port -> jackd 'Unknown source port' -> silent-but-green cue.
         for attempt in range(max_retries):
-            connections = self.conn_man.get_connections(channel_0_output)
-            if connections is not None or self.conn_man.port_exists(
-                channel_0_output
-            ):
+            if self.conn_man.port_exists(channel_0_output):
                 break
             if attempt < max_retries - 1:
                 Logger.debug(
@@ -307,7 +313,17 @@ class AudioMixer(Player):
                 f"JACK port {channel_0_output} not available after"
                 f"{max_retries} attempts"
             )
-            return
+            return False
+
+        # A stereo player registers outport 1 alongside outport 0, but the two
+        # can surface a beat apart. Give outport 1 a brief, bounded grace window
+        # before deciding mono vs stereo, so a lagging outport 1 is not mis-read
+        # as mono (which would fan outport 0 to both sides and drop the right
+        # channel). A genuinely mono player just waits out this short window.
+        for _ in range(6):
+            if self.conn_man.port_exists(channel_1_output):
+                break
+            sleep(0.05)
 
         # Check if player is stereo
         is_stereo = self.conn_man.port_exists(channel_1_output)
@@ -348,11 +364,11 @@ class AudioMixer(Player):
             Logger.error(
                 f"No valid mixer inputs found for outputs: {selected_outputs}"
             )
-            return
+            return False
 
         Logger.info(
-            f"Connecting {player_name} to outputs: {selected_outputs} ->"
-            f"{target_inputs}"
+            f"Connecting {player_name} to outputs:"
+            f"{selected_outputs} -> {target_inputs}"
         )
 
         # Fan-out routing: treat target_inputs as alternating L/R pairs.
@@ -360,21 +376,32 @@ class AudioMixer(Player):
         # Odd-indexed targets  (1, 3, 5 …) receive outport 1 (R channel)
         #   or outport 0 again when the player is mono.
         # This covers 1, 2 or any number of outputs uniformly.
+        all_connected = True
         for i, mixer_input in enumerate(target_inputs):
             if i % 2 == 0:
                 Logger.debug(f"L → {mixer_input}")
-                self.conn_man.connect_by_name(channel_0_output, mixer_input)
+                ok = self.conn_man.connect_by_name(
+                    channel_0_output, mixer_input
+                )
+            elif is_stereo:
+                Logger.debug(f"R → {mixer_input}")
+                ok = self.conn_man.connect_by_name(
+                    channel_1_output, mixer_input
+                )
             else:
-                if is_stereo:
-                    Logger.debug(f"R → {mixer_input}")
-                    self.conn_man.connect_by_name(
-                        channel_1_output, mixer_input
-                    )
-                else:
-                    Logger.debug(f"Mono → {mixer_input}")
-                    self.conn_man.connect_by_name(
-                        channel_0_output, mixer_input
-                    )
+                Logger.debug(f"Mono → {mixer_input}")
+                ok = self.conn_man.connect_by_name(
+                    channel_0_output, mixer_input
+                )
+            all_connected = all_connected and ok
+
+        if not all_connected:
+            Logger.error(
+                f"One or more mixer connections failed for {player_name};"
+                "cue may be silent"
+            )
+        return all_connected
+
 
     def player_connections_correct(
         self,

@@ -131,16 +131,19 @@ class TestPlayAction:
 
     def test_play_without_frozen_mtc_passes_none(self, handler, mtc):
         # Standalone ActionCue (no chain) → frozen_mtc_ms defaults to None.
+        # The handler must pass None THROUGH to go_from (which then seeds
+        # from live MTC itself) — patch go_from, not go: _handle_play calls
+        # go_from, and go_from substitutes live MTC for a None seed.
         target = _make_target()
         cue = _make_action_cue("play", target)
 
         with (
-            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "go_from") as mock_go_from,
             patch.object(handler, "arm"),
         ):
             handler.execute_action(cue, mtc)
 
-        mock_go.assert_called_once_with(target, mtc, None)
+        mock_go_from.assert_called_once_with(target, mtc, None)
 
     def test_play_arm_raises_returns_failed(self, handler, mtc):
         target = _make_target(loaded=False)
@@ -843,6 +846,34 @@ class TestGoRearm:
             thread.join(timeout=2)
 
         mock_arm.assert_not_called()
+
+    def test_go_sets_playing_and_disarm_clears_it(self, handler, mtc):
+        """_playing lifecycle: True while a GO owns the cue, False after
+        disarm — the disable-action path relies on this flag. (disarm is
+        called directly: go_threaded's natural completion invokes the same
+        disarm, but its timing depends on the mocked MTC.)"""
+        cue = _make_action_target(loaded=True)
+        cue._target_object = None
+        cue.post_go = 'pause'
+
+        thread = handler.go(cue, mtc)
+        assert cue._playing is True
+        thread.join(timeout=2)
+        handler.disarm(cue)
+        assert cue._playing is False
+
+    def test_stop_all_cues_clears_playing(self, handler, mtc):
+        cue = _make_action_target(loaded=True)
+        cue._playing = True
+        handler._armed_cues.append(cue)
+        handler._armed_cues_set.add(cue.id)
+        try:
+            handler.stop_all_cues()
+            assert cue._playing is False
+            assert cue._stop_requested is True
+        finally:
+            handler._armed_cues.remove(cue)
+            handler._armed_cues_set.discard(cue.id)
 
     def test_go_arms_ahead_via_arm_ahead(self, handler, mtc):
         """go() should call _arm_ahead to arm cues in the target chain."""

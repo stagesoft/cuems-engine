@@ -20,12 +20,9 @@ class TestAudioMixer:
 
     @pytest.fixture
     def mock_audio_outputs(self):
-        """Mock audio outputs configuration."""
-        return [
-            {"name": "output_1", "channels": 2},
-            {"name": "output_2", "channels": 2},
-        ]
-
+        """Audio outputs: list of JACK playback port names (current contract)."""
+        return ['system:playback_1', 'system:playback_2']
+    
     @pytest.fixture
     def mock_conn_manager(self):
         """Mock JackConnectionManager."""
@@ -52,8 +49,8 @@ class TestAudioMixer:
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
-                path="/usr/local/bin/jack-volume",
+                mixer_id="test-node-123",
+                path="/usr/local/bin/jack-volume"
             )
             return mixer
 
@@ -63,16 +60,15 @@ class TestAudioMixer:
         """Test AudioMixer initialization."""
         with (
             patch("cuemsengine.players.AudioMixer.sleep"),
-            patch.object(AudioMixer, "call_subprocess"),
+            patch.object(AudioMixer, "call_subprocess")
         ):
 
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
+                mixer_id="test-node-123"
             )
 
-            assert mixer.node_uuid == "test-node-123"
             assert mixer.port == 8000
             assert mixer.channel_number == 2
             assert mixer.client_name == "test-node-123_mixer"
@@ -83,7 +79,7 @@ class TestAudioMixer:
                 "-p",
                 "8000",
                 "-n",
-                "2",
+                "2"
             ]
 
     def test_audio_mixer_initialization_with_custom_path(
@@ -92,14 +88,14 @@ class TestAudioMixer:
         """Test AudioMixer initialization with custom jack-volume path."""
         with (
             patch("cuemsengine.players.AudioMixer.sleep"),
-            patch.object(AudioMixer, "call_subprocess"),
+            patch.object(AudioMixer, "call_subprocess")
         ):
 
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
-                path="/custom/path/jack-volume",
+                mixer_id="test-node-123",
+                path="/custom/path/jack-volume"
             )
 
             assert mixer.path == "/custom/path/jack-volume"
@@ -130,123 +126,180 @@ class TestAudioMixer:
             (("test-node-123_mixer:output_2", "system:playback_2"),),
         ]
         mock_conn_manager.connect_by_name.assert_has_calls(expected_calls)
+    
+    # NOTE: connect_player_to_mixer tests moved to TestConnectPlayerToMixer
+    # below (built with AudioMixer.__new__, matching the actual current
+    # implementation — no mixer_channel validation exists in the code).
 
-    def test_connect_player_to_mixer(self, audio_mixer, mock_conn_manager):
-        """Test connecting a player to mixer input channel."""
-        # Mock existing connections that need to be disconnected
-        mock_conn_manager.get_connections.side_effect = [
-            ["system:playback_1"],  # left output connections
-            ["system:playback_2"],  # right output connections
-        ]
 
-        audio_mixer.connect_player_to_mixer("test_player", "output", 0)
+def _build_bare_mixer(audio_outputs, conn_man, client_name='test_mixer'):
+    """Minimal AudioMixer via __new__ — bypasses AudioMixer.__init__ (no
+    subprocess, no real JACK). Thread.__init__ IS called so @logged's
+    repr(self) doesn't trip Thread's _initialized assertion."""
+    import threading
+    m = AudioMixer.__new__(AudioMixer)
+    threading.Thread.__init__(m)
+    m.conn_man = conn_man
+    m.audio_outputs = audio_outputs
+    m.channel_number = len(audio_outputs)
+    m.client_name = client_name
+    return m
 
-        # Should first disconnect existing connections, then connect to mixer
-        expected_disconnect_calls = [
-            (("test_player:output_0", "system:playback_1"),),
-            (("test_player:output_1", "system:playback_2"),),
-        ]
-        expected_connect_calls = [
-            (("test_player:output_0", "test-node-123_mixer:input_1"),),
-            (("test_player:output_1", "test-node-123_mixer:input_2"),),
-        ]
 
-        # Check disconnect calls
-        disconnect_calls = [
-            call
-            for call in mock_conn_manager.disconnect_by_name.call_args_list
-            if call[0][0].startswith("test_player:output")
-        ]
-        assert len(disconnect_calls) == 2
+def _fake_conn_man(ports, edges=None, connect_result=True):
+    """Fake JackConnectionManager over a mutable `ports` set.
 
-        # Check connect calls
-        connect_calls = [
-            call
-            for call in mock_conn_manager.connect_by_name.call_args_list
-            if call[0][0].startswith("test_player:output")
-        ]
-        assert len(connect_calls) == 2
+    ports: set of existing JACK port names (mutable — tests may grow it from
+    a patched sleep side effect to simulate late registration).
+    edges: dict[source] -> list of currently-connected destinations.
+    connect_result: return value (or side_effect list) for connect_by_name.
+    """
+    edges = edges or {}
+    cm = Mock()
+    cm.port_exists.side_effect = lambda p: p in ports
+    cm.get_connections.side_effect = lambda p: list(edges.get(p, []))
+    cm.is_connected.side_effect = lambda src, dst: dst in edges.get(src, [])
+    if isinstance(connect_result, list):
+        cm.connect_by_name.side_effect = connect_result
+    else:
+        cm.connect_by_name.return_value = connect_result
+    cm.disconnect_by_name.return_value = True
+    return cm
 
-    def test_connect_player_to_mixer_invalid_channel(
-        self, audio_mixer, mock_conn_manager
-    ):
-        """Test connecting player to invalid mixer channel."""
-        # Reset the mock to clear previous calls from initialization
-        mock_conn_manager.connect_by_name.reset_mock()
 
-        audio_mixer.connect_player_to_mixer(
-            "test_player", "output", 5
-        )  # Invalid channel
+class TestConnectPlayerToMixer:
+    """Dead-twin coverage (no production callers — hygiene only): the
+    timeout path must early-return False, mirroring connect_player_to_outputs."""
 
-        # Should not make any connections for invalid channel
-        mock_conn_manager.connect_by_name.assert_not_called()
+    PLAYER = 'test_player'
+    CH0 = 'test_player:output 0'
+    CH1 = 'test_player:output 1'
 
-    def test_connect_player_to_mixer_stereo_mapping(
-        self, audio_mixer, mock_conn_manager
-    ):
-        """Test stereo channel mapping for different mixer channels."""
-        # Mock no existing connections
-        mock_conn_manager.get_connections.return_value = []
+    def test_invalid_channel_makes_no_connections(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(['system:playback_1', 'system:playback_2'], cm)
+        with patch('time.sleep'):
+            m.connect_player_to_mixer(self.PLAYER, 'output', 5)  # >= channel_number
+        cm.connect_by_name.assert_not_called()
 
-        # Test channel 1 (should map to inputs 3,4)
-        audio_mixer.connect_player_to_mixer("test_player", "output", 1)
+    def test_channel_0_maps_to_inputs_1_2(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(['system:playback_1', 'system:playback_2'], cm)
+        with patch('time.sleep'):
+            m.connect_player_to_mixer(self.PLAYER, 'output', 0)
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_1')
+        cm.connect_by_name.assert_any_call(self.CH1, 'test_mixer:input_2')
 
-        # Should connect to inputs 3,4 (channel 1 * 2 + 1 = 3, channel 1 * 2 +
-        # 2 = 4)
-        expected_connect_calls = [
-            (("test_player:output_0", "test-node-123_mixer:input_3"),),
-            (("test_player:output_1", "test-node-123_mixer:input_4"),),
-        ]
+    def test_channel_1_maps_to_inputs_3_4(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_3', 'test_mixer:input_4'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(['system:playback_1', 'system:playback_2'], cm)
+        with patch('time.sleep'):
+            m.connect_player_to_mixer(self.PLAYER, 'output', 1)
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_3')
+        cm.connect_by_name.assert_any_call(self.CH1, 'test_mixer:input_4')
 
-        # Check that connect was called with correct inputs
-        connect_calls = [
-            call
-            for call in mock_conn_manager.connect_by_name.call_args_list
-            if call[0][0].startswith("test_player:output")
-        ]
-        assert len(connect_calls) == 2
+    def test_disconnects_existing_connections_first(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_1', 'test_mixer:input_2'}
+        edges = {
+            self.CH0: ['system:playback_1', 'other:input'],
+            self.CH1: ['system:playback_2'],
+        }
+        cm = _fake_conn_man(ports, edges)
+        m = _build_bare_mixer(['system:playback_1', 'system:playback_2'], cm)
+        with patch('time.sleep'):
+            m.connect_player_to_mixer(self.PLAYER, 'output', 0)
+        assert cm.disconnect_by_name.call_count == 3  # 2 from ch0, 1 from ch1
 
-    def test_connect_player_to_mixer_disconnects_existing(
-        self, audio_mixer, mock_conn_manager
-    ):
-        """Test that existing connections are properly disconnected."""
-        # Mock existing connections
-        mock_conn_manager.get_connections.side_effect = [
-            [
-                "system:playback_1",
-                "other:input",
-            ],  # left output has multiple connections
-            ["system:playback_2"],  # right output has one connection
-        ]
+    def test_timeout_returns_false_without_connecting(self):
+        # Player ports never register → early return False, nothing wired.
+        ports = {'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(['system:playback_1', 'system:playback_2'], cm)
+        with patch('time.sleep'):
+            result = m.connect_player_to_mixer(self.PLAYER, 'output', 0)
+        assert result is False
+        cm.connect_by_name.assert_not_called()
 
-        audio_mixer.connect_player_to_mixer("test_player", "output", 0)
 
-        # Should disconnect all existing connections
-        disconnect_calls = mock_conn_manager.disconnect_by_name.call_args_list
-        assert len(disconnect_calls) == 3  # 2 from left, 1 from right
+class TestConnectPlayerToOutputs:
+    """Direct coverage for the 2026-07 silent-but-green fix: the port-wait
+    loop must actually wait, and the bool return contract must hold."""
 
-        # Verify specific disconnections
-        left_disconnects = [
-            call
-            for call in disconnect_calls
-            if call[0][0] == "test_player:output_0"
-        ]
-        right_disconnects = [
-            call
-            for call in disconnect_calls
-            if call[0][0] == "test_player:output_1"
-        ]
+    PLAYER = 'Audio_Player-X'
+    CH0 = 'Audio_Player-X:outport 0'
+    CH1 = 'Audio_Player-X:outport 1'
+    OUTS = ['system:playback_1', 'system:playback_2']
 
-        assert len(left_disconnects) == 2
-        assert len(right_disconnects) == 1
+    def test_port_never_registers_returns_false_no_connect(self):
+        ports = {'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch('time.sleep') as mock_sleep:
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is False
+        cm.connect_by_name.assert_not_called()
+        # The wait loop must actually have waited (the old defeated guard
+        # broke on attempt 0 without a single sleep).
+        assert mock_sleep.call_count >= 29
 
-        # Verify connections to mixer were made
-        connect_calls = [
-            call
-            for call in mock_conn_manager.connect_by_name.call_args_list
-            if call[0][0].startswith("test_player:output")
-        ]
-        assert len(connect_calls) == 2
+    def test_port_registers_late_waits_then_connects(self):
+        ports = {'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+
+        def register_ports(_delay):
+            ports.update({self.CH0, self.CH1})
+
+        with patch('time.sleep', side_effect=register_ports):
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is True
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_1')
+        cm.connect_by_name.assert_any_call(self.CH1, 'test_mixer:input_2')
+
+    def test_stereo_routing(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch('time.sleep'):
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is True
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_1')
+        cm.connect_by_name.assert_any_call(self.CH1, 'test_mixer:input_2')
+
+    def test_mono_fans_outport_0_to_both_inputs(self):
+        # No outport 1 → after the grace window the player is mono and
+        # outport 0 feeds both mixer inputs (centred mono).
+        ports = {self.CH0, 'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch('time.sleep'):
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is True
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_1')
+        cm.connect_by_name.assert_any_call(self.CH0, 'test_mixer:input_2')
+        for c in cm.connect_by_name.call_args_list:
+            assert c.args[0] != self.CH1
+
+    def test_one_connect_failure_returns_false(self):
+        ports = {self.CH0, self.CH1, 'test_mixer:input_1', 'test_mixer:input_2'}
+        cm = _fake_conn_man(ports, connect_result=[True, False])
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch('time.sleep'):
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is False
+        assert cm.connect_by_name.call_count == 2  # both attempted
+
+    def test_no_mixer_inputs_returns_false(self):
+        ports = {self.CH0, self.CH1}  # mixer inputs missing
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch('time.sleep'):
+            result = m.connect_player_to_outputs(self.PLAYER, 'outport', self.OUTS)
+        assert result is False
+        cm.connect_by_name.assert_not_called()
 
 
 class TestPlayerConnectionsCorrect:
@@ -497,10 +550,12 @@ class TestMixerClient:
 
     @pytest.fixture
     def mixer_client(self):
-        """Create MixerClient instance for testing."""
+        """Create MixerClient instance for testing.
+
+        mixer_id='test' → client_name 'test_mixer' (get_mixer_client_name)."""
         with patch("cuemsengine.players.AudioMixer.PlayerClient.__init__"):
             client = MixerClient(
-                player_port=8000, channel_number=4, client_name="test_mixer"
+                player_port=8000, channel_number=4, mixer_id="test"
             )
             return client
 
@@ -700,22 +755,23 @@ class TestStartAudioMixer:
             mixer, client = start_audio_mixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
+                mixer_id="test-node-123"
             )
 
             # Verify mixer was created with correct parameters
             mock_mixer_class.assert_called_once_with(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
+                mixer_id="test-node-123",
                 path=None,
+                args=None
             )
 
             # Verify client was created with correct parameters
             mock_client_class.assert_called_once_with(
                 player_port=8000,
                 channel_number=2,
-                client_name="test-node-123_mixer",
+                mixer_id="test-node-123"
             )
 
             assert mixer == mock_mixer
@@ -732,7 +788,7 @@ class TestStartAudioMixer:
             patch(
                 "cuemsengine.players.AudioMixer.MixerClient"
             ) as mock_client_class,
-            patch("cuemsengine.players.AudioMixer.sleep"),
+            patch("cuemsengine.players.AudioMixer.sleep")
         ):
 
             mock_mixer = Mock()
@@ -743,13 +799,14 @@ class TestStartAudioMixer:
             start_audio_mixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
-                path="/custom/jack-volume",
+                mixer_id="test-node-123",
+                path="/custom/jack-volume"
             )
 
             mock_mixer_class.assert_called_once_with(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
-                node_uuid="test-node-123",
+                mixer_id="test-node-123",
                 path="/custom/jack-volume",
+                args=None
             )
