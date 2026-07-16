@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
+import ipaddress
+import socket
 from dis import hasconst
 from functools import partial
 from os import path, remove
 from typing import Any, Callable
-from os import path, remove
-import ipaddress
-import socket
 
 from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from cuemsutils.log import Logger, logged

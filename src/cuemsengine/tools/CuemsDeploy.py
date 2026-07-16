@@ -35,7 +35,6 @@ from typing import Callable, ClassVar
 
 from cuemsutils.log import Logger
 
-
 # Armed at startup; resets on first byte — catches pre-fork/getaddrinfo hangs.
 _STARTUP_DEADLINE_S = 10
 

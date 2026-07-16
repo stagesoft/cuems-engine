@@ -554,7 +554,7 @@ def test_run_cue_fade_cue_prepare_only_reveal_executes():
     """FadeCue dispatches to the ActionCue branch (via MRO) for BOTH run_cue and
     reveal_cue. The action now EXECUTES at reveal_cue (start_mtc), not run_cue:
     run_cue is prepare-only; reveal_cue fires execute_action."""
-    from cuemsengine.cues.run_cue import run_cue, reveal_cue
+    from cuemsengine.cues.run_cue import reveal_cue, run_cue
 
     target_cue = _make_audio_cue()
     cue = _make_fade_cue(target_cue)

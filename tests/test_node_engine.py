@@ -56,7 +56,6 @@ def test_node_engine_start_late_binds_deploy_manager_loop():
 
 import threading
 import time
-
 from unittest.mock import MagicMock as _MM
 
 

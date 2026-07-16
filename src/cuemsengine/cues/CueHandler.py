@@ -13,12 +13,12 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
-from .run_cue import run_cue, reveal_cue, blank_cue
-from .arm_cue import arm_cue
-from .loop_cue import loop_cue
 from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
+from .arm_cue import arm_cue
+from .loop_cue import loop_cue
+from .run_cue import blank_cue, reveal_cue, run_cue
 
 
 class CueHandler:

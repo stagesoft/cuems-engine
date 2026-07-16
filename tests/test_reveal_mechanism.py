@@ -11,10 +11,11 @@ from unittest.mock import Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
-from cuemsutils.cues import VideoCue, AudioCue, ActionCue, CueList  # noqa: E402
+from cuemsutils.cues import ActionCue, AudioCue, CueList, VideoCue  # noqa: E402
 from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
-from cuemsengine.cues.run_cue import reveal_cue  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
+from cuemsengine.cues.run_cue import reveal_cue  # noqa: E402
 
 
 def _video(layer="L1"):

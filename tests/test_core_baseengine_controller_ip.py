@@ -6,11 +6,12 @@ get_controller_ip cascade that ties them together.
 """
 
 import socket
-
-import pytest
 from unittest.mock import patch
 
-from cuemsengine.core.BaseEngine import BaseEngine, CONTROLLER_HOST
+import pytest
+
+from cuemsengine.core.BaseEngine import CONTROLLER_HOST, BaseEngine
+
 from .fixtures import env_config_path
 
 

@@ -16,12 +16,13 @@ into real MTC-timeline gaps honored identically on every node:
 import sys
 from threading import Lock
 from types import SimpleNamespace
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
 from cuemsutils.cues import ActionCue, AudioCue, VideoCue  # noqa: E402
 from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
 

@@ -1041,7 +1041,6 @@ class TestEffectiveDuration:
         # run_dmxCue reads fadein_ms then fade_time = fadein_ms/1000; project
         # data uses <fadein_time>1000</fadein_time> for a 1 s fade). So a 3 s
         # fade == 3000 ms and _effective_duration_ms must NOT multiply by 1000.
-        from cuemsengine.cues.CueHandler import CueHandler
         from cuemsutils.cues import DmxCue
 
         from cuemsengine.cues.CueHandler import CueHandler

@@ -15,8 +15,9 @@ from unittest.mock import Mock
 # Match the repo's test convention (avoid the OSC hub import at collection time).
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
-from cuemsutils.cues import DmxCue, AudioCue, VideoCue, ActionCue  # noqa: E402
+from cuemsutils.cues import ActionCue, AudioCue, DmxCue, VideoCue  # noqa: E402
 from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
 

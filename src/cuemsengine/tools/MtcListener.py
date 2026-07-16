@@ -5,7 +5,7 @@
 #!/usr/bin/env python3
 
 import os
-from threading import Thread, Lock
+from threading import Lock, Thread
 from typing import Callable
 
 import mido
