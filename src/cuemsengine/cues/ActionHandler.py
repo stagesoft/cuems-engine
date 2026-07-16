@@ -310,9 +310,7 @@ class ActionHandler:
             dispatch_exc = False
         except Exception as exc:
             dispatch_exc = True
-            reason = (
-                f"{action_type} on {target_id} raised {type(exc).__name__}: {exc}"
-            )
+            reason = f"{action_type} on {target_id} raised {type(exc).__name__}: {exc}"
             Logger.error(reason)
             result = self._action_result("failed", action_type, target_id, reason)
 
@@ -324,9 +322,7 @@ class ActionHandler:
                 try:
                     hook_fn(ctx)
                 except Exception as exc:
-                    reason = (
-                        f"after_dispatch hook raised {type(exc).__name__}: {exc}"
-                    )
+                    reason = f"after_dispatch hook raised {type(exc).__name__}: {exc}"
                     Logger.error(reason)
                     result = self._action_result(
                         "failed", action_type, target_id, reason

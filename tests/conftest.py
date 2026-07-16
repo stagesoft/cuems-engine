@@ -30,9 +30,7 @@ def _watchdog():
         if _cleanup_start_time:
             cleanup_time = time.time() - _cleanup_start_time
             if cleanup_time > 5:
-                print(
-                    f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting"
-                )
+                print(f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting")
                 sys.stdout.flush()
                 sys.stderr.flush()
                 os._exit(0)

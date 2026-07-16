@@ -265,8 +265,7 @@ async def websocket_osc_listener(
     """
     if not websockets:
         Logger.error(
-            "websockets library not available - "
-            "cannot start WebSocket OSC listener"
+            "websockets library not available - cannot start WebSocket OSC listener"
         )
         return
 

@@ -125,7 +125,9 @@ class PortHandler(object):
             raise ValueError(f"Duplicate ports found")
         all_used_ports = set[int](self.get_all_used_ports())
         if all_used_ports & set[int](ports):
-            raise ValueError(f"Ports already in use: {all_used_ports & set[int](ports)}")
+            raise ValueError(
+                f"Ports already in use: {all_used_ports & set[int](ports)}"
+            )
         if check_range:
             self.check_port_range(ports)
         return ports
@@ -152,7 +154,9 @@ class PortHandler(object):
         Raises:
             ValueError: If no free ports are found
         """
-        available_ports = self._all_available_ports - set[int](self.get_all_used_ports())
+        available_ports = self._all_available_ports - set[int](
+            self.get_all_used_ports()
+        )
         if not available_ports:
             raise ValueError(f"No free ports found")
         return choice(list(available_ports))

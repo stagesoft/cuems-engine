@@ -56,9 +56,8 @@ class ControllerEngine(BaseEngine):
         # Must be set before super().__init__() because BaseEngine sets
         # self.timecode = None which triggers on_timecode_change() via the
         # property setter, and that method reads these attributes.
-        self._last_timecode_second: int = (
-            -1
-        )  # last whole-second value broadcast to UI
+        # last whole-second value broadcast to UI
+        self._last_timecode_second: int = -1
         # Per-cue status dict: maps cue uuid → int status value.
         # Values: 0=unplayed, 1-99=playing (1 until percentage enabled),
         # 100=played, -1=error
@@ -118,9 +117,7 @@ class ControllerEngine(BaseEngine):
         self.mtc_listener.start()
         super().start()
 
-    def set_status(
-        self, property: str, value: str, strict: bool = False
-    ) -> None:
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
         """
         Set status and push to UI via WebSocket when running, armed, or load.
         """
@@ -149,9 +146,7 @@ class ControllerEngine(BaseEngine):
             # claim this port
             # This allows UI to send commands via Apache's /realtime proxy to
             # ws://127.0.0.1:9190
-            websocket_osc_port = self.cm.node_conf.get(
-                "oscquery_ws_port", 9190
-            )
+            websocket_osc_port = self.cm.node_conf.get("oscquery_ws_port", 9190)
             node_id = self.cm.node_conf.get("uuid", "controller")
         else:
             nng_hub_port = 9093
@@ -185,9 +180,7 @@ class ControllerEngine(BaseEngine):
 
         # Register command handlers for WebSocket OSC
         self._register_osc_command_handlers()
-        self.communications_thread.set_on_client_connect(
-            self._on_ws_client_connect
-        )
+        self.communications_thread.set_on_client_connect(self._on_ws_client_connect)
 
         self.communications_thread.start()
 
@@ -203,16 +196,12 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.is_alive()
                 and self.communications_thread.event_loop is not None
             ):
-                Logger.info(
-                    f"NNG communications thread ready after {waited:.1f}s"
-                )
+                Logger.info(f"NNG communications thread ready after {waited:.1f}s")
                 break
             sleep(wait_interval)
             waited += wait_interval
         else:
-            Logger.warning(
-                f"NNG communications thread not ready after {max_wait}s"
-            )
+            Logger.warning(f"NNG communications thread not ready after {max_wait}s")
 
     def _register_osc_command_handlers(self):
         """Register OSC command handlers for WebSocket OSC receiving.
@@ -256,25 +245,19 @@ class ControllerEngine(BaseEngine):
         # twice (it appears in both node_conf and network_map['node_list']).
         node_uuids: set[str] = set()
         own_uuid = (
-            self.cm.node_conf.get("uuid", "")
-            if hasattr(self, "cm") and self.cm
-            else ""
+            self.cm.node_conf.get("uuid", "") if hasattr(self, "cm") and self.cm else ""
         )
         if own_uuid:
             node_uuids.add(own_uuid)
         try:
             if self.cm and self.cm.network_map:
-                adopted, _new = NetworkMap.get_nodes_by_adoption(
-                    self.cm.network_map
-                )
+                adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
                 for entry in adopted:
                     nuuid = (entry.get("node") or {}).get("uuid")
                     if nuuid:
                         node_uuids.add(nuuid)
         except Exception as e:
-            Logger.warning(
-                f"Could not enumerate node UUIDs from network_map: {e}"
-            )
+            Logger.warning(f"Could not enumerate node UUIDs from network_map: {e}")
 
         for nuuid in node_uuids:
             self.communications_thread.register_osc_handler(
@@ -326,8 +309,7 @@ class ControllerEngine(BaseEngine):
                 key = f"{node_uuid_part}/{output_index}/{channel}"
                 self.mixer_status[key] = vol
                 self._broadcast_status(
-                    f"audio/mixer/{node_uuid_part}/"
-                    f"{output_index}/{channel}/volume",
+                    f"audio/mixer/{node_uuid_part}/{output_index}/{channel}/volume",
                     vol,
                 )
 
@@ -352,8 +334,7 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.event_loop,
             )
             Logger.debug(
-                f"Forwarded direct player OSC to nodes: {address} ="
-                f"{repr(value)}"
+                f"Forwarded direct player OSC to nodes: {address} = {repr(value)}"
             )
         except Exception as e:
             Logger.error(f"Error forwarding direct player OSC to nodes: {e}")
@@ -387,9 +368,7 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.nng_hub.send_operation(operation),
                 self.communications_thread.event_loop,
             )
-            Logger.debug(
-                f"Forwarded player OSC to nodes: {address} = {repr(value)}"
-            )
+            Logger.debug(f"Forwarded player OSC to nodes: {address} = {repr(value)}")
         except Exception as e:
             Logger.error(f"Error forwarding player OSC to nodes: {e}")
 
@@ -508,9 +487,7 @@ class ControllerEngine(BaseEngine):
                         f"(status={self.cue_status.get(cue_id)}, expected 1)"
                     )
             self.status.remove_currentcue(operation.data["id"])
-            Logger.debug(
-                f"Cue removed from currentcue: {operation.data['id']}"
-            )
+            Logger.debug(f"Cue removed from currentcue: {operation.data['id']}")
 
         elif operation.action == ActionType.UPDATE:
             # Future: percentage progress updates from loop_cue() during
@@ -555,8 +532,7 @@ class ControllerEngine(BaseEngine):
                 sender = operation.sender
                 if sender not in self._adopted_nodes:
                     Logger.debug(
-                        f"Ignoring script_finished from non-adopted node"
-                        f"{sender}"
+                        f"Ignoring script_finished from non-adopted node {sender}"
                     )
                     return
                 with self._cluster_lock:
@@ -567,13 +543,8 @@ class ControllerEngine(BaseEngine):
                     f"Node {sender} script_finished "
                     f"({len(finished_now)}/{len(required)})"
                 )
-                if (
-                    finished_now >= required
-                    and self.get_status("running") == "yes"
-                ):
-                    Logger.info(
-                        "All required nodes finished — updating running status"
-                    )
+                if finished_now >= required and self.get_status("running") == "yes":
+                    Logger.info("All required nodes finished — updating running status")
                     self.set_status("running", "no")
         elif operation.target == "armed_ready":
             if operation.data and operation.data.get("armed") == "yes":
@@ -582,17 +553,13 @@ class ControllerEngine(BaseEngine):
                 # tracker bounded.
                 sender = operation.sender
                 if sender not in self._adopted_nodes:
-                    Logger.debug(
-                        f"Ignoring armed_ready from non-adopted node {sender}"
-                    )
+                    Logger.debug(f"Ignoring armed_ready from non-adopted node {sender}")
                     return
                 with self._cluster_lock:
                     self._armed_nodes.add(sender)
                     armed_now = set(self._armed_nodes)
                     required = set(self._required_nodes)
-                Logger.info(
-                    f"Node {sender} armed ({len(armed_now)}/{len(required)})"
-                )
+                Logger.info(f"Node {sender} armed ({len(armed_now)}/{len(required)})")
                 if armed_now >= required and self.get_status("armed") != "yes":
                     if self.go_offset is None:
                         Logger.info(
@@ -606,22 +573,16 @@ class ControllerEngine(BaseEngine):
                     self.set_status("armed", "yes")
                     self._cancel_arm_watchdog()
         elif operation.target == "nextcue":
-            nextcue_id = (
-                operation.data.get("nextcue", "") if operation.data else ""
-            )
+            nextcue_id = operation.data.get("nextcue", "") if operation.data else ""
             self.set_status("nextcue", nextcue_id)
             Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
         elif operation.target == "cue_enabled":
             cue_id = operation.data.get("cue_id") if operation.data else None
-            enabled = (
-                operation.data.get("enabled", True) if operation.data else True
-            )
+            enabled = operation.data.get("enabled", True) if operation.data else True
             if cue_id and cue_id in self.cue_enabled_status:
                 self.cue_enabled_status[cue_id] = enabled
                 self._broadcast_cue_enabled(cue_id, enabled)
-                Logger.info(
-                    f"Cue {cue_id} enabled status updated from node: {enabled}"
-                )
+                Logger.info(f"Cue {cue_id} enabled status updated from node: {enabled}")
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
 
@@ -630,9 +591,7 @@ class ControllerEngine(BaseEngine):
     #########################
 
     def editor_command_callback(self, item: dict, context):
-        Logger.debug(
-            f"Received editor command: {item}, with context: {context}"
-        )
+        Logger.debug(f"Received editor command: {item}, with context: {context}")
         _item_keys = item.keys()
         if "value" not in _item_keys:
             item["value"] = ""
@@ -695,9 +654,7 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"{type(e)} confirming to editor: {e}")
 
-    def error_to_editor(
-        self, context, value=None, request_uuid=None, action=None
-    ):
+    def error_to_editor(self, context, value=None, request_uuid=None, action=None):
         if not request_uuid:
             request_uuid = self.get_editor_request()
         return_message = {
@@ -886,9 +843,7 @@ class ControllerEngine(BaseEngine):
             and self.communications_thread
             and hasattr(self.communications_thread, "broadcast_osc")
         ):
-            self.communications_thread.broadcast_osc(
-                f"/engine/status/{key}", value
-            )
+            self.communications_thread.broadcast_osc(f"/engine/status/{key}", value)
 
     async def _on_ws_client_connect(self, websocket) -> None:
         """Send full state dump to a newly connected WebSocket client."""
@@ -922,9 +877,7 @@ class ControllerEngine(BaseEngine):
         # exceeds that (e.g. 8 nodes × 64 channels), switch to a single OSC
         # bundle via build_osc_bundle() instead of per-message sends.
         for key, vol in self.mixer_status.items():
-            data = build_osc_message(
-                f"/engine/status/audio/mixer/{key}/volume", vol
-            )
+            data = build_osc_message(f"/engine/status/audio/mixer/{key}/volume", vol)
             if data:
                 await websocket.send(data)
 
@@ -1028,23 +981,18 @@ class ControllerEngine(BaseEngine):
         # Initialise per-cue status: every cue starts as unplayed (0).
         # Broadcasts one WS message per cue so the UI can populate its cue
         # list.
-        self.cue_status = {
-            cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)
-        }
+        self.cue_status = {cid: 0 for cid in self._collect_cue_ids(self.script.cuelist)}
         for cid in self.cue_status:
             self._broadcast_cue_status(cid, 0, force=True)
         Logger.info(f"Cue status initialised for {len(self.cue_status)} cues")
 
         # Initialise per-cue enabled status from XML (resets show-time
         # overrides).
-        self.cue_enabled_status = self._collect_cue_enabled(
-            self.script.cuelist
-        )
+        self.cue_enabled_status = self._collect_cue_enabled(self.script.cuelist)
         for cid, enabled in self.cue_enabled_status.items():
             self._broadcast_cue_enabled(cid, enabled)
         Logger.info(
-            f"Cue enabled status initialised for"
-            f"{len(self.cue_enabled_status)} cues"
+            f"Cue enabled status initialised for {len(self.cue_enabled_status)} cues"
         )
 
         # Update internal status
@@ -1062,14 +1010,12 @@ class ControllerEngine(BaseEngine):
 
         # Timecode starts on load; runs until next load or engine shutdown
         self.start_timecode()
-        self.go_offset = (
-            0  # Enable mtc_callback → on_timecode_change → broadcast
-        )
+        # Enable mtc_callback → on_timecode_change → broadcast
+        self.go_offset = 0
+
         # armed=yes is NOT set here -- it's set when NodeEngine reports
-        # armed_ready
-        # via status_operation_callback, ensuring cues are actually armed
-        # before
-        # the UI shows GO as available
+        # armed_ready via status_operation_callback, ensuring cues are actually
+        # armed before the UI shows GO as available
 
         # Confirm the project is loaded
         self.set_show_lock_file()
@@ -1119,8 +1065,7 @@ class ControllerEngine(BaseEngine):
         parts = value.split(" ", 1)
         if len(parts) != 2 or parts[1] not in ("0", "1"):
             Logger.warning(
-                f'Invalid cue_enabled format (expected "uuid 0|1"):'
-                f'{repr(value)}'
+                f'Invalid cue_enabled format (expected "uuid 0|1"): {repr(value)}'
             )
             return
 
@@ -1138,13 +1083,9 @@ class ControllerEngine(BaseEngine):
 
     def _forward_command_to_nodes(self, address: str, value) -> None:
         """Forward a generic command to NodeEngine via NNG."""
-        if (
-            not hasattr(self, "communications_thread")
-            or not self.communications_thread
-        ):
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
             Logger.warning(
-                "Cannot forward command to nodes: communications thread not"
-                "available"
+                "Cannot forward command to nodes: communications thread not available"
             )
             return
 
@@ -1168,9 +1109,7 @@ class ControllerEngine(BaseEngine):
                 self.communications_thread.nng_hub.send_operation(operation),
                 self.communications_thread.event_loop,
             )
-            Logger.debug(
-                f"Forwarded command to nodes: {command_name} = {repr(value)}"
-            )
+            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
@@ -1226,13 +1165,8 @@ class ControllerEngine(BaseEngine):
             Logger.debug("Cluster probe: no remote nodes to ping")
             return {controller_uuid}
 
-        if (
-            not hasattr(self, "communications_thread")
-            or not self.communications_thread
-        ):
-            Logger.warning(
-                "Cluster probe skipped: communications thread not available"
-            )
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
             return {controller_uuid}
 
         ping_op = NodeOperation(
@@ -1352,9 +1286,7 @@ class ControllerEngine(BaseEngine):
         still-pending UUIDs so operator sees what's wedged.
         """
         self._cancel_arm_watchdog()
-        timer = threading.Timer(
-            self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire
-        )
+        timer = threading.Timer(self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire)
         timer.daemon = True
         self._arm_watchdog = timer
         timer.start()
@@ -1397,9 +1329,7 @@ class ControllerEngine(BaseEngine):
 
         self._forward_command_to_nodes("/engine/command/stop", value)
 
-        Logger.info(
-            "STOP command processed - timecode stopped; nodes will re-arm"
-        )
+        Logger.info("STOP command processed - timecode stopped; nodes will re-arm")
         return True
 
     def get_project_status(self, value, context=None):
@@ -1407,17 +1337,13 @@ class ControllerEngine(BaseEngine):
         running = self.get_status("running") == "yes"
         return {
             "status": "running" if running else "none",
-            "project_uuid": (
-                str(self.script.id) if running and self.script else ""
-            ),
+            "project_uuid": (str(self.script.id) if running and self.script else ""),
         }
 
     def unload_project(self, value, context=None):
         """Unload the current project. Rejects if playback is running."""
         if self.get_status("running") == "yes":
-            raise RuntimeError(
-                "Cannot unload while running. Stop playback first."
-            )
+            raise RuntimeError("Cannot unload while running. Stop playback first.")
         self._clear_playback_state()
         self.reset_script()
         self.cue_status = {}
