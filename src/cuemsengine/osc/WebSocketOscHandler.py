@@ -174,9 +174,7 @@ async def handle_websocket_connection(
                     try:
                         message_handler(address, args)
                     except Exception as e:
-                        Logger.error(
-                            f"Error in OSC message handler for {address}: {e}"
-                        )
+                        Logger.error(f"Error in OSC message handler for {address}: {e}")
             else:
                 # Text message - might be JSON for OSCQuery protocol
                 Logger.debug(
@@ -267,8 +265,8 @@ async def websocket_osc_listener(
     """
     if not websockets:
         Logger.error(
-            "websockets library not available - cannot start WebSocket OSC"
-            "listener"
+            "websockets library not available - "
+            "cannot start WebSocket OSC listener"
         )
         return
 
@@ -294,9 +292,7 @@ async def websocket_osc_listener(
             ping_interval=20,
             ping_timeout=20,
         ):
-            Logger.info(
-                f"WebSocket OSC listener started on ws://{host}:{port}"
-            )
+            Logger.info(f"WebSocket OSC listener started on ws://{host}:{port}")
             # Keep running until stop is requested
             while not stop_check():
                 await asyncio.sleep(0.1)
@@ -338,13 +334,9 @@ class WebSocketOscRouter:
 
     def __init__(self):
         self._handlers: dict[str, Callable[[str, list[Any]], None]] = {}
-        self._wildcard_handlers: list[
-            tuple[str, Callable[[str, list[Any]], None]]
-        ] = []
+        self._wildcard_handlers: list[tuple[str, Callable[[str, list[Any]], None]]] = []
 
-    def register(
-        self, pattern: str, handler: Callable[[str, list[Any]], None]
-    ) -> None:
+    def register(self, pattern: str, handler: Callable[[str, list[Any]], None]) -> None:
         """Register a handler for an OSC address pattern.
 
         Args:
@@ -389,9 +381,7 @@ class WebSocketOscRouter:
                     handler(address, args)
                     return True
                 except Exception as e:
-                    Logger.error(
-                        f"Error in wildcard OSC handler for {address}: {e}"
-                    )
+                    Logger.error(f"Error in wildcard OSC handler for {address}: {e}")
                     return False
 
         Logger.debug(f"No handler registered for OSC address: {address}")

@@ -91,9 +91,9 @@ class AudioMixer(Player):
             output_port = f"{self.client_name}:output_{i+1}"
             # Wait for both ports to be available
             for attempt in range(max_retries):
-                if self.conn_man.port_exists(
-                    output_port
-                ) and self.conn_man.port_exists(playback_port):
+                if self.conn_man.port_exists(output_port) and self.conn_man.port_exists(
+                    playback_port
+                ):
                     break
                 if attempt < max_retries - 1:
                     Logger.debug(
@@ -153,7 +153,7 @@ class AudioMixer(Player):
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
         mixer_input_1 = f"{self.client_name}:input_{mixer_channel * 2 + 1}"
         mixer_input_2 = f"{self.client_name}:input_{mixer_channel * 2 + 2}"
-        
+
         # Wait for player JACK ports to be available (retry mechanism).
         # Gate ONLY on port_exists(); get_connections() returns [] (not None)
         # for a missing port, so the old guard broke the loop immediately and
@@ -176,37 +176,23 @@ class AudioMixer(Player):
 
         # Check if player is stereo (has output_1) or mono (only output_0)
         is_stereo = self.conn_man.port_exists(channel_1_output)
-        Logger.debug(
-            f"Player {player_name} is {'stereo' if is_stereo else 'mono'}"
-        )
+        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
 
         # First, disconnect any existing connections from player outputs
         # Guard with port_exists to avoid sending disconnect requests for
         # ports that were destroyed by a concurrent /quit.
         if self.conn_man.port_exists(channel_0_output):
-            Logger.debug(
-                f"Disconnecting existing connections from {channel_0_output}"
-            )
-            channel_0_connections = self.conn_man.get_connections(
-                channel_0_output
-            )
+            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+            channel_0_connections = self.conn_man.get_connections(channel_0_output)
             for connection in channel_0_connections:
-                Logger.debug(
-                    f"Disconnecting {channel_0_output} from {connection}"
-                )
+                Logger.debug(f"Disconnecting {channel_0_output} from {connection}")
                 self.conn_man.disconnect_by_name(channel_0_output, connection)
 
         if is_stereo and self.conn_man.port_exists(channel_1_output):
-            Logger.debug(
-                f"Disconnecting existing connections from {channel_1_output}"
-            )
-            channel_1_connections = self.conn_man.get_connections(
-                channel_1_output
-            )
+            Logger.debug(f"Disconnecting existing connections from {channel_1_output}")
+            channel_1_connections = self.conn_man.get_connections(channel_1_output)
             for connection in channel_1_connections:
-                Logger.debug(
-                    f"Disconnecting {channel_1_output} from {connection}"
-                )
+                Logger.debug(f"Disconnecting {channel_1_output} from {connection}")
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
         # Connect to mixer inputs
@@ -223,16 +209,13 @@ class AudioMixer(Player):
         # Connect second channel (if mixer has it)
         if self.conn_man.port_exists(mixer_input_2):
             if is_stereo:
-                Logger.debug(
-                    f"Connecting {channel_1_output} to {mixer_input_2}"
-                )
+                Logger.debug(f"Connecting {channel_1_output} to {mixer_input_2}")
                 self.conn_man.connect_by_name(channel_1_output, mixer_input_2)
             else:
                 # Mono player: connect output_0 to both mixer inputs for
                 # centered sound
                 Logger.debug(
-                    f"Mono player: Connecting {channel_0_output} to"
-                    f"{mixer_input_2}"
+                    f"Mono player: Connecting {channel_0_output} to {mixer_input_2}"
                 )
                 self.conn_man.connect_by_name(channel_0_output, mixer_input_2)
         else:
@@ -279,8 +262,7 @@ class AudioMixer(Player):
         if not selected_outputs:
             selected_outputs = ["system:playback_1", "system:playback_2"]
             Logger.debug(
-                f"No outputs specified, defaulting to stereo:"
-                f"{selected_outputs}"
+                f"No outputs specified, defaulting to stereo: {selected_outputs}"
             )
 
         # Define player output ports - cuems-audioplayer uses "outport 0",
@@ -293,7 +275,7 @@ class AudioMixer(Player):
             name: f"{self.client_name}:input_{i+1}"
             for i, name in enumerate(self.audio_outputs)
         }
-        
+
         # Wait for player JACK ports to be available.
         # NOTE: gate ONLY on port_exists(); get_connections() returns [] (not
         # None) for a missing port, so the old 'connections is not None' guard
@@ -327,26 +309,18 @@ class AudioMixer(Player):
 
         # Check if player is stereo
         is_stereo = self.conn_man.port_exists(channel_1_output)
-        Logger.debug(
-            f"Player {player_name} is {'stereo' if is_stereo else 'mono'}"
-        )
+        Logger.debug(f"Player {player_name} is {'stereo' if is_stereo else 'mono'}")
 
         # First, disconnect any existing connections from player outputs
         # Guard with port_exists to avoid operating on destroyed ports.
         if self.conn_man.port_exists(channel_0_output):
-            Logger.debug(
-                f"Disconnecting existing connections from {channel_0_output}"
-            )
-            channel_0_connections = self.conn_man.get_connections(
-                channel_0_output
-            )
+            Logger.debug(f"Disconnecting existing connections from {channel_0_output}")
+            channel_0_connections = self.conn_man.get_connections(channel_0_output)
             for connection in channel_0_connections:
                 self.conn_man.disconnect_by_name(channel_0_output, connection)
 
         if is_stereo and self.conn_man.port_exists(channel_1_output):
-            channel_1_connections = self.conn_man.get_connections(
-                channel_1_output
-            )
+            channel_1_connections = self.conn_man.get_connections(channel_1_output)
             for connection in channel_1_connections:
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
@@ -361,9 +335,7 @@ class AudioMixer(Player):
                     Logger.warning(f"Mixer input {mixer_input} does not exist")
 
         if not target_inputs:
-            Logger.error(
-                f"No valid mixer inputs found for outputs: {selected_outputs}"
-            )
+            Logger.error(f"No valid mixer inputs found for outputs: {selected_outputs}")
             return False
 
         Logger.info(
@@ -380,19 +352,13 @@ class AudioMixer(Player):
         for i, mixer_input in enumerate(target_inputs):
             if i % 2 == 0:
                 Logger.debug(f"L → {mixer_input}")
-                ok = self.conn_man.connect_by_name(
-                    channel_0_output, mixer_input
-                )
+                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
             elif is_stereo:
                 Logger.debug(f"R → {mixer_input}")
-                ok = self.conn_man.connect_by_name(
-                    channel_1_output, mixer_input
-                )
+                ok = self.conn_man.connect_by_name(channel_1_output, mixer_input)
             else:
                 Logger.debug(f"Mono → {mixer_input}")
-                ok = self.conn_man.connect_by_name(
-                    channel_0_output, mixer_input
-                )
+                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
             all_connected = all_connected and ok
 
         if not all_connected:
@@ -401,7 +367,6 @@ class AudioMixer(Player):
                 "cue may be silent"
             )
         return all_connected
-
 
     def player_connections_correct(
         self,
@@ -551,9 +516,7 @@ class MixerClient(PlayerClient):
             gain: Volume gain (0.0 to 1.0)
         """
         if not 0.0 <= gain <= 1.0:
-            Logger.error(
-                f"Invalid gain value: {gain}. Must be between 0.0 and 1.0"
-            )
+            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
             return
 
         path = f"/audiomixer/{self.client_name}/master"
@@ -569,15 +532,11 @@ class MixerClient(PlayerClient):
             gain: Volume gain (0.0 to 1.0)
         """
         if not 0.0 <= gain <= 1.0:
-            Logger.error(
-                f"Invalid gain value: {gain}. Must be between 0.0 and 1.0"
-            )
+            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
             return
 
         if channel >= self.channel_number:
-            Logger.error(
-                f"Invalid channel: {channel}. Max: {self.channel_number - 1}"
-            )
+            Logger.error(f"Invalid channel: {channel}. Max: {self.channel_number - 1}")
             return
 
         path = f"/audiomixer/{self.client_name}/{channel}"

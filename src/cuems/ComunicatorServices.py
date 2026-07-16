@@ -102,9 +102,8 @@ class Nng_request_response(ComunicatorService):
         with Rep0(**self.params_reply) as socket:
             while await asyncio.sleep(0, result=True):
                 request = await socket.arecv()
-                decoded_request = json.loads(
-                    request.decode()
-                )  # Parse the JSON request
+                # Parse the JSON request.
+                decoded_request = json.loads(request.decode())
                 Logger.debug(f"Received: {decoded_request}")
                 response = request_processor(decoded_request)
                 encoded_response = json.dumps(response).encode()

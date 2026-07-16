@@ -41,8 +41,7 @@ class VideoClient(PlayerClient):
     def create_layer_endpoints(self, layer_id: str) -> None:
         """Register per-layer OSC endpoints for the given layer_id."""
         layer_endpoints = {
-            k.format(layer_id): v
-            for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
+            k.format(layer_id): v for k, v in OSC_VIDEOPLAYER_LAYER_CONF.items()
         }
         self.create_endpoints(layer_endpoints)
 
@@ -94,8 +93,9 @@ class VideoOutput:
         canvas_cy = self.canvas_height // 2
         return (output_cx - canvas_cx, canvas_cy - output_cy)
 
-    def get_layer_scale(self, media_w: int | None = None,
-                        media_h: int | None = None) -> tuple[float, float]:
+    def get_layer_scale(
+        self, media_w: int | None = None, media_h: int | None = None
+    ) -> tuple[float, float]:
         """Returns a uniform (s, s) that renders the media at its NATIVE pixel
         size, clamped so the layer never exceeds this output's region.
 
@@ -118,8 +118,8 @@ class VideoOutput:
         ch = self.canvas_height
         if not ch:
             return (1.0, 1.0)
-        region_w = self.canvas_region['width']
-        region_h = self.canvas_region['height']
+        region_w = self.canvas_region["width"]
+        region_h = self.canvas_region["height"]
         if media_w and media_h:
             s = min(
                 media_h / ch,
@@ -129,8 +129,8 @@ class VideoOutput:
         else:
             s = region_h / ch
             Logger.warning(
-                f'VideoOutput {self.mapped_to}: media dims unknown, using legacy '
-                f'region-height scale {s:.4f} (may overflow if media aspect != region)'
+                f"VideoOutput {self.mapped_to}: media dims unknown, using legacy "
+                f"region-height scale {s:.4f} (may overflow if media aspect != region)"
             )
         return (s, s)
 

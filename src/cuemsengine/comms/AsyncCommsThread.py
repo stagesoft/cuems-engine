@@ -100,9 +100,7 @@ class AsyncCommsThread(Thread):
         self.stop_requested = True
         if self.event_loop and self.is_alive():
             try:
-                asyncio.run_coroutine_threadsafe(
-                    self.stop_async(), self.event_loop
-                )
+                asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
             except Exception as e:
                 Logger.debug(f"Error stopping {self.name}: {e}")
 
@@ -132,9 +130,7 @@ class AsyncCommsThread(Thread):
         # Wait for all tasks to complete cancellation
         if pending_tasks:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
-            Logger.debug(
-                f"{self.name} cancelled {len(pending_tasks)} pending tasks"
-            )
+            Logger.debug(f"{self.name} cancelled {len(pending_tasks)} pending tasks")
 
         # Now stop the event loop
         self.event_loop.call_soon_threadsafe(self.event_loop.stop)
@@ -258,14 +254,10 @@ class AsyncCommsThread(Thread):
             Logger.debug(f"{self.name} {function_name} returned: {result!r}")
             return result
         except TimeoutError:
-            Logger.error(
-                f"{self.name} {function_name} timed out after {timeout}s"
-            )
+            Logger.error(f"{self.name} {function_name} timed out after {timeout}s")
             send_task.cancel()
             raise
         except Exception as exc:
-            Logger.error(
-                f"{self.name} {function_name} raised an exception: {exc!r}"
-            )
+            Logger.error(f"{self.name} {function_name} raised an exception: {exc!r}")
             send_task.cancel()
             raise

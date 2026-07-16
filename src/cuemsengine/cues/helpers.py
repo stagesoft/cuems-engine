@@ -39,11 +39,9 @@ def find_timing(
     duration = duration.return_in_other_framerate(mtc.main_tc.framerate)
     # Set cue end timecode
     cue._end_mtc = cue._start_mtc + duration
-    in_time_fr_adjusted = cue.media.regions[
-        0
-    ].in_time.return_in_other_framerate(mtc.main_tc.framerate)
-    # Calculate offset to go
-    offset_to_go = (
-        in_time_fr_adjusted[time_attribute] - cue._start_mtc[time_attribute]
+    in_time_fr_adjusted = cue.media.regions[0].in_time.return_in_other_framerate(
+        mtc.main_tc.framerate
     )
+    # Calculate offset to go
+    offset_to_go = in_time_fr_adjusted[time_attribute] - cue._start_mtc[time_attribute]
     return offset_to_go, duration

@@ -66,6 +66,4 @@ class PyOscServer(object):
         if len(self.endpoints) == 0:
             return
         for endpoint_, function_ in self.endpoints.items():
-            self.handlers[endpoint_] = self.dispatcher.map(
-                endpoint_, function_
-            )
+            self.handlers[endpoint_] = self.dispatcher.map(endpoint_, function_)

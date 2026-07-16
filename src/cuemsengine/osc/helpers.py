@@ -48,9 +48,7 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
             cls.name, f"ws://{cls.host}:{cls.remote_port}", cls.local_port
         )
     except Exception as e:
-        Logger.exception(
-            f"Failed to create OSCQueryDevice: {e}, type: {type(e)}"
-        )
+        Logger.exception(f"Failed to create OSCQueryDevice: {e}, type: {type(e)}")
         return
     Logger.info(f"Added OSCQueryDevice: {cls.name}")
     try:
@@ -63,9 +61,7 @@ def new_oscquery_device(cls) -> OSCQueryDevice:
                 f"to be ready..."
             )
     except Exception as e:
-        Logger.exception(
-            f"Failed to update OSCQueryDevice: {e}, type: {type(e)}"
-        )
+        Logger.exception(f"Failed to update OSCQueryDevice: {e}, type: {type(e)}")
         return
     Logger.debug(
         f"OSCQueryDevice created: {x}, remote_port: {cls.remote_port},"
@@ -143,9 +139,7 @@ class ServerDevices(Enum):
 ## --------- HELPERS --------- ##
 
 
-def add_callbacks_from_dict(
-    endpoints: dict, cmd_dict: dict[str, Callable]
-) -> dict:
+def add_callbacks_from_dict(endpoints: dict, cmd_dict: dict[str, Callable]) -> dict:
     """Include the function endpoints in the endpoints dictionary
 
     Args:
@@ -182,9 +176,7 @@ def add_prefix_to_all(endpoints: dict, prefix: str) -> dict:
     return {prefix + key: value for key, value in endpoints.items()}
 
 
-def deserialize_node(
-    node_data: dict, parent_node: Optional[Node] = None
-) -> Node:
+def deserialize_node(node_data: dict, parent_node: Optional[Node] = None) -> Node:
     """
     Deserialize a dictionary structure into pyossia nodes.
 
@@ -211,9 +203,7 @@ def deserialize_node(
             try:
                 param.value = param_dict["value"]
             except:
-                Logger.warning(
-                    f"Could not set value for parameter at {node.name}"
-                )
+                Logger.warning(f"Could not set value for parameter at {node.name}")
 
     # Recursively create children
     for child_data in node_data.get("children", []):
@@ -240,9 +230,7 @@ def serialize_node(node: Node) -> dict:
         param_dict = {
             "access": str(param.access_mode),
             "bounding": str(param.bounding_mode),
-            "type": (
-                str(param.value_type) if hasattr(param, "value_type") else None
-            ),
+            "type": (str(param.value_type) if hasattr(param, "value_type") else None),
         }
 
         # Try to get current value
@@ -261,9 +249,7 @@ def serialize_node(node: Node) -> dict:
             param_dict["domain"] = (
                 str(param.domain) if hasattr(param, "domain") else None
             )
-            param_dict["unit"] = (
-                str(param.unit) if hasattr(param, "unit") else None
-            )
+            param_dict["unit"] = str(param.unit) if hasattr(param, "unit") else None
         except:
             pass
 

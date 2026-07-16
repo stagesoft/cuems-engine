@@ -137,8 +137,7 @@ class ControllerCommunications(AsyncCommsThread):
             osc_path, lambda addr, args: self._handle_osc_command(addr, args)
         )
         Logger.debug(
-            f"Registered command handler for {osc_path}"
-            f"(forward={forward_to_nodes})"
+            f"Registered command handler for {osc_path} (forward={forward_to_nodes})"
         )
 
     def register_osc_handler(
@@ -166,9 +165,7 @@ class ControllerCommunications(AsyncCommsThread):
         # Get the value (first argument, or None for impulse)
         value = args[0] if args else None
 
-        Logger.info(
-            f"WebSocket OSC command received: {address} = {repr(value)}"
-        )
+        Logger.info(f"WebSocket OSC command received: {address} = {repr(value)}")
 
         # Call the handler
         try:
@@ -205,9 +202,7 @@ class ControllerCommunications(AsyncCommsThread):
             asyncio.run_coroutine_threadsafe(
                 self.nng_hub.send_operation(operation), self.event_loop
             )
-            Logger.debug(
-                f"Forwarded command to nodes: {command_name} = {repr(value)}"
-            )
+            Logger.debug(f"Forwarded command to nodes: {command_name} = {repr(value)}")
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
@@ -334,10 +329,6 @@ class ControllerCommunications(AsyncCommsThread):
         - AttributeError: If `hwdiscovery` is not initialized
         """
         if not self.hw_discovery:
-            raise AttributeError(
-                "hw_discovery communicator is not initialized"
-            )
+            raise AttributeError("hw_discovery communicator is not initialized")
 
-        return self.run_coroutine(
-            self.hw_discovery.send_request, message, timeout
-        )
+        return self.run_coroutine(self.hw_discovery.send_request, message, timeout)

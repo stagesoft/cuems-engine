@@ -65,9 +65,7 @@ def _parse_canvas_size_override(preamble: str) -> Optional[Tuple[int, int]]:
         w = int(parts[0])
         h = int(parts[1])
     except ValueError:
-        raise DisplayConfValueError(
-            f"canvas_size={raw!r} has non-integer components"
-        )
+        raise DisplayConfValueError(f"canvas_size={raw!r} has non-integer components")
     if w <= 0 or h <= 0:
         raise DisplayConfValueError(
             f"canvas_size={raw!r} must be positive (got {w}x{h})"

@@ -41,9 +41,7 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 
 @run_cue.register
-def run_actionCue(
-    cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None
-):
+def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None):
     """Run an ActionCue by delegating to ActionHandler.execute_action.
 
     Forwards frozen_mtc_ms so a chained 'play' action triggered inside a
@@ -56,9 +54,13 @@ def run_actionCue(
     # fire at dispatch (a full body early) instead of at its own timeline slot.
     # The action is EXECUTED in reveal_cue() once live MTC reaches _start_mtc.
     if frozen_mtc_ms is not None:
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, start_seconds=frozen_mtc_ms/1000)
+        cue._start_mtc = CTimecode(
+            framerate=mtc.main_tc.framerate, start_seconds=frozen_mtc_ms / 1000
+        )
     else:
-        cue._start_mtc = CTimecode(framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames)
+        cue._start_mtc = CTimecode(
+            framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
+        )
     return
 
 
@@ -127,17 +129,13 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                     output_name = output.get("output_name", "")
                     if len(output_name) > 37:
                         output_id = output_name[37:]
-                        port_name = PLAYER_HANDLER.resolve_audio_port(
-                            output_id
-                        )
+                        port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
                         if port_name:
                             selected_outputs.append(port_name)
                         else:
                             selected_outputs.append(output_id)
 
-            Logger.debug(
-                f"Audio cue {cue.id} selected outputs: {selected_outputs}"
-            )
+            Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
 
             # If the player's outport 0 is missing, the subprocess died between
             # arm and GO. connect_player_to_outputs would block 15 s in its
@@ -157,8 +155,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                 selected_outputs=selected_outputs,
             ):
                 Logger.debug(
-                    f"Audio cue {cue.id}: graph already wired, skipping"
-                    f"connect"
+                    f"Audio cue {cue.id}: graph already wired, skipping connect"
                 )
             else:
                 Logger.warning(
@@ -213,8 +210,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             vol_value = max(0.0, min(1.0, float(master_vol) / 100.0))
             cue._osc.set_value("/volmaster", vol_value)
             Logger.info(
-                f"master_vol {master_vol}% -> {vol_value} set on audio cue"
-                f"{cue.id}",
+                f"master_vol {master_vol}% -> {vol_value} set on audio cue {cue.id}",
                 extra={"caller": cue.__class__.__name__},
             )
     except Exception as e:
@@ -372,7 +368,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # freezes on the final frame until loop_videoCue() finally sends /loop.
     # Sending it here closes the race so the first loop wraps cleanly. Finite
     # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
-    loop_early = getattr(cue, 'loop', 1) < 1
+    loop_early = getattr(cue, "loop", 1) < 1
 
     # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
     # enabled on the videocomposer BEFORE the layer starts following MTC below.
@@ -384,7 +380,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # freezes on the final frame until loop_videoCue() finally sends /loop.
     # Sending it here closes the race so the first loop wraps cleanly. Finite
     # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
-    loop_early = getattr(cue, 'loop', 1) < 1
+    loop_early = getattr(cue, "loop", 1) < 1
 
     # Re-apply position for each layer before making visible (layer may not
     # have been ready when position was set during arm)
@@ -398,35 +394,33 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         if index < len(output_names):
             output_name = output_names[index]
             try:
-                output = PLAYER_HANDLER.resolve_video_output_for_cue(
-                    cue, output_name
-                )
+                output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()
-                client.set_value(f'{layer_path}/position', [x, y])
+                client.set_value(f"{layer_path}/position", [x, y])
                 sx, sy = output.get_layer_scale(media_w, media_h)
-                client.set_value(f'{layer_path}/scale', [sx, sy])
+                client.set_value(f"{layer_path}/scale", [sx, sy])
             except (KeyError, RuntimeError, ValueError) as e:
-                Logger.warning(
-                    f"Could not re-apply position for layer {layer_id}: {e}"
-                )
+                Logger.warning(f"Could not re-apply position for layer {layer_id}: {e}")
             except Exception:
                 Logger.exception(
-                    f'Unexpected error re-applying position for layer'
+                    f"Unexpected error re-applying position for layer"
                     f'{layer_id} (output "{output_name}")'
                 )
 
-        client.set_value(f'{layer_path}/offset', int(offset_to_go))
+        client.set_value(f"{layer_path}/offset", int(offset_to_go))
         # Enable wraparound early for infinite loops, BEFORE mtcfollow, so the
         # first loop wraps instead of freezing on the clamped last frame.
         if loop_early:
-            client.set_value(f'{layer_path}/loop', 1)
+            client.set_value(f"{layer_path}/loop", 1)
         # Preload the correct frame while INVISIBLE: offset+mtcfollow let the
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
         # at the cue's start_mtc) — this is what makes prewait/postwait gaps real.
-        client.set_value(f'{layer_path}/mtcfollow', 1)
+        client.set_value(f"{layer_path}/mtcfollow", 1)
 
-    Logger.info(f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s), offset={offset_to_go}")
+    Logger.info(
+        f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s), offset={offset_to_go}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -444,38 +438,40 @@ def reveal_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @reveal_cue.register
 def reveal_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
-    layer_ids = getattr(cue, '_layer_ids', [])
-    if not layer_ids or getattr(cue, '_osc', None) is None:
+    layer_ids = getattr(cue, "_layer_ids", [])
+    if not layer_ids or getattr(cue, "_osc", None) is None:
         return
     for layer_id in layer_ids:
         try:
-            cue._osc.set_value(f'/videocomposer/layer/{layer_id}/visible', 1)
+            cue._osc.set_value(f"/videocomposer/layer/{layer_id}/visible", 1)
         except Exception as e:
-            Logger.warning(f'reveal_videoCue: /visible failed for layer {layer_id}: {e}')
-    Logger.info(f'Video cue {cue.id} revealed: {len(layer_ids)} layer(s) visible')
+            Logger.warning(
+                f"reveal_videoCue: /visible failed for layer {layer_id}: {e}"
+            )
+    Logger.info(f"Video cue {cue.id} revealed: {len(layer_ids)} layer(s) visible")
 
 
 @reveal_cue.register
 def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
-    if getattr(cue, '_osc', None) is None:
+    if getattr(cue, "_osc", None) is None:
         return
-    if not getattr(cue, '_reveal_ready', True):
+    if not getattr(cue, "_reveal_ready", True):
         # run_audioCue aborted setup before /offset (e.g. player ports missing);
         # don't assert mtcfollow on a player that never got set up.
-        Logger.info(f'Audio cue {cue.id} reveal skipped (setup aborted)')
+        Logger.info(f"Audio cue {cue.id} reveal skipped (setup aborted)")
         return
     # Re-assert offset (MTC is now at start_mtc → seek position ~0), then follow.
     try:
-        start = getattr(cue, '_start_mtc', None)
+        start = getattr(cue, "_start_mtc", None)
         if start is not None:
-            cue._osc.set_value('/offset', -start.milliseconds_exact)
+            cue._osc.set_value("/offset", -start.milliseconds_exact)
     except Exception as e:
-        Logger.warning(f'reveal_audioCue: /offset failed: {e}')
+        Logger.warning(f"reveal_audioCue: /offset failed: {e}")
     try:
-        cue._osc.set_value('/mtcfollow', 1)
+        cue._osc.set_value("/mtcfollow", 1)
     except Exception as e:
-        Logger.warning(f'reveal_audioCue: /mtcfollow failed: {e}')
-    Logger.info(f'Audio cue {cue.id} revealed: following MTC')
+        Logger.warning(f"reveal_audioCue: /mtcfollow failed: {e}")
+    Logger.info(f"Audio cue {cue.id} revealed: following MTC")
 
 
 @reveal_cue.register
@@ -483,6 +479,7 @@ def reveal_actionCue(cue: ActionCue, mtc, frozen_mtc_ms: float = None):
     # ActionCues EXECUTE here (at start_mtc), not in run_cue — so a chained
     # action fires at its own timeline slot, not a full body early.
     from .ActionHandler import ACTION_HANDLER
+
     ACTION_HANDLER.execute_action(cue, mtc, frozen_mtc_ms)
 
 
@@ -494,7 +491,7 @@ def reveal_cueList(cue: CueList, mtc, frozen_mtc_ms: float = None):
     the same child — otherwise a CueList used as a post_go='go'/'go_at_end' target
     would leave its child's video invisible / audio silent forever (no error).
     """
-    if getattr(cue, 'contents', None):
+    if getattr(cue, "contents", None):
         first_enabled = next((c for c in cue.contents if c.enabled), None)
         if first_enabled:
             reveal_cue(first_enabled, mtc, frozen_mtc_ms)
@@ -517,12 +514,16 @@ def blank_cue(cue: Cue, mtc: MtcListener):
 
 @blank_cue.register
 def blank_videoCue(cue: VideoCue, mtc):
-    layer_ids = getattr(cue, '_layer_ids', [])
-    if not layer_ids or getattr(cue, '_osc', None) is None:
+    layer_ids = getattr(cue, "_layer_ids", [])
+    if not layer_ids or getattr(cue, "_osc", None) is None:
         return
     for layer_id in layer_ids:
         try:
-            cue._osc.set_value(f'/videocomposer/layer/{layer_id}/visible', 0)
+            cue._osc.set_value(f"/videocomposer/layer/{layer_id}/visible", 0)
         except Exception as e:
-            Logger.warning(f'blank_videoCue: /visible 0 failed for layer {layer_id}: {e}')
-    Logger.info(f'Video cue {cue.id} blanked for postwait tail: {len(layer_ids)} layer(s) hidden')
+            Logger.warning(
+                f"blank_videoCue: /visible 0 failed for layer {layer_id}: {e}"
+            )
+    Logger.info(
+        f"Video cue {cue.id} blanked for postwait tail: {len(layer_ids)} layer(s) hidden"
+    )

@@ -44,9 +44,7 @@ class NodeCommunications(AsyncCommsThread):
             }
         )
 
-    def set_command_callback(
-        self, callback: Callable[[str, Any], None]
-    ) -> None:
+    def set_command_callback(self, callback: Callable[[str, Any], None]) -> None:
         """Set the callback for handling received commands.
 
         Args:
@@ -107,9 +105,7 @@ class NodeCommunications(AsyncCommsThread):
         value = data.get("value")
         address = data.get("address", f"/engine/command/{command_name}")
 
-        Logger.info(
-            f"Received command via NNG: {command_name} = {repr(value)}"
-        )
+        Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
 
         if self._command_callback:
             # Execute command in a separate thread to avoid blocking the NNG
@@ -123,8 +119,7 @@ class NodeCommunications(AsyncCommsThread):
                     self._command_callback(command_name, value, address)
                 except Exception as e:
                     Logger.error(
-                        f"Error executing command callback for"
-                        f"{command_name}: {e}"
+                        f"Error executing command callback for {command_name}: {e}"
                     )
 
             thread = threading.Thread(
@@ -140,9 +135,7 @@ class NodeCommunications(AsyncCommsThread):
     #########################
     # Nng comms to Controller
     #########################
-    def send_operation(
-        self, operation: NodeOperation, timeout: Optional[float] = None
-    ):
+    def send_operation(self, operation: NodeOperation, timeout: Optional[float] = None):
         """
         Send a NodeOperation to the controller (thread-safe).
 
@@ -150,13 +143,9 @@ class NodeCommunications(AsyncCommsThread):
         - operation: NodeOperation to send
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
-        return self.run_coroutine(
-            self.nng_hub.send_operation, operation, timeout
-        )
+        return self.run_coroutine(self.nng_hub.send_operation, operation, timeout)
 
-    def add_player(
-        self, player_id: str, data: dict, timeout: Optional[float] = None
-    ):
+    def add_player(self, player_id: str, data: dict, timeout: Optional[float] = None):
         """
         Add a player to the OSC hub (thread-safe).
 
@@ -191,9 +180,7 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
-    def add_cue(
-        self, cue_id: str, offset: str, timeout: Optional[float] = None
-    ):
+    def add_cue(self, cue_id: str, offset: str, timeout: Optional[float] = None):
         """
         Add a cue to the OSC hub (thread-safe).
 
@@ -244,9 +231,7 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
-    def update_cue(
-        self, cue_id: str, percentage: int, timeout: Optional[float] = None
-    ):
+    def update_cue(self, cue_id: str, percentage: int, timeout: Optional[float] = None):
         """
         Send a cue percentage progress update to the controller (thread-safe).
 

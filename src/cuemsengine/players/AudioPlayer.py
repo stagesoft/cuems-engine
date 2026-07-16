@@ -68,9 +68,7 @@ def start_audio_output(
     Raises:
         RuntimeError: If player fails to start within timeout or thread dies
     """
-    player = AudioPlayer(
-        port=port, path=path, args=args, media=media, uuid=uuid
-    )
+    player = AudioPlayer(port=port, path=path, args=args, media=media, uuid=uuid)
     player.start(timeout=timeout)
 
     try:

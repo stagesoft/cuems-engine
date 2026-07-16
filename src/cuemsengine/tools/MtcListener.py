@@ -160,15 +160,12 @@ class MtcListener(Thread):
             self._24h_offset_frames = 0
             self._last_decoded_frames = None
 
-
     def timecode(self):
         return self.main_tc
 
     def milliseconds(self):
         # type: ignore[attr-defined]
-        return int(
-            self.main_tc.frames * (1000 / float(self.main_tc._framerate))
-        )
+        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
@@ -201,13 +198,9 @@ class MtcListener(Thread):
                 matches = [p for p in ports if port in p]
                 if matches:
                     self.port_name = matches[0]
-                    Logger.info(
-                        f'MIDI port "{port}" matched as "{self.port_name}"'
-                    )
+                    Logger.info(f'MIDI port "{port}" matched as "{self.port_name}"')
                 else:
-                    Logger.warning(
-                        f'MIDI port "{port}" not found, auto-detecting...'
-                    )
+                    Logger.warning(f'MIDI port "{port}" not found, auto-detecting...')
                     port = None  # fall through to auto-detect
 
         if port is None:
@@ -230,9 +223,7 @@ class MtcListener(Thread):
         self.port = mido.open_input(  # type: ignore[attr-defined]
             self.port_name, callback=self.__handle_message
         )
-        Logger.info(
-            "Listening to MIDI messages on > {} <".format(self.port_name)
-        )
+        Logger.info(f"Listening to MIDI messages on > {self.port_name} <")
 
     def stop(self):
         if self.port is not None:
@@ -282,9 +273,7 @@ class MtcListener(Thread):
         # total_frames = frs + float(fps) * (secs + mins * 60 + hrs * 60 * 60)
         # //  TODO: goes to frame 0 in tc, non existent frame, changed to tc
         # 0:0:0:0 = frame 1
-        decoded = CTimecode(
-            "{}:{}:{}:{}".format(hrs, mins, secs, frs), framerate=fps
-        )
+        decoded = CTimecode("{}:{}:{}:{}".format(hrs, mins, secs, frs), framerate=fps)
         # Route through 24h-wrap detection so main_tc stays monotonic past 24h.
         # See _apply_24h_offset docstring for heuristic details (closes
         # 869cpdbzy).

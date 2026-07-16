@@ -199,9 +199,7 @@ class ActionHandler:
         ch = self._cue_handler
         if ch is None:
             return
-        ct: NodeCommunications | None = getattr(
-            ch, "communications_thread", None
-        )
+        ct: NodeCommunications | None = getattr(ch, "communications_thread", None)
         if ct is None:
             return
         try:
@@ -257,19 +255,13 @@ class ActionHandler:
         )
 
         # before_dispatch hooks
-        for _layer, hook_fn in self._matching_hooks(
-            "before_dispatch", action_type
-        ):
+        for _layer, hook_fn in self._matching_hooks("before_dispatch", action_type):
             try:
                 hook_fn(ctx)
             except Exception as exc:
-                reason = (
-                    f"before_dispatch hook raised {type(exc).__name__}: {exc}"
-                )
+                reason = f"before_dispatch hook raised {type(exc).__name__}: {exc}"
                 Logger.error(reason)
-                out = self._action_result(
-                    "failed", action_type, target_id, reason
-                )
+                out = self._action_result("failed", action_type, target_id, reason)
                 self._emit_outcome(out)
                 return out
 
@@ -319,27 +311,21 @@ class ActionHandler:
         except Exception as exc:
             dispatch_exc = True
             reason = (
-                f"{action_type} on {target_id} raised "
-                f"{type(exc).__name__}: {exc}"
+                f"{action_type} on {target_id} raised {type(exc).__name__}: {exc}"
             )
             Logger.error(reason)
-            result = self._action_result(
-                "failed", action_type, target_id, reason
-            )
+            result = self._action_result("failed", action_type, target_id, reason)
 
         ctx.outcome = result
 
         # after_dispatch hooks (skipped if default handler raised)
         if not dispatch_exc:
-            for _layer, hook_fn in self._matching_hooks(
-                "after_dispatch", action_type
-            ):
+            for _layer, hook_fn in self._matching_hooks("after_dispatch", action_type):
                 try:
                     hook_fn(ctx)
                 except Exception as exc:
                     reason = (
-                        f"after_dispatch hook raised "
-                        f"{type(exc).__name__}: {exc}"
+                        f"after_dispatch hook raised {type(exc).__name__}: {exc}"
                     )
                     Logger.error(reason)
                     result = self._action_result(
@@ -375,9 +361,7 @@ class ActionHandler:
 # ---------------------------------------------------------------------------
 
 
-def _ready_action_target(
-    action: str, target: Cue, ch: CueHandler
-) -> dict | None:
+def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | None:
     """Ensure target is enabled and loaded before dispatch; arm if needed.
 
     Returns a failure result dict on the first problem, or None if ready.
@@ -391,9 +375,7 @@ def _ready_action_target(
         try:
             ch.arm(target, init=True)
         except Exception as exc:
-            return ActionHandler._action_result(
-                "failed", action, target_id, str(exc)
-            )
+            return ActionHandler._action_result("failed", action, target_id, str(exc))
     if not getattr(target, "loaded", False):
         return ActionHandler._action_result(
             "failed", action, target_id, "Target could not be armed"
@@ -438,9 +420,7 @@ def _handle_play(
         # (circular project). See CueHandler.go_from.
         ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
-        return ActionHandler._action_result(
-            "failed", "play", target_id, str(exc)
-        )
+        return ActionHandler._action_result("failed", "play", target_id, str(exc))
     return ActionHandler._action_result("applied", "play", target_id)
 
 
@@ -479,9 +459,7 @@ def _handle_stop(
     try:
         ch.disarm(target)
     except Exception as exc:
-        return ActionHandler._action_result(
-            "failed", "stop", target_id, str(exc)
-        )
+        return ActionHandler._action_result("failed", "stop", target_id, str(exc))
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
@@ -545,9 +523,7 @@ def _handle_fade_in(
         # drop other nodes' cues on a chain owned by the target's node.
         ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
-        return ActionHandler._action_result(
-            "failed", "fade_in", target_id, str(exc)
-        )
+        return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
@@ -629,9 +605,7 @@ def _handle_fade_action(
         start_mtc_ms = mtc.main_tc.milliseconds_rounded
 
     try:
-        payloads = _build_fade_payload(
-            target, action_cue, start_mtc_ms, motion_id
-        )
+        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
     except ValueError as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
@@ -677,8 +651,7 @@ def _handle_fade_action(
         framerate=framerate, start_seconds=start_mtc_ms / 1000.0
     )
     action_cue._end_mtc = (
-        action_cue._start_mtc
-        + action_cue.duration.return_in_other_framerate(framerate)
+        action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
     )
 
     Logger.info(
@@ -703,7 +676,7 @@ def _build_fade_payload(
     Field names mirror the C++ parser at gradient-motion-engine
     src/signal/FadeCommand.cpp parseStartFade: end_value (not target_value),
     start_mtc_ms (not start_time). end_value is normalised to OSC scale
-    0.0–1.0 from FadeCue.target_value's UI scale 0–100; gradient-motiond
+    0.0-1.0 from FadeCue.target_value's UI scale 0-100; gradient-motiond
     forwards end_value directly to OSC without further unit conversion.
     """
     from cuemsutils.cues import AudioCue, VideoCue

@@ -105,9 +105,7 @@ def arm_dmxCue(cue: DmxCue):
         cue._dmx_frames = universe_frames
 
         if universe_frames:
-            total_channels = sum(
-                len(channels) for channels in universe_frames.values()
-            )
+            total_channels = sum(len(channels) for channels in universe_frames.values())
             Logger.info(
                 f"DMX cue {cue.id} armed: {len(universe_frames)} universe(s),"
                 f"{total_channels} channel(s)",
@@ -115,8 +113,7 @@ def arm_dmxCue(cue: DmxCue):
             )
         else:
             Logger.warning(
-                f"DMX cue {cue.id} armed but no channel data"
-                " found in DmxScene",
+                f"DMX cue {cue.id} armed but no channel data found in DmxScene",
                 extra={"caller": cue.__class__.__name__},
             )
 
@@ -158,9 +155,7 @@ def arm_videoCue(cue: VideoCue):
 
         if index == 0:
             # First output: normal load (creates decoder)
-            client.set_value(
-                "/videocomposer/layer/load", [video_path, layer_id]
-            )
+            client.set_value("/videocomposer/layer/load", [video_path, layer_id])
             driver_layer_id = layer_id
         else:
             # Subsequent outputs: share decoder from first layer
@@ -175,9 +170,7 @@ def arm_videoCue(cue: VideoCue):
         client.set_value(f"{layer_path}/autounload", 1)
 
         try:
-            output = PLAYER_HANDLER.resolve_video_output_for_cue(
-                cue, output_name
-            )
+            output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
             x, y = output.get_layer_placement()
             client.set_value(f"{layer_path}/position", [x, y])
             sx, sy = output.get_layer_scale(media_w, media_h)
@@ -185,11 +178,11 @@ def arm_videoCue(cue: VideoCue):
         except (KeyError, RuntimeError, ValueError) as e:
             Logger.warning(
                 f'Video output "{output_name}" placement/scale failed'
-                f'({type(e).__name__}: {e}), skipping for layer {layer_id}'
+                f"({type(e).__name__}: {e}), skipping for layer {layer_id}"
             )
         except Exception:
             Logger.exception(
-                f'Unexpected error setting placement/scale for layer'
+                f"Unexpected error setting placement/scale for layer"
                 f'{layer_id} (output "{output_name}")'
             )
 
@@ -197,6 +190,5 @@ def arm_videoCue(cue: VideoCue):
         cue._layer_ids.append(layer_id)
 
     Logger.info(
-        f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for"
-        f"{video_path}"
+        f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for {video_path}"
     )

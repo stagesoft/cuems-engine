@@ -62,8 +62,7 @@ def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
     end_mtc = getattr(cue, "_end_mtc", None)
     if end_mtc is None:
         Logger.warning(
-            f"FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting"
-            f"immediately"
+            f"FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting immediately"
         )
         return
 
@@ -111,14 +110,10 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             )
 
             last_status_update = 0.0
-            while (
-                mtc.main_tc.milliseconds_rounded
-                < cue._end_mtc.milliseconds_rounded
-            ):
+            while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
                 if cue._stop_requested:
                     Logger.info(
-                        f"Audio loop {cue.id} cancelled by stop request"
-                        f"(inner)"
+                        f"Audio loop {cue.id} cancelled by stop request" f"(inner)"
                     )
                     return
                 sleep(0.02)
@@ -182,8 +177,7 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                     )
 
         Logger.info(
-            f"Audio loop FINISHED: loop_counter={loop_counter},"
-            f"cue.loop={cue.loop}"
+            f"Audio loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}"
         )
         if cue._local:
             try:
@@ -217,10 +211,7 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
     """
     try:
         last_status_update = 0.0
-        while (
-            mtc.main_tc.milliseconds_rounded
-            < cue._end_mtc.milliseconds_rounded
-        ):
+        while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
             if cue._stop_requested:
                 Logger.info(f"DMX loop {cue.id} cancelled by stop request")
                 return
@@ -290,14 +281,10 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                 Logger.info(f"Video loop {cue.id} cancelled by stop request")
                 return
             last_status_update = 0.0
-            while (
-                mtc.main_tc.milliseconds_rounded
-                < cue._end_mtc.milliseconds_rounded
-            ):
+            while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
                 if cue._stop_requested:
                     Logger.info(
-                        f"Video loop {cue.id} cancelled by stop request"
-                        f"(inner)"
+                        f"Video loop {cue.id} cancelled by stop request (inner)"
                     )
                     return
                 sleep(0.02)
@@ -333,8 +320,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                 offset_change_frames = -cue._start_mtc.frame_number
 
                 Logger.info(
-                    f"Loop {loop_counter}: setting"
-                    f"offset={offset_change_frames}"
+                    f"Loop {loop_counter}: setting offset={offset_change_frames}"
                 )
 
                 for layer_id in layer_ids:
@@ -344,13 +330,9 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
                             int(offset_change_frames),
                         )
                     except Exception as e:
-                        Logger.error(
-                            f"Offset send failed for layer {layer_id}: {e}"
-                        )
+                        Logger.error(f"Offset send failed for layer {layer_id}: {e}")
 
-        Logger.info(
-            f"Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}"
-        )
+        Logger.info(f"Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}")
 
     except AttributeError:
         pass

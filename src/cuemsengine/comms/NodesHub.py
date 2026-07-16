@@ -105,9 +105,7 @@ class NodesHub(NngBusHub):
         super().__init__(hub_address, mode)
 
         # Callback for when operations are received
-        self._on_operation_received: Optional[
-            dict[OperationType, Callable]
-        ] = None
+        self._on_operation_received: Optional[dict[OperationType, Callable]] = None
 
     #########################
     # Nodes communication
@@ -133,9 +131,7 @@ class NodesHub(NngBusHub):
             f"{operation.type.value} {operation.target}"
         )
 
-    def set_receive_callbacks(
-        self, callback_dict: dict[OperationType, Callable]
-    ):
+    def set_receive_callbacks(self, callback_dict: dict[OperationType, Callable]):
         """
         Set the callbacks to be invoked when nodes send operations.
 
@@ -167,9 +163,7 @@ class NodesHub(NngBusHub):
                     Logger.debug(f"Received {operation}")
 
                     # Invoke callback if set (lookup by enum, not string value)
-                    message_function = self._on_operation_received.get(
-                        operation.type
-                    )
+                    message_function = self._on_operation_received.get(operation.type)
                     if message_function:
                         if asyncio.iscoroutinefunction(message_function):
                             await message_function(operation)

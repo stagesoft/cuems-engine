@@ -156,9 +156,7 @@ class OssiaNodes(object):
         # others.
         if isinstance(value, float):
             if abs(stored - value) > 1e-5:
-                raise ValueError(
-                    f"Could not set {str(node)} to {value} (got {stored})"
-                )
+                raise ValueError(f"Could not set {str(node)} to {value} (got {stored})")
         elif stored != value:
             raise ValueError(f"Could not set {str(node)} to {value}")
 
@@ -191,9 +189,7 @@ class OssiaNodes(object):
                 self.set_parameter(self.nodes[path], *param_args)
             Logger.debug(f"Created endpoint: {path}")
         except Exception as e:
-            Logger.error(
-                f"Failed to create endpoint {path}: {type(e).__name__}: {e}"
-            )
+            Logger.error(f"Failed to create endpoint {path}: {type(e).__name__}: {e}")
             raise
 
     @logged

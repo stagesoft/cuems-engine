@@ -117,9 +117,7 @@ class BaseEngine(SignalEngine):
             raise e
 
     ### STATUS ###
-    def set_status(
-        self, property: str, value: str, strict: bool = False
-    ) -> None:
+    def set_status(self, property: str, value: str, strict: bool = False) -> None:
         """Set the status of the engine
 
         Args:
@@ -134,9 +132,7 @@ class BaseEngine(SignalEngine):
         else:
             Logger.error(f"Property {property} not found in EngineStatus")
             if strict:
-                raise AttributeError(
-                    f"Property {property} not found in EngineStatus"
-                )
+                raise AttributeError(f"Property {property} not found in EngineStatus")
 
     def get_status(self, property: str, strict: bool = False) -> str:
         """Get the status of the engine
@@ -150,9 +146,7 @@ class BaseEngine(SignalEngine):
         if value == "NotFound":
             Logger.error(f"Property {property} not found in EngineStatus")
             if strict:
-                raise AttributeError(
-                    f"Property {property} not found in EngineStatus"
-                )
+                raise AttributeError(f"Property {property} not found in EngineStatus")
         return value
 
     def status_callback(self, endpoint: str, value: str) -> None:
@@ -181,8 +175,7 @@ class BaseEngine(SignalEngine):
     ) -> dict[str, list[Any, Callable | None, Any]]:
         endpoints = {}
         Logger.debug(
-            f"Building endpoints from status, vars:"
-            f"{list(vars(self.status).keys())}"
+            f"Building endpoints from status, vars: {list(vars(self.status).keys())}"
         )
         for k, v in vars(self.status).items():
             if v is None:
@@ -240,9 +233,7 @@ class BaseEngine(SignalEngine):
             endpoints=endpoints,
         )
 
-    def set_oscquery_client(
-        self, host: str = None, port: int = None
-    ) -> OssiaClient:
+    def set_oscquery_client(self, host: str = None, port: int = None) -> OssiaClient:
         if port is None:
             port = self.cm.node_conf["oscquery_ws_port"]
         if host is None:
@@ -261,9 +252,7 @@ class BaseEngine(SignalEngine):
     def set_mtc_listener(self) -> None:
         """Set the MTC listener"""
         mtc_step = partial(BaseEngine.mtc_callback, self)
-        mtc_reset = partial(
-            BaseEngine.mtc_callback, self, CTimecode("00:00:00:00")
-        )
+        mtc_reset = partial(BaseEngine.mtc_callback, self, CTimecode("00:00:00:00"))
 
         if not self.mtc_port:
             self.mtc_port = self.cm.node_conf["mtc_port"]
@@ -298,12 +287,8 @@ class BaseEngine(SignalEngine):
             # Only set OSCQuery values if server exists and has the nodes
             if hasattr(self, "oscquery_server") and self.oscquery_server:
                 try:
-                    self.oscquery_server.set_value(
-                        "/engine/status/running", "no"
-                    )
-                    self.oscquery_server.set_value(
-                        "/engine/status/gocue", "no"
-                    )
+                    self.oscquery_server.set_value("/engine/status/running", "no")
+                    self.oscquery_server.set_value("/engine/status/gocue", "no")
                 except ValueError as e:
                     Logger.warning(
                         f"Could not reset OSCQuery status nodes: {e}. Server"
@@ -372,10 +357,12 @@ class BaseEngine(SignalEngine):
         """
         resolved = self._resolve_controller_host()
         if resolved:
-            Logger.info(f'Controller IP resolved via mDNS ({CONTROLLER_HOST}): {resolved}')
+            Logger.info(
+                f"Controller IP resolved via mDNS ({CONTROLLER_HOST}): {resolved}"
+            )
             return resolved
         mapped = self._controller_ip_from_map()
-        Logger.info(f'Controller IP resolved via network_map: {mapped}')
+        Logger.info(f"Controller IP resolved via network_map: {mapped}")
         return mapped
 
     def _resolve_controller_host(self) -> str | None:
@@ -392,34 +379,30 @@ class BaseEngine(SignalEngine):
         try:
             ip = socket.gethostbyname(CONTROLLER_HOST)
         except (socket.gaierror, OSError) as e:
-            Logger.debug(f'mDNS resolution of {CONTROLLER_HOST} failed: {e}')
+            Logger.debug(f"mDNS resolution of {CONTROLLER_HOST} failed: {e}")
             return None
         try:
             addr = ipaddress.ip_address(ip)
         except ValueError:
-            Logger.warning(f'{CONTROLLER_HOST} resolved to non-IP {ip!r}; ignoring')
+            Logger.warning(f"{CONTROLLER_HOST} resolved to non-IP {ip!r}; ignoring")
             return None
         if addr.is_loopback or addr.is_unspecified:
             Logger.debug(
-                f'{CONTROLLER_HOST} resolved to {ip} (loopback/self); '
-                f'using network_map instead'
+                f"{CONTROLLER_HOST} resolved to {ip} (loopback/self); "
+                f"using network_map instead"
             )
             return None
         return ip
 
     def _controller_ip_from_map(self) -> str:
         """Return the <ip> of the NodeType.master node in network_map.xml."""
-        if not hasattr(self, 'cm') or not self.cm.network_map:
-            raise AttributeError('No network map found')
-        nodes = self.cm.network_map['node_list']
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
         if not nodes:
             raise ValueError("No nodes found in network map")
         for node_item in nodes:
-            node = (
-                node_item.get("node", {})
-                if isinstance(node_item, dict)
-                else {}
-            )
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
             if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
                 ip = node.get("ip")
                 if not ip:
@@ -464,11 +447,9 @@ class BaseEngine(SignalEngine):
     def print_all_status(self) -> None:
         Logger.info("STATUS REQUEST BY SIGUSR2 SIGNAL")
         if self.cm.is_alive():
-            Logger.info(self.cm.getName() + " is alive)")
+            Logger.info(f"{self.cm.getName()} is alive")
         else:
-            Logger.info(
-                self.cm.getName() + " is not alive, trying to restore it"
-            )
+            Logger.info(f"{self.cm.getName()} is not alive, trying to restore it")
             self.cm.start()
 
         """
@@ -552,8 +533,7 @@ class BaseEngine(SignalEngine):
         for index, item in enumerate(cuelist.contents):
             if item is None:
                 Logger.warning(
-                    f"Skipping None item at index {index} in cuelist"
-                    f"{cuelist.id}"
+                    f"Skipping None item at index {index} in cuelist {cuelist.id}"
                 )
                 continue
 
@@ -593,13 +573,8 @@ class BaseEngine(SignalEngine):
                     f"{item._target_object}"
                 )
                 if isinstance(item, ActionCue):
-                    item._action_target_object = self.script.find(
-                        item.action_target
-                    )
-                    if (
-                        item._action_target_object is None
-                        and item.action_target
-                    ):
+                    item._action_target_object = self.script.find(item.action_target)
+                    if item._action_target_object is None and item.action_target:
                         Logger.warning(
                             f"ActionCue {item.id} has action_target"
                             f" {item.action_target} that could not be"
@@ -632,9 +607,7 @@ class BaseEngine(SignalEngine):
             # staggered starts as the async loads complete in arrival order.
             first_local = first_cue
             walked = 0
-            while first_local is not None and not getattr(
-                first_local, "_local", False
-            ):
+            while first_local is not None and not getattr(first_local, "_local", False):
                 if first_local.post_go != "go":
                     first_local = None
                     break

@@ -63,7 +63,7 @@ class CuemsDeploy:
         log_file: str = "/run/cuems/rsync.log",
         on_progress: Callable[[dict], None] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
-            is_async: bool = False,
+        is_async: bool = False,
     ):
         """Construct a deploy manager.
 
@@ -158,9 +158,7 @@ class CuemsDeploy:
         log_file = self._deploy_log_path(project, tag)
 
         try:
-            coro = self._deploy_all_async(
-                log_file, file_names, mandatory_paths
-            )
+            coro = self._deploy_all_async(log_file, file_names, mandatory_paths)
             synced = asyncio.run_coroutine_threadsafe(coro, self.loop).result()
         except Exception as e:
             Logger.error(f"Unexpected error during deploy of {project!r}: {e}")
@@ -179,18 +177,20 @@ class CuemsDeploy:
                 Logger.error(error)
         return synced
 
-    def _sync_files_blocking(self, project: str, tag: str, file_names: list[str]) -> bool:
+    def _sync_files_blocking(
+        self, project: str, tag: str, file_names: list[str]
+    ) -> bool:
         """Synchronous deploy path — no event loop required."""
         if not self.enabled:
             Logger.error(
-                f'CuemsDeploy is disabled (no controller IP) — '
-                f'skipping {tag} sync for project {project!r}'
+                f"CuemsDeploy is disabled (no controller IP) — "
+                f"skipping {tag} sync for project {project!r}"
             )
             return False
 
-        if tag == 'project' and len(file_names) == 0:
+        if tag == "project" and len(file_names) == 0:
             file_names = self._project_files(project)
-        elif tag == 'media' and len(file_names) > 0:
+        elif tag == "media" and len(file_names) > 0:
             file_names = self._media_files(file_names)
 
         log_file = self._deploy_log_path(project, tag)
@@ -226,19 +226,20 @@ class CuemsDeploy:
         try:
             os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         except OSError as e:
-            Logger.warning(f'Could not create rsync log directory: {e}')
+            Logger.warning(f"Could not create rsync log directory: {e}")
 
         cmd = [
-            'rsync', '-rt',
-            '--delete',
-            '--delete-delay',
-            '--info=progress2,name0',
-            '--stats',
-            '--contimeout=2',
-            '--timeout=5',
-            '--ignore-missing-args',
-            f'--files-from={path}',
-            f'--log-file={self.log_file}',
+            "rsync",
+            "-rt",
+            "--delete",
+            "--delete-delay",
+            "--info=progress2,name0",
+            "--stats",
+            "--contimeout=2",
+            "--timeout=5",
+            "--ignore-missing-args",
+            f"--files-from={path}",
+            f"--log-file={self.log_file}",
             self.address,
             self.library_path,
         ]
@@ -257,10 +258,10 @@ class CuemsDeploy:
             fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
         sel = selectors.DefaultSelector()
-        sel.register(proc.stdout, selectors.EVENT_READ, 'out')
-        sel.register(proc.stderr, selectors.EVENT_READ, 'err')
+        sel.register(proc.stdout, selectors.EVENT_READ, "out")
+        sel.register(proc.stderr, selectors.EVENT_READ, "err")
 
-        bufs = {'out': '', 'err': ''}
+        bufs = {"out": "", "err": ""}
         stderr_lines: list[str] = []
         started = False
         deadline = time.monotonic() + _STARTUP_DEADLINE_S
@@ -268,18 +269,16 @@ class CuemsDeploy:
 
         try:
             while sel.get_map():
-                budget = (
-                    (deadline - time.monotonic()) if not started
-                    else _INACTIVITY_S
-                )
+                budget = (deadline - time.monotonic()) if not started else _INACTIVITY_S
                 events = sel.select(timeout=max(budget, 0.1))
                 if not events:
                     reason = (
-                        'no output within startup deadline' if not started
-                        else 'no output within inactivity threshold'
+                        "no output within startup deadline"
+                        if not started
+                        else "no output within inactivity threshold"
                     )
                     self._kill_blocking(proc)
-                    self.errors = [f'rsync {reason} (target: {self.address})']
+                    self.errors = [f"rsync {reason} (target: {self.address})"]
                     return False
 
                 for key, _ in events:
@@ -292,11 +291,11 @@ class CuemsDeploy:
                         sel.unregister(key.fileobj)
                         if bufs[tag]:
                             self._dispatch_line(tag, bufs[tag], stderr_lines)
-                            bufs[tag] = ''
+                            bufs[tag] = ""
                         continue
                     started = True
-                    bufs[tag] += chunk.decode(errors='replace')
-                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    bufs[tag] += chunk.decode(errors="replace")
+                    *parts, bufs[tag] = re.split(r"[\r\n]", bufs[tag])
                     for p in parts:
                         if p:
                             self._dispatch_line(tag, p, stderr_lines)
@@ -306,8 +305,8 @@ class CuemsDeploy:
             except subprocess.TimeoutExpired:
                 self._kill_blocking(proc)
                 self.errors = [
-                    f'rsync closed pipes but did not exit within '
-                    f'{_INACTIVITY_S}s (target: {self.address})'
+                    f"rsync closed pipes but did not exit within "
+                    f"{_INACTIVITY_S}s (target: {self.address})"
                 ]
                 return False
         finally:
@@ -320,22 +319,25 @@ class CuemsDeploy:
             return True
         self.errors = (
             stderr_lines[:-1]
-            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            if stderr_lines and "rsync error:" in stderr_lines[-1]
             else stderr_lines
         )
         return False
-    def _sync_files_blocking(self, project: str, tag: str, file_names: list[str]) -> bool:
+
+    def _sync_files_blocking(
+        self, project: str, tag: str, file_names: list[str]
+    ) -> bool:
         """Synchronous deploy path — no event loop required."""
         if not self.enabled:
             Logger.error(
-                f'CuemsDeploy is disabled (no controller IP) — '
-                f'skipping {tag} sync for project {project!r}'
+                f"CuemsDeploy is disabled (no controller IP) — "
+                f"skipping {tag} sync for project {project!r}"
             )
             return False
 
-        if tag == 'project' and len(file_names) == 0:
+        if tag == "project" and len(file_names) == 0:
             file_names = self._project_files(project)
-        elif tag == 'media' and len(file_names) > 0:
+        elif tag == "media" and len(file_names) > 0:
             file_names = self._media_files(file_names)
 
         log_file = self._deploy_log_path(project, tag)
@@ -371,19 +373,20 @@ class CuemsDeploy:
         try:
             os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         except OSError as e:
-            Logger.warning(f'Could not create rsync log directory: {e}')
+            Logger.warning(f"Could not create rsync log directory: {e}")
 
         cmd = [
-            'rsync', '-rt',
-            '--delete',
-            '--delete-delay',
-            '--info=progress2,name0',
-            '--stats',
-            '--contimeout=2',
-            '--timeout=5',
-            '--ignore-missing-args',
-            f'--files-from={path}',
-            f'--log-file={self.log_file}',
+            "rsync",
+            "-rt",
+            "--delete",
+            "--delete-delay",
+            "--info=progress2,name0",
+            "--stats",
+            "--contimeout=2",
+            "--timeout=5",
+            "--ignore-missing-args",
+            f"--files-from={path}",
+            f"--log-file={self.log_file}",
             self.address,
             self.library_path,
         ]
@@ -402,10 +405,10 @@ class CuemsDeploy:
             fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
         sel = selectors.DefaultSelector()
-        sel.register(proc.stdout, selectors.EVENT_READ, 'out')
-        sel.register(proc.stderr, selectors.EVENT_READ, 'err')
+        sel.register(proc.stdout, selectors.EVENT_READ, "out")
+        sel.register(proc.stderr, selectors.EVENT_READ, "err")
 
-        bufs = {'out': '', 'err': ''}
+        bufs = {"out": "", "err": ""}
         stderr_lines: list[str] = []
         started = False
         deadline = time.monotonic() + _STARTUP_DEADLINE_S
@@ -413,18 +416,16 @@ class CuemsDeploy:
 
         try:
             while sel.get_map():
-                budget = (
-                    (deadline - time.monotonic()) if not started
-                    else _INACTIVITY_S
-                )
+                budget = (deadline - time.monotonic()) if not started else _INACTIVITY_S
                 events = sel.select(timeout=max(budget, 0.1))
                 if not events:
                     reason = (
-                        'no output within startup deadline' if not started
-                        else 'no output within inactivity threshold'
+                        "no output within startup deadline"
+                        if not started
+                        else "no output within inactivity threshold"
                     )
                     self._kill_blocking(proc)
-                    self.errors = [f'rsync {reason} (target: {self.address})']
+                    self.errors = [f"rsync {reason} (target: {self.address})"]
                     return False
 
                 for key, _ in events:
@@ -437,11 +438,11 @@ class CuemsDeploy:
                         sel.unregister(key.fileobj)
                         if bufs[tag]:
                             self._dispatch_line(tag, bufs[tag], stderr_lines)
-                            bufs[tag] = ''
+                            bufs[tag] = ""
                         continue
                     started = True
-                    bufs[tag] += chunk.decode(errors='replace')
-                    *parts, bufs[tag] = re.split(r'[\r\n]', bufs[tag])
+                    bufs[tag] += chunk.decode(errors="replace")
+                    *parts, bufs[tag] = re.split(r"[\r\n]", bufs[tag])
                     for p in parts:
                         if p:
                             self._dispatch_line(tag, p, stderr_lines)
@@ -451,8 +452,8 @@ class CuemsDeploy:
             except subprocess.TimeoutExpired:
                 self._kill_blocking(proc)
                 self.errors = [
-                    f'rsync closed pipes but did not exit within '
-                    f'{_INACTIVITY_S}s (target: {self.address})'
+                    f"rsync closed pipes but did not exit within "
+                    f"{_INACTIVITY_S}s (target: {self.address})"
                 ]
                 return False
         finally:
@@ -465,10 +466,11 @@ class CuemsDeploy:
             return True
         self.errors = (
             stderr_lines[:-1]
-            if stderr_lines and 'rsync error:' in stderr_lines[-1]
+            if stderr_lines and "rsync error:" in stderr_lines[-1]
             else stderr_lines
         )
         return False
+
     def _mandatory_paths(self, project: str, tag: str) -> list[str]:
         if tag != "project":
             return []
@@ -557,11 +559,7 @@ class CuemsDeploy:
                 timeout=5,
             )
             result.check_returncode()
-            ip = (
-                result.stdout.decode(self.encoding)
-                .replace(hostname, "")
-                .strip()
-            )
+            ip = result.stdout.decode(self.encoding).replace(hostname, "").strip()
             return ip if ip else None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
@@ -641,9 +639,7 @@ class CuemsDeploy:
         try:
             while pipes_done < 2:
                 budget = deadline - asyncio.get_event_loop().time()
-                done, pending = await asyncio.wait(
-                    pending, timeout=max(budget, 0.1)
-                )
+                done, pending = await asyncio.wait(pending, timeout=max(budget, 0.1))
                 # Drain before watchdog: pump can push data without completing
                 # its task.
                 got_data = False
@@ -701,9 +697,7 @@ class CuemsDeploy:
         )
         return False
 
-    def _dispatch_line(
-        self, tag: str, line: str, stderr_lines: list[str]
-    ) -> None:
+    def _dispatch_line(self, tag: str, line: str, stderr_lines: list[str]) -> None:
         if tag == "out":
             Logger.debug(f"rsync: {line}")
             parsed = self._parse_progress(line)
@@ -734,9 +728,7 @@ class CuemsDeploy:
         precheck passes (preserving the pre-refactor invariant).
         """
         if mandatory_paths:
-            mandatory_ok, missing = await self._check_mandatory_sources(
-                mandatory_paths
-            )
+            mandatory_ok, missing = await self._check_mandatory_sources(mandatory_paths)
             if not mandatory_ok:
                 if missing:
                     self.errors = [
@@ -777,13 +769,9 @@ class CuemsDeploy:
         return out
 
     def _deploy_log_path(self, project: str, tag: str = "project") -> str:
-        return os.path.join(
-            self.tmp_path, f"rsync_request_{project}_{tag}.log"
-        )
+        return os.path.join(self.tmp_path, f"rsync_request_{project}_{tag}.log")
 
-    def _create_deploy_log(
-        self, log_file: str, file_names: list[str] = []
-    ) -> bool:
+    def _create_deploy_log(self, log_file: str, file_names: list[str] = []) -> bool:
         """Create the rsync --files-from list file for a deploy request."""
         try:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -795,9 +783,7 @@ class CuemsDeploy:
                         name = name + "\n"
                     f.write(name)
         except Exception as e:
-            Logger.error(
-                f"Exception raised when writing rsync request log file: {e}"
-            )
+            Logger.error(f"Exception raised when writing rsync request log file: {e}")
             return False
         return True
 
