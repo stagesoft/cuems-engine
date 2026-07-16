@@ -156,23 +156,17 @@ class TestCurrentCueProperty:
 
     def test_currentcue_rejects_single_element(self, status):
         """Test that single element raises ValueError."""
-        with pytest.raises(
-            ValueError, match="must be a list or tuple of two strings"
-        ):
+        with pytest.raises(ValueError, match="must be a list or tuple of two strings"):
             status.currentcue = ["only_one"]
 
     def test_currentcue_rejects_three_elements(self, status):
         """Test that three elements raises ValueError."""
-        with pytest.raises(
-            ValueError, match="must be a list or tuple of two strings"
-        ):
+        with pytest.raises(ValueError, match="must be a list or tuple of two strings"):
             status.currentcue = ("one", "two", "three")
 
     def test_currentcue_rejects_empty(self, status):
         """Test that empty list/tuple raises ValueError."""
-        with pytest.raises(
-            ValueError, match="must be a list or tuple of two strings"
-        ):
+        with pytest.raises(ValueError, match="must be a list or tuple of two strings"):
             status.currentcue = []
 
     def test_currentcue_stringifies_non_string_values(self, status):

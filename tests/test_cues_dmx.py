@@ -88,9 +88,7 @@ class TestArmDmxCue:
             arm_dmxCue(mock_dmx_cue)
 
             # Should return early without setting _osc or _dmx_frames
-            assert (
-                not hasattr(mock_dmx_cue, "_osc") or mock_dmx_cue._osc is None
-            )
+            assert not hasattr(mock_dmx_cue, "_osc") or mock_dmx_cue._osc is None
 
     def test_arm_dmx_cue_no_scene_data(self, mock_dmx_cue, mock_dmx_client):
         """Test arming DMX cue with no scene data."""
@@ -128,9 +126,7 @@ class TestArmDmxCue:
             # Should set _dmx_frames to empty dict
             assert mock_dmx_cue._dmx_frames == {}
 
-    def test_arm_dmx_cue_multiple_channels(
-        self, mock_dmx_cue, mock_dmx_client
-    ):
+    def test_arm_dmx_cue_multiple_channels(self, mock_dmx_cue, mock_dmx_client):
         """Test arming DMX cue with many channels."""
         # Create 10 channels
         channels = []
@@ -210,12 +206,9 @@ class TestRunDmxCue:
 
         # Verify call parameters
         call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
-        assert call_args.kwargs["universe_frames"] == {
-            1: {0: 255, 1: 128, 2: 64}
-        }
+        assert call_args.kwargs["universe_frames"] == {1: {0: 255, 1: 128, 2: 64}}
         assert (
-            call_args.kwargs["mtc_time"]
-            == mock_dmx_cue._start_mtc.milliseconds_rounded
+            call_args.kwargs["mtc_time"] == mock_dmx_cue._start_mtc.milliseconds_rounded
         )
         assert call_args.kwargs["fade_time"] == 2.0  # 2000ms / 1000
 
@@ -278,9 +271,7 @@ class TestRunDmxCue:
 
         # Verify start and end MTC were calculated
         # Allow for small rounding differences (CTimecode may round slightly)
-        assert (
-            abs(mock_dmx_cue._start_mtc.milliseconds_rounded - mtc_time) <= 1
-        )
+        assert abs(mock_dmx_cue._start_mtc.milliseconds_rounded - mtc_time) <= 1
 
         # End MTC should be greater than start MTC
         # Duration is calculated from fadein_time + fadeout_time (2000 + 1000 =
@@ -354,9 +345,7 @@ class TestLoopDmxCue:
         # Set _end_mtc to a value that requires waiting
         from cuemsutils.tools.CTimecode import CTimecode
 
-        mock_dmx_cue._end_mtc = CTimecode(
-            start_seconds=15.0
-        )  # End at 15 seconds
+        mock_dmx_cue._end_mtc = CTimecode(start_seconds=15.0)  # End at 15 seconds
 
         with patch("cuemsengine.cues.loop_cue.sleep") as mock_sleep:
             # Simulate MTC advancing: after first sleep, advance to past end
@@ -424,9 +413,7 @@ class TestLoopDmxCue:
         )
 
         with patch("cuemsengine.cues.loop_cue.sleep") as mock_sleep:
-            mock_dmx_cue._end_mtc = CTimecode(
-                start_seconds=14.0
-            )  # End at 14 seconds
+            mock_dmx_cue._end_mtc = CTimecode(start_seconds=14.0)  # End at 14 seconds
 
             loop_dmxCue(mock_dmx_cue, mock_mtc)
 

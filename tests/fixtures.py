@@ -150,9 +150,7 @@ def mock_deploy_project_fail():
     def selective(self, project, tag, file_names=None):
         return tag != "project"
 
-    with patch(
-        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective
-    ):
+    with patch("cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective):
         yield
 
 
@@ -168,9 +166,7 @@ def mock_deploy_media_fail():
     def selective(self, project, tag, file_names=None):
         return tag != "media"
 
-    with patch(
-        "cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective
-    ):
+    with patch("cuemsengine.tools.CuemsDeploy.CuemsDeploy.sync_files", new=selective):
         yield
 
 
@@ -321,18 +317,14 @@ def mock_player_clients():
     class MockDmxClient(MockPlayerClientBase):
         """Mock DmxClient matching its signature"""
 
-        def __init__(
-            self, player_port: int, client_name: str, host: str = "127.0.0.1"
-        ):
+        def __init__(self, player_port: int, client_name: str, host: str = "127.0.0.1"):
             super().__init__(player_port, client_name)
             self.host = host
 
     class MockMixerClient(MockPlayerClientBase):
         """Mock MixerClient matching its signature"""
 
-        def __init__(
-            self, player_port: int, channel_number: int, mixer_id: str
-        ):
+        def __init__(self, player_port: int, channel_number: int, mixer_id: str):
             super().__init__(player_port, f"mixer-{mixer_id}")
             self.channel_number = channel_number
             self.client_name = f"audiomixer-{mixer_id}"

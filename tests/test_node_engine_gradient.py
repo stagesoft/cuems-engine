@@ -74,9 +74,7 @@ class TestSetGradientClientWiring:
         ne = _make_node_engine(node_uuid="node-007")
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
-        with patch.object(
-            PLAYER_HANDLER, "set_gradient_client"
-        ) as mock_ph_sgc:
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
             ne.set_gradient_client()
 
         mock_ph_sgc.assert_called_once()
@@ -93,9 +91,7 @@ class TestSetGradientClientWiring:
         ne = _make_node_engine(gradient_osc_port="7100")
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
-        with patch.object(
-            PLAYER_HANDLER, "set_gradient_client"
-        ) as mock_ph_sgc:
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
             ne.set_gradient_client()
 
         mock_ph_sgc.assert_called_once()
@@ -126,12 +122,8 @@ class TestStopPlaybackCancelAll:
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         return [
-            patch.object(
-                PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-            ),
-            patch.object(
-                PLAYER_HANDLER, "get_dmx_player_client", return_value=None
-            ),
+            patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
+            patch.object(PLAYER_HANDLER, "get_dmx_player_client", return_value=None),
             patch.object(PLAYER_HANDLER, "kill_all_audio_players"),
             patch.object(PLAYER_HANDLER, "cleanup_zombie_jack_clients"),
             patch.object(ne, "unload_video_devs"),
@@ -161,9 +153,7 @@ class TestStopPlaybackCancelAll:
                 ),
             ]
         )
-        mock_gc.send_cancel_all.side_effect = lambda: call_order.append(
-            "cancel_all"
-        )
+        mock_gc.send_cancel_all.side_effect = lambda: call_order.append("cancel_all")
 
         import contextlib
 
@@ -172,12 +162,8 @@ class TestStopPlaybackCancelAll:
                 stack.enter_context(p)
             ne.stop_playback()
 
-        assert (
-            "cancel_all" in call_order
-        ), "send_cancel_all must be called on stop"
-        assert (
-            "stop_all_cues" in call_order
-        ), "stop_all_cues must be called on stop"
+        assert "cancel_all" in call_order, "send_cancel_all must be called on stop"
+        assert "stop_all_cues" in call_order, "stop_all_cues must be called on stop"
         assert call_order.index("cancel_all") < call_order.index(
             "stop_all_cues"
         ), "send_cancel_all must fire before stop_all_cues"
@@ -230,15 +216,9 @@ class TestLoadProjectCancelAll:
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         return [
-            patch.object(
-                PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-            ),
-            patch.object(
-                PLAYER_HANDLER, "get_dmx_player_client", return_value=None
-            ),
-            patch.object(
-                PLAYER_HANDLER, "get_audio_mixer_client", return_value=None
-            ),
+            patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
+            patch.object(PLAYER_HANDLER, "get_dmx_player_client", return_value=None),
+            patch.object(PLAYER_HANDLER, "get_audio_mixer_client", return_value=None),
             patch.object(PLAYER_HANDLER, "kill_all_audio_players"),
             patch.object(PLAYER_HANDLER, "kill_orphaned_audio_processes"),
             patch.object(PLAYER_HANDLER, "cleanup_zombie_jack_clients"),
@@ -268,9 +248,7 @@ class TestLoadProjectCancelAll:
                 side_effect=lambda: call_order.append("stop_all_cues"),
             )
         )
-        mock_gc.send_cancel_all.side_effect = lambda: call_order.append(
-            "cancel_all"
-        )
+        mock_gc.send_cancel_all.side_effect = lambda: call_order.append("cancel_all")
 
         import contextlib
 
@@ -279,12 +257,8 @@ class TestLoadProjectCancelAll:
                 stack.enter_context(p)
             ne._load_project_inner("new-project")
 
-        assert (
-            "cancel_all" in call_order
-        ), "send_cancel_all must be called on load"
-        assert (
-            "stop_all_cues" in call_order
-        ), "stop_all_cues must be called on load"
+        assert "cancel_all" in call_order, "send_cancel_all must be called on load"
+        assert "stop_all_cues" in call_order, "stop_all_cues must be called on load"
         assert call_order.index("cancel_all") < call_order.index(
             "stop_all_cues"
         ), "send_cancel_all must fire before stop_all_cues on project load"

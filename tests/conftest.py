@@ -31,8 +31,7 @@ def _watchdog():
             cleanup_time = time.time() - _cleanup_start_time
             if cleanup_time > 5:
                 print(
-                    f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force"
-                    f"exiting"
+                    f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting"
                 )
                 sys.stdout.flush()
                 sys.stderr.flush()
@@ -50,9 +49,7 @@ def _watchdog():
             os._exit(1)
 
 
-_watchdog_thread = threading.Thread(
-    target=_watchdog, daemon=True, name="Watchdog"
-)
+_watchdog_thread = threading.Thread(target=_watchdog, daemon=True, name="Watchdog")
 _watchdog_thread.start()
 
 

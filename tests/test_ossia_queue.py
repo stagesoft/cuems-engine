@@ -62,9 +62,7 @@ def test_global_message_queue_receives_commands(
 
             # Create GlobalMessageQueue and NodeCommunications
             with patch("cuemsengine.comms.NodeCommunications.NodesHub"):
-                with patch(
-                    "cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"
-                ):
+                with patch("cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"):
                     node_comm = NodeCommunications(
                         hub_address="tcp://127.0.0.1:5555",
                         commands_dict=commands_dict,
@@ -302,9 +300,7 @@ def test_global_message_queue_ignores_unused_paths(
 
             # Create GlobalMessageQueue and NodeCommunications
             with patch("cuemsengine.comms.NodeCommunications.NodesHub"):
-                with patch(
-                    "cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"
-                ):
+                with patch("cuemsengine.comms.NodeCommunications.PLAYER_HANDLER"):
                     node_comm = NodeCommunications(
                         hub_address="tcp://127.0.0.1:5555",
                         commands_dict=commands_dict,

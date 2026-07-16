@@ -130,9 +130,7 @@ class TestDmxClient:
             patch("cuemsengine.players.DmxPlayer.PlayerClient.__init__"),
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Patch during __init__
-            client = DmxClient(
-                player_port=9000, client_name="test-node-123_dmxplayer"
-            )
+            client = DmxClient(player_port=9000, client_name="test-node-123_dmxplayer")
             # Mock the device and parameters BEFORE calling
             # _create_bundle_parameters
             mock_param = Mock()
@@ -165,14 +163,10 @@ class TestDmxClient:
     def test_dmx_client_initialization(self):
         """Test DmxClient initialization."""
         with (
-            patch(
-                "cuemsengine.players.DmxPlayer.PlayerClient.__init__"
-            ) as mock_init,
+            patch("cuemsengine.players.DmxPlayer.PlayerClient.__init__") as mock_init,
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Skip bundle creation during init
-            client = DmxClient(
-                player_port=9000, client_name="test-node-123_dmxplayer"
-            )
+            client = DmxClient(player_port=9000, client_name="test-node-123_dmxplayer")
 
             # Set up device mock after initialization
             client.device = Mock()
@@ -215,9 +209,7 @@ class TestDmxClient:
         actual_calls = [call[0][0] for call in call_args_list if call[0]]
 
         # Verify each expected node was created
-        assert len(actual_calls) == len(
-            expected_nodes
-        ), (
+        assert len(actual_calls) == len(expected_nodes), (
             f"Expected {len(expected_nodes)} nodes,"
             f" got {len(actual_calls)}: {actual_calls}"
         )
@@ -370,12 +362,8 @@ class TestStartDmxPlayer:
     def test_start_dmx_player(self):
         """Test starting DMX player and client."""
         with (
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxPlayer"
-            ) as mock_player_class,
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxClient"
-            ) as mock_client_class,
+            patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
             patch("cuemsengine.players.DmxPlayer.sleep"),
         ):
 
@@ -413,12 +401,8 @@ class TestStartDmxPlayer:
     def test_start_dmx_player_with_args(self):
         """Test starting DMX player with custom args."""
         with (
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxPlayer"
-            ) as mock_player_class,
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxClient"
-            ) as mock_client_class,
+            patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
             patch("cuemsengine.players.DmxPlayer.sleep"),
         ):
 
@@ -444,12 +428,8 @@ class TestStartDmxPlayer:
     def test_start_dmx_player_waits_for_pid(self):
         """Test that start_dmx_player waits for player process to start."""
         with (
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxPlayer"
-            ) as mock_player_class,
-            patch(
-                "cuemsengine.players.DmxPlayer.DmxClient"
-            ) as mock_client_class,
+            patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
             patch("cuemsengine.players.DmxPlayer.sleep") as mock_sleep,
         ):
 

@@ -248,9 +248,7 @@ class TestHandleEditorCommandDictReturn:
             patch.object(controller, "confirm_to_editor") as mock_confirm,
             patch.object(controller, "set_editor_request"),
         ):
-            controller.handle_editor_command(
-                "project_status", None, context="ctx"
-            )
+            controller.handle_editor_command("project_status", None, context="ctx")
             mock_confirm.assert_called_once()
             call_kwargs = mock_confirm.call_args
             # value should be a dict, not 'OK'
@@ -265,9 +263,7 @@ class TestHandleEditorCommandDictReturn:
             patch.object(controller, "set_editor_request"),
             patch.object(controller, "_forward_command_to_nodes"),
         ):
-            controller.handle_editor_command(
-                "project_unload", None, context="ctx"
-            )
+            controller.handle_editor_command("project_unload", None, context="ctx")
             mock_confirm.assert_called_once()
             assert mock_confirm.call_args[1]["value"] == "OK"
 

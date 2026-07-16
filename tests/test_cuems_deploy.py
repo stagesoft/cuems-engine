@@ -141,9 +141,7 @@ def test_constructor_with_empty_string_is_disabled():
 
 
 def test_constructor_with_hostname_falls_back_to_avahi():
-    with patch.object(
-        CuemsDeploy, "_avahi_resolve", return_value="192.168.1.10"
-    ):
+    with patch.object(CuemsDeploy, "_avahi_resolve", return_value="192.168.1.10"):
         d = CuemsDeploy(controller_ip=None, hostname="controller.local")
         assert d.enabled is True
         assert d.main_ip == "192.168.1.10"
@@ -205,9 +203,7 @@ def test_sync_files_fails_fast_when_project_mandatory_file_missing(
     assert result is False
     check_mandatory.assert_called_once()
     sync_mock.assert_not_called()
-    assert any(
-        "mandatory project files are missing" in e for e in d.errors
-    ), d.errors
+    assert any("mandatory project files are missing" in e for e in d.errors), d.errors
 
 
 def test_sync_files_project_does_single_sync_after_mandatory_precheck(
@@ -358,9 +354,7 @@ async def test_sync_command_includes_supervision_flags(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_sync_startup_deadline_fires_with_no_output(
-    tmp_path, monkeypatch
-):
+async def test_sync_startup_deadline_fires_with_no_output(tmp_path, monkeypatch):
     """If rsync produces zero output before the startup deadline, kill it
     and surface a clean error — the original 'pre-fork hang' case (T011)."""
     _shrink_watchdogs(monkeypatch)
@@ -396,9 +390,7 @@ async def test_sync_startup_deadline_fires_with_no_output(
 
 
 @pytest.mark.anyio
-async def test_sync_inactivity_threshold_fires_after_started(
-    tmp_path, monkeypatch
-):
+async def test_sync_inactivity_threshold_fires_after_started(tmp_path, monkeypatch):
     """Post-startup wedge: rsync emits one chunk, then nothing. Watchdog
     must kick in with the inactivity message (T012)."""
     _shrink_watchdogs(monkeypatch)
@@ -457,9 +449,7 @@ async def test_sync_handles_rsync_error_exit(tmp_path):
     proc = _make_async_proc(
         rc=10,
         stdout_chunks=[b""],
-        stderr_chunks=[
-            b"rsync: connection refused\nrsync error: foo at main.c(123)\n"
-        ],
+        stderr_chunks=[b"rsync: connection refused\nrsync error: foo at main.c(123)\n"],
     )
     with patch("asyncio.create_subprocess_exec", return_value=proc):
         result = await d._sync(str(log_file))
@@ -497,10 +487,7 @@ async def test_sync_fires_on_progress_for_progress2_lines(tmp_path):
     log_file = tmp_path / "rsync_request.log"
     log_file.write_text("")
 
-    progress = (
-        b"  2,147,483,648 100%  118.34MB/s    0:00:17 "
-        b"(xfr#3, to-chk=0/3)\r"
-    )
+    progress = b"  2,147,483,648 100%  118.34MB/s    0:00:17 " b"(xfr#3, to-chk=0/3)\r"
     proc = _make_async_proc(
         rc=0,
         stdout_chunks=[progress, b""],
@@ -540,9 +527,7 @@ def test_parse_progress_basic_line(deploy):
 
 
 def test_parse_progress_without_xfr_suffix(deploy):
-    parsed = deploy._parse_progress(
-        "         32,768   5%    1.50MB/s    0:00:10"
-    )
+    parsed = deploy._parse_progress("         32,768   5%    1.50MB/s    0:00:10")
     assert parsed["bytes"] == 32_768
     assert parsed["pct"] == 5
     assert "xfr" not in parsed
@@ -664,9 +649,7 @@ async def test_sync_startup_watchdog_fires(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_sync_inactivity_watchdog_fires_after_first_chunk(
-    tmp_path, monkeypatch
-):
+async def test_sync_inactivity_watchdog_fires_after_first_chunk(tmp_path, monkeypatch):
     """
     T012: inactivity watchdog fires after first chunk arrives then silence.
     """
@@ -737,9 +720,7 @@ async def test_check_mandatory_sources_false_and_paths_on_nonzero_exit():
     proc.communicate = _communicate
 
     with patch("asyncio.create_subprocess_exec", return_value=proc):
-        ok, missing = await d._check_mandatory_sources(
-            ["/projects/proj/script.xml"]
-        )
+        ok, missing = await d._check_mandatory_sources(["/projects/proj/script.xml"])
 
     assert ok is False
     assert missing == ["/projects/proj/script.xml"]
@@ -917,13 +898,13 @@ def test_media_files_idx_only_for_video_extensions(deploy):
 
 def test_constructor_accepts_is_async_false_default():
     """T003: default construction stores _is_async=False with no kwarg."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d._is_async is False
 
 
 def test_constructor_accepts_is_async_true():
     """T004: is_async=True is stored as True."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
     assert d._is_async is True
 
 
@@ -934,22 +915,26 @@ def test_constructor_accepts_is_async_true():
 
 def test_sync_files_routes_to_blocking_when_is_async_false():
     """T006a: with _is_async=False, sync_files calls _sync_files_blocking."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_sync_files_blocking', return_value=True) as mock_blocking, \
-         patch.object(d, '_sync_files_async', return_value=True) as mock_async:
-        result = d.sync_files('proj', 'project')
-    mock_blocking.assert_called_once_with('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_sync_files_blocking", return_value=True) as mock_blocking,
+        patch.object(d, "_sync_files_async", return_value=True) as mock_async,
+    ):
+        result = d.sync_files("proj", "project")
+    mock_blocking.assert_called_once_with("proj", "project", [])
     mock_async.assert_not_called()
     assert result is True
 
 
 def test_sync_files_routes_to_async_when_is_async_true():
     """T006b: with _is_async=True, sync_files calls _sync_files_async."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
-    with patch.object(d, '_sync_files_blocking', return_value=True) as mock_blocking, \
-         patch.object(d, '_sync_files_async', return_value=True) as mock_async:
-        result = d.sync_files('proj', 'project')
-    mock_async.assert_called_once_with('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
+    with (
+        patch.object(d, "_sync_files_blocking", return_value=True) as mock_blocking,
+        patch.object(d, "_sync_files_async", return_value=True) as mock_async,
+    ):
+        result = d.sync_files("proj", "project")
+    mock_async.assert_called_once_with("proj", "project", [])
     mock_blocking.assert_not_called()
     assert result is True
 
@@ -969,7 +954,7 @@ def test_kill_blocking_is_not_coroutine():
 
 def test_kill_blocking_terminates_then_waits():
     """T013: normal case — terminate + wait(timeout=2) succeeds."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     proc = MagicMock()
     proc.wait.return_value = 0
     d._kill_blocking(proc)
@@ -979,9 +964,9 @@ def test_kill_blocking_terminates_then_waits():
 
 def test_kill_blocking_escalates_to_kill_on_timeout():
     """T014: if wait() times out, proc.kill() is called."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     proc = MagicMock()
-    proc.wait.side_effect = [_subprocess.TimeoutExpired(cmd='rsync', timeout=2), 0]
+    proc.wait.side_effect = [_subprocess.TimeoutExpired(cmd="rsync", timeout=2), 0]
     d._kill_blocking(proc)
     proc.terminate.assert_called_once()
     proc.kill.assert_called_once()
@@ -991,6 +976,7 @@ def test_kill_blocking_escalates_to_kill_on_timeout():
 # T016–T021 — _sync_blocking tests
 # Uses real OS pipes so fcntl/selectors/os.read work without extra mocking.
 # ─────────────────────────────────────────────────────────────────────────
+
 
 def _make_sync_blocking_proc(r_out, r_err, wait_rc=0, poll_rc=0):
     """Fake subprocess.Popen return value backed by real pipe fds."""
@@ -1009,8 +995,8 @@ def test_sync_blocking_is_not_coroutine():
 
 def test_sync_blocking_includes_correct_rsync_flags(tmp_path):
     """T017: _sync_blocking builds rsync cmd with all required flags."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1023,27 +1009,29 @@ def test_sync_blocking_includes_correct_rsync_flags(tmp_path):
         captured_cmd.extend(cmd)
         return _make_sync_blocking_proc(r_out, r_err)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', side_effect=_fake_popen):
+    with patch(
+        "cuemsengine.tools.CuemsDeploy.subprocess.Popen", side_effect=_fake_popen
+    ):
         d._sync_blocking(log_file)
 
     _os.close(r_out)
     _os.close(r_err)
 
-    assert 'rsync' in captured_cmd
-    assert '-rt' in captured_cmd
-    assert '--delete' in captured_cmd
-    assert '--delete-delay' in captured_cmd
-    assert '--contimeout=2' in captured_cmd
-    assert '--timeout=5' in captured_cmd
-    assert '--ignore-missing-args' in captured_cmd
-    assert '--info=progress2,name0' in captured_cmd
-    assert f'--files-from={log_file}' in captured_cmd
+    assert "rsync" in captured_cmd
+    assert "-rt" in captured_cmd
+    assert "--delete" in captured_cmd
+    assert "--delete-delay" in captured_cmd
+    assert "--contimeout=2" in captured_cmd
+    assert "--timeout=5" in captured_cmd
+    assert "--ignore-missing-args" in captured_cmd
+    assert "--info=progress2,name0" in captured_cmd
+    assert f"--files-from={log_file}" in captured_cmd
 
 
 def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
     """T018: zero exit code → True + errors cleared."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1051,7 +1039,7 @@ def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
     _os.close(w_err)
     proc = _make_sync_blocking_proc(r_out, r_err, wait_rc=0, poll_rc=0)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
     _os.close(r_out)
@@ -1062,33 +1050,34 @@ def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
 
 def test_sync_blocking_returns_false_on_nonzero_exit(tmp_path):
     """T019: non-zero exit code → False + errors contain stderr output."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
-    _os.write(w_err, b'rsync connection refused\n')
+    _os.write(w_err, b"rsync connection refused\n")
     _os.close(w_out)
     _os.close(w_err)
     proc = _make_sync_blocking_proc(r_out, r_err, wait_rc=10, poll_rc=10)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
     _os.close(r_out)
     _os.close(r_err)
     assert result is False
-    assert any('rsync connection refused' in e for e in d.errors)
+    assert any("rsync connection refused" in e for e in d.errors)
 
 
 def test_sync_blocking_startup_deadline_fires(tmp_path, monkeypatch):
     """T020: no output before startup deadline → False + startup-deadline error."""
     import cuemsengine.tools.CuemsDeploy as _mod
-    monkeypatch.setattr(_mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(_mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    monkeypatch.setattr(_mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(_mod, "_INACTIVITY_S", 0.05)
+
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1098,41 +1087,46 @@ def test_sync_blocking_startup_deadline_fires(tmp_path, monkeypatch):
     proc.wait.return_value = 0
     proc.poll.return_value = None
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
-    _os.close(w_out); _os.close(r_out)
-    _os.close(w_err); _os.close(r_err)
+    _os.close(w_out)
+    _os.close(r_out)
+    _os.close(w_err)
+    _os.close(r_err)
     assert result is False
-    assert any('startup deadline' in e for e in d.errors)
+    assert any("startup deadline" in e for e in d.errors)
     proc.terminate.assert_called()
 
 
 def test_sync_blocking_inactivity_fires_after_first_chunk(tmp_path, monkeypatch):
     """T021: output then silence → False + inactivity-threshold error."""
     import cuemsengine.tools.CuemsDeploy as _mod
-    monkeypatch.setattr(_mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(_mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    monkeypatch.setattr(_mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(_mod, "_INACTIVITY_S", 0.05)
+
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
-    _os.write(w_out, b'  1,024   0%    0.00kB/s    0:00:00\r')
+    _os.write(w_out, b"  1,024   0%    0.00kB/s    0:00:00\r")
     proc = MagicMock()
     proc.stdout.fileno.return_value = r_out
     proc.stderr.fileno.return_value = r_err
     proc.wait.return_value = 0
     proc.poll.return_value = None
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
-    _os.close(w_out); _os.close(r_out)
-    _os.close(w_err); _os.close(r_err)
+    _os.close(w_out)
+    _os.close(r_out)
+    _os.close(w_err)
+    _os.close(r_err)
     assert result is False
-    assert any('inactivity threshold' in e for e in d.errors)
+    assert any("inactivity threshold" in e for e in d.errors)
     proc.terminate.assert_called()
 
 
@@ -1144,85 +1138,97 @@ def test_sync_blocking_inactivity_fires_after_first_chunk(tmp_path, monkeypatch)
 def test_sync_files_blocking_returns_false_when_disabled():
     """T023: disabled instance (no controller IP) → False without attempting rsync."""
     d = CuemsDeploy(controller_ip=None)
-    result = d._sync_files_blocking('proj', 'project', [])
+    result = d._sync_files_blocking("proj", "project", [])
     assert result is False
 
 
 def test_sync_files_blocking_does_not_require_loop():
     """T024: _sync_files_blocking with no loop bound → succeeds (no RuntimeError)."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d.loop is None
-    with patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        result = d._sync_files_blocking('proj', 'project', [])
+    with (
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is True
 
 
 def test_sync_files_blocking_defaults_project_files_for_project_tag():
     """T025: tag='project' with empty file_names → _project_files() expansion."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     captured = []
 
     def _capture(log_file, file_names):
         captured.extend(file_names)
         return True
 
-    with patch.object(d, '_create_deploy_log', side_effect=_capture), \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'project', [])
+    with (
+        patch.object(d, "_create_deploy_log", side_effect=_capture),
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "project", [])
 
-    assert any('/projects/proj/script.xml' in f for f in captured)
+    assert any("/projects/proj/script.xml" in f for f in captured)
 
 
 def test_sync_files_blocking_expands_media_files_for_media_tag():
     """T026: tag='media' with file list → _media_files() expansion."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     captured = []
 
     def _capture(log_file, file_names):
         captured.extend(file_names)
         return True
 
-    with patch.object(d, '_create_deploy_log', side_effect=_capture), \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'media', ['clip.mp4'])
+    with (
+        patch.object(d, "_create_deploy_log", side_effect=_capture),
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "media", ["clip.mp4"])
 
-    assert 'media/clip.mp4' in captured
-    assert 'media/indexes/clip.mp4.idx' in captured
+    assert "media/clip.mp4" in captured
+    assert "media/indexes/clip.mp4.idx" in captured
 
 
 def test_sync_files_blocking_returns_true_on_success():
     """T027: _sync_blocking returns True → _sync_files_blocking returns True."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log') as mock_reset:
-        result = d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log") as mock_reset,
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is True
     mock_reset.assert_called_once()
 
 
 def test_sync_files_blocking_logs_errors_on_failure():
     """T028: _sync_blocking returns False → _sync_files_blocking returns False."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    d.errors = ['fake error']
-    with patch.object(d, '_sync_blocking', return_value=False), \
-         patch.object(d, '_create_deploy_log', return_value=True):
-        result = d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    d.errors = ["fake error"]
+    with (
+        patch.object(d, "_sync_blocking", return_value=False),
+        patch.object(d, "_create_deploy_log", return_value=True),
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is False
 
 
 def test_sync_files_blocking_does_not_call_check_mandatory_sources():
     """T029: _check_mandatory_sources must NOT be called on the blocking path (FR-012)."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_check_mandatory_sources') as mock_check, \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_check_mandatory_sources") as mock_check,
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "project", [])
     assert mock_check.call_count == 0
 
 
@@ -1233,23 +1239,29 @@ def test_sync_files_blocking_does_not_call_check_mandatory_sources():
 
 def test_sync_files_async_returns_false_when_loop_unbound():
     """T031: async path with no loop bound → False + 'event loop not bound' error."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
     assert d.loop is None
-    result = d.sync_files('proj', 'project')
+    result = d.sync_files("proj", "project")
     assert result is False
-    assert d.errors == ['event loop not bound']
+    assert d.errors == ["event loop not bound"]
 
 
 def test_sync_files_async_errors_cleared_on_success(deploy_with_loop):
     """T032: stale errors are cleared when async deploy succeeds."""
     d = deploy_with_loop
-    d.errors = ['stale']
-    with patch.object(d, '_check_mandatory_sources', new_callable=AsyncMock,
-                      return_value=(True, [])), \
-         patch.object(d, '_sync', new_callable=AsyncMock, return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    d.errors = ["stale"]
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(True, []),
+        ),
+        patch.object(d, "_sync", new_callable=AsyncMock, return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
     assert result is True
     assert d.errors == []
 
@@ -1261,13 +1273,13 @@ def test_sync_files_async_errors_cleared_on_success(deploy_with_loop):
 
 def test_constructor_accepts_is_async_false_default():
     """T003: default construction stores _is_async=False with no kwarg."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d._is_async is False
 
 
 def test_constructor_accepts_is_async_true():
     """T004: is_async=True is stored as True."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
     assert d._is_async is True
 
 
@@ -1278,22 +1290,26 @@ def test_constructor_accepts_is_async_true():
 
 def test_sync_files_routes_to_blocking_when_is_async_false():
     """T006a: with _is_async=False, sync_files calls _sync_files_blocking."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_sync_files_blocking', return_value=True) as mock_blocking, \
-         patch.object(d, '_sync_files_async', return_value=True) as mock_async:
-        result = d.sync_files('proj', 'project')
-    mock_blocking.assert_called_once_with('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_sync_files_blocking", return_value=True) as mock_blocking,
+        patch.object(d, "_sync_files_async", return_value=True) as mock_async,
+    ):
+        result = d.sync_files("proj", "project")
+    mock_blocking.assert_called_once_with("proj", "project", [])
     mock_async.assert_not_called()
     assert result is True
 
 
 def test_sync_files_routes_to_async_when_is_async_true():
     """T006b: with _is_async=True, sync_files calls _sync_files_async."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
-    with patch.object(d, '_sync_files_blocking', return_value=True) as mock_blocking, \
-         patch.object(d, '_sync_files_async', return_value=True) as mock_async:
-        result = d.sync_files('proj', 'project')
-    mock_async.assert_called_once_with('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
+    with (
+        patch.object(d, "_sync_files_blocking", return_value=True) as mock_blocking,
+        patch.object(d, "_sync_files_async", return_value=True) as mock_async,
+    ):
+        result = d.sync_files("proj", "project")
+    mock_async.assert_called_once_with("proj", "project", [])
     mock_blocking.assert_not_called()
     assert result is True
 
@@ -1313,7 +1329,7 @@ def test_kill_blocking_is_not_coroutine():
 
 def test_kill_blocking_terminates_then_waits():
     """T013: normal case — terminate + wait(timeout=2) succeeds."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     proc = MagicMock()
     proc.wait.return_value = 0
     d._kill_blocking(proc)
@@ -1323,9 +1339,9 @@ def test_kill_blocking_terminates_then_waits():
 
 def test_kill_blocking_escalates_to_kill_on_timeout():
     """T014: if wait() times out, proc.kill() is called."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     proc = MagicMock()
-    proc.wait.side_effect = [_subprocess.TimeoutExpired(cmd='rsync', timeout=2), 0]
+    proc.wait.side_effect = [_subprocess.TimeoutExpired(cmd="rsync", timeout=2), 0]
     d._kill_blocking(proc)
     proc.terminate.assert_called_once()
     proc.kill.assert_called_once()
@@ -1335,6 +1351,7 @@ def test_kill_blocking_escalates_to_kill_on_timeout():
 # T016–T021 — _sync_blocking tests
 # Uses real OS pipes so fcntl/selectors/os.read work without extra mocking.
 # ─────────────────────────────────────────────────────────────────────────
+
 
 def _make_sync_blocking_proc(r_out, r_err, wait_rc=0, poll_rc=0):
     """Fake subprocess.Popen return value backed by real pipe fds."""
@@ -1353,8 +1370,8 @@ def test_sync_blocking_is_not_coroutine():
 
 def test_sync_blocking_includes_correct_rsync_flags(tmp_path):
     """T017: _sync_blocking builds rsync cmd with all required flags."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1367,27 +1384,29 @@ def test_sync_blocking_includes_correct_rsync_flags(tmp_path):
         captured_cmd.extend(cmd)
         return _make_sync_blocking_proc(r_out, r_err)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', side_effect=_fake_popen):
+    with patch(
+        "cuemsengine.tools.CuemsDeploy.subprocess.Popen", side_effect=_fake_popen
+    ):
         d._sync_blocking(log_file)
 
     _os.close(r_out)
     _os.close(r_err)
 
-    assert 'rsync' in captured_cmd
-    assert '-rt' in captured_cmd
-    assert '--delete' in captured_cmd
-    assert '--delete-delay' in captured_cmd
-    assert '--contimeout=2' in captured_cmd
-    assert '--timeout=5' in captured_cmd
-    assert '--ignore-missing-args' in captured_cmd
-    assert '--info=progress2,name0' in captured_cmd
-    assert f'--files-from={log_file}' in captured_cmd
+    assert "rsync" in captured_cmd
+    assert "-rt" in captured_cmd
+    assert "--delete" in captured_cmd
+    assert "--delete-delay" in captured_cmd
+    assert "--contimeout=2" in captured_cmd
+    assert "--timeout=5" in captured_cmd
+    assert "--ignore-missing-args" in captured_cmd
+    assert "--info=progress2,name0" in captured_cmd
+    assert f"--files-from={log_file}" in captured_cmd
 
 
 def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
     """T018: zero exit code → True + errors cleared."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1395,7 +1414,7 @@ def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
     _os.close(w_err)
     proc = _make_sync_blocking_proc(r_out, r_err, wait_rc=0, poll_rc=0)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
     _os.close(r_out)
@@ -1406,33 +1425,34 @@ def test_sync_blocking_returns_true_on_zero_exit(tmp_path):
 
 def test_sync_blocking_returns_false_on_nonzero_exit(tmp_path):
     """T019: non-zero exit code → False + errors contain stderr output."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
-    _os.write(w_err, b'rsync connection refused\n')
+    _os.write(w_err, b"rsync connection refused\n")
     _os.close(w_out)
     _os.close(w_err)
     proc = _make_sync_blocking_proc(r_out, r_err, wait_rc=10, poll_rc=10)
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
     _os.close(r_out)
     _os.close(r_err)
     assert result is False
-    assert any('rsync connection refused' in e for e in d.errors)
+    assert any("rsync connection refused" in e for e in d.errors)
 
 
 def test_sync_blocking_startup_deadline_fires(tmp_path, monkeypatch):
     """T020: no output before startup deadline → False + startup-deadline error."""
     import cuemsengine.tools.CuemsDeploy as _mod
-    monkeypatch.setattr(_mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(_mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    monkeypatch.setattr(_mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(_mod, "_INACTIVITY_S", 0.05)
+
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
@@ -1442,41 +1462,46 @@ def test_sync_blocking_startup_deadline_fires(tmp_path, monkeypatch):
     proc.wait.return_value = 0
     proc.poll.return_value = None
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
-    _os.close(w_out); _os.close(r_out)
-    _os.close(w_err); _os.close(r_err)
+    _os.close(w_out)
+    _os.close(r_out)
+    _os.close(w_err)
+    _os.close(r_err)
     assert result is False
-    assert any('startup deadline' in e for e in d.errors)
+    assert any("startup deadline" in e for e in d.errors)
     proc.terminate.assert_called()
 
 
 def test_sync_blocking_inactivity_fires_after_first_chunk(tmp_path, monkeypatch):
     """T021: output then silence → False + inactivity-threshold error."""
     import cuemsengine.tools.CuemsDeploy as _mod
-    monkeypatch.setattr(_mod, '_STARTUP_DEADLINE_S', 0.05)
-    monkeypatch.setattr(_mod, '_INACTIVITY_S', 0.05)
 
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    log_file = str(tmp_path / 'rsync.log')
+    monkeypatch.setattr(_mod, "_STARTUP_DEADLINE_S", 0.05)
+    monkeypatch.setattr(_mod, "_INACTIVITY_S", 0.05)
+
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    log_file = str(tmp_path / "rsync.log")
 
     r_out, w_out = _os.pipe()
     r_err, w_err = _os.pipe()
-    _os.write(w_out, b'  1,024   0%    0.00kB/s    0:00:00\r')
+    _os.write(w_out, b"  1,024   0%    0.00kB/s    0:00:00\r")
     proc = MagicMock()
     proc.stdout.fileno.return_value = r_out
     proc.stderr.fileno.return_value = r_err
     proc.wait.return_value = 0
     proc.poll.return_value = None
 
-    with patch('cuemsengine.tools.CuemsDeploy.subprocess.Popen', return_value=proc):
+    with patch("cuemsengine.tools.CuemsDeploy.subprocess.Popen", return_value=proc):
         result = d._sync_blocking(log_file)
 
-    _os.close(w_out); _os.close(r_out)
-    _os.close(w_err); _os.close(r_err)
+    _os.close(w_out)
+    _os.close(r_out)
+    _os.close(w_err)
+    _os.close(r_err)
     assert result is False
-    assert any('inactivity threshold' in e for e in d.errors)
+    assert any("inactivity threshold" in e for e in d.errors)
     proc.terminate.assert_called()
 
 
@@ -1488,85 +1513,97 @@ def test_sync_blocking_inactivity_fires_after_first_chunk(tmp_path, monkeypatch)
 def test_sync_files_blocking_returns_false_when_disabled():
     """T023: disabled instance (no controller IP) → False without attempting rsync."""
     d = CuemsDeploy(controller_ip=None)
-    result = d._sync_files_blocking('proj', 'project', [])
+    result = d._sync_files_blocking("proj", "project", [])
     assert result is False
 
 
 def test_sync_files_blocking_does_not_require_loop():
     """T024: _sync_files_blocking with no loop bound → succeeds (no RuntimeError)."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     assert d.loop is None
-    with patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        result = d._sync_files_blocking('proj', 'project', [])
+    with (
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is True
 
 
 def test_sync_files_blocking_defaults_project_files_for_project_tag():
     """T025: tag='project' with empty file_names → _project_files() expansion."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     captured = []
 
     def _capture(log_file, file_names):
         captured.extend(file_names)
         return True
 
-    with patch.object(d, '_create_deploy_log', side_effect=_capture), \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'project', [])
+    with (
+        patch.object(d, "_create_deploy_log", side_effect=_capture),
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "project", [])
 
-    assert any('/projects/proj/script.xml' in f for f in captured)
+    assert any("/projects/proj/script.xml" in f for f in captured)
 
 
 def test_sync_files_blocking_expands_media_files_for_media_tag():
     """T026: tag='media' with file list → _media_files() expansion."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
+    d = CuemsDeploy(controller_ip="10.0.0.1")
     captured = []
 
     def _capture(log_file, file_names):
         captured.extend(file_names)
         return True
 
-    with patch.object(d, '_create_deploy_log', side_effect=_capture), \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'media', ['clip.mp4'])
+    with (
+        patch.object(d, "_create_deploy_log", side_effect=_capture),
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "media", ["clip.mp4"])
 
-    assert 'media/clip.mp4' in captured
-    assert 'media/indexes/clip.mp4.idx' in captured
+    assert "media/clip.mp4" in captured
+    assert "media/indexes/clip.mp4.idx" in captured
 
 
 def test_sync_files_blocking_returns_true_on_success():
     """T027: _sync_blocking returns True → _sync_files_blocking returns True."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log') as mock_reset:
-        result = d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log") as mock_reset,
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is True
     mock_reset.assert_called_once()
 
 
 def test_sync_files_blocking_logs_errors_on_failure():
     """T028: _sync_blocking returns False → _sync_files_blocking returns False."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    d.errors = ['fake error']
-    with patch.object(d, '_sync_blocking', return_value=False), \
-         patch.object(d, '_create_deploy_log', return_value=True):
-        result = d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    d.errors = ["fake error"]
+    with (
+        patch.object(d, "_sync_blocking", return_value=False),
+        patch.object(d, "_create_deploy_log", return_value=True),
+    ):
+        result = d._sync_files_blocking("proj", "project", [])
     assert result is False
 
 
 def test_sync_files_blocking_does_not_call_check_mandatory_sources():
     """T029: _check_mandatory_sources must NOT be called on the blocking path (FR-012)."""
-    d = CuemsDeploy(controller_ip='10.0.0.1')
-    with patch.object(d, '_check_mandatory_sources') as mock_check, \
-         patch.object(d, '_sync_blocking', return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        d._sync_files_blocking('proj', 'project', [])
+    d = CuemsDeploy(controller_ip="10.0.0.1")
+    with (
+        patch.object(d, "_check_mandatory_sources") as mock_check,
+        patch.object(d, "_sync_blocking", return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        d._sync_files_blocking("proj", "project", [])
     assert mock_check.call_count == 0
 
 
@@ -1577,23 +1614,29 @@ def test_sync_files_blocking_does_not_call_check_mandatory_sources():
 
 def test_sync_files_async_returns_false_when_loop_unbound():
     """T031: async path with no loop bound → False + 'event loop not bound' error."""
-    d = CuemsDeploy(controller_ip='10.0.0.1', is_async=True)
+    d = CuemsDeploy(controller_ip="10.0.0.1", is_async=True)
     assert d.loop is None
-    result = d.sync_files('proj', 'project')
+    result = d.sync_files("proj", "project")
     assert result is False
-    assert d.errors == ['event loop not bound']
+    assert d.errors == ["event loop not bound"]
 
 
 def test_sync_files_async_errors_cleared_on_success(deploy_with_loop):
     """T032: stale errors are cleared when async deploy succeeds."""
     d = deploy_with_loop
-    d.errors = ['stale']
-    with patch.object(d, '_check_mandatory_sources', new_callable=AsyncMock,
-                      return_value=(True, [])), \
-         patch.object(d, '_sync', new_callable=AsyncMock, return_value=True), \
-         patch.object(d, '_create_deploy_log', return_value=True), \
-         patch.object(d, '_reset_deploy_log'):
-        result = d.sync_files('proj', 'project')
+    d.errors = ["stale"]
+    with (
+        patch.object(
+            d,
+            "_check_mandatory_sources",
+            new_callable=AsyncMock,
+            return_value=(True, []),
+        ),
+        patch.object(d, "_sync", new_callable=AsyncMock, return_value=True),
+        patch.object(d, "_create_deploy_log", return_value=True),
+        patch.object(d, "_reset_deploy_log"),
+    ):
+        result = d.sync_files("proj", "project")
     assert result is True
     assert d.errors == []
 

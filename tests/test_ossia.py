@@ -151,9 +151,7 @@ def test_client_init(capfd, ossia_client_factory):
         "/test3": [ValueType.Int, print_callback, 20],
         "/test4": [ValueType.Int, print_callback, 30],
     }
-    with ossia_client_factory(
-        endpoints=test_endpoints, local_port=9095
-    ) as client:
+    with ossia_client_factory(endpoints=test_endpoints, local_port=9095) as client:
         assert len(client.device.root_node.children()) == 4
         out, err = capfd.readouterr()
 
@@ -232,9 +230,7 @@ def test_oscclient_in_separate_process(process_cleanup):
     # Create OssiaClient in separate process
     def run_client(result_queue):
         client = OssiaClient(
-            endpoints={
-                "/test": [ValueType.Int, lambda x: result_queue.put(x), 10]
-            },
+            endpoints={"/test": [ValueType.Int, lambda x: result_queue.put(x), 10]},
             remote_type=ClientDevices.OSC,
             local_port=LOCAL,
             remote_port=REMOTE,
@@ -243,9 +239,7 @@ def test_oscclient_in_separate_process(process_cleanup):
         client.set_value("/test", 80)
         sleep(0.5)  # Allow time for value to be set
 
-    client_process = process_cleanup(
-        Process(target=run_client, args=(client_res,))
-    )
+    client_process = process_cleanup(Process(target=run_client, args=(client_res,)))
     client_process.start()
 
     # ASSERT

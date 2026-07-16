@@ -162,9 +162,7 @@ class TestPlayAction:
         target = _make_target()
         cue = _make_action_cue("play", target)
 
-        with patch.object(
-            handler, "go", side_effect=RuntimeError("not loaded to go")
-        ):
+        with patch.object(handler, "go", side_effect=RuntimeError("not loaded to go")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -212,9 +210,7 @@ class TestStopAction:
         target = _make_target(_stop_requested=False)
         cue = _make_action_cue("stop", target)
 
-        with patch.object(
-            handler, "disarm", side_effect=RuntimeError("disarm failed")
-        ):
+        with patch.object(handler, "disarm", side_effect=RuntimeError("disarm failed")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -292,9 +288,7 @@ class TestFadeInAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(
-            handler, "arm", side_effect=RuntimeError("arm failed")
-        ):
+        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -305,9 +299,7 @@ class TestFadeInAction:
         target = _make_target()
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(
-            handler, "go", side_effect=RuntimeError("not loaded to go")
-        ):
+        with patch.object(handler, "go", side_effect=RuntimeError("not loaded to go")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -368,9 +360,7 @@ class TestGoToAction:
         target = _make_target(loaded=False)
         cue = _make_action_cue("go_to", target)
 
-        with patch.object(
-            handler, "arm", side_effect=RuntimeError("arm failed")
-        ):
+        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -565,9 +555,7 @@ class TestActionHookDispatchOrder:
         ACTION_HANDLER.register_action_hook(
             "before_dispatch", before, source="cue_layer"
         )
-        ACTION_HANDLER.register_action_hook(
-            "after_dispatch", after, source="cue_layer"
-        )
+        ACTION_HANDLER.register_action_hook("after_dispatch", after, source="cue_layer")
         target = _make_target(enabled=False)
         cue = _make_action_cue("enable", target)
         handler.execute_action(cue, mtc)
@@ -633,9 +621,7 @@ class TestActionResultSink:
             ACTION_HANDLER.set_result_sink(None)
             ACTION_HANDLER.set_emit_enabled(False)
 
-    def test_default_path_calls_send_operation_when_sink_unset(
-        self, handler, mtc
-    ):
+    def test_default_path_calls_send_operation_when_sink_unset(self, handler, mtc):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         ACTION_HANDLER.set_emit_enabled(True)
@@ -653,17 +639,13 @@ class TestActionResultSink:
 
 
 class TestActionHookExceptions:
-    def test_before_dispatch_raises_failed_and_isolates_other_cues(
-        self, handler, mtc
-    ):
+    def test_before_dispatch_raises_failed_and_isolates_other_cues(self, handler, mtc):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         def boom(ctx):
             raise RuntimeError("hook boom")
 
-        ACTION_HANDLER.register_action_hook(
-            "before_dispatch", boom, source="cue_layer"
-        )
+        ACTION_HANDLER.register_action_hook("before_dispatch", boom, source="cue_layer")
         target = _make_target(enabled=True)
         bystander = _make_target(enabled=True, _stop_requested=False)
         snap = (
@@ -672,9 +654,7 @@ class TestActionHookExceptions:
             getattr(bystander, "_go_generation", 0),
         )
 
-        result = handler.execute_action(
-            _make_action_cue("disable", target), mtc
-        )
+        result = handler.execute_action(_make_action_cue("disable", target), mtc)
 
         assert result["status"] == "failed"
         assert target.enabled is True
@@ -686,9 +666,7 @@ class TestActionHookExceptions:
 
 
 class TestActionMidTransitionWithHook:
-    def test_pause_while_already_paused_deterministic_with_hook(
-        self, handler, mtc
-    ):
+    def test_pause_while_already_paused_deterministic_with_hook(self, handler, mtc):
         from cuemsengine.cues.ActionHandler import ACTION_HANDLER
 
         order = []
@@ -727,9 +705,7 @@ class TestFadeActionHandler:
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_action", target)
 
-        with patch.object(
-            handler, "arm", side_effect=RuntimeError("arm failed")
-        ):
+        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
@@ -780,9 +756,7 @@ def test_rejected_action_warning_text_unchanged(handler, mtc, caplog):
     target = _make_target()
     with caplog.at_level(logging.WARNING):
         handler.execute_action(_make_action_cue("explode", target), mtc)
-    assert any(
-        "Unsupported action_type" in r.getMessage() for r in caplog.records
-    )
+    assert any("Unsupported action_type" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -854,7 +828,7 @@ class TestGoRearm:
         disarm, but its timing depends on the mocked MTC.)"""
         cue = _make_action_target(loaded=True)
         cue._target_object = None
-        cue.post_go = 'pause'
+        cue.post_go = "pause"
 
         thread = handler.go(cue, mtc)
         assert cue._playing is True
@@ -1038,9 +1012,7 @@ class TestEffectiveDuration:
         from cuemsengine.cues.CueHandler import CueHandler
 
         cue = _make_target()
-        cue.media = Media(
-            {"file_name": "test.wav", "duration": "00:00:05.000"}
-        )
+        cue.media = Media({"file_name": "test.wav", "duration": "00:00:05.000"})
         # prewait=0, postwait=0, media=5s
         duration = CueHandler._effective_duration_ms(cue)
         assert duration >= 4900  # ~5000ms, allow rounding

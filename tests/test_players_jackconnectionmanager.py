@@ -74,9 +74,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
 
@@ -139,9 +137,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_jack_client.get_ports.side_effect = jack.JackError(
-                "Connection lost"
-            )
+            mock_jack_client.get_ports.side_effect = jack.JackError("Connection lost")
             mock_client_class.return_value = mock_jack_client
 
             manager = JackConnectionManager("test_client")
@@ -154,9 +150,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_jack_client.get_ports.side_effect = Exception(
-                "Unexpected error"
-            )
+            mock_jack_client.get_ports.side_effect = Exception("Unexpected error")
             mock_client_class.return_value = mock_jack_client
 
             manager = JackConnectionManager("test_client")
@@ -169,9 +163,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
             ports = manager.get_ports()
@@ -180,48 +172,34 @@ class TestJackConnectionManager:
 
     def test_connect_by_name_success(self, jack_manager, mock_jack_client):
         """Test connecting JACK ports successfully."""
-        mock_jack_client.get_all_connections.return_value = (
-            []
-        )  # Not already connected
+        mock_jack_client.get_all_connections.return_value = []  # Not already connected
 
         result = jack_manager.connect_by_name("source:output", "dest:input")
 
         assert result is True
-        mock_jack_client.connect.assert_called_once_with(
-            "source:output", "dest:input"
-        )
+        mock_jack_client.connect.assert_called_once_with("source:output", "dest:input")
 
-    def test_connect_by_name_already_connected(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_connect_by_name_already_connected(self, jack_manager, mock_jack_client):
         """Test connecting JACK ports that are already connected."""
         # Mock is_connected to return True
         with patch.object(jack_manager, "is_connected", return_value=True):
-            result = jack_manager.connect_by_name(
-                "source:output", "dest:input"
-            )
+            result = jack_manager.connect_by_name("source:output", "dest:input")
 
             assert result is True
             mock_jack_client.connect.assert_not_called()
 
     def test_connect_by_name_jack_error(self, jack_manager, mock_jack_client):
         """Test connecting JACK ports with JACK error."""
-        mock_jack_client.get_all_connections.return_value = (
-            []
-        )  # Not already connected
+        mock_jack_client.get_all_connections.return_value = []  # Not already connected
         mock_jack_client.connect.side_effect = jack.JackError("Port not found")
 
         result = jack_manager.connect_by_name("source:output", "dest:input")
 
         assert result is False
 
-    def test_connect_by_name_unexpected_error(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_connect_by_name_unexpected_error(self, jack_manager, mock_jack_client):
         """Test connecting JACK ports with unexpected error."""
-        mock_jack_client.get_all_connections.return_value = (
-            []
-        )  # Not already connected
+        mock_jack_client.get_all_connections.return_value = []  # Not already connected
         mock_jack_client.connect.side_effect = Exception("Unexpected error")
 
         result = jack_manager.connect_by_name("source:output", "dest:input")
@@ -233,9 +211,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
             result = manager.connect_by_name("source:output", "dest:input")
@@ -251,21 +227,15 @@ class TestJackConnectionManager:
             "source:output", "dest:input"
         )
 
-    def test_disconnect_by_name_jack_error(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_disconnect_by_name_jack_error(self, jack_manager, mock_jack_client):
         """Test disconnecting JACK ports with JACK error."""
-        mock_jack_client.disconnect.side_effect = jack.JackError(
-            "Port not found"
-        )
+        mock_jack_client.disconnect.side_effect = jack.JackError("Port not found")
 
         result = jack_manager.disconnect_by_name("source:output", "dest:input")
 
         assert result is False
 
-    def test_disconnect_by_name_unexpected_error(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_disconnect_by_name_unexpected_error(self, jack_manager, mock_jack_client):
         """Test disconnecting JACK ports with unexpected error."""
         mock_jack_client.disconnect.side_effect = Exception("Unexpected error")
 
@@ -278,9 +248,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
             result = manager.disconnect_by_name("source:output", "dest:input")
@@ -294,14 +262,10 @@ class TestJackConnectionManager:
         expected_connections = ["system:playback_1", "system:playback_2"]
         assert connections == expected_connections
 
-        mock_jack_client.get_ports.assert_called_once_with(
-            name_pattern="^test_port$"
-        )
+        mock_jack_client.get_ports.assert_called_once_with(name_pattern="^test_port$")
         mock_jack_client.get_all_connections.assert_called_once()
 
-    def test_get_connections_port_not_found(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_get_connections_port_not_found(self, jack_manager, mock_jack_client):
         """Test getting connections for a port that doesn't exist."""
         mock_jack_client.get_ports.return_value = []  # No ports found
 
@@ -311,17 +275,13 @@ class TestJackConnectionManager:
 
     def test_get_connections_jack_error(self, jack_manager, mock_jack_client):
         """Test getting connections with JACK error."""
-        mock_jack_client.get_ports.side_effect = jack.JackError(
-            "Connection lost"
-        )
+        mock_jack_client.get_ports.side_effect = jack.JackError("Connection lost")
 
         connections = jack_manager.get_connections("test_port")
 
         assert connections == []
 
-    def test_get_connections_unexpected_error(
-        self, jack_manager, mock_jack_client
-    ):
+    def test_get_connections_unexpected_error(self, jack_manager, mock_jack_client):
         """Test getting connections with unexpected error."""
         mock_jack_client.get_ports.side_effect = Exception("Unexpected error")
 
@@ -334,9 +294,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
             connections = manager.get_connections("test_port")
@@ -402,9 +360,7 @@ class TestJackConnectionManager:
         with patch(
             "cuemsengine.players.JackConnectionManager.jack.Client"
         ) as mock_client_class:
-            mock_client_class.side_effect = jack.JackError(
-                "JACK server not running"
-            )
+            mock_client_class.side_effect = jack.JackError("JACK server not running")
 
             manager = JackConnectionManager("test_client")
             del manager  # Should not raise exception

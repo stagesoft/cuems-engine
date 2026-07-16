@@ -83,11 +83,8 @@ def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
         drifts.append(delta - 30000)
         prev_start_ms = start_mtc.milliseconds_rounded
 
-    assert all(
-        d == -40 for d in drifts
-    ), (
-        f"expected buggy path to lose exactly 40 ms/iter at 25 fps,"
-        f" got {drifts}"
+    assert all(d == -40 for d in drifts), (
+        f"expected buggy path to lose exactly 40 ms/iter at 25 fps," f" got {drifts}"
     )
 
 

@@ -128,8 +128,7 @@ def test_node_operation_serialization_format():
     # ASSERT - Verify __str__ representation
     str_repr = str(operation)
     assert (
-        str_repr
-        == f"NodeOperation by {sender_id}: add on player {player_id}"
+        str_repr == f"NodeOperation by {sender_id}: add on player {player_id}"
         " (with data)"
     )
 
@@ -144,8 +143,7 @@ def test_node_operation_serialization_format():
 
     # ASSERT - Verify __str__ for REMOVE (without data)
     assert (
-        str(remove_op)
-        == f"NodeOperation by {sender_id}: remove on player {player_id}"
+        str(remove_op) == f"NodeOperation by {sender_id}: remove on player {player_id}"
         " (without data)"
     )
 
@@ -174,9 +172,7 @@ class TestNodesHubIntegration:
 
             # ACT - Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(
-                listener_hub.start_message_receiver()
-            )
+            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
             await asyncio.sleep(0.1)  # Allow listener to bind
 
             dialer_task = asyncio.create_task(dialer_hub.start())
@@ -236,9 +232,7 @@ class TestNodesHubIntegration:
 
             # Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(
-                listener_hub.start_message_receiver()
-            )
+            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
             await asyncio.sleep(0.1)
             dialer_task = asyncio.create_task(dialer_hub.start())
             await asyncio.sleep(0.1)
@@ -314,9 +308,7 @@ class TestNodesHubIntegration:
 
             # Start hubs (transport + message receiver)
             listener_task = asyncio.create_task(listener_hub.start())
-            receiver_task = asyncio.create_task(
-                listener_hub.start_message_receiver()
-            )
+            receiver_task = asyncio.create_task(listener_hub.start_message_receiver())
             await asyncio.sleep(0.1)
             dialer_task = asyncio.create_task(dialer_hub.start())
             await asyncio.sleep(0.1)
@@ -391,9 +383,7 @@ class TestCommunicationsIntegration:
         # Mock IPC communicators with async methods
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(
-            side_effect=asyncio.CancelledError
-        )
+        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",
@@ -416,9 +406,7 @@ class TestCommunicationsIntegration:
             time.sleep(0.3)  # Allow node to connect
 
             # ACT - Send operation from node
-            node.add_player(
-                "audioplayer-xyz", {"name": "audioplayer", "volume": 0.8}
-            )
+            node.add_player("audioplayer-xyz", {"name": "audioplayer", "volume": 0.8})
 
             # Wait for message to be received
             time.sleep(0.5)
@@ -460,9 +448,7 @@ class TestCommunicationsIntegration:
 
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(
-            side_effect=asyncio.CancelledError
-        )
+        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",
@@ -526,9 +512,7 @@ class TestCommunicationsIntegration:
 
         mock_comm = MagicMock()
         mock_comm.responder_connect = AsyncMock()
-        mock_comm.responder_get_request = AsyncMock(
-            side_effect=asyncio.CancelledError
-        )
+        mock_comm.responder_get_request = AsyncMock(side_effect=asyncio.CancelledError)
 
         with patch(
             "cuemsengine.comms.ControllerCommunications.Communicator",

@@ -287,9 +287,7 @@ def test_project_deploy_failure_aborts_load_preserves_previous(
     ):
         result = node_engine.load_project("complex_test")
 
-    assert (
-        result is False
-    ), "load_project should return False on deploy_project failure"
+    assert result is False, "load_project should return False on deploy_project failure"
     assert "Project deploy FAILED" in caplog.text
     assert "aborting load" in caplog.text
     # Previous project survives — load status unchanged

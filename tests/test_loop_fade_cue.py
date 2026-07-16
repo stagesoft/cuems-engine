@@ -43,9 +43,7 @@ class _AdvancingMtc:
 
     @property
     def milliseconds_rounded(self) -> int:
-        return int(
-            self._start_ms + (time.monotonic() - self._start_wall) * self._rate
-        )
+        return int(self._start_ms + (time.monotonic() - self._start_wall) * self._rate)
 
 
 def test_fade_cue_registered_in_loop_cue_dispatch():
@@ -112,9 +110,7 @@ def test_loop_fade_cue_returns_early_on_stop_requested():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    assert (
-        elapsed < 0.5
-    ), f"loop_fadeCue did not respect _stop_requested: {elapsed}s"
+    assert elapsed < 0.5, f"loop_fadeCue did not respect _stop_requested: {elapsed}s"
 
 
 def test_loop_fade_cue_no_end_mtc_returns_immediately():
@@ -133,6 +129,4 @@ def test_loop_fade_cue_no_end_mtc_returns_immediately():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    assert (
-        elapsed < 0.2
-    ), "loop_fadeCue without _end_mtc must return immediately"
+    assert elapsed < 0.2, "loop_fadeCue without _end_mtc must return immediately"

@@ -86,9 +86,7 @@ _FADE_KWARGS = dict(
 
 
 class TestSendFade:
-    def test_send_fade_emits_correct_osc_address(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_emits_correct_osc_address(self, udp_listener, gradient_client):
         """(SC-004 #1) /gradient/start_fade address."""
         sock, _ = udp_listener
         gradient_client.send_fade(**_FADE_KWARGS)
@@ -102,9 +100,7 @@ class TestSendFade:
         data, _ = _recv(sock)
         assert _type_tag_str(data) == ",sssisffhiss"
 
-    def test_send_fade_motion_id_at_position_0(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_motion_id_at_position_0(self, udp_listener, gradient_client):
         """(SC-004 #3) motion_id at params[0]."""
         sock, _ = udp_listener
         gradient_client.send_fade(**_FADE_KWARGS)
@@ -142,24 +138,17 @@ class TestSendFade:
         ), "start_mtc_ms type tag must be 'h' (int64)"
         assert msg.params[7] == large_val
 
-    def test_send_fade_osc_error_is_raised(
-        self, udp_listener, gradient_client, caplog
-    ):
+    def test_send_fade_osc_error_is_raised(self, udp_listener, gradient_client, caplog):
         """(SC-004 #8) OSC send error is logged at ERROR and re-raised."""
-        gradient_client._osc.client.send = MagicMock(
-            side_effect=OSError("send failed")
-        )
+        gradient_client._osc.client.send = MagicMock(side_effect=OSError("send failed"))
         with caplog.at_level(logging.ERROR):
             with pytest.raises(OSError):
                 gradient_client.send_fade(**_FADE_KWARGS)
         assert any(
-            "GradientClient.send_fade failed" in r.message
-            for r in caplog.records
+            "GradientClient.send_fade failed" in r.message for r in caplog.records
         )
 
-    def test_send_fade_all_11_params_present(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_all_11_params_present(self, udp_listener, gradient_client):
         """
         All 11 fields of the wire contract are present in the sent message.
         """
@@ -168,25 +157,19 @@ class TestSendFade:
         _, msg = _recv(sock)
         assert len(msg.params) == 11
 
-    def test_send_fade_osc_host_at_position_2(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_osc_host_at_position_2(self, udp_listener, gradient_client):
         sock, _ = udp_listener
         gradient_client.send_fade(**_FADE_KWARGS)
         _, msg = _recv(sock)
         assert msg.params[2] == "127.0.0.1"
 
-    def test_send_fade_osc_port_at_position_3(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_osc_port_at_position_3(self, udp_listener, gradient_client):
         sock, _ = udp_listener
         gradient_client.send_fade(**_FADE_KWARGS)
         _, msg = _recv(sock)
         assert msg.params[3] == 12300
 
-    def test_send_fade_curve_type_at_position_9(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_fade_curve_type_at_position_9(self, udp_listener, gradient_client):
         sock, _ = udp_listener
         gradient_client.send_fade(**_FADE_KWARGS)
         _, msg = _recv(sock)
@@ -198,9 +181,7 @@ class TestSendFade:
 
         sock, port = udp_listener
         gc = GradientClient(host="127.0.0.1", port=port, node_uuid="n")
-        kwargs = {
-            k: v for k, v in _FADE_KWARGS.items() if k != "curve_params_json"
-        }
+        kwargs = {k: v for k, v in _FADE_KWARGS.items() if k != "curve_params_json"}
         gc.send_fade(**kwargs)
         _, msg = _recv(sock)
         assert msg.params[10] == "{}"
@@ -212,9 +193,7 @@ class TestSendFade:
 
 
 class TestSendCancelAll:
-    def test_send_cancel_all_emits_correct_address(
-        self, udp_listener, gradient_client
-    ):
+    def test_send_cancel_all_emits_correct_address(self, udp_listener, gradient_client):
         """(SC-004 #6) /gradient/cancel_all address."""
         sock, _ = udp_listener
         gradient_client.send_cancel_all()

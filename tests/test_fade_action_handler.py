@@ -201,9 +201,7 @@ class TestBuildFadePayloadVideoSingleLayer:
     ):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
 
-        target_cue = _make_video_cue(
-            start_value=start_value, layer_ids=layer_ids
-        )
+        target_cue = _make_video_cue(start_value=start_value, layer_ids=layer_ids)
         fade_cue = _make_fade_cue(target_cue, target_value=target_value)
         payloads = _build_fade_payload(
             target_cue, fade_cue, start_mtc_ms=1234, motion_id=motion_id
@@ -284,9 +282,7 @@ def test_build_payload_unsupported_target_raises():
     fake_target = MagicMock(spec=[])  # not Audio/VideoCue
     fade_cue = MagicMock()
     try:
-        _build_fade_payload(
-            fake_target, fade_cue, start_mtc_ms=0, motion_id="x"
-        )
+        _build_fade_payload(fake_target, fade_cue, start_mtc_ms=0, motion_id="x")
     except ValueError:
         return
     raise AssertionError("Expected ValueError for unsupported target_cue type")
@@ -298,9 +294,7 @@ def test_build_payload_video_no_layer_ids_raises():
     target_cue = _make_video_cue(layer_ids=[])
     fade_cue = _make_fade_cue(target_cue)
     try:
-        _build_fade_payload(
-            target_cue, fade_cue, start_mtc_ms=0, motion_id="x"
-        )
+        _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, motion_id="x")
     except ValueError:
         return
     raise AssertionError("Expected ValueError for VideoCue with no _layer_ids")
@@ -321,9 +315,7 @@ def _mock_gradient_client():
 
 
 class TestHandleFadeActionAudio:
-    def _call(
-        self, target_value=80, mtc_ms=5000, start_value=0.5, mock_gc=None
-    ):
+    def _call(self, target_value=80, mtc_ms=5000, start_value=0.5, mock_gc=None):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
@@ -334,9 +326,7 @@ class TestHandleFadeActionAudio:
         ch = _make_cue_handler()
         if mock_gc is None:
             mock_gc = _mock_gradient_client()
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             result = handler(ch, cue, target_cue, mtc)
         return result, ch, cue, target_cue, mock_gc
 
@@ -356,9 +346,7 @@ class TestHandleFadeActionAudio:
     def test_send_fade_passes_base_motion_id(self):
         """AudioCue motion_id is the base FadeCue.uuid (no layer suffix)."""
         result, _, cue, _, mock_gc = self._call()
-        assert mock_gc.send_fade.call_args.kwargs.get("motion_id") == str(
-            cue.id
-        )
+        assert mock_gc.send_fade.call_args.kwargs.get("motion_id") == str(cue.id)
 
     def test_handler_does_not_disarm_target(self):
         result, ch, *_ = self._call()
@@ -400,9 +388,7 @@ class TestHandleFadeActionVideoMultiLayer:
         mtc = _make_mtc(mtc_ms)
         ch = _make_cue_handler()
         mock_gc = _mock_gradient_client()
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             result = handler(ch, cue, target_cue, mtc)
         return result, ch, cue, target_cue, mock_gc
 
@@ -417,16 +403,12 @@ class TestHandleFadeActionVideoMultiLayer:
     def test_send_fade_motion_ids_layer_suffixed(self):
         result, _, cue, _, mock_gc = self._call(layer_ids=(0, 2, 5))
         base = str(cue.id)
-        observed = [
-            c.kwargs.get("motion_id") for c in mock_gc.send_fade.call_args_list
-        ]
+        observed = [c.kwargs.get("motion_id") for c in mock_gc.send_fade.call_args_list]
         assert observed == [f"{base}_0", f"{base}_2", f"{base}_5"]
 
     def test_send_fade_osc_paths_per_layer(self):
         result, _, _, _, mock_gc = self._call(layer_ids=(0, 2, 5))
-        paths = [
-            c.kwargs.get("osc_path") for c in mock_gc.send_fade.call_args_list
-        ]
+        paths = [c.kwargs.get("osc_path") for c in mock_gc.send_fade.call_args_list]
         assert paths == [
             "/videocomposer/layer/0/opacity",
             "/videocomposer/layer/2/opacity",
@@ -452,9 +434,7 @@ class TestHandleFadeActionFailures:
         ch = _make_cue_handler()
         ch.arm = MagicMock(return_value=False)
         mock_gc = _mock_gradient_client()
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
 
@@ -470,9 +450,7 @@ class TestHandleFadeActionFailures:
         ch = _make_cue_handler()
         ch.arm = MagicMock(return_value=False)
         mock_gc = _mock_gradient_client()
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             handler(ch, cue, target_cue, mtc)
         mock_gc.send_fade.assert_not_called()
 
@@ -487,9 +465,7 @@ class TestHandleFadeActionFailures:
         ch = _make_cue_handler()
         mock_gc = _mock_gradient_client()
         mock_gc.send_fade.side_effect = RuntimeError("OSC send failed")
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
 
@@ -505,9 +481,7 @@ class TestHandleFadeActionFailures:
         ch = _make_cue_handler()
         mock_gc = _mock_gradient_client()
         mock_gc.send_fade.side_effect = RuntimeError("OSC send failed")
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             handler(ch, cue, target_cue, mtc)
         ch.disarm.assert_not_called()
         ch.go.assert_not_called()
@@ -526,9 +500,7 @@ class TestHandleFadeActionFailures:
         cue = _make_fade_cue(target_cue, target_value=80)
         mtc = _make_mtc()
         ch = _make_cue_handler()
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=None
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=None):
             result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
 
@@ -552,9 +524,7 @@ class TestHandleFadeActionFailures:
                 raise RuntimeError("OSC send failed for layer 2")
 
         mock_gc.send_fade.side_effect = flaky_send
-        with patch.object(
-            PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc
-        ):
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             result = handler(ch, cue, target_cue, mtc)
         assert result["status"] == "failed"
         # Sent layer 0, failed on layer 2, did NOT attempt layer 5.
@@ -585,6 +555,7 @@ def test_run_cue_fade_cue_prepare_only_reveal_executes():
     reveal_cue. The action now EXECUTES at reveal_cue (start_mtc), not run_cue:
     run_cue is prepare-only; reveal_cue fires execute_action."""
     from cuemsengine.cues.run_cue import run_cue, reveal_cue
+
     target_cue = _make_audio_cue()
     cue = _make_fade_cue(target_cue)
     mtc = _make_mtc()

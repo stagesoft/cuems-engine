@@ -121,9 +121,7 @@ def _pong_op(sender: str) -> NodeOperation:
 
 class TestCollectProjectNodes:
     def _fake_cue(self, output_names):
-        cue = SimpleNamespace(
-            outputs=[{"output_name": n} for n in output_names]
-        )
+        cue = SimpleNamespace(outputs=[{"output_name": n} for n in output_names])
         return cue
 
     def _fake_cuelist(self, contents):
@@ -151,9 +149,7 @@ class TestCollectProjectNodes:
         assert nodes == {SLAVE_UUID, CONTROLLER_UUID}
 
     def test_skips_malformed_output_names(self, controller):
-        cl = self._fake_cuelist(
-            [self._fake_cue(["short", "not-a-uuid-shape", ""])]
-        )
+        cl = self._fake_cuelist([self._fake_cue(["short", "not-a-uuid-shape", ""])])
         assert controller._collect_project_nodes(cl) == set()
 
     def test_handles_empty_or_missing_outputs(self, controller):
@@ -214,9 +210,7 @@ class TestArmedReadyAggregation:
         controller.go_offset = None
         controller.set_status("armed", "no")
         with patch.object(controller, "start_timecode") as start_tc:
-            controller.status_operation_callback(
-                _armed_ready_op(CONTROLLER_UUID)
-            )
+            controller.status_operation_callback(_armed_ready_op(CONTROLLER_UUID))
             controller.status_operation_callback(_armed_ready_op(SLAVE_UUID))
             assert self._read_armed(controller) == "yes"
             assert controller.go_offset == 0
@@ -230,9 +224,7 @@ class TestScriptFinishedAggregation:
     def test_running_stays_yes_until_all_required_report(self, controller):
         controller.set_status("running", "yes")
 
-        controller.status_operation_callback(
-            _script_finished_op(CONTROLLER_UUID)
-        )
+        controller.status_operation_callback(_script_finished_op(CONTROLLER_UUID))
         assert controller.get_status("running") == "yes"
         assert controller._finished_nodes == {CONTROLLER_UUID}
 
@@ -284,9 +276,7 @@ def test_probe_returns_only_controller_when_no_remote_nodes(controller):
     alive = controller._probe_cluster_liveness(timeout=0.05)
     assert alive == {CONTROLLER_UUID}
     # No broadcast scheduled.
-    assert (
-        controller.communications_thread.nng_hub.send_operation.call_count == 0
-    )
+    assert controller.communications_thread.nng_hub.send_operation.call_count == 0
 
 
 # ─── Adopted-uuids reader handles bool-typed values ─────────────────────
@@ -404,9 +394,7 @@ class TestArmWatchdog:
             controller.set_status("armed", "no")
             controller._arm_arm_watchdog()
             # Simulate both required nodes coming armed before timeout.
-            controller.status_operation_callback(
-                _armed_ready_op(CONTROLLER_UUID)
-            )
+            controller.status_operation_callback(_armed_ready_op(CONTROLLER_UUID))
             controller.status_operation_callback(_armed_ready_op(SLAVE_UUID))
             time.sleep(0.3)
             assert controller.get_status("armed") == "yes"

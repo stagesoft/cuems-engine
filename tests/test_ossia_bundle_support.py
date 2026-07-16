@@ -18,10 +18,7 @@ try:
     OSSIA_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️  Import error: {e}")
-    print(
-        "\nAttempting to inspect pyossia module structure despite import"
-        "error..."
-    )
+    print("\nAttempting to inspect pyossia module structure despite import" "error...")
     OSSIA_AVAILABLE = False
     ossia = None
 
@@ -42,15 +39,11 @@ except ImportError as e:
         try:
             ossia_module = importlib.import_module("pyossia.ossia_python")
             print(f"\n✅ ossia_python module found: {ossia_module}")
-            _pub = [
-                a for a in dir(ossia_module) if not a.startswith("_")
-            ]
+            _pub = [a for a in dir(ossia_module) if not a.startswith("_")]
             print(f"   Module attributes: {_pub[:30]}")
 
             # Check for bundle-related items
-            bundle_items = [
-                a for a in dir(ossia_module) if "bundle" in a.lower()
-            ]
+            bundle_items = [a for a in dir(ossia_module) if "bundle" in a.lower()]
             if bundle_items:
                 print(f"   ✅ Bundle-related items found: {bundle_items}")
             else:
@@ -126,9 +119,7 @@ def test_osc_protocol():
 
         # Look for bundle-related methods
         bundle_methods = [
-            m
-            for m in dir(device)
-            if "bundle" in m.lower() or "push" in m.lower()
+            m for m in dir(device) if "bundle" in m.lower() or "push" in m.lower()
         ]
         if bundle_methods:
             print(f"\n✅ Bundle/push methods found: {bundle_methods}")
@@ -237,9 +228,7 @@ def test_libossia_bundle_element():
 
         # Check what's available in ossia module
         print("\nSearching for 'bundle' in ossia module...")
-        bundle_related = [
-            item for item in dir(ossia) if "bundle" in item.lower()
-        ]
+        bundle_related = [item for item in dir(ossia) if "bundle" in item.lower()]
         if bundle_related:
             print(f"✅ Found: {bundle_related}")
         else:

@@ -73,9 +73,7 @@ class CuemsTestCleaner:
                     engine.stop()
                 print(f"Stopped engine: {engine.__class__.__name__}")
             except Exception as e:
-                print(
-                    f"Error stopping engine {engine.__class__.__name__}: {e}"
-                )
+                print(f"Error stopping engine {engine.__class__.__name__}: {e}")
 
         # Terminate all registered processes
         for process in _active_processes:

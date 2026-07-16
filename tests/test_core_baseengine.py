@@ -12,9 +12,7 @@ from .fixtures import env_config_path, mock_config_manager
 
 
 class TestBaseEngine:
-    def test_base_engine_initialization_with_all_components(
-        self, env_config_path
-    ):
+    def test_base_engine_initialization_with_all_components(self, env_config_path):
         """
         Test BaseEngine initialization with both ConfigManager and MTC listener
         """

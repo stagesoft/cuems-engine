@@ -49,9 +49,7 @@ def test_project_go_from_controller(
         sleep(1)
 
     # ASSERT - Verify engines loaded project
-    assert (
-        node_engine.get_status("running") == "yes"
-    ), "Node engine is not running"
+    assert node_engine.get_status("running") == "yes", "Node engine is not running"
 
     assert controller_engine.script is not None
     assert node_engine.script is not None
@@ -61,26 +59,19 @@ def test_project_go_from_controller(
     assert node_engine.get_status("load") == "complex_test"
 
     # ASSERT - Verify player clients were mocked and recorded
-    print(
-        f"\n📊 Mock Player Clients Created:"
-        f"{len(mock_player_clients['clients'])}"
-    )
+    print(f"\n📊 Mock Player Clients Created:" f"{len(mock_player_clients['clients'])}")
     for client in mock_player_clients["clients"]:
         print(f"   - {client['name']} on port {client['port']}")
 
     assert (
         len(mock_player_clients["clients"]) > 0
     ), "Expected player clients to be created"
-    client_names = {
-        client["name"] for client in mock_player_clients["clients"]
-    }
+    client_names = {client["name"] for client in mock_player_clients["clients"]}
 
     # Verify we have expected player types
     has_video = any("video" in name for name in client_names)
     has_dmx = any("dmx" in name or "mixer" in name for name in client_names)
-    assert (
-        has_video or has_dmx
-    ), f"Expected video or dmx players, got: {client_names}"
+    assert has_video or has_dmx, f"Expected video or dmx players, got: {client_names}"
 
     # If commands were sent, verify they have correct structure
     print(f"📊 Mock Commands Recorded: {len(mock_player_clients['commands'])}")

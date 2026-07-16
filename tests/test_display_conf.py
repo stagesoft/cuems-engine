@@ -30,9 +30,7 @@ canvas_region=0,0,1920,1080
 """,
     )
     regions, canvas = read_display_conf(path)
-    assert regions == {
-        "HDMI-A-1": {"x": 0, "y": 0, "width": 1920, "height": 1080}
-    }
+    assert regions == {"HDMI-A-1": {"x": 0, "y": 0, "width": 1920, "height": 1080}}
     assert canvas == (1920, 1080)
 
 
@@ -150,9 +148,7 @@ def test_missing_file_raises(tmp_path):
 def test_file_without_output_sections_raises(tmp_path):
     """Treat file-present-but-empty same as missing — same operator action."""
     path = _write(tmp_path, "canvas_layout=custom\n")
-    with pytest.raises(
-        DisplayConfNotFoundError, match="no \\[output:\\*\\] sections"
-    ):
+    with pytest.raises(DisplayConfNotFoundError, match="no \\[output:\\*\\] sections"):
         read_display_conf(path)
 
 

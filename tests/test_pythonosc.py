@@ -34,9 +34,7 @@ def test_client_call_send_message():
 def test_server_call_start():
     # Arrange
     server = PyOscServer()
-    with patch.object(
-        ThreadingOSCUDPServer, "serve_forever"
-    ) as mock_serve_forever:
+    with patch.object(ThreadingOSCUDPServer, "serve_forever") as mock_serve_forever:
         # Act
         server.start()
         # Assert

@@ -22,9 +22,7 @@ def _make_chunked_proc(n_chunks=5, chunk_interval=0.05):
     Return a fake asyncio subprocess that emits n_chunks progress lines then
     exits.
     """
-    progress_line = (
-        b"    32,768  50%    1.00MB/s    0:00:01 (xfr#1, to-chk=0/1)\r"
-    )
+    progress_line = b"    32,768  50%    1.00MB/s    0:00:01 (xfr#1, to-chk=0/1)\r"
 
     async def _read_out(size):
         await asyncio.sleep(chunk_interval)
@@ -141,13 +139,9 @@ def test_nng_heartbeat_not_blocked_during_deploy():
     loop_thread.join(timeout=5)
 
     assert result_holder, "sync_files() did not return within 10 s"
-    assert (
-        result_holder[0] is True
-    ), f"sync_files() returned False; errors={d.errors}"
+    assert result_holder[0] is True, f"sync_files() returned False; errors={d.errors}"
 
-    assert (
-        len(heartbeat_times) >= 2
-    ), "heartbeat recorded fewer than 2 timestamps"
+    assert len(heartbeat_times) >= 2, "heartbeat recorded fewer than 2 timestamps"
     intervals = [
         heartbeat_times[i + 1] - heartbeat_times[i]
         for i in range(len(heartbeat_times) - 1)

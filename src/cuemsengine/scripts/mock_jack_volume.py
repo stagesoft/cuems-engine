@@ -28,9 +28,7 @@ def main():
     parser.add_argument(
         "-c", dest="client_name", default="mock_mixer", help="JACK client name"
     )
-    parser.add_argument(
-        "-p", dest="port", type=int, required=True, help="OSC UDP port"
-    )
+    parser.add_argument("-p", dest="port", type=int, required=True, help="OSC UDP port")
     parser.add_argument(
         "-n", dest="channels", type=int, default=2, help="Number of channels"
     )
@@ -53,9 +51,7 @@ def main():
     def quit_handler(address, *osc_args):
         Logger.info(f"[mock-jack-volume] OSC {address} -- shutting down")
         if server_ref:
-            threading.Thread(
-                target=server_ref[0].shutdown, daemon=True
-            ).start()
+            threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
 
     # Register dynamic volume paths based on client name and channel count
     base = f"/audiomixer/{args.client_name}"
@@ -64,9 +60,7 @@ def main():
         dispatcher.map(f"{base}/{i}", volume_handler)
     dispatcher.map("/quit", quit_handler)
     dispatcher.set_default_handler(
-        lambda address, *a: Logger.info(
-            f"[mock-jack-volume] OSC {address} {list(a)}"
-        )
+        lambda address, *a: Logger.info(f"[mock-jack-volume] OSC {address} {list(a)}")
     )
 
     server = BlockingOSCUDPServer(("0.0.0.0", args.port), dispatcher)
