@@ -99,7 +99,8 @@ class NodeEngine(BaseEngine):
         self.set_players()
         # Set up NNG command receiving (after players ready)
         self._setup_nng_command_callback()
-        self.mtc_listener.start()
+        if self.mtc_listener is not None:
+            self.mtc_listener.start()
         super().start()
 
     def _setup_nng_command_callback(self):
@@ -583,6 +584,9 @@ class NodeEngine(BaseEngine):
         outputs_map = {}
         if cuelist is None:
             cuelist = self.script.cuelist
+        if cuelist.contents is None:
+            Logger.warning("Cuelist contents is None, skipping map_cue_outputs")
+            return outputs_map
         for cue in cuelist.contents:
             if isinstance(cue, CueList):
                 outputs_map.update(self.map_cue_outputs(cue))

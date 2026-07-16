@@ -10,23 +10,23 @@ class EngineStatus:
 
     def __init__(self):
         # Initialize before test (test setter increments this)
-        self.recieved = 0
-        self.load = ""
-        self.loadcue = ""
+        self.armed = ""
+        self.deploy = ""
         self.go = ""
         self.gocue = ""
-        self.pause = ""
-        self.stop = ""
-        self.resetall = ""
-        self.preload = ""
-        self.unload = ""
         self.hwdiscovery = ""
-        self.deploy = ""
+        self.load = ""
+        self.loadcue = ""
+        self.nextcue = ""
+        self.pause = ""
+        self.preload = ""
+        self.recieved = 0
+        self.resetall = ""
+        self.running = ""
+        self.stop = ""
         self.test = ""
         self.timecode = 0
-        self.nextcue = ""
-        self.running = ""
-        self.armed = ""
+        self.unload = ""
 
         del self.currentcue  # start with empty array
 

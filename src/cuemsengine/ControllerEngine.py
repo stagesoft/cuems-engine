@@ -113,8 +113,9 @@ class ControllerEngine(BaseEngine):
         # the most reliable loopback path; any earlier detection would have
         # picked a wrong/fallback port (e.g. rtpmidid:Announcements).
         Logger.info("Re-detecting MIDI port after MTC sender creation...")
-        self.mtc_listener._MtcListener__open_port(None)
-        self.mtc_listener.start()
+        if self.mtc_listener is not None:
+            self.mtc_listener._MtcListener__open_port(None)
+            self.mtc_listener.start()
         super().start()
 
     def set_status(self, property: str, value: str, strict: bool = False) -> None:

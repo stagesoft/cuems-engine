@@ -9,21 +9,15 @@ from unittest.mock import patch
 import pytest
 
 from cuemsengine.core.BaseEngine import BaseEngine
+from cuemsengine.core.EngineStatus import EngineStatus
 
 
 @pytest.fixture
-def daemon(with_signals: bool = True):
+def base_engine(with_signals: bool = True):
     environ["CUEMS_CONF_PATH"] = str(
         Path(__file__).parent / ".." / "dev" / "test_xml_files"
     )
     return BaseEngine(with_signals=with_signals)
-
-
-@pytest.fixture
-def mock_signal():
-    with patch("signal.signal") as mock_signal_obj:
-        yield mock_signal_obj
-
 
 def test_engine_can_start_and_stop():
     from os import environ, path
@@ -46,89 +40,92 @@ def test_engine_can_start_and_stop():
     assert engine.running == False
 
 
-def test_engine_status(daemon):
-    assert daemon.status.load is None
-    assert daemon.status.loadcue is None
-    assert daemon.status.go is None
-    assert daemon.status.gocue is None
-    assert daemon.status.pause is None
-    assert daemon.status.stop is None
-    assert daemon.status.resetall is None
-    assert daemon.status.preload is None
-    assert daemon.status.unload is None
-    assert daemon.status.hwdiscovery is None
-    assert daemon.status.deploy is None
-    assert daemon.status.test is None
-    assert daemon.status.timecode is None
-    assert daemon.status.currentcue == []
-    assert daemon.status.nextcue is None
-    assert daemon.status.running is None
+def test_engine_initial_status(base_engine):
+    assert isinstance(base_engine.status, EngineStatus)
+    assert base_engine.status.armed == ""
+    assert base_engine.status.deploy == ""
+    assert base_engine.status.go == ""
+    assert base_engine.status.gocue == ""
+    assert base_engine.status.hwdiscovery == ""
+    assert base_engine.status.load == ""
+    assert base_engine.status.loadcue == ""
+    assert base_engine.status.nextcue == ""
+    assert base_engine.status.pause == ""
+    assert base_engine.status.preload == ""
+    assert base_engine.status.recieved == 1
+    assert base_engine.status.resetall == ""
+    assert base_engine.status.running == ""
+    assert base_engine.status.stop == ""
+    assert base_engine.status.test == ""
+    assert base_engine.status.timecode == 0
+    assert base_engine.status.currentcue == []
 
 
-def test_set_status(daemon):
-    daemon.set_status("load", "test")
-    assert daemon.status.load == "test"
+def test_set_status(base_engine):
+    base_engine.set_status("load", "test")
+    assert base_engine.status.load == "test"
 
 
-def test_get_status(daemon):
-    daemon.set_status("load", "test")
-    assert daemon.get_status("load") == "test"
+def test_get_status(base_engine):
+    base_engine.set_status("load", "test")
+    assert base_engine.get_status("load") == "test"
 
 
-def test_recieved_test(daemon):
-    assert daemon.status.recieved == 0
-    daemon.set_status("test", "test")
-    assert daemon.status.test == "test"
-    assert daemon.status.recieved == 1
-    daemon.set_status("test", "test2")
-    assert daemon.status.test == "test2"
-    assert daemon.status.recieved == 2
+def test_recieved_test(base_engine):
+    assert base_engine.status.recieved == 1
+    base_engine.set_status("test", "test")
+    assert base_engine.status.test == "test"
+    assert base_engine.status.recieved == 2
+    base_engine.set_status("test", "test2")
+    assert base_engine.status.test == "test2"
+    assert base_engine.status.recieved == 3
 
 
-def test_get_status_none(daemon, caplog):
-    assert daemon.get_status("none") == "NotFound"
+def test_get_status_none(base_engine, caplog):
+    assert base_engine.get_status("none") == "NotFound"
     assert "Property none not found in EngineStatus" in caplog.text
 
     try:
-        daemon.get_status("none", strict=True)
+        base_engine.get_status("none", strict=True)
     except AttributeError as e:
         assert str(e) == "Property none not found in EngineStatus"
 
 
-def test_set_status_none(daemon, caplog):
-    daemon.set_status("none", "test")
+def test_set_status_none(base_engine, caplog):
+    base_engine.set_status("none", "test")
     assert "Property none not found in EngineStatus" in caplog.text
     try:
-        daemon.set_status("none", "test", strict=True)
+        base_engine.set_status("none", "test", strict=True)
     except AttributeError as e:
         assert str(e) == "Property none not found in EngineStatus"
 
 
 STATUSES = [
-    "load",
-    "loadcue",
+    "armed",
+    "deploy",
     "go",
     "gocue",
-    "pause",
-    "stop",
-    "resetall",
-    "preload",
-    "unload",
     "hwdiscovery",
-    "deploy",
+    "load",
+    "loadcue",
+    "nextcue",
+    "pause",
+    "preload",
+    "recieved",
+    "resetall",
+    "running",
+    "stop",
     "test",
     "timecode",
-    "nextcue",
-    "running",
-    "recieved",
+    "unload",
     "currentcue",
 ]
 
 
-def test_all_statuses(daemon):
-    for i in vars(daemon.status).keys():
+def test_all_statuses(base_engine):
+    for i in vars(base_engine.status).keys():
         assert i[1:] in STATUSES
-    assert STATUSES == daemon.get_all_status_names()
+    assert STATUSES == base_engine.get_all_status_names()
 
 
 class TestCurrentCueProperty:
@@ -136,8 +133,6 @@ class TestCurrentCueProperty:
 
     @pytest.fixture
     def status(self):
-        from cuemsengine.core.EngineStatus import EngineStatus
-
         return EngineStatus()
 
     def test_currentcue_accepts_tuple_of_two_elements(self, status):

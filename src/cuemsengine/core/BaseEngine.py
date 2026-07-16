@@ -61,6 +61,7 @@ class BaseEngine(SignalEngine):
         self.node_name = None
         self.node_host = None
         self.mtc_port = MTC_PORT
+        self.mtc_listener = None
         self.timecode = None
         self.status = EngineStatus()
         self.oscquery_client_list: list[OssiaClient] = []
