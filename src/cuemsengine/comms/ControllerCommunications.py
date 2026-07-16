@@ -260,7 +260,7 @@ class ControllerCommunications(AsyncCommsThread):
         Logger.info("Editor listener started")
         await self.editor.responder_connect()
         while not self.stop_requested:
-            Logger.debug(f"waiting for editor message")
+            Logger.debug("Waiting for editor message")
             await self.editor.responder_get_request(self.editor_callback)
 
     async def respond_to_editor(self, message, context: Context):

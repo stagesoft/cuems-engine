@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from time import sleep
-
 from cuemsutils.log import Logger, logged
 
 from ..osc.endpoints import OSC_AUDIOPLAYER_CONF
@@ -29,7 +27,7 @@ class AudioPlayer(Player):
             for arg in self.args.split():
                 process_call_list.append(arg)
         process_call_list.extend(["--port", str(self.port)])
-        if self.uuid != None:
+        if self.uuid is not None:
             uuid_slug = "".join(self.uuid.split("-"))
             process_call_list.extend(["--uuid", uuid_slug])
         process_call_list.append(self.media)

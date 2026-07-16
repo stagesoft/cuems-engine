@@ -3,13 +3,11 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from functools import singledispatch
-from os import path
 
 from cuemsutils.cues import AudioCue, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
-from ..players import AudioClient, DmxClient, VideoClient
 from ..players.PlayerHandler import PLAYER_HANDLER
 
 

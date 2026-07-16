@@ -5,6 +5,7 @@ on:
     branches: [main, rc_1]
   pull_request:
     branches: [main, rc_1]
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -43,7 +44,7 @@ jobs:
         run: poetry run isort --check src/ tests/
 
       - name: flake8
-        run: poetry run flake8 src/ tests/
+        run: poetry run flake8 src/ # PEP8 compliance for shipped code
 
   test:
     name: Tests

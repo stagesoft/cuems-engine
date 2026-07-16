@@ -10,7 +10,7 @@ from threading import RLock
 from time import monotonic, sleep
 from typing import Callable
 
-from cuemsutils.cues import AudioCue, DmxCue, VideoCue
+from cuemsutils.cues import AudioCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
@@ -18,9 +18,9 @@ from ..tools.PortHandler import PORT_HANDLER
 from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
 from .AudioPlayer import AudioClient, AudioPlayer, start_audio_output
 from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
+from .GradientClient import GradientClient
 from .Player import Player
-from .VideoPlayer import VideoClient, VideoOutput, VideoPlayer
-
+from .VideoPlayer import VideoClient, VideoOutput
 DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
 
 
@@ -46,7 +46,7 @@ class PlayerHandler:
     _dmx_player_client: DmxClient | None
     _player_endpoints_generator: partial | None
     _video_client: VideoClient | None
-    _gradient_client: "GradientClient | None"
+    _gradient_client: GradientClient | None
     _video_outputs: dict[str, VideoOutput]
     _audio_outputs: dict[str, dict]
     _loaded_layer_ids: set[str]
@@ -141,7 +141,9 @@ class PlayerHandler:
     def set_audio_output_generator(self, path: str, args: str):
         """Sets the audio player generator"""
         Logger.info(f"Setting audio output generator to {path} {args}")
-        self._audio_output_generator = partial(start_audio_output, path=path, args=args)
+        self._audio_output_generator = partial[tuple[AudioPlayer, AudioClient]](
+            start_audio_output, path=path, args=args
+        )
 
     def set_audio_outputs(self, audio_outputs: dict[str, dict]) -> None:
         """Store audio output configs keyed by <id>."""
@@ -487,9 +489,10 @@ class PlayerHandler:
                     # than proceeding silently. (Not raised on purpose: aborting
                     # the arm here could disrupt an in-progress GO chain.)
                     Logger.error(
-                        f"Audio cue {cue.id} failed to route {player_name} to the mixer — "
-                        f"it will be SILENT despite showing armed (player ports may not have "
-                        f"registered in time, or mixer inputs are missing)."
+                        f"Audio cue {cue.id} failed to route {player_name} to the mixer"
+                        " - it will be SILENT despite showing armed status "
+                        "(player ports may not have registered in time, or "
+                        "mixer inputs are missing)."
                     )
 
     # ---------------------------
@@ -562,7 +565,7 @@ class PlayerHandler:
         Logger.info(f"Setting video client for node {self._node_uuid}")
         self._video_client = VideoClient(player_port=port)
 
-    def get_gradient_client(self) -> "GradientClient | None":
+    def get_gradient_client(self) -> GradientClient | None:
         """
         Returns the GradientClient instance, or None if not yet initialised.
         """
@@ -575,8 +578,6 @@ class PlayerHandler:
         PyOscClient is fire-and-forget UDP with no held resources, so no
         teardown of the prior client is needed.
         """
-        from .GradientClient import GradientClient
-
         self._gradient_client = GradientClient(
             host="127.0.0.1",
             port=port,

@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from functools import partial
 from time import sleep
 
 from cuemsutils.log import Logger, logged
@@ -10,7 +9,6 @@ from pyossia import ValueType
 
 from ..osc.helpers import add_callback_to_all
 from ..osc.OssiaClient import PlayerClient
-from ..tools.PortHandler import PORT_HANDLER
 from .JackConnectionManager import JackConnectionManager
 from .Player import Player
 
@@ -689,7 +687,9 @@ def start_audio_mixer(
     return mixer, client
 
 
-### Helper functions ###
+# ###
+# Helper functions
+# ###
 def get_mixer_client_name(mixer_id: str) -> str:
     """Get the client name for the mixer.
 

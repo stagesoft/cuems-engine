@@ -6,10 +6,9 @@
 import os
 import subprocess
 import threading
-from functools import partial
 from time import sleep
 
-from cuemsutils.cues import AudioCue, CueList, DmxCue, VideoCue
+from cuemsutils.cues import CueList
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
@@ -20,7 +19,7 @@ from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 from .tools.CuemsDeploy import CuemsDeploy
-from .tools.display_conf import DisplayConfNotFoundError, read_display_conf
+from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
@@ -802,14 +801,14 @@ class NodeEngine(BaseEngine):
                 Logger.warning(f"ensure_video_indexes: indexer failed: {e}")
                 return
             if result.returncode == 0:
-                Logger.info(f"ensure_video_indexes: indexer ok (rc=0)")
+                Logger.info("ensure_video_indexes: indexer ok (rc=0)")
                 if result.stdout:
                     Logger.debug(
                         f"ensure_video_indexes stdout: {result.stdout.strip()}"
                     )
             else:
                 Logger.warning(
-                    f"ensure_video_indexes: indexer returned"
+                    "ensure_video_indexes: indexer returned"
                     f"rc={result.returncode}. "
                     f"stdout={result.stdout.strip()!r}"
                     f"stderr={result.stderr.strip()!r}"
@@ -1151,6 +1150,7 @@ class NodeEngine(BaseEngine):
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
         main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener, GO_mtc + sigma_ms)
+        Logger.info(f"Cue {cue_to_go.id} started on main thread: {main_thread.name}")
 
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
@@ -1246,7 +1246,7 @@ class NodeEngine(BaseEngine):
         Logger.info("Playback stopped.")
 
 
-## MISCELLANEOUS FUNCTIONS ##
+# --------- MISCELLANEOUS FUNCTIONS --------- #
 
 
 # helper functions

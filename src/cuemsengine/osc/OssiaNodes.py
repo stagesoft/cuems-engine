@@ -104,10 +104,10 @@ class OssiaNodes(object):
         )
         _.access_mode = ossia.AccessMode.Bi
         if callback:
-            l = len(signature(callback).parameters)
-            if l == 1:
+            cb_params = len(signature(callback).parameters)
+            if cb_params == 1:
                 _.add_callback(callback)
-            elif l == 2:
+            elif cb_params == 2:
                 _.add_callback_param(callback)
             else:
                 raise ValueError("callback must have 1 or 2 parameters")
@@ -117,13 +117,13 @@ class OssiaNodes(object):
     def set_node_callback(self, node: Node, callback: Callable) -> None:
         """Set a callback to a node"""
         Logger.debug(f"Setting callback for node {str(node)}")
-        l = len(signature(callback).parameters)
-        if l == 1:
+        cb_params = len(signature(callback).parameters)
+        if cb_params == 1:
             node.parameter.add_callback(callback)
-        elif l == 2:
+        elif cb_params == 2:
             node.parameter.add_callback_param(callback)
         else:
-            raise ValueError(f"callback must have 1 or 2 parameters, not {l}")
+            raise ValueError(f"callback must have 1 or 2 parameters, not {cb_params}")
 
     @logged
     def set_value(self, node: Union[Node, str], value) -> None:

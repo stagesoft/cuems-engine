@@ -16,6 +16,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
+from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from .run_cue import blank_cue, reveal_cue, run_cue
@@ -754,7 +755,8 @@ class CueHandler:
                 # no remove_cue (controller's stop already reset status), no
                 # fire, no disarm (mirrors the post-loop generation guard).
                 Logger.info(
-                    f"Cue {cue.id} postwait tail cancelled (stop/newer GO), skipping cleanup"
+                    f"Cue {cue.id} postwait tail cancelled (stop/newer GO),"
+                    " skipping cleanup"
                 )
                 return
             # A pure _stop_requested exit (action-pause: sets the flag WITHOUT a
@@ -917,7 +919,7 @@ class CueHandler:
         if not path_parts:
             Logger.warning("Empty DMX path parts, skipping routing")
             return
-        if not "mixer" in path_parts:
+        if "mixer" not in path_parts:
             Logger.warning(
                 f'Invalid DMX path (no "mixer" keyword): {path_parts}, skipping routing'
             )
@@ -948,7 +950,5 @@ class CueHandler:
 # ---------------------------
 
 CUE_HANDLER = CueHandler()
-
-from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 
 _ACTION_HANDLER_SINGLETON.bind_cue_handler(CUE_HANDLER)

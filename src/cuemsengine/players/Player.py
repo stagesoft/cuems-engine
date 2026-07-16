@@ -3,7 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 import os
-from subprocess import PIPE, STDOUT, CalledProcessError, Popen
+from subprocess import PIPE, STDOUT, Popen
 from threading import Thread
 from time import sleep
 
@@ -102,7 +102,7 @@ class Player(Thread):
         while self.pid is None and elapsed < timeout:
             # Check if the thread is still alive
             if not self.is_alive():
-                error_msg = f"Player thread died during startup"
+                error_msg = "Player thread died during startup"
                 if self.error:
                     error_msg += f": {self.error}"
                 Logger.error(error_msg)

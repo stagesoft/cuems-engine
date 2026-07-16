@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-import time
 from functools import singledispatch
 from time import sleep
 
@@ -109,7 +108,8 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
                 f"cue.loop={cue.loop}"
             )
 
-            last_status_update = 0.0
+            # Future: uncomment to enable percentage progress updates.
+            # last_status_update = 0.0
             while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
                 if cue._stop_requested:
                     Logger.info(
@@ -183,7 +183,7 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             try:
                 cue._osc.set_value("/mtcfollow", 0)
                 Logger.info(
-                    f"Audio mtcfollow disabled",
+                    "Audio mtcfollow disabled",
                     extra={"caller": cue.__class__.__name__},
                 )
             except Exception as e:
@@ -210,7 +210,8 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
         mtc: The MIDI Time Code interface
     """
     try:
-        last_status_update = 0.0
+        # Future: uncomment to enable percentage progress updates.
+        # last_status_update = 0.0
         while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
             if cue._stop_requested:
                 Logger.info(f"DMX loop {cue.id} cancelled by stop request")
@@ -280,7 +281,8 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
             if cue._stop_requested:
                 Logger.info(f"Video loop {cue.id} cancelled by stop request")
                 return
-            last_status_update = 0.0
+            # Future: uncomment to enable percentage progress updates.
+            # last_status_update = 0.0
             while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
                 if cue._stop_requested:
                     Logger.info(

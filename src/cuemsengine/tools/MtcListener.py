@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-#!/usr/bin/env python3
-
 import os
 from threading import Lock, Thread
 from typing import Callable
@@ -170,9 +168,9 @@ class MtcListener(Thread):
     def __update_timecode(self, timecode):
         self.main_tc = timecode
         if self.main_tc.milliseconds_rounded == 0:
-            if self.step_callback != None and self.reset_callback != None:
+            if self.step_callback is not None and self.reset_callback is not None:
                 self.reset_callback()
-        if self.step_callback != None:
+        if self.step_callback is not None:
             self.step_callback(self.main_tc)
 
     def __open_port(self, port):

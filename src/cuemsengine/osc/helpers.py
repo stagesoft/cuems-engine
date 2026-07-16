@@ -136,7 +136,7 @@ class ServerDevices(Enum):
     PYOSC = None
 
 
-## --------- HELPERS --------- ##
+# --------- HELPERS --------- #
 
 
 def add_callbacks_from_dict(endpoints: dict, cmd_dict: dict[str, Callable]) -> dict:
@@ -202,8 +202,8 @@ def deserialize_node(node_data: dict, parent_node: Optional[Node] = None) -> Nod
         if param_dict.get("value") is not None:
             try:
                 param.value = param_dict["value"]
-            except:
-                Logger.warning(f"Could not set value for parameter at {node.name}")
+            except Exception as e:
+                Logger.warning(f"Could not set value for parameter at {node.name}: {e}")
 
     # Recursively create children
     for child_data in node_data.get("children", []):
@@ -241,7 +241,8 @@ def serialize_node(node: Node) -> dict:
                 param_dict["value"] = list(value)
             else:
                 param_dict["value"] = value
-        except:
+        except Exception as e:
+            Logger.warning(f"Could not get value for {param.name} at {node.name}: {e}")
             param_dict["value"] = None
 
         # Get other parameter properties
@@ -250,7 +251,10 @@ def serialize_node(node: Node) -> dict:
                 str(param.domain) if hasattr(param, "domain") else None
             )
             param_dict["unit"] = str(param.unit) if hasattr(param, "unit") else None
-        except:
+        except Exception as e:
+            Logger.warning(
+                f"Could not get domain or unit for {param.name} at {node.name}: {e}"
+            )
             pass
 
         node_dict["parameter"] = param_dict

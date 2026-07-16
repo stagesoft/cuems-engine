@@ -146,3 +146,7 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = "E203"

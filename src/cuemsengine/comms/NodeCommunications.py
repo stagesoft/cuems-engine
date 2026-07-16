@@ -52,7 +52,7 @@ class NodeCommunications(AsyncCommsThread):
                      Called with (command_name: str, value: Any)
         """
         self._command_callback = callback
-        Logger.debug(f"Command callback set in NodeCommunications")
+        Logger.debug("Command callback set in NodeCommunications")
 
     def create_all_tasks(self):
         """Create async tasks for node communications."""
@@ -130,7 +130,7 @@ class NodeCommunications(AsyncCommsThread):
             thread.start()
             Logger.debug(f"Started command thread: {thread.name}")
         else:
-            Logger.warning(f"No command callback set for NodeCommunications")
+            Logger.warning("No command callback set for NodeCommunications")
 
     #########################
     # Nng comms to Controller

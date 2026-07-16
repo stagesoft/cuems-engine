@@ -5,12 +5,10 @@
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 from cuemsutils.log import Logger
 from cuemsutils.tools.HubServices import Message, NngBusHub
-
-from ..osc.helpers import Node, deserialize_node, serialize_node
 
 
 class ActionType(Enum):
@@ -63,7 +61,7 @@ class NodeOperation:
             data=message.data["data"],
         )
 
-    def __dict__(self):
+    def __dict__(self) -> dict:
         return {
             "type": self.type.value,
             "action": self.action.value,
@@ -72,7 +70,7 @@ class NodeOperation:
             "data": self.data,
         }
 
-    def __str__(self):
+    def __str__(self) -> str:
         data_str = "without" if not self.data else "with"
         return (
             f"{type(self).__name__} by {self.sender}: "

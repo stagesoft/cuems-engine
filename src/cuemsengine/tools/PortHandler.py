@@ -122,7 +122,7 @@ class PortHandler(object):
         if isinstance(ports, dict):
             ports = [i for i in ports.values()]
         if len(ports) > len(set[int](ports)):
-            raise ValueError(f"Duplicate ports found")
+            raise ValueError("Duplicate ports found")
         all_used_ports = set[int](self.get_all_used_ports())
         if all_used_ports & set[int](ports):
             raise ValueError(
@@ -158,7 +158,7 @@ class PortHandler(object):
             self.get_all_used_ports()
         )
         if not available_ports:
-            raise ValueError(f"No free ports found")
+            raise ValueError("No free ports found")
         return choice(list(available_ports))
 
     def get_free_ports(self, n: int) -> list:

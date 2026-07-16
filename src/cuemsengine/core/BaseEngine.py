@@ -4,7 +4,6 @@
 
 import ipaddress
 import socket
-from dis import hasconst
 from functools import partial
 from os import path, remove
 from typing import Any, Callable
@@ -24,8 +23,6 @@ from ..osc import (
     OssiaServer,
     ServerDevices,
 )
-from ..osc.helpers import add_callback_to_all, add_prefix_to_all
-from ..osc.OssiaClient import PlayerClient
 from ..tools.MtcListener import MtcListener
 from ..tools.PortHandler import PORT_HANDLER
 from .EngineStatus import EngineStatus
@@ -34,7 +31,6 @@ MTC_PORT = "Midi Through Port-0"
 CONTROLLER_NETWORK_FLAG = "NodeType.master"
 SHOW_LOCK_PATH = "/tmp/cuems.show.lock"
 CONTROLLER_HOST = "controller.local"
-NODE_ENGINE_PORT = 10000
 
 
 class BaseEngine(SignalEngine):
@@ -76,7 +72,7 @@ class BaseEngine(SignalEngine):
         if self.with_mtc:
             self.set_mtc_listener()
 
-        ## dev: CUE "POINTERS":
+        # DEV: CUE "POINTERS":
         # here we use the "standard" point of view that there is an
         # ongoing cue already running (one or many, at least the last to be
         # gone)
@@ -115,7 +111,7 @@ class BaseEngine(SignalEngine):
             Logger.error(f"Error removing show lock file: {e}")
             raise e
 
-    ### STATUS ###
+    # --------- STATUS --------- #
     def set_status(self, property: str, value: str, strict: bool = False) -> None:
         """Set the status of the engine
 
@@ -202,7 +198,7 @@ class BaseEngine(SignalEngine):
             )
         return endpoints
 
-    ### OSCQUERY ###
+    # --------- OSCQUERY --------- #
     def set_oscquery_server(
         self, endpoints: dict = None, host: str = None, port: int = None
     ):
@@ -247,7 +243,7 @@ class BaseEngine(SignalEngine):
         self.oscquery_client_list.append(oscquery_client)
         return oscquery_client
 
-    ### MTC LISTENER ###
+    # --------- MTC LISTENER --------- #
     def set_mtc_listener(self) -> None:
         """Set the MTC listener"""
         mtc_step = partial(BaseEngine.mtc_callback, self)
@@ -300,11 +296,9 @@ class BaseEngine(SignalEngine):
             # precision at NTSC framerates (29.97/23.976).
             self.timecode = mtc.milliseconds_exact - self.go_offset
 
-    ### CONFIG MANAGER ###
+    # --------- CONFIG MANAGER --------- #
     def set_config_manager(self) -> None:
         """Set the ConfigManager"""
-        from cuemsutils.xml import ProjectMappings
-
         try:
             self.cm = ConfigManager(load_all=True)
             self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
@@ -421,7 +415,7 @@ class BaseEngine(SignalEngine):
         - ValueError: No nodes found in network map
         - AttributeError: No controller found in network map
         """
-        Logger.info(f"Looking for hosts in network map")
+        Logger.info("Looking for hosts in network map")
         network_dict = self.cm.network_map
         if not network_dict:
             raise ValueError("No network map not found")
@@ -468,7 +462,7 @@ class BaseEngine(SignalEngine):
 
         Logger.info(f"MTC: {self.mtc_listener.timecode()}")
 
-    ### SHOW LOCK FILE ###
+    # --------- SHOW LOCK FILE --------- #
     def set_show_lock_file(self):  # DEV: static
         if not path.isfile(SHOW_LOCK_PATH):
             try:
@@ -476,8 +470,8 @@ class BaseEngine(SignalEngine):
                     file.write(" ")
                 Logger.info("/tmp/cuems.show.lock file written...")
                 self.show_locked = True
-            except:
-                Logger.warning("Could not write show lock file")
+            except Exception as e:
+                Logger.warning(f"Could not write show lock file: {e}")
         else:
             Logger.info(f"Show lock file {SHOW_LOCK_PATH} already exists")
             self.show_locked = True

@@ -11,7 +11,6 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
-from .helpers import find_timing
 
 
 @singledispatch
@@ -419,7 +418,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         client.set_value(f"{layer_path}/mtcfollow", 1)
 
     Logger.info(
-        f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s), offset={offset_to_go}"
+        f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s),"
+        f" offset={offset_to_go}"
     )
 
 
@@ -525,5 +525,6 @@ def blank_videoCue(cue: VideoCue, mtc):
                 f"blank_videoCue: /visible 0 failed for layer {layer_id}: {e}"
             )
     Logger.info(
-        f"Video cue {cue.id} blanked for postwait tail: {len(layer_ids)} layer(s) hidden"
+        f"Video cue {cue.id} blanked for postwait tail:"
+        f" {len(layer_ids)} layer(s) hidden"
     )

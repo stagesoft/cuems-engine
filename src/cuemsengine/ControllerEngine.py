@@ -13,7 +13,7 @@ from cuemsutils.xml.Settings import NetworkMap
 
 from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
-from .core.BaseEngine import CONTROLLER_HOST, NODE_ENGINE_PORT, BaseEngine
+from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
 
 
@@ -132,12 +132,6 @@ class ControllerEngine(BaseEngine):
 
     def set_communicators(self):
         Logger.info("Setting up Communicators")
-
-        # Get OSC hub host from ConfigManager or use default
-        if hasattr(self, "cm") and self.cm:
-            osc_hub_host = self.cm.controller_url
-        else:
-            osc_hub_host = CONTROLLER_HOST
 
         # Get NNG hub port from config (must match NodeEngine)
         if hasattr(self, "cm") and self.cm and hasattr(self.cm, "node_conf"):
@@ -275,13 +269,11 @@ class ControllerEngine(BaseEngine):
         value = args[0] if args else None
 
         # Parse: /<node_uuid>/<type>/<...>
+        # parts[0] is node_uuid, parts[1] is type (audiomixer, jadeo, etc.)
         parts = address.strip("/").split("/")
         if len(parts) < 2:
             Logger.warning(f"Invalid direct player OSC address: {address}")
             return
-
-        # parts[0] is node_uuid, parts[1] is type (audiomixer, jadeo, etc.)
-        player_type = parts[1]
 
         Logger.debug(f"Direct player OSC: {address} = {repr(value)}")
 
@@ -881,7 +873,7 @@ class ControllerEngine(BaseEngine):
             if data:
                 await websocket.send(data)
 
-        Logger.info(f"Late-join state dump sent to new WebSocket client")
+        Logger.info("Late-join state dump sent to new WebSocket client")
 
     def on_timecode_change(self, value) -> None:
         """
@@ -1043,7 +1035,7 @@ class ControllerEngine(BaseEngine):
         # NodeEngine's run_command is idempotent so a double-call is harmless)
         self._forward_command_to_nodes("/engine/command/go", value)
 
-        Logger.info(f"GO command processed")
+        Logger.info("GO command processed")
         return True
 
     def _setnextcue_handler(self, value):
