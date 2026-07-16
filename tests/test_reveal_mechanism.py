@@ -15,7 +15,7 @@ sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 from cuemsutils.cues import ActionCue, AudioCue, CueList, VideoCue  # noqa: E402
 from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
 
-from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
+from cuemsengine.cues.CueHandler import CUE_HANDLER  # noqa: E402
 from cuemsengine.cues.run_cue import reveal_cue  # noqa: E402
 
 
@@ -71,7 +71,7 @@ class TestRevealCue:
 class TestRevealWait:
     def test_no_start_mtc_reaches_immediately(self):
         cue = Mock(spec=ActionCue)  # no _start_mtc -> immediate
-        assert CueHandler._reveal_wait(None, cue, Mock(), 0) == "reached"
+        assert CUE_HANDLER._reveal_wait(cue, Mock(), 0) == "reached"
 
     def test_stop_requested_returns_stopped(self):
         cue = Mock(spec=VideoCue)
@@ -80,7 +80,7 @@ class TestRevealWait:
         cue._go_generation = 0
         mtc = Mock()
         mtc.main_tc.milliseconds_exact = 0
-        assert CueHandler._reveal_wait(None, cue, mtc, 0) == "stopped"
+        assert CUE_HANDLER._reveal_wait(cue, mtc, 0) == "stopped"
 
     def test_generation_change_returns_stopped(self):
         cue = Mock(spec=VideoCue)
@@ -89,7 +89,7 @@ class TestRevealWait:
         cue._go_generation = 5  # != go_gen passed below
         mtc = Mock()
         mtc.main_tc.milliseconds_exact = 0
-        assert CueHandler._reveal_wait(None, cue, mtc, 0) == "stopped"
+        assert CUE_HANDLER._reveal_wait(cue, mtc, 0) == "stopped"
 
     def test_reaches_when_mtc_past_start(self):
         cue = Mock(spec=VideoCue)
@@ -98,4 +98,4 @@ class TestRevealWait:
         cue._go_generation = 0
         mtc = Mock()
         mtc.main_tc.milliseconds_exact = 5000  # already past start
-        assert CueHandler._reveal_wait(None, cue, mtc, 0) == "reached"
+        assert CUE_HANDLER._reveal_wait(cue, mtc, 0) == "reached"
