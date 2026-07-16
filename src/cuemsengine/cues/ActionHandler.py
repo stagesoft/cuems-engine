@@ -11,7 +11,8 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from threading import Thread
+from typing import Any, Callable, Literal, Protocol
 
 from cuemsutils.cues import ActionCue
 from cuemsutils.cues.Cue import Cue
@@ -21,7 +22,6 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
-from .CueHandler import CueHandler
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
@@ -46,6 +46,21 @@ RegistrationLayer = Literal["cue_layer", "node_layer"]
 _ALL_ACTIONS: frozenset[str] = frozenset()
 
 
+class CueOrchestrator(Protocol):
+    """Subset of CueHandler needed by action dispatch (avoids circular import)."""
+
+    def arm(self, cue: Cue, init: bool = False) -> bool: ...
+
+    def disarm(self, cue: Cue) -> bool: ...
+
+    def go_from(
+        self,
+        start_cue: Cue,
+        mtc: MtcListener,
+        seed_ms: float | None = None,
+    ) -> Thread | None: ...
+
+
 def _filter_matches(action_type: str, filter_key: frozenset[str]) -> bool:
     if not filter_key:
         return True
@@ -64,7 +79,7 @@ class ActionHookContext:
     action_type: str
     target_id: str | None
     outcome: dict | None = None
-    cue_handler: Any = None
+    cue_handler: CueOrchestrator | None = None
     frozen_mtc_ms: float | None = None
 
 
@@ -74,7 +89,7 @@ class ActionHandler:
     """
 
     def __init__(self) -> None:
-        self._cue_handler: Any = None
+        self._cue_handler: CueOrchestrator | None = None
         self._lock = threading.Lock()
         self._hooks: dict[
             tuple[str, str, frozenset[str]], Callable[[ActionHookContext], Any]
@@ -84,7 +99,7 @@ class ActionHandler:
 
     # ---- binding ----
 
-    def bind_cue_handler(self, cue_handler: Any) -> None:
+    def bind_cue_handler(self, cue_handler: CueOrchestrator) -> None:
         """Bind the singleton cue orchestrator (arm, go, armed lookups)."""
         self._cue_handler = cue_handler
 
@@ -357,7 +372,9 @@ class ActionHandler:
 # ---------------------------------------------------------------------------
 
 
-def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | None:
+def _ready_action_target(
+    action: str, target: Cue, ch: CueOrchestrator
+) -> dict | None:
     """Ensure target is enabled and loaded before dispatch; arm if needed.
 
     Returns a failure result dict on the first problem, or None if ready.
@@ -393,7 +410,7 @@ def _ready_action_target(action: str, target: Cue, ch: CueHandler) -> dict | Non
 
 
 def _handle_play(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -421,7 +438,7 @@ def _handle_play(
 
 
 def _handle_pause(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -437,7 +454,7 @@ def _handle_pause(
 
 
 def _handle_stop(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -460,7 +477,7 @@ def _handle_stop(
 
 
 def _handle_enable(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -479,7 +496,7 @@ def _handle_enable(
 
 
 def _handle_disable(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -498,7 +515,7 @@ def _handle_disable(
 
 
 def _handle_fade_in(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -524,7 +541,7 @@ def _handle_fade_in(
 
 
 def _handle_fade_out(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -542,7 +559,7 @@ def _handle_fade_out(
 
 
 def _handle_go_to(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     _action_cue: Any,
     target: Cue,
     mtc: MtcListener,
@@ -558,7 +575,7 @@ def _handle_go_to(
 
 
 def _handle_fade_action(
-    ch: CueHandler,
+    ch: CueOrchestrator,
     action_cue: Any,
     target: Cue,
     mtc: MtcListener,
