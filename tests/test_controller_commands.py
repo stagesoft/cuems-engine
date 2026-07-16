@@ -7,6 +7,7 @@
 Tests _clear_playback_state(), refactored load_project/stop_script,
 and new get_project_status/unload_project/handle_editor_command dict returns.
 """
+
 from os import environ
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, PropertyMock, patch

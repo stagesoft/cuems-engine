@@ -13,6 +13,7 @@ into real MTC-timeline gaps honored identically on every node:
 - ActionHandler._handle_play forwards the frozen anchor UNCHANGED (no +eff
   double-count — the frozen arriving there is already the action's slot).
 """
+
 import sys
 from threading import Lock
 from types import SimpleNamespace

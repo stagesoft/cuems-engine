@@ -6,6 +6,7 @@
 - a CueList used as a chain target must reveal its first enabled child;
 - reveal_audioCue must no-op if run_audioCue aborted setup before /offset.
 """
+
 import sys
 from unittest.mock import Mock, patch
 

@@ -3,6 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 """Utilites for communications from ControllerEngine and NodeEngine."""
+
 import asyncio
 import json
 from typing import Any, Callable, Optional

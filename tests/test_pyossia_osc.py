@@ -7,6 +7,7 @@
 These tests verify basic OSC communication using pyossia, replacing
 the old pythonosc-based tests.
 """
+
 import time
 
 from pyossia import ValueType, ossia

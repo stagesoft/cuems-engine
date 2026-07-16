@@ -258,8 +258,7 @@ def main():
     print("SUMMARY & RECOMMENDATIONS")
     print("=" * 60)
 
-    print(
-        """
+    print("""
 Based on the test results above:
 
 1. If bundle methods are found:
@@ -275,8 +274,7 @@ Based on the test results above:
    → Register a single OSCQuery endpoint like /dmxplayer/scene
    → That endpoint accepts serialized scene data
    → The endpoint handler reconstructs and sends the bundle locally
-    """
-    )
+    """)
 
     print("\n✅ Test complete!")
 

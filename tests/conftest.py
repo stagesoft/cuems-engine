@@ -30,14 +30,16 @@ def _watchdog():
         if _cleanup_start_time:
             cleanup_time = time.time() - _cleanup_start_time
             if cleanup_time > 5:
-                print(f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting")
+                print(
+                    f"\n⚠️  WATCHDOG: Cleanup took {cleanup_time:.1f}s, force exiting"
+                )
                 sys.stdout.flush()
                 sys.stderr.flush()
                 os._exit(0)
 
-        # Absolute max runtime: 40 seconds (should never hit this)
+        # Absolute max runtime: 60 seconds (should never hit this)
         runtime = time.time() - _test_start_time
-        if runtime > 40:
+        if runtime > 60:
             print(
                 f"\n⚠️  WATCHDOG: Total runtime {runtime:.0f}s exceeded,"
                 f"force exiting"

@@ -7,6 +7,7 @@
 This test documents the expected flow of NodeOperation messages via NngHub
 when cues are armed/disarmed on NodeEngine.
 """
+
 import asyncio
 from unittest.mock import MagicMock, Mock
 

@@ -21,6 +21,7 @@ from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
 from .GradientClient import GradientClient
 from .Player import Player
 from .VideoPlayer import VideoClient, VideoOutput
+
 DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
 
 

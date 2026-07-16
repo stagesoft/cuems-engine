@@ -9,6 +9,7 @@ fadein_ms / 1000), so _effective_duration_ms must NOT multiply them by 1000.
 Before the fix a chained 1 s DMX fade contributed 1_000_000 ms to the timeline
 sum, scheduling the rest of a post_go='go' chain ~16.7 min late.
 """
+
 import sys
 from unittest.mock import Mock
 

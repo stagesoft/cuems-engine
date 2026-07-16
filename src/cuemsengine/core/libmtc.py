@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from ctypes import c_void_p, c_uint64, c_uint, c_char_p, cdll
+from ctypes import c_char_p, c_uint, c_uint64, c_void_p, cdll
 
 try:
     libmtcmaster = cdll.LoadLibrary("libmtcmaster.so.0")
