@@ -19,6 +19,7 @@ def base_engine(with_signals: bool = True):
     )
     return BaseEngine(with_signals=with_signals)
 
+
 def test_engine_can_start_and_stop():
     from os import environ, path
     from time import sleep

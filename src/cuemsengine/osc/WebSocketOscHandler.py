@@ -34,8 +34,8 @@ from cuemsutils.log import Logger
 
 try:
     import websockets
-    from websockets.exceptions import ConnectionClosed
     from websockets.asyncio.server import serve as websocket_serve
+    from websockets.exceptions import ConnectionClosed
 except ImportError:
     websockets = None
     websocket_serve = None

@@ -90,4 +90,4 @@ def test_get_status_endpoints(env_config_path):
         assert status_name in engine.get_all_status_names()
         assert v[0] == ValueType.String
         # assert v[1] == engine.status_callback
-        #assert v[2] == getattr(engine.status, status_name)
+        # assert v[2] == getattr(engine.status, status_name)

@@ -372,9 +372,7 @@ class ActionHandler:
 # ---------------------------------------------------------------------------
 
 
-def _ready_action_target(
-    action: str, target: Cue, ch: CueOrchestrator
-) -> dict | None:
+def _ready_action_target(action: str, target: Cue, ch: CueOrchestrator) -> dict | None:
     """Ensure target is enabled and loaded before dispatch; arm if needed.
 
     Returns a failure result dict on the first problem, or None if ready.
