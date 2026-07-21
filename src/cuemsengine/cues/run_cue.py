@@ -194,11 +194,16 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         # Setup reached the offset send → safe for reveal_cue to start following.
         cue._reveal_ready = True
 
-    # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). Following early
-    # with a future-negative offset hits the audioplayer's "Out of file
-    # boundaries" path and TERMINATES the cue before it plays. The offset above
+    # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). The offset above
     # is harmless while not following; reveal_cue turns following on at
     # start_mtc, where the seek position is ~0.
+    # NOTE: the deferral used to be REQUIRED — following early with a
+    # future-negative offset hit the audioplayer's "Out of file boundaries" path
+    # and TERMINATED the cue before it played. Fixed in cuems-audioplayer
+    # (869dyufeh): a negative seek now holds silence and self-gates. The deferral
+    # is kept as belt-and-suspenders until the fixed player binary is fleet-wide;
+    # once it is, this reveal-time /mtcfollow can be dropped (audio becomes
+    # symmetric with video).
 
     # Apply master volume from cue settings
     try:
