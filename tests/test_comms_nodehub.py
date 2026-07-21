@@ -394,7 +394,9 @@ class TestCommunicationsIntegration:
             controller = ControllerCommunications(
                 NNG_ADDRESS,
                 editor_callback=editor_callback,
-                player_operation_callback=player_callback,
+                node_operation_callback={
+                    OperationType.PLAYER: player_callback
+                },
             )
             node = NodeCommunications(NNG_ADDRESS, node_id="test-node-001")
 
@@ -458,7 +460,9 @@ class TestCommunicationsIntegration:
             controller = ControllerCommunications(
                 NNG_ADDRESS,
                 editor_callback=editor_callback,
-                player_operation_callback=player_callback,
+                node_operation_callback={
+                    OperationType.PLAYER: player_callback
+                },
             )
             node = NodeCommunications(NNG_ADDRESS, node_id="node-multi")
 
@@ -522,7 +526,9 @@ class TestCommunicationsIntegration:
             controller = ControllerCommunications(
                 NNG_ADDRESS,
                 editor_callback=editor_callback,
-                player_operation_callback=player_callback,
+                node_operation_callback={
+                    OperationType.PLAYER: player_callback
+                },
             )
             node = NodeCommunications(NNG_ADDRESS, node_id="node-custom")
 
