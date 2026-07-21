@@ -68,7 +68,7 @@ jobs:
             libjack-jackd2-dev \
             python3-systemd \
             wget
-          sudo wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -o python3-pyossia.deb
+          sudo wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
           sudo apt install -y $(realpath python3-pyossia.deb)
 
       - name: Install Poetry
