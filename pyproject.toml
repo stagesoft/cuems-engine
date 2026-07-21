@@ -58,6 +58,7 @@ black = "*"
 isort = "*"
 flake8 = "*"
 autopep8 = "^2.3.2"
+flake8-pyproject = "^1.2.4"
 
 [tool.poetry.scripts]
 controller-engine = "cuemsengine.scripts.controller_engine:main"
