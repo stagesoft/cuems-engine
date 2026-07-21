@@ -48,7 +48,7 @@ jobs:
 
   test:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: lint
     permissions:
       contents: write   # required to push the coverage badge to gh-pages
@@ -59,11 +59,10 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ">=3.11 <3.12"
 
       - name: Install system packages
         run: |
-          sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             libjack-jackd2-dev \
             python3-systemd \
