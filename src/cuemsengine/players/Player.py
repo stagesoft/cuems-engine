@@ -95,8 +95,6 @@ class Player(Thread):
         self.started = True
 
         # Wait for player process to start with timeout
-        from time import sleep
-
         elapsed = 0.0
         interval = 0.01
         while self.pid is None and elapsed < timeout:

@@ -27,7 +27,7 @@ class TestDmxPlayer:
     def dmx_player(self):
         """Create DmxPlayer instance for testing."""
         with (
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.Player.sleep"),
             patch.object(DmxPlayer, "call_subprocess"),
             patch.object(DmxPlayer, "start"),
         ):  # Mock the start method to avoid thread issues
@@ -41,7 +41,7 @@ class TestDmxPlayer:
     def test_dmx_player_initialization(self):
         """Test DmxPlayer initialization."""
         with (
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.Player.sleep"),
             patch.object(DmxPlayer, "call_subprocess"),
         ):
 
@@ -60,7 +60,7 @@ class TestDmxPlayer:
     def test_dmx_player_initialization_with_args(self):
         """Test DmxPlayer initialization with custom args."""
         with (
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.Player.sleep"),
             patch.object(DmxPlayer, "call_subprocess"),
         ):
 
@@ -90,7 +90,7 @@ class TestDmxPlayer:
     def test_run_method_with_args(self):
         """Test the run method with custom args."""
         with (
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.Player.sleep"),
             patch.object(DmxPlayer, "call_subprocess") as mock_call,
             patch.object(DmxPlayer, "start"),
         ):  # Prevent thread from starting automatically
@@ -127,7 +127,8 @@ class TestDmxClient:
         original_create_bundle = DmxClient._create_bundle_parameters
 
         with (
-            patch("cuemsengine.players.DmxPlayer.PlayerClient.__init__"),
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.bind_device"),
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints"),
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Patch during __init__
             client = DmxClient(player_port=9000, client_name="test-node-123_dmxplayer")
@@ -147,7 +148,7 @@ class TestDmxClient:
             client.device.root_node = Mock()
             add_node_mock = Mock(side_effect=create_mock_node)
             client.device.root_node.add_node = add_node_mock
-            client.name = "test-node-123_dmxplayer"
+            # client.name = "test-node-123_dmxplayer"
 
             # Restore and call the real _create_bundle_parameters() method
             client._create_bundle_parameters = original_create_bundle.__get__(
@@ -163,7 +164,8 @@ class TestDmxClient:
     def test_dmx_client_initialization(self):
         """Test DmxClient initialization."""
         with (
-            patch("cuemsengine.players.DmxPlayer.PlayerClient.__init__") as mock_init,
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.bind_device") as mock_init,
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints") as mock_endpoints,
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Skip bundle creation during init
             client = DmxClient(player_port=9000, client_name="test-node-123_dmxplayer")
@@ -174,13 +176,16 @@ class TestDmxClient:
 
             # Verify PlayerClient init was called
             mock_init.assert_called_once()
+            mock_endpoints.assert_called_once()
             assert client.player_port == 9000
             assert client.host == "127.0.0.1"
+            assert client.name == "test-node-123_dmxplayer"
 
     def test_dmx_client_custom_host(self):
         """Test DmxClient initialization with custom host."""
         with (
-            patch("cuemsengine.players.DmxPlayer.PlayerClient.__init__"),
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.bind_device") as mock_init,
+            patch("cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints") as mock_endpoints,
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Skip bundle creation during init
             client = DmxClient(
@@ -198,7 +203,13 @@ class TestDmxClient:
     def test_create_bundle_parameters(self, dmx_client):
         """Test bundle parameters are created correctly."""
         # Verify add_node was called for each parameter
-        expected_nodes = ["/frame", "/mtc_time", "/start_offset", "/fade_time"]
+        expected_nodes = [
+            "/frame",
+            "/mtc_time",
+            "/start_offset",
+            "/fade_time",
+            "/mtcfollow"
+        ]
 
         # Get all calls made to add_node (stored in fixture)
         add_node_mock = dmx_client._add_node_mock
@@ -363,8 +374,7 @@ class TestStartDmxPlayer:
         """Test starting DMX player and client."""
         with (
             patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
-            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class
         ):
 
             # Mock player instance
@@ -402,8 +412,7 @@ class TestStartDmxPlayer:
         """Test starting DMX player with custom args."""
         with (
             patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
-            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
-            patch("cuemsengine.players.DmxPlayer.sleep"),
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class
         ):
 
             mock_player = Mock()
@@ -425,34 +434,20 @@ class TestStartDmxPlayer:
                 args="--debug",
             )
 
-    def test_start_dmx_player_waits_for_pid(self):
-        """Test that start_dmx_player waits for player process to start."""
+    def test_player_start_waits_for_pid(self):
         with (
-            patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
-            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
-            patch("cuemsengine.players.DmxPlayer.sleep") as mock_sleep,
+            patch("cuemsengine.players.Player.sleep") as mock_sleep,
+            patch.object(DmxPlayer, "call_subprocess"),
+            patch("threading.Thread.start"),  # don't spawn real thread
         ):
+            player = DmxPlayer(port=9000, node_uuid="n", path="/bin/dmx")
+            player.pid = None
+            player.is_alive = Mock(return_value=True)
 
-            # Mock player with pid initially None, then set
-            mock_player = Mock()
-            mock_player.pid = None
-            mock_player_class.return_value = mock_player
-
-            mock_client_class.return_value = Mock()
-
-            # Set pid after first check
-            # sleep() passes the sleep duration as an argument, so accept it
-            def set_pid_after_check(*args, **kwargs):
+            def set_pid(*args, **kwargs):
                 if mock_sleep.call_count == 1:
-                    mock_player.pid = 12345
+                    player.pid = 12345
 
-            mock_sleep.side_effect = set_pid_after_check
-
-            start_dmx_player(
-                port=9000,
-                node_uuid="test-node-123",
-                path="/usr/local/bin/dmxplayer",
-            )
-
-            # Verify sleep was called (waiting for pid)
+            mock_sleep.side_effect = set_pid
+            player.start(timeout=5.0)
             assert mock_sleep.call_count >= 1
