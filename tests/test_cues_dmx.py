@@ -3,8 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 import sys
-from time import sleep
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -187,10 +186,13 @@ class TestRunDmxCue:
 
     @pytest.fixture
     def mock_mtc(self):
-        """Create a mock MTC listener."""
+        """MTC listener whose main_tc is a real CTimecode.
+
+        run_dmxCue builds _start_mtc from main_tc.framerate + main_tc.frames;
+        a bare Mock for those fields raises inside CTimecode.
+        """
         mtc = Mock()
-        mtc.main_tc = Mock()
-        mtc.main_tc.milliseconds_rounded = 10000  # 10 seconds
+        mtc.main_tc = CTimecode(framerate=25, start_seconds=10.0)
         return mtc
 
     def test_run_dmx_cue_success(self, mock_dmx_cue, mock_mtc):
@@ -204,12 +206,13 @@ class TestRunDmxCue:
         # Verify send_dmx_scene was called
         mock_dmx_cue._osc.send_dmx_scene.assert_called_once()
 
-        # Verify call parameters
+        # Verify call parameters — mtc_time is absolute "0:0:S.sss" string
         call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
         assert call_args.kwargs["universe_frames"] == {1: {0: 255, 1: 128, 2: 64}}
-        assert (
-            call_args.kwargs["mtc_time"] == mock_dmx_cue._start_mtc.milliseconds_rounded
+        expected_mtc_time = (
+            f"0:0:{mock_dmx_cue._start_mtc.milliseconds_exact / 1000.0}"
         )
+        assert call_args.kwargs["mtc_time"] == expected_mtc_time
         assert call_args.kwargs["fade_time"] == 2.0  # 2000ms / 1000
 
     def test_run_dmx_cue_no_frames(self, mock_dmx_cue, mock_mtc):
@@ -241,14 +244,25 @@ class TestRunDmxCue:
         call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
         assert call_args.kwargs["fade_time"] == 0.0
 
-    def test_run_dmx_cue_no_fadein_attribute(self, mock_dmx_cue, mock_mtc):
-        """Test running DMX cue without fadein_time attribute."""
-        del mock_dmx_cue.fadein_time
+    def test_run_dmx_cue_no_fadein_attribute(self, mock_mtc):
+        """Test running DMX cue without fadein_time attribute.
 
-        run_dmxCue(mock_dmx_cue, mock_mtc)
+        Mock(spec=DmxCue) re-creates deleted spec attrs, so use a plain
+        namespace to exercise getattr(..., 0).
+        """
+        from types import SimpleNamespace
 
-        # Should default to 0.0
-        call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
+        cue = SimpleNamespace(
+            id="test_dmx_cue_001",
+            fadeout_time=1000,
+            _local=True,
+            _dmx_frames={1: {0: 255}},
+            _osc=Mock(spec=DmxClient),
+        )
+
+        run_dmxCue(cue, mock_mtc)
+
+        call_args = cue._osc.send_dmx_scene.call_args
         assert call_args.kwargs["fade_time"] == 0.0
 
     def test_run_dmx_cue_error_handling(self, mock_dmx_cue, mock_mtc):
@@ -264,14 +278,14 @@ class TestRunDmxCue:
 
     def test_run_dmx_cue_mtc_offset_calculation(self, mock_dmx_cue, mock_mtc):
         """Test MTC offset calculation."""
-        mtc_time = 15000  # 15 seconds
-        mock_mtc.main_tc.milliseconds_rounded = mtc_time
+        mock_mtc.main_tc = CTimecode(framerate=25, start_seconds=15.0)
+        mtc_time = mock_mtc.main_tc.milliseconds_rounded
 
         run_dmxCue(mock_dmx_cue, mock_mtc)
 
         # Verify start and end MTC were calculated
         # Allow for small rounding differences (CTimecode may round slightly)
-        assert abs(mock_dmx_cue._start_mtc.milliseconds_rounded - mtc_time) <= 1
+        assert abs(mock_dmx_cue._start_mtc.milliseconds_rounded - mtc_time) <= 40
 
         # End MTC should be greater than start MTC
         # Duration is calculated from fadein_time + fadeout_time (2000 + 1000 =
@@ -286,7 +300,7 @@ class TestRunDmxCue:
                 )
                 - expected_duration
             )
-            <= 1
+            <= 40
         )
 
     def test_run_dmx_cue_multiple_universes(self, mock_dmx_cue, mock_mtc):
@@ -316,6 +330,7 @@ class TestLoopDmxCue:
         cue = Mock(spec=DmxCue)
         cue.id = "test_dmx_cue_001"
         cue._local = True
+        cue._stop_requested = False
         cue.loop = 0  # No looping
         cue.fadein_time = 2000  # 2 seconds
         cue.fadeout_time = 3000  # 3 seconds
@@ -343,8 +358,6 @@ class TestLoopDmxCue:
         mock_mtc.main_tc = mock_main_tc
 
         # Set _end_mtc to a value that requires waiting
-        from cuemsutils.tools.CTimecode import CTimecode
-
         mock_dmx_cue._end_mtc = CTimecode(start_seconds=15.0)  # End at 15 seconds
 
         with patch("cuemsengine.cues.loop_cue.sleep") as mock_sleep:
@@ -418,7 +431,7 @@ class TestLoopDmxCue:
             loop_dmxCue(mock_dmx_cue, mock_mtc)
 
             # Should loop until MTC reaches or exceeds end time
-            # sleep should be called multiple times (once per 5ms check)
+            # sleep should be called multiple times (once per 20ms check)
             assert mock_sleep.call_count >= 1
 
 
@@ -433,6 +446,7 @@ class TestDmxCueIntegration:
         cue.fadein_time = 1000
         cue.fadeout_time = 500
         cue._local = True
+        cue._stop_requested = False
         cue.loop = 0
 
         # Setup DmxScene
@@ -461,12 +475,8 @@ class TestDmxCueIntegration:
         """Test complete workflow: arm -> run -> loop."""
         mock_client = Mock(spec=DmxClient)
         mock_mtc = Mock()
-
-        # Create a mock main_tc object with milliseconds as a simple attribute
-        # We'll update it directly when needed
-        mock_main_tc = Mock()
-        mock_main_tc.milliseconds_rounded = 1000
-        mock_mtc.main_tc = mock_main_tc
+        # Real CTimecode required by run_dmxCue (framerate + frames).
+        mock_mtc.main_tc = CTimecode(framerate=25, start_seconds=1.0)
 
         with (
             patch("cuemsengine.cues.arm_cue.PLAYER_HANDLER") as mock_handler,
@@ -481,7 +491,7 @@ class TestDmxCueIntegration:
             assert dmx_cue._osc == mock_client
             assert dmx_cue._dmx_frames == {1: {0: 255, 1: 128}}
 
-            # Step 2: Run the cue (with MTC at 1000ms)
+            # Step 2: Run the cue (with MTC at ~1000ms)
             run_dmxCue(dmx_cue, mock_mtc)
 
             assert hasattr(dmx_cue, "_start_mtc")
@@ -501,18 +511,16 @@ class TestDmxCueIntegration:
                     )
                     - expected_duration
                 )
-                <= 1
+                <= 40
             )
 
             # Step 3: Loop/wait for duration
-            # Set MTC to well past end time so loop exits immediately
-            # Use a value that's definitely greater than _end_mtc
-            mock_main_tc.milliseconds_rounded = (
+            # Past end: loop exits immediately (only milliseconds_rounded needed)
+            mock_mtc.main_tc = Mock()
+            mock_mtc.main_tc.milliseconds_rounded = (
                 dmx_cue._end_mtc.milliseconds_rounded + 10000
             )
             loop_dmxCue(dmx_cue, mock_mtc)
 
             # Since MTC is already past end time, sleep should not be called
-            # (or called very few times if there's a race condition)
-            # Complete workflow executed successfully
-            assert True
+            assert mock_sleep.call_count == 0
