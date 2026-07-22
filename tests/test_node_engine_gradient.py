@@ -205,6 +205,8 @@ class TestLoadProjectCancelAll:
         ne._project_generation = 0
         ne.script = MagicMock()
         ne.script.unix_name = "old-project"
+        # __new__ shell has no mtc_listener; load path resets wrap state if set.
+        ne.mtc_listener = None
         return ne
 
     def _load_patches(self, ne, mock_gc=None):
@@ -216,6 +218,9 @@ class TestLoadProjectCancelAll:
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         return [
+            # Deploy is fail-fast before teardown/cancel_all — must succeed
+            # or cancel_all is never reached.
+            patch.object(ne, "deploy_project", return_value=True),
             patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc),
             patch.object(PLAYER_HANDLER, "get_dmx_player_client", return_value=None),
             patch.object(PLAYER_HANDLER, "get_audio_mixer_client", return_value=None),
