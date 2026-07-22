@@ -642,32 +642,14 @@ class NodeEngine(BaseEngine):
             )
             return False
 
-        gradient_client = PLAYER_HANDLER.get_gradient_client()
-        if gradient_client:
-            try:
-                gradient_client.send_cancel_all()
-            except Exception as exc:
-                Logger.error(f"gradient send_cancel_all failed on project load: {exc}")
-        else:
-            Logger.debug(
-                "gradient_client not initialised, skipping cancel_all on project load"
-            )
+        self._gradient_cancel_all("project load")
 
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
         CUE_HANDLER.stop_all_cues()
 
         # DMX: stop following MTC, blackout all universes.
-        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
-        if dmx_client:
-            try:
-                dmx_client.disable_mtcfollow()
-            except Exception as e:
-                Logger.warning(f"DMX disable mtcfollow failed: {e}")
-            try:
-                dmx_client.send_blackout()
-            except Exception as e:
-                Logger.warning(f"DMX blackout failed: {e}")
+        self._dmx_reset()
 
         # Video: reset videocomposer (remove all layers, cancel loads, reset
         # master).
@@ -712,24 +694,7 @@ class NodeEngine(BaseEngine):
         Logger.info(f"Project {project} loaded")
 
         # Notify Controller that arming is complete (GO button can go green)
-        try:
-            from .comms.NodesHub import (
-                ActionType,
-                NodeOperation,
-                OperationType,
-            )
-
-            operation = NodeOperation(
-                type=OperationType.STATUS,
-                action=ActionType.UPDATE,
-                sender=self.cm.node_uuid,
-                target="armed_ready",
-                data={"armed": "yes"},
-            )
-            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-            Logger.debug("Notified Controller that arming after load is complete")
-        except Exception as e:
-            Logger.warning(f"Could not notify Controller of armed_ready: {e}")
+        self._notify_armed_ready("arming after load")
 
         # Broadcast initial nextcue to UI
         self._broadcast_nextcue()
@@ -911,6 +876,63 @@ class NodeEngine(BaseEngine):
                     Logger.error(
                         f"cue_enabled side effects failed for {target_id}: {exc}"
                     )
+
+    def _gradient_cancel_all(self, context: str):
+        """Cancel all in-flight gradient fades.
+
+        Shared by _load_project_inner (project load) and stop_playback
+        (STOP) — both must flush queued fades before stopping cue threads,
+        so gradient OSC traffic never outlives the cues that started it.
+        """
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f"gradient send_cancel_all failed on {context}: {exc}")
+        else:
+            Logger.debug(
+                f"gradient_client not initialised, skipping cancel_all on {context}"
+            )
+
+    def _dmx_reset(self):
+        """Stop DMX MTC following and blackout all universes.
+
+        Shared by _load_project_inner and stop_playback: both need the DMX
+        playhead frozen and outputs zeroed before video/audio teardown.
+        """
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.disable_mtcfollow()
+            except Exception as e:
+                Logger.warning(f"DMX disable mtcfollow failed: {e}")
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f"DMX blackout failed: {e}")
+
+    def _notify_armed_ready(self, context: str):
+        """Notify Controller that this node finished (re)arming, so the GO
+        button can go green.
+
+        Shared by _load_project_inner (arming after load) and stop_playback
+        (re-arm after STOP).
+        """
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        try:
+            operation = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid,
+                target="armed_ready",
+                data={"armed": "yes"},
+            )
+            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+            Logger.debug(f"Notified Controller that {context} is complete")
+        except Exception as e:
+            Logger.warning(f"Could not notify Controller of armed_ready: {e}")
 
     def _notify_cue_enabled(self, cue_id: str, enabled: bool):
         """Send cue enabled status to Controller via NNG."""
@@ -1185,14 +1207,7 @@ class NodeEngine(BaseEngine):
 
         self.set_status("running", "no")
 
-        gradient_client = PLAYER_HANDLER.get_gradient_client()
-        if gradient_client:
-            try:
-                gradient_client.send_cancel_all()
-            except Exception as exc:
-                Logger.error(f"gradient send_cancel_all failed on stop: {exc}")
-        else:
-            Logger.debug("gradient_client not initialised, skipping cancel_all on stop")
+        self._gradient_cancel_all("stop")
 
         # Signal all running cue threads to stop immediately.
         # Must happen BEFORE blackout/reset so loop_cue threads don't
@@ -1202,16 +1217,7 @@ class NodeEngine(BaseEngine):
 
         # DMX: disable MTC following first (freezes the playhead so queued
         # scenes can't fire), then blackout via OLA for instant visual reset.
-        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
-        if dmx_client:
-            try:
-                dmx_client.disable_mtcfollow()
-            except Exception as e:
-                Logger.warning(f"DMX disable mtcfollow failed: {e}")
-            try:
-                dmx_client.send_blackout()
-            except Exception as e:
-                Logger.warning(f"DMX blackout failed: {e}")
+        self._dmx_reset()
 
         # Unload all video layers (instant visual blackout)
         self.unload_video_devs()
@@ -1227,24 +1233,7 @@ class NodeEngine(BaseEngine):
 
             # Notify Controller that re-arm is complete (GO button can go
             # green)
-            try:
-                from .comms.NodesHub import (
-                    ActionType,
-                    NodeOperation,
-                    OperationType,
-                )
-
-                operation = NodeOperation(
-                    type=OperationType.STATUS,
-                    action=ActionType.UPDATE,
-                    sender=self.cm.node_uuid,
-                    target="armed_ready",
-                    data={"armed": "yes"},
-                )
-                CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-                Logger.debug("Notified Controller that re-arm is complete")
-            except Exception as e:
-                Logger.warning(f"Could not notify Controller of armed_ready: {e}")
+            self._notify_armed_ready("re-arm")
 
             # Broadcast nextcue (reset to first cue after stop)
             self._broadcast_nextcue()
