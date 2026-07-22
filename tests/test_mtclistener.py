@@ -33,30 +33,44 @@ class TestMtcListener:
         listener = MtcListener(
             step_callback=step_callback,
             reset_callback=reset_callback,
-            port=1234,
+            port="MTC Port 1",
         )
         yield listener
         listener.stop()
 
     def test_initialization(self, mtc_listener):
         """Test that MtcListener initializes correctly"""
-        assert mtc_listener.port_name == 1234
+        assert mtc_listener.port_name == "MTC Port 1"
         assert mtc_listener.step_callback is not None
         assert mtc_listener.reset_callback is not None
         assert mtc_listener.daemon is True
         assert isinstance(mtc_listener.main_tc, CTimecode)
         assert mtc_listener.main_tc.fraction_frame is True
 
+    def test_non_string_port_raises_type_error(self, mock_mido):
+        """port must be a MIDI port name (str), never a numeric socket port."""
+        with pytest.raises(TypeError, match="MIDI port name"):
+            MtcListener(port=1234)
+
     def test_timecode_methods(self, mtc_listener):
-        """Test timecode and milliseconds methods"""
-        # Set a specific timecode
+        """Test timecode + milliseconds_rounded (CTimecode.milliseconds is deprecated)."""
         test_tc = CTimecode("1:2:3:4")
         mtc_listener.main_tc = test_tc
 
         assert mtc_listener.timecode() == test_tc
-        assert mtc_listener.milliseconds_rounded() == int(
-            test_tc.frames * (1000 / float(test_tc._framerate))
-        )
+        assert mtc_listener.milliseconds_rounded() == test_tc.milliseconds_rounded
+        assert isinstance(mtc_listener.milliseconds_rounded(), int)
+
+    def test_milliseconds_exact(self, mtc_listener):
+        """milliseconds_exact is the float/precise sibling of milliseconds_rounded."""
+        test_tc = CTimecode("1:2:3:4")
+        mtc_listener.main_tc = test_tc
+
+        exact = mtc_listener.milliseconds_exact()
+        assert isinstance(exact, float)
+        assert exact == test_tc.milliseconds_exact
+        # Same timeline: rounded is the int view of exact.
+        assert mtc_listener.milliseconds_rounded() == int(exact)
 
     def test_quarter_frame_handling(self, mtc_listener):
         """Test handling of quarter frame messages"""

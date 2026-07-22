@@ -161,9 +161,17 @@ class MtcListener(Thread):
     def timecode(self):
         return self.main_tc
 
-    def milliseconds(self):
-        # type: ignore[attr-defined]
-        return int(self.main_tc.frames * (1000 / float(self.main_tc._framerate)))
+    def milliseconds_rounded(self) -> int:
+        """Integer milliseconds from the current MTC (CTimecode.milliseconds_rounded)."""
+        return self.main_tc.milliseconds_rounded
+
+    def milliseconds_exact(self) -> float:
+        """Float milliseconds from the current MTC (CTimecode.milliseconds_exact)."""
+        return self.main_tc.milliseconds_exact
+
+    def milliseconds(self) -> int:
+        """Deprecated alias of milliseconds_rounded (CTimecode.milliseconds is deprecated)."""
+        return self.milliseconds_rounded()
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
@@ -179,6 +187,10 @@ class MtcListener(Thread):
         # port_name is left as None and re-detected later in
         # ControllerEngine.start()
         # once the timecode sender has created the virtual MIDI port.
+        if port is not None and not isinstance(port, str):
+            raise TypeError(
+                f"port must be a MIDI port name (str), got {type(port).__name__}"
+            )
         try:
             ports = mido.get_input_names()  # type: ignore[attr-defined]
         except Exception as e:
