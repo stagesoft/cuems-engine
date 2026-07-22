@@ -594,6 +594,7 @@ class NodeEngine(BaseEngine):
         for cue in cuelist.contents:
             if isinstance(cue, CueList):
                 outputs_map.update(self.map_cue_outputs(cue))
+                continue
             elif not isinstance(cue, MediaCue):
                 continue
 

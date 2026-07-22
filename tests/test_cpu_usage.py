@@ -92,7 +92,6 @@ class TestBaseEngineCPUUsage:
         """Test CPU usage when BaseEngine is idle (minimal activity)"""
         # Register engine for cleanup
         engine_cleanup(base_engine)
-        # base_engine.start()
 
         current_process = psutil.Process()
 

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
+import threading
 from time import sleep, time
 
 import pytest
@@ -27,6 +28,7 @@ from .helpers import timeout
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.slow
 def test_project_go_from_controller(
     mock_config_path,
     mock_avahi_resolve,
@@ -45,11 +47,17 @@ def test_project_go_from_controller(
     controller_engine.create_timecode()
     controller_engine.set_comms()
 
-    # NodeEngine.start() binds NNG + players (replaces set_communications).
+    # NodeEngine.start() binds NNG + players (replaces set_communications),
+    # then falls into BaseEngine/SignalEngine's blocking run loop (the real
+    # systemd entrypoint never returns) - it must run off-thread here, same
+    # as the production process. engine_cleanup's teardown calls
+    # node_engine.stop() which flips SignalEngine.running=False and lets
+    # the loop exit on its own.
     node_engine = NodeEngine(with_mtc=True)
     engine_cleanup(node_engine)
-    node_engine.start()
-    sleep(0.5)
+    node_thread = threading.Thread(target=node_engine.start, daemon=True)
+    node_thread.start()
+    sleep(1.5)
 
     # ACT - Load project (this will create player clients)
     controller_engine.load_project("complex_test")

@@ -168,10 +168,19 @@ def mock_avahi_resolve():
 
 @fixture
 def mock_controller_ip():
-    """Mock BaseEngine.get_controller_ip to return localhost"""
+    """Mock BaseEngine.get_controller_ip to return the IPv4 loopback.
+
+    "localhost" resolves to the IPv6 loopback (::1) first on most hosts,
+    while ControllerEngine's NNG hub listener binds IPv4-only
+    (tcp://0.0.0.0:<port>) - a NodeEngine dialer built from the literal
+    string "localhost" then dials ::1 and never completes the pynng
+    pipe-connect handshake (silently retries forever; no error, no
+    active_connections entry). Use 127.0.0.1 so real-comms tests
+    (with_mtc=True + set_comms()/start()) actually connect.
+    """
     with patch(
         "cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip",
-        return_value="localhost",
+        return_value="127.0.0.1",
     ):
         yield
 

@@ -111,13 +111,18 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=45
 
-      - name: Integration tests
+      - name: Integration fast tests
         run: |
           poetry run pytest \
-            -m integration \
+            -m "integration and not slow" \
             --cov=src \
             --cov-append \
             --cov-report=term-missing
+
+      # No "Integration slow tests" step: the only two tests currently
+      # marked @pytest.mark.slow (test_cpu_usage.py, test_project_go.py) are
+      # both unreliable on a CI runner and are run manually/locally instead.
+      # See specs/planning/integration-slow-tests-investigation.md.
 
       - name: Generate XML coverage report
         run: poetry run coverage xml -o coverage.xml
