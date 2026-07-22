@@ -538,9 +538,15 @@ class TestMixerClient:
     def mixer_client(self):
         """Create MixerClient instance for testing.
 
-        mixer_id='test' → client_name 'test_mixer' (get_mixer_client_name)."""
+        mixer_id='test' → client_name 'test_mixer' (get_mixer_client_name).
+
+        PlayerClient.__init__ is patched (no real OSC device); seed the
+        OssiaNodes fields that __init__ would have set so GC/__del__ is safe.
+        """
         with patch("cuemsengine.players.AudioMixer.PlayerClient.__init__"):
             client = MixerClient(player_port=8000, channel_number=4, mixer_id="test")
+            client.nodes = {}
+            client.device = None
             return client
 
     def test_mixer_client_initialization(self, mixer_client):

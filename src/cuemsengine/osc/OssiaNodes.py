@@ -72,13 +72,20 @@ class OssiaNodes(object):
             del self.nodes[str(key)]
 
     def remove_device(self) -> None:
-        """Remove the device and all nodes from the collection"""
-        node_keys = list(self.nodes.keys())
-        for node in node_keys:
-            self.remove_node(node)
-        self.nodes = {}
-        del self.device
-        sleep(CLEANUP_DELAY)
+        """Remove the device and all nodes from the collection.
+
+        Safe when ``__init__`` was skipped (e.g. tests that patch a subclass
+        ``__init__``): missing ``nodes``/``device`` is a no-op, not an error.
+        """
+        nodes = getattr(self, "nodes", None)
+        if nodes:
+            for node in list(nodes.keys()):
+                self.remove_node(node)
+        if hasattr(self, "nodes"):
+            self.nodes = {}
+        if getattr(self, "device", None) is not None:
+            del self.device
+            sleep(CLEANUP_DELAY)
         self.device = None
 
     @staticmethod
@@ -239,5 +246,9 @@ class OssiaNodes(object):
         return nodes
 
     def __del__(self):
-        self.remove_device()
+        # Destructors must not raise (pytest reports UnraisableExceptionWarning).
+        try:
+            self.remove_device()
+        except Exception:
+            pass
         del self

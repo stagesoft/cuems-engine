@@ -12,6 +12,8 @@ and use pyossia's native bundle support instead.
 import sys
 import time
 
+import pytest
+
 try:
     from pyossia import ossia
 
@@ -62,7 +64,7 @@ def test_basic_ossia():
 
     if not OSSIA_AVAILABLE:
         print("❌ Cannot run test: pyossia import failed")
-        return None
+        pytest.skip("pyossia import failed")
 
     try:
         # Create a local device
@@ -79,10 +81,10 @@ def test_basic_ossia():
         for m in methods[:20]:  # Show first 20
             print(f"  - {m}")
 
-        return device
+        assert device is not None
     except Exception as e:
         print(f"❌ Error: {e}")
-        return None
+        pytest.fail(f"basic ossia probe failed: {e}")
 
 
 def test_osc_protocol():
@@ -93,7 +95,7 @@ def test_osc_protocol():
 
     if not OSSIA_AVAILABLE:
         print("❌ Cannot run test: pyossia import failed")
-        return None
+        pytest.skip("pyossia import failed")
 
     try:
         # Create OSC device with unique ports
@@ -126,13 +128,13 @@ def test_osc_protocol():
         else:
             print("\n❌ No bundle/push methods found on OSCDevice")
 
-        return device
+        assert device is not None
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
 
         traceback.print_exc()
-        return None
+        pytest.fail(f"osc protocol probe failed: {e}")
 
 
 def test_parameter_bundle():
@@ -143,7 +145,7 @@ def test_parameter_bundle():
 
     if not OSSIA_AVAILABLE:
         print("❌ Cannot run test: pyossia import failed")
-        return None, None
+        pytest.skip("pyossia import failed")
 
     try:
         # Create sender and receiver with unique ports
@@ -152,16 +154,23 @@ def test_parameter_bundle():
 
         time.sleep(0.5)  # Wait for setup
 
-        # Create parameters on receiver
+        # Create parameters on receiver (API varies by pyossia version)
         root = receiver.root_node
+        if not hasattr(root, "create_child"):
+            print(
+                "❌ root_node has no create_child — "
+                "parameter-bundle probe not applicable on this pyossia"
+            )
+            return
+
         param1 = root.create_child("param1")
-        p1 = param1.create_parameter(ossia.ValueType.Float)
+        param1.create_parameter(ossia.ValueType.Float)
 
         param2 = root.create_child("param2")
-        p2 = param2.create_parameter(ossia.ValueType.Float)
+        param2.create_parameter(ossia.ValueType.Float)
 
         param3 = root.create_child("param3")
-        p3 = param3.create_parameter(ossia.ValueType.String)
+        param3.create_parameter(ossia.ValueType.String)
 
         print("✅ Created 3 parameters on receiver")
 
@@ -193,14 +202,13 @@ def test_parameter_bundle():
                 if hasattr(obj, "push_bundle") or hasattr(obj, "send_bundle"):
                     print(f"  ✅ Found bundle method on {attr}: {obj}")
 
-        return sender, receiver
-
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
 
         traceback.print_exc()
-        return None, None
+        # Capability probe: missing/changed APIs are findings, not failures.
+        return
 
 
 def test_libossia_bundle_element():
@@ -211,7 +219,7 @@ def test_libossia_bundle_element():
 
     if not OSSIA_AVAILABLE:
         print("❌ Cannot run test: pyossia import failed")
-        return
+        pytest.skip("pyossia import failed")
 
     try:
         # Check if bundle_element exists in ossia module
@@ -239,6 +247,8 @@ def test_libossia_bundle_element():
         import traceback
 
         traceback.print_exc()
+        # Capability probe — report, don't fail.
+        return
 
 
 def main():
@@ -247,10 +257,10 @@ def main():
     print("PYOSSIA BUNDLE SUPPORT TEST")
     print("🔬 " * 20 + "\n")
 
-    # Run tests
-    device = test_basic_ossia()
-    osc_device = test_osc_protocol()
-    sender, receiver = test_parameter_bundle()
+    # Run tests (pytest-collected; must return None)
+    test_basic_ossia()
+    test_osc_protocol()
+    test_parameter_bundle()
     test_libossia_bundle_element()
 
     # Summary

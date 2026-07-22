@@ -324,3 +324,17 @@ def test_server_node_removal_affects_all_children():
         assert len(server.device.root_node.children()) == 1
     finally:
         _ossia_release(server)
+
+
+def test_remove_device_tolerates_incomplete_init():
+    """__del__/remove_device must not raise when __init__ was skipped.
+
+    MixerClient tests patch PlayerClient.__init__, leaving no ``nodes``;
+    an unguarded destructor surfaces as PytestUnraisableExceptionWarning.
+    """
+    from cuemsengine.osc.OssiaNodes import OssiaNodes
+
+    incomplete = OssiaNodes.__new__(OssiaNodes)
+    incomplete.remove_device()  # must not raise
+    assert getattr(incomplete, "nodes", None) in (None, {})
+    assert getattr(incomplete, "device", None) is None
