@@ -5,12 +5,11 @@
 """Regression test for engine loop-period drift.
 
 Exercises the exact `_start_mtc`/`_end_mtc` rebase arithmetic used inside
-`loop_audioCue` and `loop_videoCue` when a cue loops. Before the fix, the
-rebase went through
-`CTimecode(start_seconds=_end_mtc.milliseconds_rounded/1000)`,
-which loses one frame of the target framerate on every iteration (40 ms at
-25 fps MTC). The fix assigns `_start_mtc` directly from the previous
-`_end_mtc.frames`, skipping the lossy ms->s->frames round-trip.
+`loop_audioCue` and `loop_videoCue` when a cue loops. The historical bug went
+through `CTimecode(start_seconds=_end_mtc.milliseconds_rounded/1000)`, which
+lost one frame per iteration under older cuemsutils. The engine fix assigns
+`_start_mtc` directly from the previous `_end_mtc.frames`. cuemsutils later
+also made the ms round-trip lossless; both paths are pinned here.
 
 The symptom was audio cues loop-starting ~29960 ms apart instead of 30000 ms,
 drifting linearly against the videocomposer which wraps at the true media
@@ -66,9 +65,13 @@ def test_rebase_preserves_30s_duration_over_10_iterations(framerate):
         prev_start_ms = start_mtc.milliseconds_rounded
 
 
-def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
-    """Pin the pre-fix behaviour so a future regression is obvious: the old
-    rebase lost exactly one 25 fps frame (40 ms) per iteration."""
+def test_legacy_ms_roundtrip_rebase_no_longer_drifts_at_25fps():
+    """Old start_seconds(ms/1000) rebase used to lose 40 ms/iter at 25 fps.
+
+    cuemsutils CTimecode hardening made that round-trip lossless; the engine
+    still uses frame-domain assign (_rebase_fixed) as defense in depth. Pin
+    zero drift so a future cuemsutils regression resurfaces here.
+    """
     framerate = "25"
     duration = CTimecode("00:00:30.000").return_in_other_framerate(framerate)
 
@@ -83,8 +86,8 @@ def test_buggy_rebase_drifts_one_frame_per_iter_at_25fps():
         drifts.append(delta - 30000)
         prev_start_ms = start_mtc.milliseconds_rounded
 
-    assert all(d == -40 for d in drifts), (
-        f"expected buggy path to lose exactly 40 ms/iter at 25 fps," f" got {drifts}"
+    assert all(d == 0 for d in drifts), (
+        f"expected ms round-trip rebase to be lossless at 25 fps, got {drifts}"
     )
 
 

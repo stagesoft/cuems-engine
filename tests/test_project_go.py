@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from time import sleep
-from unittest.mock import patch
+from time import sleep, time
+
+import pytest
 
 from cuemsengine import ControllerEngine, NodeEngine
 
@@ -12,6 +13,8 @@ from .fixtures import (
     mock_avahi_resolve,
     mock_config_path,
     mock_controller_ip,
+    mock_deploy_success,
+    mock_display_conf,
     mock_library_path,
     mock_player_clients,
     mock_player_subprocess,
@@ -19,12 +22,18 @@ from .fixtures import (
 )
 from .helpers import timeout
 
+# Controller↔node load+go against live NNG/MTC — same class as
+# test_project_load (excluded from fast unit runs).
+pytestmark = pytest.mark.integration
+
 
 def test_project_go_from_controller(
     mock_config_path,
     mock_avahi_resolve,
     mock_library_path,
     mock_controller_ip,
+    mock_deploy_success,
+    mock_display_conf,
     mock_player_clients,
     mock_player_subprocess,
     suppress_logging,
@@ -32,16 +41,25 @@ def test_project_go_from_controller(
 ):
     # ARRANGE
     controller_engine = ControllerEngine(with_mtc=True)
+    engine_cleanup(controller_engine)
     controller_engine.create_timecode()
     controller_engine.set_comms()
+
+    # NodeEngine.start() binds NNG + players (replaces set_communications).
     node_engine = NodeEngine(with_mtc=True)
-    node_engine.set_communications()
-    node_engine.set_players()
+    engine_cleanup(node_engine)
+    node_engine.start()
     sleep(0.5)
 
     # ACT - Load project (this will create player clients)
     controller_engine.load_project("complex_test")
+    deadline = time() + 10.0
     while node_engine.get_status("load") != "complex_test":
+        if time() > deadline:
+            raise TimeoutError(
+                f"node never reached load=complex_test "
+                f"(got {node_engine.get_status('load')!r})"
+            )
         sleep(0.01)
     # ACT
     with timeout(10):
@@ -83,9 +101,3 @@ def test_project_go_from_controller(
         assert "node" in cmd
         assert "value" in cmd
         assert "port" in cmd
-
-    assert False
-
-    # CLEANUP
-    engine_cleanup(controller_engine)
-    engine_cleanup(node_engine)

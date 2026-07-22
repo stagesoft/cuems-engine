@@ -72,11 +72,12 @@ class NodeEngine(BaseEngine):
         self._loading_lock = threading.Lock()
         self._loading = False
         self._project_generation: int = 0
-        self.nng_hub_address = (
-            f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
-        )
-        PORT_HANDLER.add_system_ports()
-        if hasattr(self, "cm"):
+        # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
+        if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
+            self.nng_hub_address = (
+                f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
+            )
+            PORT_HANDLER.add_system_ports()
             PORT_HANDLER.add_config_ports(get_config_ports(self.cm.node_conf))
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
@@ -89,6 +90,9 @@ class NodeEngine(BaseEngine):
                 # TODO: Use node host from config
                 prefix="/players",
             )
+        else:
+            self.nng_hub_address = None
+            self.deploy_manager = None
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)

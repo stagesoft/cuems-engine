@@ -128,6 +128,25 @@ def mock_config_path():
 
 
 @fixture
+def mock_display_conf():
+    """Stub display.conf regions for NodeEngine.start()/set_video_players.
+
+    Unit/CI hosts lack /run/cuems/display.conf (written by videocomposer's
+    ExecStartPre). Connector names match default_mappings.xml
+    (salida_001, salida_002).
+    """
+    regions = {
+        "salida_001": {"x": 0, "y": 0, "width": 1920, "height": 1080},
+        "salida_002": {"x": 0, "y": 0, "width": 1920, "height": 1080},
+    }
+    with patch(
+        "cuemsengine.NodeEngine.read_display_conf",
+        return_value=(regions, (1920, 1080)),
+    ):
+        yield regions
+
+
+@fixture
 def mock_avahi_resolve():
     """Mock avahi-resolve-host-name to return a fixed IP address.
 

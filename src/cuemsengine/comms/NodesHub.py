@@ -125,7 +125,7 @@ class NodesHub(NngBusHub):
         message = Message(sender=operation.sender, data=operation.__dict__())
         await self.send_message(message)
         Logger.debug(
-            f"Queued {operation.action.value} operation for"
+            f"Queued {operation.action.value} operation for "
             f"{operation.type.value} {operation.target}"
         )
 
@@ -161,12 +161,13 @@ class NodesHub(NngBusHub):
                     Logger.debug(f"Received {operation}")
 
                     # Invoke callback if set (lookup by enum, not string value)
-                    message_function = self._on_operation_received.get(operation.type)
-                    if message_function:
-                        if asyncio.iscoroutinefunction(message_function):
-                            await message_function(operation)
-                        else:
-                            message_function(operation)
+                    if self._on_operation_received:
+                        callback = self._on_operation_received.get(operation.type)
+                        if callback:
+                            if asyncio.iscoroutinefunction(callback):
+                                await callback(operation)
+                            else:
+                                callback(operation)
                 await asyncio.sleep(0.01)  # Prevent tight loop
 
             except Exception as e:
