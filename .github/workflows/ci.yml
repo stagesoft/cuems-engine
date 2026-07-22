@@ -105,7 +105,7 @@ jobs:
         run: poetry install --with dev --no-interaction
 
       - name: Install Python 3.11 systemd bindings
-        run: poetry run pip install systemd-python
+        run: poetry run pip install systemd-python==235
 
       - name: Unit tests
         run: |
