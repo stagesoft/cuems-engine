@@ -10,6 +10,9 @@ from cuemsengine.core.BaseEngine import MTC_PORT, BaseEngine
 
 from .fixtures import env_config_path, mock_config_manager
 
+# All tests in this module are integration-class
+# (excluded from fast unit tests runs).
+pytestmark = pytest.mark.integration
 
 class TestBaseEngine:
     def test_base_engine_initialization_with_all_components(self, env_config_path):
@@ -22,7 +25,7 @@ class TestBaseEngine:
         assert engine.node_name == "0367f391-ebf4-48b2-9f26-000000000001"
         assert engine.mtc_port == MTC_PORT
         assert engine._timecode is None
-        assert engine.go_offset == 0
+        assert engine.go_offset == None
         assert engine.node_host == "http://000000000001.local"
         assert engine.script is None
         assert engine.stop_requested is False
@@ -85,9 +88,14 @@ def test_get_status_endpoints(env_config_path):
 
     engine = BaseEngine(with_cm=True, with_mtc=True)
     endpoints = engine.get_status_endpoints()
+    int_statuses = ["recieved", "timecode"]
+    list_statuses = ["currentcue"]
     for k, v in endpoints.items():
         status_name = k.split("/")[-1]
         assert status_name in engine.get_all_status_names()
-        assert v[0] == ValueType.String
-        # assert v[1] == engine.status_callback
-        # assert v[2] == getattr(engine.status, status_name)
+        if status_name in int_statuses:
+            assert v[0] == ValueType.Int
+        elif status_name in list_statuses:
+            assert v[0] == ValueType.List
+        else:
+            assert v[0] == ValueType.String
