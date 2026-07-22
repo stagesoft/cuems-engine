@@ -72,13 +72,15 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends \
             libjack-jackd2-dev \
-            python3-systemd \
+            libsystemd-dev \
+            gcc \
+            pkg-config \
             libavahi-client-dev \
             wget
           wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
-          # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11
-          sudo dpkg -i --force-depends "$(realpath python3-pyossia.deb)" || true
-          sudo dpkg --force-all --configure python3-pyossia || true
+          # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11.
+          # --unpack skips postinst (py3compile needs a registered python3 >= 3.11).
+          sudo dpkg --force-depends --unpack "$(realpath python3-pyossia.deb)"
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -96,11 +98,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-3.11-deadsnakes-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-3.11-deadsnakes-systemd-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
         run: poetry install --with dev --no-interaction
+
+      - name: Install Python 3.11 systemd bindings
+        run: poetry run pip install systemd-python
 
       - name: Unit tests
         run: |
