@@ -3,15 +3,18 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """Increment 2 — chain timeline anchoring.
 
-Covers the Σ (effective-duration) accumulation that turns prewait/body/postwait
-into real MTC-timeline gaps honored identically on every node:
+Covers the Σ (chain-advance) accumulation that turns prewait/postwait into
+real MTC-timeline gaps honored identically on every node (Auto continue —
+body excluded from the slot):
 - CueHandler._next_local_fire (the go_threaded fire-walk): non-local ENABLED
-  cues advance the timeline (+eff), disabled cues are transparent (+0), the walk
-  stops at a chain break and terminates on an all-remote/all-disabled cycle;
+  cues advance the timeline (+_chain_advance_ms), disabled cues are transparent
+  (+0), the walk stops at a chain break and terminates on an
+  all-remote/all-disabled cycle;
 - _effective_duration_ms surfaces an enabled-A/V body==0 as an error (silent
   cross-node desync source);
-- ActionHandler._handle_play forwards the frozen anchor UNCHANGED (no +eff
-  double-count — the frozen arriving there is already the action's slot).
+- ActionHandler._handle_play forwards the frozen anchor UNCHANGED via go_from
+  (no +advance double-count — the frozen arriving there is already the
+  action's slot).
 """
 
 import sys
@@ -36,77 +39,77 @@ def _mtc(ms=5000, framerate=25.0):
     return mtc
 
 
-def _cue(id, local, enabled, eff, post_go="go", target=None):
-    """A minimal chain node. _eff is the value the stubbed
-    _effective_duration_ms returns for this cue."""
+def _cue(id, local, enabled, adv, post_go="go", target=None):
+    """A minimal chain node. _adv is the value the stubbed
+    _chain_advance_ms returns for this cue (prewait+postwait slot)."""
     return SimpleNamespace(
         id=id,
         _local=local,
         enabled=enabled,
-        _eff=eff,
+        _adv=adv,
         post_go=post_go,
         _target_object=target,
     )
 
 
 def _fire(head_cue, arrival):
-    """Call _next_local_fire with a fake self whose _effective_duration_ms
-    returns each cue's _eff — isolates the walk logic from duration math."""
-    fake = SimpleNamespace(_effective_duration_ms=lambda c: c._eff)
+    """Call _next_local_fire with a fake self whose _chain_advance_ms
+    returns each cue's _adv — isolates the walk logic from duration math."""
+    fake = SimpleNamespace(_chain_advance_ms=lambda c: c._adv)
     return CueHandler._next_local_fire(fake, head_cue, arrival)
 
 
 class TestNextLocalFire:
     def test_immediate_local_target(self):
-        b = _cue("B", local=True, enabled=True, eff=999)
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)
+        b = _cue("B", local=True, enabled=True, adv=999)
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)
         cue, arrival = _fire(a, 1000)
         assert cue is b
-        assert arrival == 1100  # 1000 + eff(A)
+        assert arrival == 1100  # 1000 + adv(A)
 
     def test_non_local_enabled_advances_timeline(self):
-        c = _cue("C", local=True, enabled=True, eff=999)
-        b = _cue("B", local=False, enabled=True, eff=200, target=c)
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)
+        c = _cue("C", local=True, enabled=True, adv=999)
+        b = _cue("B", local=False, enabled=True, adv=200, target=c)
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)
         cue, arrival = _fire(a, 1000)
         assert cue is c
-        assert arrival == 1300  # 1000 + eff(A)=100 + eff(B)=200
+        assert arrival == 1300  # 1000 + adv(A)=100 + adv(B)=200
 
     def test_disabled_is_transparent(self):
-        c = _cue("C", local=True, enabled=True, eff=999)
-        b = _cue("B", local=True, enabled=False, eff=200, target=c)
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)
+        c = _cue("C", local=True, enabled=True, adv=999)
+        b = _cue("B", local=True, enabled=False, adv=200, target=c)
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)
         cue, arrival = _fire(a, 1000)
         assert cue is c
         assert arrival == 1100  # disabled B adds 0
 
     def test_mixed_skip(self):
-        d = _cue("D", local=True, enabled=True, eff=999)
-        c = _cue("C", local=False, enabled=True, eff=300, target=d)  # +300
-        b = _cue("B", local=True, enabled=False, eff=200, target=c)  # +0
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)  # +100
+        d = _cue("D", local=True, enabled=True, adv=999)
+        c = _cue("C", local=False, enabled=True, adv=300, target=d)  # +300
+        b = _cue("B", local=True, enabled=False, adv=200, target=c)  # +0
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)  # +100
         cue, arrival = _fire(a, 1000)
         assert cue is d
         assert arrival == 1400  # 1000 + 100 + 0 + 300
 
     def test_chain_break_returns_none(self):
-        b = _cue("B", local=False, enabled=True, eff=200, post_go="pause")
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)
+        b = _cue("B", local=False, enabled=True, adv=200, post_go="pause")
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)
         cue, arrival = _fire(a, 1000)
         assert cue is None
         assert arrival == 1100  # arrival of B, but nothing local to fire
 
     def test_end_of_chain_returns_none(self):
-        a = _cue("A", local=True, enabled=True, eff=100, target=None)
+        a = _cue("A", local=True, enabled=True, adv=100, target=None)
         cue, arrival = _fire(a, 1000)
         assert cue is None
         assert arrival == 1100
 
     def test_all_remote_cycle_terminates(self):
         # Self-referential non-local chain — must hit the 1024 bound, not spin.
-        b = _cue("B", local=False, enabled=True, eff=0, post_go="go")
+        b = _cue("B", local=False, enabled=True, adv=0, post_go="go")
         b._target_object = b
-        a = _cue("A", local=True, enabled=True, eff=100, target=b)
+        a = _cue("A", local=True, enabled=True, adv=100, target=b)
         with patch("cuemsengine.cues.CueHandler.Logger") as log:
             cue, _ = _fire(a, 1000)
         assert cue is None
@@ -139,17 +142,22 @@ class TestEffectiveDurationBodyZero:
 
 class TestHandlePlayForwardsFrozen:
     def test_frozen_forwarded_unchanged(self):
-        # _handle_play must pass the frozen anchor straight through — the value
-        # arriving here is already the action's slot; +eff would double-count.
+        # _handle_play must pass the frozen anchor straight through go_from —
+        # the value arriving here is already the action's slot; +advance would
+        # double-count.
         from cuemsengine.cues import ActionHandler as AH
 
         ch = Mock()
         target = Mock()
         target.id = "t"
+        target._local = True
+        target.enabled = True
+        target.loaded = True
         mtc = Mock()
         with patch.object(AH, "_ready_action_target", return_value=None):
             AH._handle_play(ch, Mock(), target, mtc, 4242.0)
-        ch.go.assert_called_once_with(target, mtc, 4242.0)
+        ch.go_from.assert_called_once_with(target, mtc, 4242.0)
+        ch.go.assert_not_called()
 
 
 class TestRunActionCueStampsStartMtc:
