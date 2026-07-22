@@ -209,9 +209,7 @@ class TestRunDmxCue:
         # Verify call parameters — mtc_time is absolute "0:0:S.sss" string
         call_args = mock_dmx_cue._osc.send_dmx_scene.call_args
         assert call_args.kwargs["universe_frames"] == {1: {0: 255, 1: 128, 2: 64}}
-        expected_mtc_time = (
-            f"0:0:{mock_dmx_cue._start_mtc.milliseconds_exact / 1000.0}"
-        )
+        expected_mtc_time = f"0:0:{mock_dmx_cue._start_mtc.milliseconds_exact / 1000.0}"
         assert call_args.kwargs["mtc_time"] == expected_mtc_time
         assert call_args.kwargs["fade_time"] == 2.0  # 2000ms / 1000
 

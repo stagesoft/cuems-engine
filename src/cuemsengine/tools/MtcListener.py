@@ -162,15 +162,18 @@ class MtcListener(Thread):
         return self.main_tc
 
     def milliseconds_rounded(self) -> int:
-        """Integer milliseconds from the current MTC (CTimecode.milliseconds_rounded)."""
+        """Integer milliseconds from the current MTC."""
         return self.main_tc.milliseconds_rounded
 
     def milliseconds_exact(self) -> float:
-        """Float milliseconds from the current MTC (CTimecode.milliseconds_exact)."""
+        """Float milliseconds from the current MTC."""
         return self.main_tc.milliseconds_exact
 
     def milliseconds(self) -> int:
-        """Deprecated alias of milliseconds_rounded (CTimecode.milliseconds is deprecated)."""
+        """
+        Deprecated alias of milliseconds_rounded
+        (CTimecode.milliseconds is deprecated).
+        """
         return self.milliseconds_rounded()
 
     def __update_timecode(self, timecode):

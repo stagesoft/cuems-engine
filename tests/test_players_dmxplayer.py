@@ -165,7 +165,9 @@ class TestDmxClient:
         """Test DmxClient initialization."""
         with (
             patch("cuemsengine.osc.OssiaClient.OssiaClient.bind_device") as mock_init,
-            patch("cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints") as mock_endpoints,
+            patch(
+                "cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints"
+            ) as mock_endpoints,
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Skip bundle creation during init
             client = DmxClient(player_port=9000, client_name="test-node-123_dmxplayer")
@@ -185,7 +187,9 @@ class TestDmxClient:
         """Test DmxClient initialization with custom host."""
         with (
             patch("cuemsengine.osc.OssiaClient.OssiaClient.bind_device") as mock_init,
-            patch("cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints") as mock_endpoints,
+            patch(
+                "cuemsengine.osc.OssiaClient.OssiaClient.create_endpoints"
+            ) as mock_endpoints,
             patch.object(DmxClient, "_create_bundle_parameters"),
         ):  # Skip bundle creation during init
             client = DmxClient(
@@ -208,7 +212,7 @@ class TestDmxClient:
             "/mtc_time",
             "/start_offset",
             "/fade_time",
-            "/mtcfollow"
+            "/mtcfollow",
         ]
 
         # Get all calls made to add_node (stored in fixture)
@@ -374,7 +378,7 @@ class TestStartDmxPlayer:
         """Test starting DMX player and client."""
         with (
             patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
-            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
         ):
 
             # Mock player instance
@@ -412,7 +416,7 @@ class TestStartDmxPlayer:
         """Test starting DMX player with custom args."""
         with (
             patch("cuemsengine.players.DmxPlayer.DmxPlayer") as mock_player_class,
-            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class
+            patch("cuemsengine.players.DmxPlayer.DmxClient") as mock_client_class,
         ):
 
             mock_player = Mock()

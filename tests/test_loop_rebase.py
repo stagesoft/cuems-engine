@@ -86,9 +86,9 @@ def test_legacy_ms_roundtrip_rebase_no_longer_drifts_at_25fps():
         drifts.append(delta - 30000)
         prev_start_ms = start_mtc.milliseconds_rounded
 
-    assert all(d == 0 for d in drifts), (
-        f"expected ms round-trip rebase to be lossless at 25 fps, got {drifts}"
-    )
+    assert all(
+        d == 0 for d in drifts
+    ), f"expected ms round-trip rebase to be lossless at 25 fps, got {drifts}"
 
 
 def test_fixed_rebase_matches_absolute_anchor():

@@ -1,9 +1,9 @@
-
 from logging import INFO
 from time import sleep
 from unittest.mock import patch
 
 from cuemsengine import ControllerEngine, NodeEngine
+
 
 def test_project_load_from_controller(
     mock_config_path,

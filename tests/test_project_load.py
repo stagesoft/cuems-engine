@@ -30,6 +30,7 @@ from .fixtures import (
 # (excluded from fast unit tests runs).
 pytestmark = pytest.mark.integration
 
+
 def test_engine_instantiation(
     mock_config_path,
     mock_avahi_resolve,

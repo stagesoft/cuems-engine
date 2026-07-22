@@ -4,17 +4,17 @@
 
 from unittest.mock import patch
 
+import pytest
 from pythonosc.osc_message import OscMessage
 from pythonosc.osc_server import ThreadingOSCUDPServer
 from pythonosc.udp_client import SimpleUDPClient
 
 from cuemsengine.osc.PyOsc import PyOscClient, PyOscServer
 
-import pytest
-
 # All tests in this module are integration-class
 # (excluded from fast unit tests runs).
 pytestmark = pytest.mark.integration
+
 
 def test_new_osc_client():
     # Arrange
