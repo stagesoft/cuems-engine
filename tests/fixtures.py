@@ -43,20 +43,50 @@ def mock_mtc_listener():
         yield mock_mtc
 
 
+def _ossia_release(device_owner):
+    """Explicitly free OSC bind + PortHandler reservation.
+
+    Do not rely on ``__del__``: pytest failure tracebacks keep locals alive and
+    defer GC, which leaves UDP ports bound for subsequent tests.
+    """
+    from cuemsengine.tools.PortHandler import PORT_HANDLER
+
+    device = getattr(device_owner, "device", None)
+    if device is not None and not isinstance(device, str):
+        try:
+            device_owner.remove_device()
+        except Exception:
+            pass
+    local_port = getattr(device_owner, "local_port", None)
+    if isinstance(local_port, int):
+        PORT_HANDLER.remove_random_port(local_port)
+    remote_port = getattr(device_owner, "remote_port", None)
+    if isinstance(remote_port, int):
+        PORT_HANDLER.remove_random_port(remote_port)
+
+
 @fixture
 def ossia_client_factory():
     from contextlib import contextmanager
 
     from cuemsengine.osc.OssiaClient import OssiaClient
+    from cuemsengine.tools.PortHandler import PORT_HANDLER
 
     @contextmanager
     def create_client(**kwargs):
-        client = OssiaClient(**kwargs)
+        kwargs.setdefault("local_port", PORT_HANDLER.new_random_port())
+        kwargs.setdefault("remote_port", PORT_HANDLER.new_random_port())
+        try:
+            client = OssiaClient(**kwargs)
+        except Exception:
+            PORT_HANDLER.remove_random_port(kwargs["local_port"])
+            PORT_HANDLER.remove_random_port(kwargs["remote_port"])
+            raise
 
         try:
             yield client
         finally:
-            del client
+            _ossia_release(client)
 
     yield create_client
 
@@ -66,19 +96,24 @@ def ossia_server_factory():
     from contextlib import contextmanager
 
     from cuemsengine.osc.OssiaServer import OssiaServer
+    from cuemsengine.tools.PortHandler import PORT_HANDLER
 
     @contextmanager
     def create_server(**kwargs):
+        kwargs.setdefault("local_port", PORT_HANDLER.new_random_port())
+        kwargs.setdefault("remote_port", PORT_HANDLER.new_random_port())
         try:
             server = OssiaServer(**kwargs)
         except Exception as e:
             print(e)
             print(type(e))
+            PORT_HANDLER.remove_random_port(kwargs["local_port"])
+            PORT_HANDLER.remove_random_port(kwargs["remote_port"])
             raise e
         try:
             yield server
         finally:
-            del server
+            _ossia_release(server)
 
     yield create_server
 
