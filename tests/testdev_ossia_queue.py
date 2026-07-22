@@ -16,6 +16,11 @@ from cuemsengine.osc.OssiaServer import OssiaServer
 from .fixtures import ossia_client_factory, ossia_server_factory
 from .helpers import timeout
 
+import pytest
+
+# All tests in this module are integration-class
+# (excluded from fast unit tests runs).
+pytestmark = pytest.mark.integration
 
 def test_global_message_queue_receives_commands(
     ossia_server_factory, ossia_client_factory
