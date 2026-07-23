@@ -73,17 +73,18 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libjack-jackd2-dev \
             libsystemd-dev \
-            rtpmidid \
             gcc \
             pkg-config \
             libavahi-client-dev \
             wget
           wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
           wget https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O libmtcmaster.deb
+          wget https://github.com/stagesoft/rtpmidid/releases/download/v26.06-1stagelab1/librtpmidid0_26.01.1.g7f552_amd64.deb -O librtpmidid0.deb
           # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11.
           # --unpack skips postinst (py3compile needs a registered python3 >= 3.11).
           sudo dpkg --force-depends --unpack "$(realpath python3-pyossia.deb)"
           sudo dpkg --force-depends --unpack "$(realpath libmtcmaster.deb)"
+          sudo dpkg --force-depends --unpack "$(realpath librtpmidid0.deb)"
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
