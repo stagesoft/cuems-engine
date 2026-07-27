@@ -30,13 +30,86 @@ def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
     pass
 
 
+def _first_enabled_child(cue: CueList) -> Cue | None:
+    """First enabled child of a CueList, or None.
+
+    Dedupes the child selection both run_cueList and reveal_cueList need.
+    """
+    contents = getattr(cue, "contents", None)
+    if not contents:
+        return None
+    return next((c for c in contents if c.enabled), None)
+
+
+def _ensure_child_loaded(parent: CueList, child: Cue) -> bool:
+    """Give a CueList's first-enabled child the same "not loaded at go() time →
+    re-arm + warn" safety net CueHandler.go() gives top-level cues.
+
+    run_cueList/reveal_cueList dispatch to the child DIRECTLY, bypassing go()
+    (CueHandler.py) — so a child that reaches its trigger un-armed (CueList used
+    as a post_go target: _arm_ahead skips CueLists and arm_cue has no CueList
+    branch; enabled at runtime before the async arm finished; pre-arm failed)
+    would otherwise run against a cue with no player, emitting only a misleading
+    log ("subprocess likely crashed between arm and GO") and no recovery.
+
+    Returns True if the child is loaded (already, or after a successful re-arm).
+    Non-local children are left untouched — they are owned by the node where
+    they ARE local (arm() no-ops for non-local anyway) — and the caller keeps
+    the existing direct dispatch for them.
+    """
+    if not getattr(child, "_local", True):
+        return True  # not ours to arm; caller dispatches as before
+    if getattr(child, "loaded", False):
+        return True
+
+    # Lazy import: CueHandler imports run_cue at module load, so a top-level
+    # import here would be circular (mirrors reveal_actionCue's ActionHandler
+    # import).
+    from .CueHandler import CUE_HANDLER
+
+    Logger.warning(
+        f"CueList {parent.id} child {child.id} not loaded at trigger time "
+        f"(pre-arm missed — CueList children skip go()'s guard). "
+        f"Re-arming as fallback."
+    )
+    # arm() wraps arm_cue() in try/FINALLY, not try/except: a raise from
+    # arm_audioCue/arm_videoCue (e.g. PlayerHandler.new_audio_output's
+    # ValueError, or arm_videoCue's output-name lookup) would propagate out of
+    # run_cueList and kill the PARENT CueList's go_threaded daemon thread —
+    # silently skipping the parent's illuminate/reveal/postwait/chain/disarm,
+    # the very failure this guard exists to prevent. Contain it here.
+    try:
+        CUE_HANDLER.arm(child, init=True)
+    except Exception as e:
+        Logger.error(
+            f"CueList {parent.id} child {child.id} re-arm raised {e!r} — cue "
+            f"will produce NO output this GO (silent audio / invisible video)."
+        )
+        return False
+    if not getattr(child, "loaded", False):
+        Logger.error(
+            f"CueList {parent.id} child {child.id} re-arm did not complete — "
+            f"cue will produce NO output this GO (silent audio / invisible "
+            f"video)."
+        )
+        return False
+    return True
+
+
 @run_cue.register
 def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
-    """Run a CueList by dispatching its first enabled child."""
-    if cue.contents:
-        first_enabled = next((c for c in cue.contents if c.enabled), None)
-        if first_enabled:
-            run_cue(first_enabled, mtc, frozen_mtc_ms)
+    """Run a CueList by dispatching its first enabled child.
+
+    Children bypass CueHandler.go(), so replicate go()'s re-arm safety net here
+    (_ensure_child_loaded) — otherwise an un-armed child fires with only a
+    misleading log and no recovery.
+    """
+    child = _first_enabled_child(cue)
+    if child is None:
+        return
+    if not _ensure_child_loaded(cue, child):
+        return  # re-arm failed (already logged loudly) — don't dispatch
+    run_cue(child, mtc, frozen_mtc_ms)
 
 
 @run_cue.register
@@ -495,11 +568,24 @@ def reveal_cueList(cue: CueList, mtc, frozen_mtc_ms: float = None):
     Mirrors run_cueList: run_cue set the child up HELD, so reveal must recurse to
     the same child — otherwise a CueList used as a post_go='go'/'go_at_end' target
     would leave its child's video invisible / audio silent forever (no error).
+
+    run_cueList (earlier in go_threaded) is the arm point, so by reveal the child
+    is normally loaded. If it isn't (run_cueList's re-arm failed — already logged
+    loudly there), we log + SKIP rather than re-arm: a reveal-time arm without
+    run_cue's setup would leave _start_mtc at its default and make reveal_audioCue
+    send a wrong /offset then enable /mtcfollow — actively wrong playback, worse
+    than a clean skip.
     """
-    if getattr(cue, "contents", None):
-        first_enabled = next((c for c in cue.contents if c.enabled), None)
-        if first_enabled:
-            reveal_cue(first_enabled, mtc, frozen_mtc_ms)
+    child = _first_enabled_child(cue)
+    if child is None:
+        return
+    if getattr(child, "_local", True) and not getattr(child, "loaded", False):
+        Logger.warning(
+            f"CueList {cue.id} reveal: child {child.id} not loaded (setup never "
+            f"completed) — skipping reveal."
+        )
+        return
+    reveal_cue(child, mtc, frozen_mtc_ms)
 
 
 @singledispatch
