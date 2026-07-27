@@ -497,6 +497,14 @@ class MixerClient(PlayerClient):
         self.client_name = get_mixer_client_name(mixer_id)
         self.channel_number = channel_number
 
+        # Shadow of the gain commanded to jack-volume via the typed setters
+        # (jack-volume is write-only — it cannot be read back). Keys are
+        # "master" and channel indices as strings ("0", "1", …); values are
+        # linear gains. reset_volumes populates it (through apply_volume); the
+        # node snapshots it to the controller after each reset so the UI can
+        # read back the true (post-reset) mixer volume.
+        self._gain_state: dict[str, float] = {}
+
         # Build OSC endpoint configuration for jack-volume
         endpoints = build_mixer_osc_endpoints(self.client_name, channel_number)
 
@@ -507,19 +515,68 @@ class MixerClient(PlayerClient):
         )
 
     @logged
+    def apply_volume(self, channel, gain: float) -> bool:
+        """Send a volume to jack-volume AND record it in `_gain_state`.
+
+        The typed setters (set_master_volume / set_channel_volume, hence
+        reset_volumes) route through here, so a reset populates _gain_state with
+        the values it commanded. The node snapshots that state to the controller
+        right after each reset, letting the UI read back the true (post-reset)
+        mixer gain — jack-volume itself is write-only.
+
+        (Live per-cue UI writes stay on the raw set_value path and are shadowed
+        controller-side; they are not recorded here because the node snapshots
+        only on reset, never per write — a per-write report would race the
+        controller's optimistic populate.)
+
+        Args:
+            channel: "master" or a 0-indexed channel (int or numeric string)
+            gain: Volume gain (0.0 to 1.0)
+
+        Returns:
+            True if applied; False if gain/channel was invalid (no OSC sent,
+            no state change) — same reject-and-no-op semantics the typed
+            setters have always had.
+        """
+        if not 0.0 <= gain <= 1.0:
+            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
+            return False
+
+        ch = str(channel)
+        if ch == "master":
+            path = f"/audiomixer/{self.client_name}/master"
+        else:
+            try:
+                ch_i = int(ch)
+            except (TypeError, ValueError):
+                Logger.error(f"Invalid mixer channel: {channel!r}")
+                return False
+            if not 0 <= ch_i < self.channel_number:
+                Logger.error(f"Invalid channel: {ch_i}. Max: {self.channel_number - 1}")
+                return False
+            ch = str(ch_i)
+            path = f"/audiomixer/{self.client_name}/{ch_i}"
+
+        Logger.debug(f"Setting mixer {ch} volume to {gain}")
+        self.set_value(path, gain)
+        self._gain_state[ch] = gain
+        return True
+
+    def snapshot(self) -> dict:
+        """Return a copy of the authoritative gain state for reporting.
+
+        Shape: {"master": gain, "0": gain, "1": gain, …}.
+        """
+        return dict(self._gain_state)
+
+    @logged
     def set_master_volume(self, gain: float):
         """Set the master volume gain.
 
         Args:
             gain: Volume gain (0.0 to 1.0)
         """
-        if not 0.0 <= gain <= 1.0:
-            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
-            return
-
-        path = f"/audiomixer/{self.client_name}/master"
-        Logger.debug(f"Setting master volume to {gain}")
-        self.set_value(path, gain)
+        self.apply_volume("master", gain)
 
     @logged
     def set_channel_volume(self, channel: int, gain: float):
@@ -529,17 +586,7 @@ class MixerClient(PlayerClient):
             channel: Channel number (0-indexed)
             gain: Volume gain (0.0 to 1.0)
         """
-        if not 0.0 <= gain <= 1.0:
-            Logger.error(f"Invalid gain value: {gain}. Must be between 0.0 and 1.0")
-            return
-
-        if channel >= self.channel_number:
-            Logger.error(f"Invalid channel: {channel}. Max: {self.channel_number - 1}")
-            return
-
-        path = f"/audiomixer/{self.client_name}/{channel}"
-        Logger.debug(f"Setting channel {channel} volume to {gain}")
-        self.set_value(path, gain)
+        self.apply_volume(channel, gain)
 
     @logged
     def set_all_channels_volume(self, gain: float):

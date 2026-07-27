@@ -231,6 +231,33 @@ class NodeCommunications(AsyncCommsThread):
         )
         return self.send_operation(operation, timeout)
 
+    def update_mixer_status(
+        self,
+        entries: dict,
+        output_index: str = "0",
+        timeout: Optional[float] = None,
+    ):
+        """Send an authoritative audio-mixer gain snapshot to the controller.
+
+        Used so the UI can read back the true mixer volume (jack-volume itself
+        is write-only). Sent on settle events (mixer startup / after
+        reset_volumes), NOT per UI write — a per-write report would race the
+        controller's optimistic populate.
+
+        Parameters:
+        - entries: {"master": gain, "0": gain, …} linear gains
+        - output_index: mixer instance index (always "0" today)
+        - timeout: Optional timeout in seconds (defaults to `self.timeout`)
+        """
+        operation = NodeOperation(
+            type=OperationType.STATUS,
+            action=ActionType.UPDATE,
+            sender=self.node_id,
+            target="audiomixer_status",
+            data={"output_index": output_index, "entries": entries},
+        )
+        return self.send_operation(operation, timeout)
+
     def update_cue(self, cue_id: str, percentage: int, timeout: Optional[float] = None):
         """
         Send a cue percentage progress update to the controller (thread-safe).

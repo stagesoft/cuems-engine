@@ -399,3 +399,69 @@ class TestArmWatchdog:
             time.sleep(0.3)
             assert controller.get_status("armed") == "yes"
             assert not fired.is_set()
+
+
+# ─── status_operation_callback: audiomixer_status (869cwpkz4) ────────────
+
+
+def _mixer_status_op(sender: str, entries: dict, output_index: str = "0"):
+    return NodeOperation(
+        type=OperationType.STATUS,
+        action=ActionType.UPDATE,
+        sender=sender,
+        target="audiomixer_status",
+        data={"output_index": output_index, "entries": entries},
+    )
+
+
+class TestMixerStatusCallback:
+    """The node-sourced mixer snapshot must populate mixer_status (keyed
+    {uuid}/{output}/{channel}) and broadcast each entry to the UI."""
+
+    def test_updates_shadow_and_broadcasts(self, controller):
+        controller.status_operation_callback(
+            _mixer_status_op(SLAVE_UUID, {"master": 1.0, "0": 0.5})
+        )
+        assert controller.mixer_status[f"{SLAVE_UUID}/0/master"] == 1.0
+        assert controller.mixer_status[f"{SLAVE_UUID}/0/0"] == 0.5
+        controller.communications_thread.broadcast_osc.assert_any_call(
+            f"/engine/status/audio/mixer/{SLAVE_UUID}/0/master/volume", 1.0
+        )
+        controller.communications_thread.broadcast_osc.assert_any_call(
+            f"/engine/status/audio/mixer/{SLAVE_UUID}/0/0/volume", 0.5
+        )
+
+    def test_reset_snapshot_overwrites_stale_ui_write(self, controller):
+        # The exact reported defect: a UI write left 0.5, a load reset makes the
+        # real gain unity; the node's post-reset snapshot must overwrite it.
+        controller.mixer_status[f"{SLAVE_UUID}/0/0"] = 0.5
+        controller.status_operation_callback(_mixer_status_op(SLAVE_UUID, {"0": 1.0}))
+        assert controller.mixer_status[f"{SLAVE_UUID}/0/0"] == 1.0
+
+    def test_non_finite_and_non_numeric_entries_skipped(self, controller):
+        controller.status_operation_callback(
+            _mixer_status_op(SLAVE_UUID, {"master": float("inf"), "0": "x"})
+        )
+        assert f"{SLAVE_UUID}/0/master" not in controller.mixer_status
+        assert f"{SLAVE_UUID}/0/0" not in controller.mixer_status
+
+    def test_foreign_sender_ignored(self, controller):
+        # Mirrors armed_ready/script_finished: an unadopted node must not grow
+        # the shadow.
+        controller.status_operation_callback(
+            _mixer_status_op(FOREIGN_UUID, {"master": 0.5})
+        )
+        assert controller.mixer_status == {}
+
+    def test_non_dict_entries_do_not_crash(self, controller):
+        # A malformed op with entries as a list must not raise (would otherwise
+        # kill the NNG status thread on entries.items()).
+        op = NodeOperation(
+            type=OperationType.STATUS,
+            action=ActionType.UPDATE,
+            sender=SLAVE_UUID,
+            target="audiomixer_status",
+            data={"output_index": "0", "entries": ["master", 1.0]},
+        )
+        controller.status_operation_callback(op)
+        assert controller.mixer_status == {}

@@ -177,6 +177,10 @@ class PlayerHandler:
             Tuple containing the AudioMixer and MixerClient instances
         """
         Logger.info(f"Starting audio mixer {mixer_id}")
+        # Clean up any surviving jack-volume from a prior engine lifetime so the
+        # new mixer binds "0_mixer" cleanly (avoids the JackNameNotUnique rename
+        # that would leave the engine addressing a disconnected zombie).
+        self.kill_orphaned_mixer_processes()
         self._audio_mixer, self._audio_mixer_client = start_audio_mixer(
             audio_outputs=audio_outputs,
             port=port,
@@ -382,6 +386,48 @@ class PlayerHandler:
             pid = int(pid_str)
             if pid not in tracked_pids:
                 Logger.warning(f"Killing orphaned audioplayer process {pid}")
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def kill_orphaned_mixer_processes(self):
+        """Kill jack-volume mixer processes not tracked by this engine.
+
+        Mirrors kill_orphaned_audio_processes for the mixer. On a node-engine
+        restart the previous jack-volume survives as an independent subprocess
+        and keeps the "0_mixer" JACK client name; a freshly spawned jack-volume
+        then hits JackNameNotUnique and is renamed by JACK, ending up a
+        disconnected zombie while the engine still addresses "0_mixer" (the
+        orphan) — every restart also leaks another zombie. Kill any survivor
+        first so the new mixer binds "0_mixer" cleanly.
+
+        Match "jack-volume -c" (the binary invoked with its client-name flag)
+        rather than the bare word, so an operator's `tail -f .../jack-volume.log`
+        or a grep isn't caught and killed. Covers both the plain and
+        "cuems-jack-volume" install names.
+        """
+        import os
+        import signal
+
+        result = subprocess.run(
+            ["pgrep", "-f", "jack-volume -c"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return
+
+        tracked_pid = None
+        if self._audio_mixer is not None and getattr(self._audio_mixer, "p", None):
+            tracked_pid = self._audio_mixer.p.pid
+
+        for pid_str in result.stdout.strip().split("\n"):
+            if not pid_str:
+                continue
+            pid = int(pid_str)
+            if pid != tracked_pid:
+                Logger.warning(f"Killing orphaned jack-volume mixer process {pid}")
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
