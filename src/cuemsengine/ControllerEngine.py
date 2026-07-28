@@ -576,6 +576,44 @@ class ControllerEngine(BaseEngine):
                 self.cue_enabled_status[cue_id] = enabled
                 self._broadcast_cue_enabled(cue_id, enabled)
                 Logger.info(f"Cue {cue_id} enabled status updated from node: {enabled}")
+        elif operation.target == "audiomixer_status":
+            # Authoritative mixer gain snapshot from a node (sent on mixer
+            # startup / after reset_volumes). This is the ONLY node-sourced feed
+            # of mixer_status; it lets the UI recover the TRUE gain rather than a
+            # stale UI-write echo. jack-volume itself is write-only, so the node
+            # reports what it commanded. Key shape matches the UI-write shadow:
+            # "{node_uuid}/{output_index}/{channel}".
+            node_uuid = operation.sender
+            # Filter foreign/unadopted senders (mirrors armed_ready /
+            # script_finished) so the shadow can't grow from nodes the cluster
+            # never adopted. A pre-load startup snapshot from a not-yet-adopted
+            # node is dropped, but the UI's unity default matches the post-reset
+            # state, and the load-time reset snapshot (node adopted by then)
+            # reconciles.
+            if node_uuid not in self._adopted_nodes:
+                Logger.debug(f"Ignoring audiomixer_status from non-adopted {node_uuid}")
+                return
+            data = operation.data or {}
+            output_index = data.get("output_index", "0")
+            entries = data.get("entries", {})
+            if not isinstance(entries, dict):
+                Logger.debug(f"audiomixer_status from {node_uuid} had non-dict entries")
+                return
+            updated = 0
+            for channel, vol in entries.items():
+                try:
+                    v = float(vol)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(v):
+                    continue
+                key = f"{node_uuid}/{output_index}/{channel}"
+                self.mixer_status[key] = v
+                self._broadcast_status(
+                    f"audio/mixer/{node_uuid}/{output_index}/{channel}/volume", v
+                )
+                updated += 1
+            Logger.info(f"Mixer status from {node_uuid}: {updated} channel(s) updated")
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
 

@@ -419,6 +419,16 @@ class NodeEngine(BaseEngine):
                     Logger.info(f"Audio mixer {mixer_id} registered with Controller")
                 except Exception as e:
                     Logger.warning(f"Could not register mixer with Controller: {e}")
+
+                # Assert a known unity state at startup so the controller shadow
+                # (hence the UI) reflects real gain from t=0, then snapshot it.
+                try:
+                    mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+                    if mixer_client:
+                        mixer_client.reset_volumes()
+                    self._report_mixer_status()
+                except Exception as e:
+                    Logger.warning(f"Mixer startup state assert/report failed: {e}")
             except Exception as e:
                 Logger.error(f"Error starting audio mixer: {e}")
                 Logger.exception(e)
@@ -459,6 +469,30 @@ class NodeEngine(BaseEngine):
             self.cm.node_conf["audioplayer"]["path"],
             audio_args,
         )
+
+    def _report_mixer_status(self, output_index: str = "0") -> None:
+        """Snapshot the local mixer's authoritative gain to the controller.
+
+        Sent on SETTLE EVENTS only — mixer startup and after each
+        reset_volumes — never per UI write. A per-write report would race the
+        controller's synchronous optimistic populate (unordered NNG command
+        threads) and make faders jump backward on a fast drag; live UI writes
+        are already shadowed accurately controller-side, so the node only needs
+        to report the resets the controller can't observe.
+        """
+        try:
+            mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+            if not mixer_client:
+                return
+            entries = mixer_client.snapshot()
+            if not entries:
+                return
+            CUE_HANDLER.communications_thread.update_mixer_status(
+                entries, output_index=output_index, timeout=0.1
+            )
+            Logger.debug(f"Reported mixer status to controller: {entries}")
+        except Exception as e:
+            Logger.warning(f"Could not report mixer status: {e}")
 
     # Video functions
     def set_video_players(self):
@@ -663,6 +697,9 @@ class NodeEngine(BaseEngine):
                 mixer_client.reset_volumes()
             except Exception as e:
                 Logger.warning(f"JACK volume reset failed: {e}")
+            # Report the reset so the UI reflects real (unity) gain, not the
+            # stale value it may have shown from a previous UI write.
+            self._report_mixer_status()
         PLAYER_HANDLER.kill_all_audio_players()
         PLAYER_HANDLER.kill_orphaned_audio_processes()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
@@ -1071,6 +1108,8 @@ class NodeEngine(BaseEngine):
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
         if mixer_client:
             mixer_client.reset_volumes()
+            # Report the reset so the UI reflects real (unity) gain.
+            self._report_mixer_status()
 
         self.initial_cuelist_process()
 

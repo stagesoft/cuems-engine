@@ -768,3 +768,78 @@ class TestStartAudioMixer:
                 path="/custom/jack-volume",
                 args=None,
             )
+
+
+class TestMixerClientGainState:
+    """869cwpkz4: MixerClient records the gain it commands in _gain_state so the
+    node can snapshot the TRUE mixer volume to the controller (jack-volume is
+    write-only and cannot be read back)."""
+
+    @pytest.fixture
+    def mixer_client(self):
+        with patch("cuemsengine.players.AudioMixer.PlayerClient.__init__"):
+            client = MixerClient(player_port=8000, channel_number=4, mixer_id="test")
+            client.nodes = {}
+            client.device = None
+            return client
+
+    def test_apply_volume_master_records_and_sends(self, mixer_client):
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume("master", 0.5) is True
+        sv.assert_called_once_with("/audiomixer/test_mixer/master", 0.5)
+        assert mixer_client.snapshot() == {"master": 0.5}
+
+    def test_apply_volume_int_channel_records(self, mixer_client):
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume(2, 0.7) is True
+        sv.assert_called_once_with("/audiomixer/test_mixer/2", 0.7)
+        assert mixer_client.snapshot() == {"2": 0.7}
+
+    def test_apply_volume_numeric_string_channel(self, mixer_client):
+        # route_audio_message passes the channel as a string from the OSC path.
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume("1", 0.3) is True
+        sv.assert_called_once_with("/audiomixer/test_mixer/1", 0.3)
+        assert mixer_client.snapshot() == {"1": 0.3}
+
+    def test_apply_volume_invalid_gain_rejected(self, mixer_client):
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume("master", 1.5) is False
+        sv.assert_not_called()
+        assert mixer_client.snapshot() == {}
+
+    def test_apply_volume_out_of_range_channel_rejected(self, mixer_client):
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume(9, 0.5) is False  # channel_number=4
+        sv.assert_not_called()
+        assert mixer_client.snapshot() == {}
+
+    def test_apply_volume_nonnumeric_channel_rejected(self, mixer_client):
+        with patch.object(mixer_client, "set_value") as sv:
+            assert mixer_client.apply_volume("left", 0.5) is False
+        sv.assert_not_called()
+        assert mixer_client.snapshot() == {}
+
+    def test_typed_setters_record_state(self, mixer_client):
+        with patch.object(mixer_client, "set_value"):
+            mixer_client.set_master_volume(0.2)
+            mixer_client.set_channel_volume(3, 0.4)
+        assert mixer_client.snapshot() == {"master": 0.2, "3": 0.4}
+
+    def test_reset_volumes_populates_all_to_unity(self, mixer_client):
+        with patch.object(mixer_client, "set_value"):
+            mixer_client.reset_volumes()
+        assert mixer_client.snapshot() == {
+            "master": 1.0,
+            "0": 1.0,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 1.0,
+        }
+
+    def test_snapshot_is_a_copy(self, mixer_client):
+        with patch.object(mixer_client, "set_value"):
+            mixer_client.apply_volume("master", 0.5)
+        snap = mixer_client.snapshot()
+        snap["master"] = 0.0
+        assert mixer_client.snapshot() == {"master": 0.5}
