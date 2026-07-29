@@ -50,9 +50,7 @@ def _make_node_engine(
         "gradient_osc_port": gradient_osc_port,
         "nng_hub_port": "5555",
     }
-    ne.cm.node_network_map = (
-        node_network_map if node_network_map is not None else {}
-    )
+    ne.cm.node_network_map = node_network_map if node_network_map is not None else {}
     return ne
 
 
