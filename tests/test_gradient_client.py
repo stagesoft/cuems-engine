@@ -7,10 +7,10 @@ Covers (SC-004 required 8 tests, plus extras):
 1. /gradient/start_fade address
 2. ,sssisffhiss type-tag string
 3. motion_id at position 0
-4. constructor-supplied node_uuid injected at position 1 (node_name)
+4. constructor-supplied node_name injected at position 1 (node_name)
 5. start_mtc_ms 'h' (int64) tag round-trips values exceeding int32 range
-6. /gradient/cancel_all emission with no args
-7. /gradient/cancel_motion emission with motion_id
+6. /gradient/cancel_all emission carrying node_name
+7. /gradient/cancel_motion emission with motion_id + node_name
 8. OSC send error logged at ERROR and re-raised
 """
 
@@ -22,6 +22,9 @@ from unittest.mock import MagicMock
 
 import pytest
 from pythonosc.osc_message import OscMessage
+
+
+from cuemsengine.players.GradientClient import GradientClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,11 +62,10 @@ def udp_listener():
 
 
 @pytest.fixture
-def gradient_client(udp_listener):
-    from cuemsengine.players.GradientClient import GradientClient
+def gradient_client(udp_listener) -> GradientClient:
 
     _, port = udp_listener
-    return GradientClient(host="127.0.0.1", port=port, node_uuid="node-test")
+    return GradientClient(host="127.0.0.1", port=port, node_name="node-test")
 
 
 _FADE_KWARGS = dict(
@@ -107,11 +109,11 @@ class TestSendFade:
         _, msg = _recv(sock)
         assert msg.params[0] == "test-motion-id"
 
-    def test_send_fade_node_uuid_injected_as_node_name(
+    def test_send_fade_node_name_injected_as_node_name(
         self, udp_listener, gradient_client
     ):
         """
-        (SC-004 #4) Constructor-supplied node_uuid injected at params[1]
+        (SC-004 #4) Constructor-supplied node_name injected at params[1]
         (node_name).
         """
         sock, _ = udp_listener
@@ -127,7 +129,7 @@ class TestSendFade:
         from cuemsengine.players.GradientClient import GradientClient
 
         sock, port = udp_listener
-        gc = GradientClient(host="127.0.0.1", port=port, node_uuid="n")
+        gc = GradientClient(host="127.0.0.1", port=port, node_name="n")
         large_val = 2**33  # 8_589_934_592 — exceeds int32 max (2_147_483_647)
         gc.send_fade(**{**_FADE_KWARGS, "start_mtc_ms": large_val})
         data, msg = _recv(sock)
@@ -180,7 +182,7 @@ class TestSendFade:
         from cuemsengine.players.GradientClient import GradientClient
 
         sock, port = udp_listener
-        gc = GradientClient(host="127.0.0.1", port=port, node_uuid="n")
+        gc = GradientClient(host="127.0.0.1", port=port, node_name="n")
         kwargs = {k: v for k, v in _FADE_KWARGS.items() if k != "curve_params_json"}
         gc.send_fade(**kwargs)
         _, msg = _recv(sock)
@@ -200,12 +202,16 @@ class TestSendCancelAll:
         _, msg = _recv(sock)
         assert msg.address == "/gradient/cancel_all"
 
-    def test_send_cancel_all_no_params(self, udp_listener, gradient_client):
-        """cancel_all carries no arguments."""
+    def test_send_cancel_all_carries_node_name(self, udp_listener, gradient_client):
+        """
+        cancel_all carries the constructor-supplied node_name — required by
+        the daemon's node_name filter (wire tag ',s', verified against
+        gradient-motion-engine's OscServer.cpp/parseFadeOscCommand.cpp).
+        """
         sock, _ = udp_listener
         gradient_client.send_cancel_all()
         _, msg = _recv(sock)
-        assert msg.params == []
+        assert msg.params == ["node-test"]
 
 
 # ---------------------------------------------------------------------------
@@ -228,3 +234,14 @@ class TestSendCancelMotion:
         gradient_client.send_cancel_motion("test-motion-id-42")
         _, msg = _recv(sock)
         assert msg.params[0] == "test-motion-id-42"
+
+    def test_send_cancel_motion_carries_node_name(self, udp_listener, gradient_client):
+        """
+        cancel_motion carries the constructor-supplied node_name at
+        params[1] — required by the daemon's node_name filter (wire tag
+        ',ss').
+        """
+        sock, _ = udp_listener
+        gradient_client.send_cancel_motion("test-motion-id-42")
+        _, msg = _recv(sock)
+        assert msg.params[1] == "node-test"

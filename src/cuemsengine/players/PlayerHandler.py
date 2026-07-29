@@ -618,8 +618,13 @@ class PlayerHandler:
         """
         return self._gradient_client
 
-    def set_gradient_client(self, port: int, node_uuid: str) -> None:
+    def set_gradient_client(self, port: int, node_name: str) -> None:
         """Construct (or replace) the GradientClient for this node.
+
+        node_name must match gradient-motiond's own --node-name (defaults to
+        the OS hostname; see node-identity-contract.md in cuems-common) —
+        NOT the node's UUID, which the daemon's node_name filter will never
+        match, silently dropping every message.
 
         Safe to call multiple times: any new call replaces the prior client.
         PyOscClient is fire-and-forget UDP with no held resources, so no
@@ -628,9 +633,9 @@ class PlayerHandler:
         self._gradient_client = GradientClient(
             host="127.0.0.1",
             port=port,
-            node_uuid=node_uuid,
+            node_name=node_name,
         )
-        Logger.info(f"GradientClient: bound to 127.0.0.1:{port} node_uuid={node_uuid}")
+        Logger.info(f"GradientClient: bound to 127.0.0.1:{port} node_name={node_name}")
 
     def start_video_outputs(
         self,

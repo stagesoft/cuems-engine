@@ -64,11 +64,21 @@ existing motion with the same `motion_id` before starting the new one
 
 Cancels a single in-flight motion by its `motion_id`.
 
-**Type-tag string**: `s`
+**Type-tag string**: `ss`
 
 | Position | Tag | Field     | Python type | Example                              |
 |----------|-----|-----------|-------------|--------------------------------------|
 | 0        | `s` | motion_id | `str`       | `"3fa85f64-5717-4562-b3fc-2c963f66afa6_2"` |
+| 1        | `s` | node_name | `str`       | `"controller"`                       |
+
+**CORRECTED 2026-07-29**: this document previously said `cancel_motion`
+took only `motion_id` (type-tag `s`). Direct inspection of
+`gradient-motion-engine`'s `daemon/comms/OscServer.cpp` (method
+registration `"/gradient/cancel_motion", "ss"`) and
+`src/signal/parseFadeOscCommand.cpp` (`parseCancelMotion`, `argc != 2`
+→ `TypeError`) shows the daemon requires `node_name` as a second
+argument, same as `start_fade` — same `NodeMismatch` drop rule applies.
+A sender omitting it hits `TypeError` (logged at WARNING on the daemon).
 
 This message is motion-generic: it works for any motion type (fade today;
 crossfade, vector in future phases). `cancel_motion` is NOT removed when
@@ -78,9 +88,19 @@ future motion types are added.
 
 ## `/gradient/cancel_all`
 
-Cancels all in-flight motions on the daemon. No arguments.
+Cancels all in-flight motions on the daemon.
 
-**Type-tag string**: `` (empty)
+**Type-tag string**: `s`
+
+| Position | Tag | Field     | Python type | Example                              |
+|----------|-----|-----------|-------------|--------------------------------------|
+| 0        | `s` | node_name | `str`       | `"controller"`                       |
+
+**CORRECTED 2026-07-29**: this document previously said `cancel_all` took
+no arguments (empty type-tag). The actual daemon registers
+`"/gradient/cancel_all", "s"` and `parseCancelAll` requires exactly one
+`node_name` arg (`argc != 1` → `TypeError`). A sender passing zero args
+never matches the registered method signature.
 
 Sent by `NodeEngine` on STOP and project load (FR-003, FR-004, FR-005).
 This is the primary cleanup mechanism; individual `cancel_motion` calls
@@ -90,10 +110,25 @@ are not required before `cancel_all`.
 
 ## Python Sender Implementation Notes
 
-`GradientClient` holds `node_uuid` at construction (set by
-`PlayerHandler.set_gradient_client(port, node_uuid)`); `node_name` is injected
-by `send_fade` itself, not passed by callers. This prevents placeholder
-values from causing silent daemon-side `NodeMismatch` drops.
+**CORRECTED 2026-07-29**: `GradientClient` previously held `node_uuid` at
+construction and injected the node's UUID as `node_name`. This was wrong:
+gradient-motiond's `node_name` filter matches its own `--node-name`
+(defaulting to the OS hostname — see `node-identity-contract.md` in
+cuems-common), never the node's UUID. Every `send_fade` was silently
+dropped (`NodeMismatch`, logged at DEBUG only — invisible at the daemon's
+default `info` log level), reproduced live against `gradient-motiond`
+v0.3.0: a UUID `node_name` produces zero daemon log output, while
+`node_name="controller"` (the OS hostname) produces
+`GradientEngine: MotionComplete motion_id=...` at INFO.
+
+`GradientClient` now holds `node_name` at construction (set by
+`PlayerHandler.set_gradient_client(port, node_name)`); `NodeEngine`
+resolves the correct value from `network_map.xml`'s `<role_id>` (falling
+back to the legacy `<hostname>` override, then to `node_uuid` as a
+last-resort with a WARNING log — see
+`NodeEngine._resolve_gradient_node_name`). `send_fade` injects it, not
+passed by callers, preventing placeholder values from causing silent
+daemon-side `NodeMismatch` drops.
 
 ```python
 # GradientClient.send_fade (the only place this builder runs):
@@ -101,7 +136,7 @@ from pythonosc.osc_message_builder import OscMessageBuilder
 
 builder = OscMessageBuilder(address='/gradient/start_fade')
 builder.add_arg(motion_id,         arg_type='s')
-builder.add_arg(self._node_uuid,   arg_type='s')   # node_name — self-injected
+builder.add_arg(self._node_name,   arg_type='s')   # node_name — self-injected
 builder.add_arg(osc_host,          arg_type='s')
 builder.add_arg(osc_port,          arg_type='i')
 builder.add_arg(osc_path,          arg_type='s')
@@ -114,11 +149,11 @@ builder.add_arg(curve_params_json, arg_type='s')
 msg = builder.build()
 self._osc.client.send(msg)   # SimpleUDPClient.send(OscMessage)
 
-# cancel_motion — one string arg; PyOscClient.send_message is fine
-self._osc.send_message('/gradient/cancel_motion', motion_id)
+# cancel_motion — motion_id + node_name; PyOscClient.send_message is fine
+self._osc.client.send_message('/gradient/cancel_motion', (motion_id, self._node_name))
 
-# cancel_all — no args; pass empty list
-self._osc.send_message('/gradient/cancel_all', [])
+# cancel_all — node_name only
+self._osc.client.send_message('/gradient/cancel_all', self._node_name)
 ```
 
 `self._osc.client` is the underlying `SimpleUDPClient`. For `cancel_motion`

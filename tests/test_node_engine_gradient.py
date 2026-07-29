@@ -6,7 +6,11 @@
 Covers (T008):
 - set_gradient_client() invoked from set_players() alongside
   - set_video_players/set_dmx_players
-- node_uuid passed correctly into PLAYER_HANDLER.set_gradient_client
+- the resolved node_name (NOT node_uuid) is passed into
+  PLAYER_HANDLER.set_gradient_client — gradient-motiond's node_name filter
+  matches its own --node-name (defaults to OS hostname; see
+  node-identity-contract.md in cuems-common), which cuems-nodeconf keeps in
+  sync with network_map.xml's <role_id>/<hostname>, never the node's UUID.
 - cancel_all fires before stop_all_cues on STOP
 - cancel_all fires before stop_all_cues on project load
 - None guard: when gradient_client is None, logs DEBUG and doesn't crash
@@ -28,7 +32,9 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def _make_node_engine(gradient_osc_port="7100", node_uuid="node-001"):
+def _make_node_engine(
+    gradient_osc_port="7100", node_uuid="node-001", node_network_map=None
+):
     """
     Build a NodeEngine shell via __new__ — skips full __init__ and real config.
     """
@@ -44,6 +50,9 @@ def _make_node_engine(gradient_osc_port="7100", node_uuid="node-001"):
         "gradient_osc_port": gradient_osc_port,
         "nng_hub_port": "5555",
     }
+    ne.cm.node_network_map = (
+        node_network_map if node_network_map is not None else {}
+    )
     return ne
 
 
@@ -67,11 +76,18 @@ class TestSetGradientClientWiring:
             ne.set_players()
         mock_sgc.assert_called_once()
 
-    def test_set_gradient_client_node_uuid_passed(self):
+    def test_set_gradient_client_uses_role_id_not_uuid(self):
         """
-        set_gradient_client() must propagate cm.node_uuid to PLAYER_HANDLER.
+        set_gradient_client() must propagate the network_map role_id to
+        PLAYER_HANDLER — NOT cm.node_uuid. gradient-motiond's node_name
+        filter matches its own --node-name (OS hostname by default), which
+        cuems-nodeconf keeps in sync with <role_id>; the daemon never sees
+        or matches on the node's UUID.
         """
-        ne = _make_node_engine(node_uuid="node-007")
+        ne = _make_node_engine(
+            node_uuid="0367f391-ebf4-48b2-9f26-000000000001",
+            node_network_map={"role_id": "controller"},
+        )
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
@@ -79,9 +95,47 @@ class TestSetGradientClientWiring:
 
         mock_ph_sgc.assert_called_once()
         _, kwargs = mock_ph_sgc.call_args
-        assert (
-            kwargs.get("node_uuid") == "node-007"
-            or mock_ph_sgc.call_args[0][1] == "node-007"
+        assert kwargs.get("node_name") == "controller"
+
+    def test_set_gradient_client_prefers_legacy_hostname_override(self):
+        """
+        When network_map's <hostname> is present (legacy override — the OS
+        hostname diverges from <role_id>), it takes precedence over
+        <role_id> since it is the actual value gethostname() returns on
+        that node.
+        """
+        ne = _make_node_engine(
+            node_network_map={"role_id": "controller", "hostname": "000000000002"},
+        )
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
+            ne.set_gradient_client()
+
+        _, kwargs = mock_ph_sgc.call_args
+        assert kwargs.get("node_name") == "000000000002"
+
+    def test_set_gradient_client_falls_back_to_uuid_with_warning(self, caplog):
+        """
+        When network_map has neither role_id nor hostname (unadopted /
+        pre-migration node), fall back to node_uuid rather than crashing —
+        but log a WARNING since this fallback will not match the daemon's
+        node_name filter (Constitution V: no silent failures).
+        """
+        ne = _make_node_engine(
+            node_uuid="node-007", node_network_map={"name": "some-mdns-name"}
+        )
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+
+        with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_ph_sgc:
+            with caplog.at_level(logging.WARNING):
+                ne.set_gradient_client()
+
+        _, kwargs = mock_ph_sgc.call_args
+        assert kwargs.get("node_name") == "node-007"
+        assert any(
+            "gradient_node_name" in r.message and r.levelno == logging.WARNING
+            for r in caplog.records
         )
 
     def test_set_gradient_client_port_from_node_conf(self):
@@ -305,7 +359,11 @@ class TestGradientOscPortBinding:
         Custom gradient_osc_port in node_conf is forwarded as int to
         PLAYER_HANDLER.
         """
-        ne = _make_node_engine(gradient_osc_port="7200", node_uuid="node-002")
+        ne = _make_node_engine(
+            gradient_osc_port="7200",
+            node_uuid="node-002",
+            node_network_map={"role_id": "node01"},
+        )
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         with patch.object(PLAYER_HANDLER, "set_gradient_client") as mock_sgc:
@@ -315,5 +373,4 @@ class TestGradientOscPortBinding:
         _, kwargs = mock_sgc.call_args
         port_arg = kwargs.get("port") or mock_sgc.call_args[0][0]
         assert port_arg == 7200, f"Expected port 7200, got {port_arg}"
-        uuid_arg = kwargs.get("node_uuid") or mock_sgc.call_args[0][1]
-        assert uuid_arg == "node-002"
+        assert kwargs.get("node_name") == "node01"
