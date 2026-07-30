@@ -85,6 +85,17 @@ class AudioMixer(Player):
         Retries if ports are not yet registered (race with jack-volume
         startup).
         """
+        # Fail fast with no JACK server (see connect_player_to_outputs): the
+        # retry loop is for the port-registration race, not for a host whose
+        # jackd is absent/stubbed — there it just burned
+        # len(audio_outputs) * max_retries * retry_delay seconds at startup.
+        if self.conn_man.client is None:
+            Logger.error(
+                "No JACK server available - mixer outputs not wired; audio on"
+                " this host will be SILENT. (jackd absent or stubbed -"
+                " skipping the port wait.)"
+            )
+            return
         for i, playback_port in enumerate(self.audio_outputs):
             output_port = f"{self.client_name}:output_{i+1}"
             # Wait for both ports to be available
@@ -273,6 +284,25 @@ class AudioMixer(Player):
             name: f"{self.client_name}:input_{i+1}"
             for i, name in enumerate(self.audio_outputs)
         }
+
+        # Fail fast when there is no JACK client at all. The retry loop below
+        # exists for a TRANSIENT race (player ports registering a beat after
+        # the process spawns); a missing JACK server is PERMANENT for this arm
+        # attempt, and waiting max_retries * retry_delay (~15s) for it blocked
+        # armed_ready — and therefore the cluster GO gate — on every load and
+        # re-arm of a host whose jackd is deliberately stubbed (measured
+        # load->GO 16s vs 1-2s on the test2 controller, regression window
+        # 2026-07-23 -> 24 when this wait first deployed there). The client
+        # property retries initialization once on this access, so a jackd
+        # that just came up is still picked up.
+        if self.conn_man.client is None:
+            Logger.error(
+                f"No JACK server available - cannot route {player_name} to the"
+                f" mixer; cue will be SILENT despite showing armed status."
+                f" (jackd absent or stubbed on this host - skipping the"
+                f" {max_retries * retry_delay:.0f}s port wait.)"
+            )
+            return False
 
         # Wait for player JACK ports to be available.
         # NOTE: gate ONLY on port_exists(); get_connections() returns [] (not
