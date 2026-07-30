@@ -619,7 +619,7 @@ def _handle_fade_action(
 
     try:
         payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
         )
@@ -738,9 +738,9 @@ def _build_fade_payload(
         }
 
     if isinstance(target_cue, AudioCue):
-        master_vol = getattr(target_cue, "master_vol", None)
-        script_default = (100.0 if master_vol is None else float(master_vol)) / 100.0
-        return [_entry("/volmaster", motion_id, script_default)]
+        master_vol = getattr(target_cue, "master_vol", 100)
+        ratio_value = float(master_vol) / 100.0
+        return [_entry("/volmaster", motion_id, ratio_value)]
 
     if isinstance(target_cue, VideoCue):
         layer_ids = getattr(target_cue, "_layer_ids", []) or []
@@ -748,13 +748,13 @@ def _build_fade_payload(
             raise ValueError(
                 f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
             )
-        opacity = getattr(target_cue, "opacity", None)
-        script_default = (100.0 if opacity is None else float(opacity)) / 100.0
+        opacity = getattr(target_cue, "opacity", 100)
+        ratio_value = float(opacity) / 100.0
         return [
             _entry(
                 f"/videocomposer/layer/{layer_id}/opacity",
                 f"{motion_id}_{layer_id}",
-                script_default,
+                ratio_value,
             )
             for layer_id in layer_ids
         ]
