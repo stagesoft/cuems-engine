@@ -689,6 +689,18 @@ def _build_fade_payload(
     start_mtc_ms (not start_time). end_value is normalised to OSC scale
     0.0-1.0 from FadeCue.target_value's UI scale 0-100; gradient-motiond
     forwards end_value directly to OSC without further unit conversion.
+
+    start_value's source of truth is target_cue._osc (an AudioClient /
+    VideoClient — a PlayerClient subclass): whatever level is currently live
+    on the player, since external actors (OSC UI controls, other cues) can
+    change it after the cue was armed. The CuemsScript-stored level
+    (AudioCue.master_vol / VideoCue.opacity, both 0-100 int, same UI scale as
+    target_value) is deployed to the client as its initial value when the
+    cue is armed (arm_videoCue) / run (run_audioCue) — it is only consulted
+    here as a fallback, via get_value_if_set(), for the case where nothing
+    has been deployed to the client yet. Falls back further to 100 (full
+    volume/opacity) when even the script field is absent, matching each
+    field's own REQ_ITEMS default in cuemsutils.
     """
     from cuemsutils.cues import AudioCue, VideoCue
 
@@ -699,12 +711,16 @@ def _build_fade_payload(
     duration_ms = fade_cue.duration.milliseconds_rounded
     end_value = float(fade_cue.target_value) / 100.0
 
-    def _entry(osc_path: str, entry_motion_id: str) -> dict:
+    def _entry(
+        osc_path: str, entry_motion_id: str, script_default: float
+    ) -> dict:
+        live_value = target_cue._osc.get_value_if_set(osc_path)
+        start_value = live_value if live_value is not None else script_default
         return {
             "motion_id": entry_motion_id,
             "osc_port": target_cue._osc.remote_port,
             "osc_path": osc_path,
-            "start_value": target_cue._osc.get_value(osc_path),
+            "start_value": start_value,
             "end_value": end_value,
             "start_mtc_ms": start_mtc_ms,
             "duration_ms": duration_ms,
@@ -712,7 +728,9 @@ def _build_fade_payload(
         }
 
     if isinstance(target_cue, AudioCue):
-        return [_entry("/volmaster", motion_id)]
+        master_vol = getattr(target_cue, "master_vol", None)
+        script_default = (100.0 if master_vol is None else float(master_vol)) / 100.0
+        return [_entry("/volmaster", motion_id, script_default)]
 
     if isinstance(target_cue, VideoCue):
         layer_ids = getattr(target_cue, "_layer_ids", []) or []
@@ -720,10 +738,13 @@ def _build_fade_payload(
             raise ValueError(
                 f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
             )
+        opacity = getattr(target_cue, "opacity", None)
+        script_default = (100.0 if opacity is None else float(opacity)) / 100.0
         return [
             _entry(
                 f"/videocomposer/layer/{layer_id}/opacity",
                 f"{motion_id}_{layer_id}",
+                script_default,
             )
             for layer_id in layer_ids
         ]

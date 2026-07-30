@@ -28,29 +28,53 @@ from cuemsutils.cues.FadeCue import FadeCue, FadeCurveType
 # ---------------------------------------------------------------------------
 
 
-def _make_audio_cue(start_value: float = 0.5) -> AudioCue:
+def _make_audio_cue(
+    master_vol: int | None = None, client_live_value: float | None = None
+) -> AudioCue:
+    """master_vol=None leaves cuemsutils' own AudioCue REQ_ITEMS default (100)
+    in place — i.e. "no volume predefined" at the CuemsScript level.
+
+    client_live_value simulates AudioClient.get_value_if_set("/volmaster"):
+    None (default) means nothing has been deployed to the client yet, so
+    _build_fade_payload must fall back to master_vol; any other value means
+    the client already holds a live value (e.g. deployed at run_audioCue
+    time, or changed by an external actor) and it MUST win over master_vol.
+    """
     cue = AudioCue()
     cue.enabled = True
     cue.loaded = True
-    cue.master_vol = 100
+    if master_vol is not None:
+        cue.master_vol = master_vol
     cue._stop_requested = False
     cue._go_generation = 0
     osc = MagicMock()
     osc.remote_port = 12300
-    osc.get_value = MagicMock(return_value=start_value)
+    osc.get_value_if_set = MagicMock(return_value=client_live_value)
     cue._osc = osc
     return cue
 
 
-def _make_video_cue(start_value: float = 0.5, layer_ids=None) -> VideoCue:
+def _make_video_cue(
+    opacity: int | None = None,
+    layer_ids=None,
+    client_live_value: float | None = None,
+) -> VideoCue:
+    """opacity=None leaves cuemsutils' own VideoCue REQ_ITEMS default (100)
+    in place — i.e. "no opacity predefined" at the CuemsScript level.
+
+    client_live_value simulates VideoClient.get_value_if_set(layer_opacity_path)
+    — see _make_audio_cue's client_live_value docstring; same semantics.
+    """
     cue = VideoCue()
     cue.enabled = True
     cue.loaded = True
+    if opacity is not None:
+        cue.opacity = opacity
     cue._stop_requested = False
     cue._go_generation = 0
     osc = MagicMock()
     osc.remote_port = 7000
-    osc.get_value = MagicMock(return_value=start_value)
+    osc.get_value_if_set = MagicMock(return_value=client_live_value)
     cue._osc = osc
     cue._layer_ids = list(layer_ids) if layer_ids is not None else [2]
     return cue
@@ -112,10 +136,10 @@ def test_fade_action_in_supported_cue_actions():
 
 
 class TestBuildFadePayloadAudio:
-    def _build(self, start_value=0.5, target_value=80, motion_id="fade-uuid"):
+    def _build(self, master_vol=100, target_value=80, motion_id="fade-uuid"):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
 
-        target_cue = _make_audio_cue(start_value=start_value)
+        target_cue = _make_audio_cue(master_vol=master_vol)
         fade_cue = _make_fade_cue(target_cue, target_value=target_value)
         payloads = _build_fade_payload(
             target_cue, fade_cue, start_mtc_ms=1234, motion_id=motion_id
@@ -143,10 +167,58 @@ class TestBuildFadePayloadAudio:
         payloads, *_ = self._build()
         assert payloads[0]["osc_path"] == "/volmaster"
 
-    def test_audio_start_value_from_cache(self):
-        """start_value MUST come from target_cue._osc.get_value(osc_path)."""
-        payloads, *_ = self._build(start_value=0.42)
-        assert payloads[0]["start_value"] == 0.42
+    def test_audio_start_value_from_stored_master_vol_when_client_unset(self):
+        """
+        When the client (AudioClient) hasn't had a value deployed to it yet
+        (get_value_if_set returns None), start_value falls back to the
+        CuemsScript-stored AudioCue.master_vol (0-100 int, normalised to
+        OSC's 0.0-1.0 scale).
+        """
+        payloads, *_ = self._build(master_vol=60)
+        assert payloads[0]["start_value"] == pytest.approx(0.6)
+
+    def test_audio_start_value_defaults_to_100_when_no_master_vol_predefined(self):
+        """
+        When neither the client nor the script has a value (fresh AudioCue,
+        nothing deployed yet), start_value must default to full volume
+        (100 -> 1.0), matching AudioCue's own REQ_ITEMS default in
+        cuemsutils.
+        """
+        payloads, *_ = self._build(master_vol=None)
+        assert payloads[0]["start_value"] == pytest.approx(1.0)
+
+    def test_audio_start_value_from_client_wins_over_stored_master_vol(self):
+        """
+        The client is the sole source of truth once a value has been
+        deployed to it — an external actor (OSC UI, another cue) may have
+        changed the live volume since the cue's master_vol was deployed at
+        run_audioCue time, and that MUST be what a fade starts from, not
+        the (now stale) CuemsScript value.
+        """
+        target_cue = _make_audio_cue(master_vol=60, client_live_value=0.35)
+        fade_cue = _make_fade_cue(target_cue, target_value=80)
+        from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+        payloads = _build_fade_payload(
+            target_cue, fade_cue, start_mtc_ms=1234, motion_id="fade-uuid"
+        )
+        assert payloads[0]["start_value"] == pytest.approx(0.35)
+
+    def test_audio_start_value_reads_via_get_value_if_set_not_get_value(self):
+        """
+        _build_fade_payload must consult get_value_if_set(osc_path) — not
+        get_value(osc_path), which can't distinguish "never deployed" from
+        "explicitly set to this value" on a fresh pyossia parameter.
+        """
+        target_cue = _make_audio_cue(master_vol=60)
+        fade_cue = _make_fade_cue(target_cue, target_value=80)
+        from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+        _build_fade_payload(
+            target_cue, fade_cue, start_mtc_ms=1234, motion_id="fade-uuid"
+        )
+        target_cue._osc.get_value_if_set.assert_called_once_with("/volmaster")
+        target_cue._osc.get_value.assert_not_called()
 
     def test_audio_end_value_normalised_to_unit_range(self):
         """
@@ -194,14 +266,14 @@ class TestBuildFadePayloadAudio:
 class TestBuildFadePayloadVideoSingleLayer:
     def _build(
         self,
-        start_value=0.3,
+        opacity=100,
         target_value=100,
         layer_ids=(2,),
         motion_id="vid-fade",
     ):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
 
-        target_cue = _make_video_cue(start_value=start_value, layer_ids=layer_ids)
+        target_cue = _make_video_cue(opacity=opacity, layer_ids=layer_ids)
         fade_cue = _make_fade_cue(target_cue, target_value=target_value)
         payloads = _build_fade_payload(
             target_cue, fade_cue, start_mtc_ms=1234, motion_id=motion_id
@@ -228,16 +300,67 @@ class TestBuildFadePayloadVideoSingleLayer:
         payloads, *_ = self._build(layer_ids=(2,), motion_id="base-uuid")
         assert payloads[0]["motion_id"] == "base-uuid_2"
 
-    def test_video_single_layer_start_value_from_cache(self):
-        payloads, *_ = self._build(start_value=0.7)
-        assert payloads[0]["start_value"] == 0.7
+    def test_video_single_layer_start_value_from_stored_opacity_when_client_unset(
+        self,
+    ):
+        """
+        When the client (VideoClient) hasn't had a value deployed to this
+        layer's opacity path yet (get_value_if_set returns None), start_value
+        falls back to the CuemsScript-stored VideoCue.opacity (0-100 int,
+        same UI scale as AudioCue.master_vol — NOT already a 0.0-1.0 float),
+        normalised to OSC's 0.0-1.0 scale.
+        """
+        payloads, *_ = self._build(opacity=70)
+        assert payloads[0]["start_value"] == pytest.approx(0.7)
+
+    def test_video_single_layer_start_value_defaults_to_100_when_no_opacity_predefined(
+        self,
+    ):
+        """
+        When neither the client nor the script has a value (fresh VideoCue,
+        nothing deployed yet), start_value must default to fully opaque
+        (100 -> 1.0), matching VideoCue's own REQ_ITEMS default in
+        cuemsutils.
+        """
+        payloads, *_ = self._build(opacity=None)
+        assert payloads[0]["start_value"] == pytest.approx(1.0)
+
+    def test_video_single_layer_start_value_from_client_wins_over_stored_opacity(self):
+        """
+        The client is the sole source of truth once a value has been
+        deployed to this layer's opacity path — an external actor may have
+        changed the live opacity since arm_videoCue deployed the cue's
+        stored opacity, and that MUST be what a fade starts from.
+        """
+        target_cue = _make_video_cue(
+            opacity=70, layer_ids=(2,), client_live_value=0.15
+        )
+        fade_cue = _make_fade_cue(target_cue, target_value=100)
+        from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+        payloads = _build_fade_payload(
+            target_cue, fade_cue, start_mtc_ms=1234, motion_id="vid-fade"
+        )
+        assert payloads[0]["start_value"] == pytest.approx(0.15)
+
+    def test_video_single_layer_opacity_range_is_0_to_100_int_not_0_to_1_float(self):
+        """
+        opacity=60 (an int on the 0-100 UI scale) must produce start_value
+        0.6 — not 60.0 (unnormalised) and not 0.006 (double-normalised, as
+        would happen if opacity were mistakenly already treated as a 0.0-1.0
+        float and divided by 100 again).
+        """
+        payloads, *_ = self._build(opacity=60)
+        assert payloads[0]["start_value"] == pytest.approx(0.6)
+        assert payloads[0]["start_value"] != pytest.approx(60.0)
+        assert payloads[0]["start_value"] != pytest.approx(0.006)
 
 
 class TestBuildFadePayloadVideoMultiLayer:
     def _build(self, layer_ids=(0, 2, 5), motion_id="multi-uuid"):
         from cuemsengine.cues.ActionHandler import _build_fade_payload
 
-        target_cue = _make_video_cue(start_value=0.5, layer_ids=layer_ids)
+        target_cue = _make_video_cue(opacity=100, layer_ids=layer_ids)
         fade_cue = _make_fade_cue(target_cue, target_value=80)
         payloads = _build_fade_payload(
             target_cue, fade_cue, start_mtc_ms=1234, motion_id=motion_id
@@ -315,12 +438,12 @@ def _mock_gradient_client():
 
 
 class TestHandleFadeActionAudio:
-    def _call(self, target_value=80, mtc_ms=5000, start_value=0.5, mock_gc=None):
+    def _call(self, target_value=80, mtc_ms=5000, master_vol=100, mock_gc=None):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
         from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 
         handler = _ACTION_HANDLERS["fade_action"]
-        target_cue = _make_audio_cue(start_value=start_value)
+        target_cue = _make_audio_cue(master_vol=master_vol)
         cue = _make_fade_cue(target_cue, target_value=target_value)
         mtc = _make_mtc(mtc_ms)
         ch = _make_cue_handler()

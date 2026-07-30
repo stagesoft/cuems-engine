@@ -3,7 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from pyossia import ValueType
-from pytest import raises
+from pytest import approx, raises
 
 from cuemsengine.osc.OssiaClient import OssiaClient
 from cuemsengine.osc.OssiaServer import OssiaServer
@@ -104,6 +104,39 @@ def test_client_list_endpoints(ossia_client_factory):
             "/test3",
         ]
         assert len(client.device.root_node.children()) == 3
+
+
+def test_get_value_if_set_returns_none_when_never_set(ossia_client_factory):
+    """A freshly-created endpoint has never had set_value() called on it —
+    get_value_if_set() must return None, not pyossia's raw type-default
+    (get_value() alone would return 0 here, indistinguishable from an
+    explicit set_value(path, 0))."""
+    with ossia_client_factory(
+        endpoints={"/test1": [ValueType.Float, None, None]}
+    ) as client:
+        assert client.get_value_if_set("/test1") is None
+
+
+def test_get_value_if_set_returns_value_after_set_value(ossia_client_factory):
+    with ossia_client_factory(
+        endpoints={"/test1": [ValueType.Float, None, None]}
+    ) as client:
+        client.set_value("/test1", 0.42)
+        assert client.get_value_if_set("/test1") == approx(0.42)
+
+
+def test_get_value_if_set_distinguishes_explicit_zero_from_unset(
+    ossia_client_factory,
+):
+    """The whole point of this method: an explicit set_value(path, 0.0)
+    must be reported as set (0.0), not conflated with "never set" (None)."""
+    with ossia_client_factory(
+        endpoints={"/test1": [ValueType.Float, None, None]}
+    ) as client:
+        assert client.get_value_if_set("/test1") is None
+        client.set_value("/test1", 0.0)
+        assert client.get_value_if_set("/test1") == 0.0
+        assert client.get_value_if_set("/test1") is not None
 
 
 def test_server_empty_init(ossia_server_factory):

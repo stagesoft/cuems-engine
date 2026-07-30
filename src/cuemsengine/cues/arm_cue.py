@@ -166,6 +166,13 @@ def arm_videoCue(cue: VideoCue):
         layer_path = f"/videocomposer/layer/{layer_id}"
         client.set_value(f"{layer_path}/visible", 0)
         client.set_value(f"{layer_path}/autounload", 1)
+        # Deploy the CuemsScript-stored opacity as this layer's initial
+        # value — the client (not the script) is the source of truth from
+        # here on; ActionHandler._build_fade_payload reads it back via
+        # get_value_if_set() and only falls back to cue.opacity if nothing
+        # has been deployed yet.
+        opacity = getattr(cue, "opacity", 100)
+        client.set_value(f"{layer_path}/opacity", opacity / 100.0)
 
         try:
             output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
