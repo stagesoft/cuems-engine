@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
 from time import sleep
@@ -57,15 +58,33 @@ def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
     (auto-disarm of the FadeCue itself in go_threaded's end-of-cue path) only
     fires after the fade has elapsed. _start_mtc / _end_mtc are set by
     ActionHandler._handle_fade_action at dispatch time.
-    """
-    end_mtc = getattr(cue, "_end_mtc", None)
-    if end_mtc is None:
-        Logger.warning(
-            f"FadeCue {cue.id} has no _end_mtc; loop_fadeCue exiting immediately"
-        )
-        return
 
-    while mtc.main_tc.milliseconds_rounded < end_mtc.milliseconds_rounded:
+    Every node walks the chain and runs this loop, but only the node where the
+    action target is local actually dispatches the fade and stamps _end_mtc —
+    on the others the handler bails early and _end_mtc still holds
+    Cue.__init__'s zero CTimecode (or a stale value from a previous GO). Those
+    nodes MUST hold for the same duration anyway: their instant remove_cue
+    would reach the controller first and grey out the cue in the UI
+    (status 1 → 100) while the fade is still running on the owner node. Fall
+    back to now + duration so every node's illumination window matches the
+    fade.
+    """
+    now_ms = mtc.main_tc.milliseconds_rounded
+    end_mtc = getattr(cue, "_end_mtc", None)
+    if end_mtc is not None and end_mtc.milliseconds_rounded > now_ms:
+        end_ms = end_mtc.milliseconds_rounded
+    else:
+        duration = getattr(cue, "duration", None)
+        duration_ms = duration.milliseconds_rounded if duration is not None else 0
+        if duration_ms <= 0:
+            return
+        end_ms = now_ms + duration_ms
+        Logger.debug(
+            f"FadeCue {cue.id}: no dispatched _end_mtc on this node; holding"
+            f" for duration ({duration_ms}ms)"
+        )
+
+    while mtc.main_tc.milliseconds_rounded < end_ms:
         if getattr(cue, "_stop_requested", False):
             Logger.info(f"FadeCue {cue.id} loop cancelled by stop request")
             return

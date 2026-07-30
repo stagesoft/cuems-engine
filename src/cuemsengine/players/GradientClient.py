@@ -12,17 +12,24 @@ from ..osc.PyOsc import PyOscClient
 class GradientClient:
     """Fire-and-forget UDP OSC client for gradient-motiond v0.3.0.
 
-    Holds node_uuid at construction and injects it as node_name on every
+    Holds node_name at construction and injects it as node_name on every
     send_fade — callers do not pass it. Safe to construct multiple times;
     each new instance replaces the prior one in PlayerHandler.
+
+    node_name MUST match the value gradient-motiond filters on (its
+    --node-name CLI flag, defaulting to the OS hostname — see
+    node-identity-contract.md in cuems-common). It is NOT the node's UUID:
+    the daemon's OscServer drops any message whose node_name field doesn't
+    match byte-for-byte, silently (DEBUG-only log), so a UUID never
+    matches and every send is a no-op.
     """
 
     def __init__(
-        self, host: str = "127.0.0.1", port: int = 7100, node_uuid: str = ""
+        self, host: str = "127.0.0.1", port: int = 7100, node_name: str = ""
     ) -> None:
         self._host = host
         self._port = port
-        self._node_uuid = node_uuid
+        self._node_name = node_name
         self._osc = PyOscClient(host=host, port=port)
 
     def send_fade(
@@ -41,7 +48,7 @@ class GradientClient:
         builder = OscMessageBuilder(address="/gradient/start_fade")
         builder.add_arg(motion_id, arg_type="s")
         # node_name — self-injected
-        builder.add_arg(self._node_uuid, arg_type="s")
+        builder.add_arg(self._node_name, arg_type="s")
         builder.add_arg(osc_host, arg_type="s")
         builder.add_arg(int(osc_port), arg_type="i")
         builder.add_arg(osc_path, arg_type="s")
@@ -59,14 +66,16 @@ class GradientClient:
 
     def send_cancel_motion(self, motion_id: str) -> None:
         try:
-            self._osc.client.send_message("/gradient/cancel_motion", motion_id)
+            self._osc.client.send_message(
+                "/gradient/cancel_motion", (motion_id, self._node_name)
+            )
         except Exception as exc:
             Logger.error(f"GradientClient.send_cancel_motion failed: {exc}")
             raise
 
     def send_cancel_all(self) -> None:
         try:
-            self._osc.client.send_message("/gradient/cancel_all", [])
+            self._osc.client.send_message("/gradient/cancel_all", self._node_name)
         except Exception as exc:
             Logger.error(f"GradientClient.send_cancel_all failed: {exc}")
             raise

@@ -141,9 +141,10 @@ class TestRunCueListRearm:
     def test_loaded_child_dispatches_without_rearm(self):
         child = _child(loaded=True)
         cl = _cuelist([child])
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             run_cueList(cl, Mock(), 100.0)
         ch.arm.assert_not_called()
         rc.assert_called_once_with(child, ANY, 100.0)
@@ -154,9 +155,10 @@ class TestRunCueListRearm:
         def _arm(c, init=False):
             c.loaded = True  # successful re-arm
 
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             ch.arm.side_effect = _arm
             run_cueList(_cuelist([child]), Mock(), 100.0)
         ch.arm.assert_called_once_with(child, init=True)
@@ -164,9 +166,10 @@ class TestRunCueListRearm:
 
     def test_rearm_leaves_unloaded_skips_dispatch(self):
         child = _child(loaded=False)
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             # arm() is a no-op mock -> child.loaded stays False
             run_cueList(_cuelist([child]), Mock(), 100.0)
         ch.arm.assert_called_once_with(child, init=True)
@@ -176,9 +179,10 @@ class TestRunCueListRearm:
         # arm() wraps arm_cue in try/FINALLY: a raise would otherwise kill the
         # parent CueList's go_threaded thread. _ensure_child_loaded must swallow.
         child = _child(loaded=False)
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             ch.arm.side_effect = ValueError("boom")
             run_cueList(_cuelist([child]), Mock(), 100.0)  # must NOT raise
         ch.arm.assert_called_once_with(child, init=True)
@@ -187,9 +191,10 @@ class TestRunCueListRearm:
     def test_nonlocal_child_dispatched_without_rearm(self):
         # Non-local child is owned by another node; guard leaves dispatch as-is.
         child = _child(loaded=False, local=False)
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             run_cueList(_cuelist([child]), Mock(), 100.0)
         ch.arm.assert_not_called()
         rc.assert_called_once_with(child, ANY, 100.0)
@@ -197,9 +202,10 @@ class TestRunCueListRearm:
     def test_no_enabled_child_is_noop(self):
         child = _child(enabled=False)
         cl = _cuelist([child])
-        with patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch, patch(
-            "cuemsengine.cues.run_cue.run_cue"
-        ) as rc:
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER") as ch,
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
             run_cueList(cl, Mock(), 100.0)
             run_cueList(_cuelist([]), Mock(), 100.0)  # empty contents
         ch.arm.assert_not_called()

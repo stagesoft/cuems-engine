@@ -387,7 +387,29 @@ class NodeEngine(BaseEngine):
         Wire GradientClient into PLAYER_HANDLER using settings from node_conf.
         """
         port = int(self.cm.node_conf["gradient_osc_port"])
-        PLAYER_HANDLER.set_gradient_client(port=port, node_uuid=self.cm.node_uuid)
+        node_name = self._resolve_gradient_node_name()
+        PLAYER_HANDLER.set_gradient_client(port=port, node_name=node_name)
+
+    def _resolve_gradient_node_name(self) -> str:
+        """
+        Resolve the identifier gradient-motiond's node_name filter expects.
+
+        gradient-motiond defaults its --node-name to the OS hostname (see
+        node-identity-contract.md in cuems-common); cuems-nodeconf keeps the
+        OS hostname in sync with network_map.xml's <role_id> and only
+        persists <hostname> as a legacy override when the two diverge. The
+        node's UUID is never what the daemon filters on.
+        """
+        node = self.cm.node_network_map or {}
+        node_name = node.get("hostname") or node.get("role_id")
+        if not node_name:
+            node_name = self.cm.node_uuid
+            Logger.warning(
+                "gradient_node_name: no role_id/hostname in network_map for "
+                f"node {self.cm.node_uuid}; falling back to node_uuid — "
+                "gradient-motiond's node_name filter will likely reject fades"
+            )
+        return node_name
 
     # Audio functions
     def set_audio_players(self):

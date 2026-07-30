@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Unit tests for loop_fadeCue (Phase 6).
 
@@ -20,12 +21,12 @@ from unittest.mock import MagicMock
 from cuemsutils.cues.FadeCue import FadeCue
 
 
-def _make_fade_cue() -> FadeCue:
+def _make_fade_cue(duration: str = "0:0:0:1") -> FadeCue:
     cue = FadeCue(
         {
             "action_target": "some-target-uuid",
             "target_value": 80,
-            "duration": "0:0:0:1",
+            "duration": duration,
             "curve_type": "linear",
         }
     )
@@ -113,15 +114,58 @@ def test_loop_fade_cue_returns_early_on_stop_requested():
     assert elapsed < 0.5, f"loop_fadeCue did not respect _stop_requested: {elapsed}s"
 
 
-def test_loop_fade_cue_no_end_mtc_returns_immediately():
-    """
-    If _end_mtc is missing (defensive), loop_fadeCue must not loop forever.
-    """
+def test_loop_fade_cue_unstamped_end_mtc_holds_duration():
+    """A node where the fade did NOT dispatch (action target local to another
+    node) leaves _end_mtc at Cue.__init__'s zero CTimecode. loop_fadeCue must
+    hold for the cue's own duration anyway — an instant return would send
+    remove_cue at T+0 and grey out the cue in the UI (status 1 -> 100) while
+    the fade is still running on the owner node."""
+    from cuemsengine.cues.loop_cue import loop_cue
+
+    cue = _make_fade_cue(duration="00:00:00.200")  # 200ms
+    cue._stop_requested = False
+    # _end_mtc untouched: Cue.__init__'s zero CTimecode (never stamped)
+
+    mtc = _AdvancingMtc(start_ms=1000, ms_per_second=1000.0)
+
+    t0 = time.monotonic()
+    loop_cue(cue, mtc)
+    elapsed = time.monotonic() - t0
+
+    assert elapsed >= 0.15, f"loop_fadeCue returned too quickly: {elapsed}s"
+    assert elapsed < 1.0, f"loop_fadeCue blocked too long: {elapsed}s"
+
+
+def test_loop_fade_cue_stale_end_mtc_holds_duration():
+    """A stale _end_mtc left by a previous GO (already in the past) must take
+    the same fallback: hold for the cue's duration, not return instantly."""
+    from cuemsengine.cues.loop_cue import loop_cue
+
+    cue = _make_fade_cue(duration="00:00:00.200")
+    cue._stop_requested = False
+    end_mtc = MagicMock()
+    end_mtc.milliseconds_rounded = 500  # in the past (now = 1000)
+    cue._end_mtc = end_mtc
+
+    mtc = _AdvancingMtc(start_ms=1000, ms_per_second=1000.0)
+
+    t0 = time.monotonic()
+    loop_cue(cue, mtc)
+    elapsed = time.monotonic() - t0
+
+    assert elapsed >= 0.15, f"loop_fadeCue returned too quickly: {elapsed}s"
+    assert elapsed < 1.0, f"loop_fadeCue blocked too long: {elapsed}s"
+
+
+def test_loop_fade_cue_no_duration_returns_immediately():
+    """Defensive: with neither a stamped _end_mtc nor a usable duration there
+    is nothing to hold — loop_fadeCue must not block. (FadeCue rejects zero
+    durations at construction, but the setter allows None to clear.)"""
     from cuemsengine.cues.loop_cue import loop_cue
 
     cue = _make_fade_cue()
+    cue.duration = None
     cue._stop_requested = False
-    # No _end_mtc attribute set (simulating a bug upstream)
 
     mtc = _AdvancingMtc(start_ms=0, ms_per_second=1000.0)
 
@@ -129,4 +173,4 @@ def test_loop_fade_cue_no_end_mtc_returns_immediately():
     loop_cue(cue, mtc)
     elapsed = time.monotonic() - t0
 
-    assert elapsed < 0.2, "loop_fadeCue without _end_mtc must return immediately"
+    assert elapsed < 0.2, "loop_fadeCue with zero duration must return immediately"

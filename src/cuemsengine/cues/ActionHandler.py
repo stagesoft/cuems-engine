@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 Dedicated action-cue execution, extension hooks, and optional result sink.
@@ -22,6 +23,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
@@ -617,7 +619,7 @@ def _handle_fade_action(
 
     try:
         payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return ActionHandler._action_result(
             "failed", "fade_action", target_id, str(exc)
         )
@@ -655,6 +657,14 @@ def _handle_fade_action(
                 f"OSC dispatch failed: {exc}",
             )
 
+    # Record each fade's end_value engine-side (NO OSC push — set_value would
+    # jump the player to the final level instantly): gradient-motiond drives
+    # the player directly, so the client mirror never sees the fade. Without
+    # this, the next fade's start_value reads the pre-fade level.
+    for entry in payloads:
+        target._osc.record_value(entry["osc_path"], entry["end_value"])
+
+
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
     framerate = mtc.main_tc.framerate
@@ -689,6 +699,18 @@ def _build_fade_payload(
     start_mtc_ms (not start_time). end_value is normalised to OSC scale
     0.0-1.0 from FadeCue.target_value's UI scale 0-100; gradient-motiond
     forwards end_value directly to OSC without further unit conversion.
+
+    start_value's source of truth is target_cue._osc (an AudioClient /
+    VideoClient — a PlayerClient subclass): whatever level is currently live
+    on the player, since external actors (OSC UI controls, other cues) can
+    change it after the cue was armed. The CuemsScript-stored level
+    (AudioCue.master_vol / VideoCue.opacity, both 0-100 int, same UI scale as
+    target_value) is deployed to the client as its initial value when the
+    cue is armed (arm_videoCue) / run (run_audioCue) — it is only consulted
+    here as a fallback, via get_value_if_set(), for the case where nothing
+    has been deployed to the client yet. Falls back further to 100 (full
+    volume/opacity) when even the script field is absent, matching each
+    field's own REQ_ITEMS default in cuemsutils.
     """
     from cuemsutils.cues import AudioCue, VideoCue
 
@@ -699,12 +721,16 @@ def _build_fade_payload(
     duration_ms = fade_cue.duration.milliseconds_rounded
     end_value = float(fade_cue.target_value) / 100.0
 
-    def _entry(osc_path: str, entry_motion_id: str) -> dict:
+    def _entry(
+        osc_path: str, entry_motion_id: str, script_default: float
+    ) -> dict:
+        live_value = target_cue._osc.get_value_if_set(osc_path)
+        start_value = live_value if live_value is not None else script_default
         return {
             "motion_id": entry_motion_id,
             "osc_port": target_cue._osc.remote_port,
             "osc_path": osc_path,
-            "start_value": target_cue._osc.get_value(osc_path),
+            "start_value": start_value,
             "end_value": end_value,
             "start_mtc_ms": start_mtc_ms,
             "duration_ms": duration_ms,
@@ -712,7 +738,9 @@ def _build_fade_payload(
         }
 
     if isinstance(target_cue, AudioCue):
-        return [_entry("/volmaster", motion_id)]
+        master_vol = getattr(target_cue, "master_vol", 100)
+        ratio_value = float(master_vol) / 100.0
+        return [_entry("/volmaster", motion_id, ratio_value)]
 
     if isinstance(target_cue, VideoCue):
         layer_ids = getattr(target_cue, "_layer_ids", []) or []
@@ -720,10 +748,13 @@ def _build_fade_payload(
             raise ValueError(
                 f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
             )
+        opacity = getattr(target_cue, "opacity", 100)
+        ratio_value = float(opacity) / 100.0
         return [
             _entry(
                 f"/videocomposer/layer/{layer_id}/opacity",
                 f"{motion_id}_{layer_id}",
+                ratio_value,
             )
             for layer_id in layer_ids
         ]

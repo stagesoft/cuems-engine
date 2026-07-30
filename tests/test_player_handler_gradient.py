@@ -33,23 +33,23 @@ class TestGradientClientDefault:
 
 class TestSetGradientClient:
     def test_set_gradient_client_constructs_client(self):
-        """set_gradient_client(port, node_uuid) constructs a GradientClient."""
+        """set_gradient_client(port, node_name) constructs a GradientClient."""
         from cuemsengine.players.GradientClient import GradientClient
 
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid="node-002")
+        handler.set_gradient_client(port=7200, node_name="node-002")
         client = handler.get_gradient_client()
         assert isinstance(client, GradientClient)
 
     def test_set_gradient_client_stores_correct_port(self):
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid="node-002")
+        handler.set_gradient_client(port=7200, node_name="node-002")
         assert handler.get_gradient_client()._port == 7200
 
-    def test_set_gradient_client_stores_correct_node_uuid(self):
+    def test_set_gradient_client_stores_correct_node_name(self):
         handler = _get_handler()
-        handler.set_gradient_client(port=7200, node_uuid="node-002")
-        assert handler.get_gradient_client()._node_uuid == "node-002"
+        handler.set_gradient_client(port=7200, node_name="node-002")
+        assert handler.get_gradient_client()._node_name == "node-002"
 
     def test_set_gradient_client_replaces_prior_instance(self):
         """
@@ -57,9 +57,9 @@ class TestSetGradientClient:
         safe-guard).
         """
         handler = _get_handler()
-        handler.set_gradient_client(port=7100, node_uuid="node-001")
+        handler.set_gradient_client(port=7100, node_name="node-001")
         first = handler.get_gradient_client()
-        handler.set_gradient_client(port=7200, node_uuid="node-002")
+        handler.set_gradient_client(port=7200, node_name="node-002")
         second = handler.get_gradient_client()
         assert second is not first
         assert second._port == 7200
