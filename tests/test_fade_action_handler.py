@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Unit tests for the fade_action handler (US1) and related CueHandler methods.
 
@@ -494,6 +495,14 @@ class TestHandleFadeActionAudio:
         assert hasattr(cue, "_start_mtc")
         assert cue._start_mtc.milliseconds_rounded == 5000
 
+    def test_handler_records_end_value_on_client(self):
+        """After a successful dispatch the fade's end_value must be recorded
+        on the target's client (record_value: no OSC push) so the NEXT fade's
+        start_value chains from it — gradient-motiond drives the player
+        directly, so the client mirror never sees the fade itself."""
+        result, _, _, target_cue, _ = self._call(target_value=80)
+        target_cue._osc.record_value.assert_called_once_with("/volmaster", 0.8)
+
 
 # ---------------------------------------------------------------------------
 # _handle_fade_action — VideoCue multi-layer dispatch
@@ -536,6 +545,14 @@ class TestHandleFadeActionVideoMultiLayer:
             "/videocomposer/layer/0/opacity",
             "/videocomposer/layer/2/opacity",
             "/videocomposer/layer/5/opacity",
+        ]
+
+    def test_handler_records_end_value_per_layer(self):
+        result, _, _, target_cue, _ = self._call(layer_ids=(0, 2, 5))
+        assert target_cue._osc.record_value.call_args_list == [
+            call("/videocomposer/layer/0/opacity", 0.8),
+            call("/videocomposer/layer/2/opacity", 0.8),
+            call("/videocomposer/layer/5/opacity", 0.8),
         ]
 
 
@@ -652,6 +669,23 @@ class TestHandleFadeActionFailures:
         assert result["status"] == "failed"
         # Sent layer 0, failed on layer 2, did NOT attempt layer 5.
         assert mock_gc.send_fade.call_count == 2
+
+    def test_osc_failure_no_end_value_recorded(self):
+        """A failed dispatch must not record the end_value — the fade never
+        started, so the next fade must chain from the pre-failure level."""
+        from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+
+        handler = _ACTION_HANDLERS["fade_action"]
+        target_cue = _make_audio_cue()
+        cue = _make_fade_cue(target_cue, target_value=80)
+        mtc = _make_mtc()
+        ch = _make_cue_handler()
+        mock_gc = _mock_gradient_client()
+        mock_gc.send_fade.side_effect = RuntimeError("OSC send failed")
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
+            handler(ch, cue, target_cue, mtc)
+        target_cue._osc.record_value.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

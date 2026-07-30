@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 Dedicated action-cue execution, extension hooks, and optional result sink.
@@ -22,6 +23,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
@@ -654,6 +656,14 @@ def _handle_fade_action(
                 target_id,
                 f"OSC dispatch failed: {exc}",
             )
+
+    # Record each fade's end_value engine-side (NO OSC push — set_value would
+    # jump the player to the final level instantly): gradient-motiond drives
+    # the player directly, so the client mirror never sees the fade. Without
+    # this, the next fade's start_value reads the pre-fade level.
+    for entry in payloads:
+        target._osc.record_value(entry["osc_path"], entry["end_value"])
+
 
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
