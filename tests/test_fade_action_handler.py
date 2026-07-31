@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from cuemsutils.cues import AudioCue, VideoCue
 from cuemsutils.cues.FadeCue import FadeCue, FadeCurveType
+from cuemsutils.tools.CTimecode import CTimecode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -404,10 +405,13 @@ def test_build_payload_unsupported_target_raises():
     from cuemsengine.cues.ActionHandler import _build_fade_payload
 
     fake_target = MagicMock(spec=[])  # not Audio/VideoCue
-    fade_cue = MagicMock()
+    # Real FadeCue (valid duration) so the failure exercised is specifically
+    # the unsupported-target branch, not the duration guard.
+    fade_cue = _make_fade_cue(_make_audio_cue())
     try:
         _build_fade_payload(fake_target, fade_cue, start_mtc_ms=0, motion_id="x")
-    except ValueError:
+    except ValueError as exc:
+        assert "duration" not in str(exc)
         return
     raise AssertionError("Expected ValueError for unsupported target_cue type")
 
@@ -422,6 +426,52 @@ def test_build_payload_video_no_layer_ids_raises():
     except ValueError:
         return
     raise AssertionError("Expected ValueError for VideoCue with no _layer_ids")
+
+
+# ---------------------------------------------------------------------------
+# _build_fade_payload — duration guard (parser-bypass shapes)
+# ---------------------------------------------------------------------------
+
+
+def _set_duration_bypassing_setter(fade_cue: FadeCue, value) -> None:
+    """Simulate GenericParser: assign duration via dict.__setitem__, skipping
+    FadeCue.set_duration (which would itself reject zero/None-invalid values —
+    that is exactly why the engine-side guard exists)."""
+    dict.__setitem__(fade_cue, "duration", value)
+
+
+def test_build_payload_zero_duration_raises():
+    from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+    target_cue = _make_audio_cue()
+    fade_cue = _make_fade_cue(target_cue)
+    _set_duration_bypassing_setter(fade_cue, CTimecode("00:00:00.000"))
+    with pytest.raises(ValueError, match="duration must be greater than zero"):
+        _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, motion_id="x")
+
+
+def test_build_payload_none_duration_raises():
+    """Regression pin: duration=None must raise ValueError, NOT AttributeError."""
+    from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+    target_cue = _make_audio_cue()
+    fade_cue = _make_fade_cue(target_cue)
+    _set_duration_bypassing_setter(fade_cue, None)
+    with pytest.raises(ValueError, match="duration must be greater than zero"):
+        _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, motion_id="x")
+
+
+def test_build_payload_300ms_duration_passes():
+    from cuemsengine.cues.ActionHandler import _build_fade_payload
+
+    target_cue = _make_audio_cue()
+    fade_cue = _make_fade_cue(target_cue)
+    _set_duration_bypassing_setter(fade_cue, CTimecode("00:00:00.300"))
+    payloads = _build_fade_payload(
+        target_cue, fade_cue, start_mtc_ms=0, motion_id="x"
+    )
+    assert len(payloads) == 1
+    assert payloads[0]["duration_ms"] == 300
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +643,44 @@ class TestHandleFadeActionFailures:
         with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
             handler(ch, cue, target_cue, mtc)
         mock_gc.send_fade.assert_not_called()
+
+    def test_zero_duration_returns_failed(self):
+        """duration=0 (parser bypass) → clean failed result, zero side effects:
+        no OSC dispatch and no record_value (the level mirror must not lie)."""
+        from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+
+        handler = _ACTION_HANDLERS["fade_action"]
+        target_cue = _make_audio_cue()
+        cue = _make_fade_cue(target_cue, target_value=80)
+        _set_duration_bypassing_setter(cue, CTimecode("00:00:00.000"))
+        mtc = _make_mtc()
+        ch = _make_cue_handler()
+        mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
+        assert result["status"] == "failed"
+        mock_gc.send_fade.assert_not_called()
+        target_cue._osc.record_value.assert_not_called()
+
+    def test_none_duration_returns_failed(self):
+        """duration=None (absent in XML) → clean failed result, no crash,
+        zero side effects."""
+        from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS
+        from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
+
+        handler = _ACTION_HANDLERS["fade_action"]
+        target_cue = _make_audio_cue()
+        cue = _make_fade_cue(target_cue, target_value=80)
+        _set_duration_bypassing_setter(cue, None)
+        mtc = _make_mtc()
+        ch = _make_cue_handler()
+        mock_gc = _mock_gradient_client()
+        with patch.object(PLAYER_HANDLER, "get_gradient_client", return_value=mock_gc):
+            result = handler(ch, cue, target_cue, mtc)
+        assert result["status"] == "failed"
+        mock_gc.send_fade.assert_not_called()
+        target_cue._osc.record_value.assert_not_called()
 
     def test_osc_send_failure_returns_failed(self):
         from cuemsengine.cues.ActionHandler import _ACTION_HANDLERS

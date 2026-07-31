@@ -714,11 +714,22 @@ def _build_fade_payload(
     """
     from cuemsutils.cues import AudioCue, VideoCue
 
+    # Parser-built FadeCues bypass the utils setter (GenericParser assigns via
+    # dict.__setitem__), so duration can arrive as None or zero. gradient-motiond
+    # drops dur <= 0 over fire-and-forget UDP — without this guard the fade
+    # would report "applied" and record_value a level that never happened.
+    duration = fade_cue.duration
+    duration_ms = getattr(duration, "milliseconds_rounded", None)
+    if not isinstance(duration_ms, (int, float)) or duration_ms <= 0:
+        raise ValueError(
+            f"FadeCue {motion_id}: duration must be greater than zero "
+            f"(got {duration!r}); fix the fade duration in the project"
+        )
+
     curve_type = fade_cue.curve_type
     curve_type_str = (
         curve_type.value if hasattr(curve_type, "value") else str(curve_type)
     )
-    duration_ms = fade_cue.duration.milliseconds_rounded
     end_value = float(fade_cue.target_value) / 100.0
 
     def _entry(
