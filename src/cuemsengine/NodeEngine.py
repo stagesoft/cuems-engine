@@ -77,12 +77,12 @@ class NodeEngine(BaseEngine):
             self.nng_hub_address = (
                 f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
             )
-            PORT_HANDLER.add_system_ports()
-            PORT_HANDLER.add_config_ports(get_config_ports(self.cm.node_conf))
+            # add_system_ports() / add_config_ports() moved to
+            # BaseEngine.__init__ so the controller engine gets them too.
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
                 tmp_path=self.cm.tmp_path,
-                controller_ip=self.controller_ip,  # set by BaseEngine.set_cm()
+                controller_ip=self.controller_ip,  # set by set_config_manager()
             )
             PLAYER_HANDLER.add_media_folder(self.cm.library_path)
             PLAYER_HANDLER.set_player_endpoints_generator(
@@ -441,12 +441,14 @@ class NodeEngine(BaseEngine):
             audio_outputs = self.cm.node_hw_outputs["audio_outputs"]
             Logger.info(f"Initializing audio mixer with {len(audio_outputs)} outputs")
 
-            # Assign a port for the audio mixer
             mixer_id = "0"  # TODO: make this a unique identifier for the mixer
-            mixer_ports = PORT_HANDLER.assign_ports(["audio_mixer"])
-            PORT_HANDLER.add_config_ports(mixer_ports)
-            # Start the audio mixer
+            # Start the audio mixer. The port draw is inside the try: it can
+            # now raise if the pool is exhausted, and losing the mixer must
+            # not abort the whole node start.
+            # (assign_ports(cue=None) registers via add_config_ports itself —
+            # the explicit second call that used to sit here was redundant.)
             try:
+                mixer_ports = PORT_HANDLER.assign_ports(["audio_mixer"])
                 PLAYER_HANDLER.start_audio_mixer(
                     audio_outputs=audio_outputs,
                     port=mixer_ports["audio_mixer"],
@@ -474,7 +476,10 @@ class NodeEngine(BaseEngine):
                 except Exception as e:
                     Logger.warning(f"Mixer startup state assert/report failed: {e}")
             except Exception as e:
-                Logger.error(f"Error starting audio mixer: {e}")
+                Logger.error(
+                    f"Error starting audio mixer: {e}. "
+                    f"Audio on this node will be SILENT."
+                )
                 Logger.exception(e)
         else:
             Logger.info(
@@ -549,8 +554,21 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.add_node_uuid(self.cm.node_uuid)
         vc_conf = self.cm.node_conf.get("videoplayer", {})
         osc_video_port = int(vc_conf.get("osc_port", VIDEOCOMPOSER_OSC_PORT_DEFAULT))
-        PLAYER_HANDLER.set_video_client(osc_video_port)
+        # Declare BEFORE building the client: the client draws its own local
+        # OSC port from the pool, and must not be handed the videocomposer's.
+        # This is also the only registration of this port — it comes from the
+        # nested videoplayer/osc_port key, which get_config_ports() (top-level
+        # only) cannot see, so BaseEngine's hoisted call misses it.
         PORT_HANDLER.add_config_ports({"videocomposer": osc_video_port})
+        try:
+            PLAYER_HANDLER.set_video_client(osc_video_port)
+        except Exception as e:
+            Logger.error(
+                f"Could not create the videocomposer OSC client: {e}. "
+                f"Video on this node will not respond."
+            )
+            Logger.exception(e)
+            return
 
         # Canvas geometry comes from /run/cuems/display.conf, written by
         # cuems-generate-display-conf (videocomposer's ExecStartPre). It's the
@@ -595,15 +613,15 @@ class NodeEngine(BaseEngine):
     # DMX functions
     def set_dmx_players(self):
         """Set the DMX player for this node and register its endpoints."""
-        # Assign a port for the DMX player
-        dmx_ports = PORT_HANDLER.assign_ports(["dmx_player"])
-        PORT_HANDLER.add_config_ports(dmx_ports)
-
         # Get node UUID for player naming
         node_uuid = self.cm.node_conf.get("uuid", "default_node")
 
-        # Start the DMX player
+        # Start the DMX player. The port draw is inside the try: it can now
+        # raise if the pool is exhausted, and losing DMX must not abort the
+        # whole node start. (assign_ports(cue=None) registers via
+        # add_config_ports itself — the second call here was redundant.)
         try:
+            dmx_ports = PORT_HANDLER.assign_ports(["dmx_player"])
             # Append --output-latency-ms from settings.xml when an
             # integer override is present. Dmx has no "auto" form —
             # absent ⇒ dmxplayer's 35 ms Phase-5A default stands.
@@ -1331,20 +1349,8 @@ class NodeEngine(BaseEngine):
 
 
 # helper functions
-def is_int(value: any) -> bool:
-    """Check if a value is an integer"""
-    try:
-        int(value)
-        return True
-    except ValueError:
-        return False
-
-
-def get_config_ports(node_conf: dict) -> dict:
-    """Create a dict of ports from the config"""
-    k = [i for i in node_conf.keys() if "port" in i and is_int(node_conf[i])]
-    v = [int(node_conf[i]) for i in k]
-    return dict(zip(k, v))
+# is_int() and get_config_ports() moved to tools/config_ports.py — BaseEngine
+# needs them and importing NodeEngine from there would invert the dependency.
 
 
 def redirect_audio_cmd(path_parts: list[str], value: str) -> None:

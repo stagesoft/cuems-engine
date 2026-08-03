@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from __future__ import annotations
 
@@ -348,6 +349,17 @@ class CueHandler:
                     )
                 except Exception:
                     pass
+        except Exception as e:
+            # Fail loud, fail local. _arm_ahead() runs on the GO daemon
+            # thread, so letting this propagate would kill a *playing* cue's
+            # thread before loop_cue() and skip its generation-tracked
+            # cleanup — far worse than one broken cue. Leave the cue
+            # unloaded and let go()'s fallback re-arm retry it; if that also
+            # fails, go() raises where an operator can see it.
+            Logger.error(f"Failed to arm {type(cue).__name__} {cue.id}: {e}")
+            Logger.exception(e)
+            cue.loaded = False
+            return False
         finally:
             loading_event = cue._loading
             cue._loading = None

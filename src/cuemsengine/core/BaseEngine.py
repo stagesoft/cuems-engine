@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import ipaddress
 import socket
@@ -23,6 +24,7 @@ from ..osc import (
     OssiaServer,
     ServerDevices,
 )
+from ..tools.config_ports import get_config_ports
 from ..tools.MtcListener import MtcListener
 from ..tools.PortHandler import PORT_HANDLER
 from .EngineStatus import EngineStatus
@@ -70,6 +72,14 @@ class BaseEngine(SignalEngine):
 
         if self.with_cm:
             self.set_config_manager()
+            # Exclude everything already spoken for BEFORE any port is handed
+            # out: what is bound on this host right now, and what settings.xml
+            # declares. Both engines need this — the controller used to get
+            # neither, since these two calls lived in NodeEngine.__init__
+            # (869ed9wf7). Neither can raise: add_system_ports() is an
+            # observation and add_config_ports() a declaration.
+            PORT_HANDLER.add_system_ports()
+            PORT_HANDLER.add_config_ports(get_config_ports(self.cm.node_conf))
         if self.with_mtc:
             self.set_mtc_listener()
 
