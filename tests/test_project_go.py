@@ -69,6 +69,23 @@ def test_project_go_from_controller(
                 f"(got {node_engine.get_status('load')!r})"
             )
         sleep(0.01)
+
+    # A node reporting load=complex_test is NOT the same as the cluster being
+    # armed: the controller only flips armed=yes once every required node has
+    # sent armed_ready. go_script() checks that gate and, when it is not open,
+    # logs a warning and returns — no exception, nothing forwarded to the node.
+    # Calling GO too early therefore fails much later and looks like the node
+    # never ran (running=''), which is how this read as a random flake rather
+    # than a missing wait. Wait for the gate, the same way the UI does.
+    deadline = time() + 15.0
+    while controller_engine.get_status("armed") != "yes":
+        if time() > deadline:
+            raise AssertionError(
+                f"controller never armed, so GO would be a no-op "
+                f"(armed={controller_engine.get_status('armed')!r})"
+            )
+        sleep(0.01)
+
     # ACT
     with timeout(10):
         controller_engine.go_script("complex_test")
