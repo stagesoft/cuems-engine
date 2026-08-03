@@ -25,6 +25,7 @@ from .fixtures import (
     mock_player_subprocess,
     suppress_logging,
 )
+from .helpers import free_tcp_port
 
 # All tests in this module are integration-class
 # (excluded from fast unit tests runs).
@@ -65,7 +66,12 @@ def test_project_load_on_controller(
     """Test the project load on the controller"""
     # ARRANGE
     controller_engine = ControllerEngine(with_mtc=False)
-    controller_engine.set_oscquery_server()
+    # Never the configured oscquery_ws_port (9190): that is the controller's
+    # WebSocket OSC port, so it is taken both by an earlier test in this
+    # session that called set_comms() and by any real cuems-controller-engine
+    # running on the host. Neither is a product defect, and neither is
+    # something this test is asserting about.
+    controller_engine.set_oscquery_server(port=free_tcp_port())
     # ACT
     controller_engine.load_project("empty_test")
 
@@ -91,7 +97,7 @@ def test_complex_project_load_on_controller(
     """Test the project load on the controller"""
     # ARRANGE
     controller_engine = ControllerEngine(with_mtc=False)
-    controller_engine.set_oscquery_server()
+    controller_engine.set_oscquery_server(port=free_tcp_port())
     # ACT
     controller_engine.load_project("complex_test")
 

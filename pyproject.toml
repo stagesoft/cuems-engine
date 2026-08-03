@@ -49,6 +49,12 @@ JACK-Client = ">=0.5.4"
 
 [tool.poetry.group.dev.dependencies]
 psutil = "*"
+# anyio ships the pytest plugin providing @pytest.mark.anyio, which
+# tests/test_cuems_deploy.py uses for its async tests. It was never declared —
+# it only happened to be present transitively on the dev box. Anywhere it is
+# not, those 13 tests fail outright with "async def functions are not natively
+# supported" instead of running, so the dependency has to be explicit.
+anyio = "*"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
 pytest-xdist = ">=3.0"

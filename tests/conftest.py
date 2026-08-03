@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -119,6 +120,64 @@ def _no_mdns_lookup():
         side_effect=socket.gaierror("mDNS disabled in tests"),
     ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _isolated_runtime_paths(tmp_path_factory):
+    """Redirect the engine's hardcoded /tmp runtime paths into a temp dir.
+
+    Two production paths are baked in as constants and are shared with any
+    cuems-engine actually running on the host:
+
+    - The IPC sockets. ControllerCommunications opens
+      Communicator(IpcAddress.EDITOR.value) and friends; cuemsutils hardcodes
+      those as /tmp/editor.ipc, /tmp/nodeconf.ipc, /tmp/hwdiscovery.ipc.
+    - The show lock, BaseEngine.SHOW_LOCK_PATH = /tmp/cuems.show.lock.
+
+    On a host running CUEMS the suite therefore either fails on them or — far
+    worse — touches live state: Communicator.__init__ calls sys.exit(1) on a
+    PermissionError (surfacing as "SystemExit: 1" in whichever test called
+    set_comms()), and stop() deletes the show lock out from under the running
+    engine as soon as the test user happens to have write permission. Tests
+    must never be able to do that.
+
+    Patching the module-level names is enough — both are resolved at call time.
+    IpcAddress is replaced wholesale rather than per-member because enum member
+    values are immutable.
+    """
+    run_dir = tmp_path_factory.mktemp("cuems-run")
+
+    class _TestIpcAddress:
+        HWDISCOVERY = SimpleNamespace(value=str(run_dir / "hwdiscovery.ipc"))
+        NODECONF = SimpleNamespace(value=str(run_dir / "nodeconf.ipc"))
+        EDITOR = SimpleNamespace(value=str(run_dir / "editor.ipc"))
+
+    targets = [
+        (
+            "cuemsengine.comms.ControllerCommunications.IpcAddress",
+            _TestIpcAddress,
+        ),
+        (
+            "cuemsengine.core.BaseEngine.SHOW_LOCK_PATH",
+            str(run_dir / "cuems.show.lock"),
+        ),
+    ]
+
+    patchers = []
+    for target, replacement in targets:
+        try:
+            patcher = patch(target, replacement)
+            patcher.start()
+        except (ImportError, AttributeError):
+            # Not importable in this context — nothing to isolate.
+            continue
+        patchers.append(patcher)
+
+    try:
+        yield run_dir
+    finally:
+        for patcher in reversed(patchers):
+            patcher.stop()
 
 
 def _stop_comms_threads():
@@ -234,27 +293,37 @@ def engine_cleanup():
     def aggressive_cleanup(engine):
         """Aggressively cleanup engine with no mercy"""
         try:
-            # Stop communications thread first
+            # Stop communications thread first.
+            #
+            # This used to call event_loop.stop() directly and move on. That
+            # halts the loop without cancelling its tasks, so the WebSocket OSC
+            # listener's server socket is never closed and the controller's
+            # oscquery_ws_port (9190) stays bound for the rest of the session —
+            # every later test that needs it then failed with "Underlying
+            # Transport Error (ws_port=9190)". stop() cancels the tasks first,
+            # waits for the cancellations to settle, then stops the loop and
+            # joins the thread, which releases the listener.
             if hasattr(engine, "communications_thread"):
                 comm = engine.communications_thread
-                comm.stop_requested = True
-                if hasattr(comm, "event_loop") and comm.event_loop:
-                    try:
-                        comm.event_loop.stop()
-                    except:
-                        pass
-                if (
-                    hasattr(comm, "ocsquery_queue_loop")
-                    and comm.ocsquery_queue_loop.is_alive()
-                ):
-                    # Don't wait, just mark as stopped
-                    pass
+                try:
+                    comm.stop(timeout=5)
+                except Exception:
+                    # Fall back to the old best-effort path rather than let a
+                    # teardown failure mask the test's own result.
+                    comm.stop_requested = True
+                    if getattr(comm, "event_loop", None):
+                        try:
+                            comm.event_loop.call_soon_threadsafe(comm.event_loop.stop)
+                        except Exception:
+                            pass
 
-            # Stop OSCQuery
+            # Stop OSCQuery and hand its ports back to PORT_HANDLER
             if hasattr(engine, "oscquery_server"):
                 try:
-                    engine.oscquery_server.remove_device()
-                except:
+                    from .fixtures import _ossia_release
+
+                    _ossia_release(engine.oscquery_server)
+                except Exception:
                     pass
 
             if hasattr(engine, "oscquery_client"):
