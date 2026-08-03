@@ -86,36 +86,64 @@ class AsyncCommsThread(Thread):
         self.event_loop.create_task(self.run_asyncio_comms())
         self.event_loop.run_forever()
 
-    def stop(self) -> None:
-        """Stop the thread and event loop.
+    def stop(self, timeout: Optional[float] = None) -> None:
+        """Stop the thread and event loop, and wait for it to terminate.
 
-        Thread-safe method that signals the thread to stop and schedules the
-        async stop coroutine to run in the event loop. This will cause the
-        event loop to stop and the thread to terminate.
+        Thread-safe method that cancels all pending tasks, stops the event
+        loop and joins the thread.
+
+        This MUST block until the thread is gone. The event loop drives NNG
+        (pynng) sockets, and pynng registers an atexit hook that calls
+        nng_fini(), which destroys NNG's global state. CPython does not join
+        daemon threads before running atexit hooks, so if this thread is still
+        alive at interpreter shutdown, its next NNG call lands in freed
+        internals and aborts the process with
+        "panic: pthread_mutex_lock: Invalid argument" (ClickUp 869ed00ya).
+
+        Args:
+            timeout: Seconds to wait for task cancellation and for the thread
+                to join. Defaults to `self.timeout`.
 
         Note:
-            This method can be called from any thread. It does not wait for
-            the thread to fully terminate.
+            This method can be called from any thread except this one.
         """
         self.stop_requested = True
-        if self.event_loop and self.is_alive():
+        if timeout is None:
+            timeout = self.timeout
+
+        loop = self.event_loop
+        if loop is not None and self.is_alive():
             try:
-                asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
+                # Cancel the tasks first and WAIT for them: cancelling the NNG
+                # receiver while NNG is still alive lets pynng cancel and free
+                # its aio cleanly.
+                future = asyncio.run_coroutine_threadsafe(self._cancel_tasks(), loop)
+                future.result(timeout=timeout)
             except Exception as e:
-                Logger.debug(f"Error stopping {self.name}: {e}")
+                Logger.warning(f"Error cancelling tasks in {self.name}: {e}")
+            finally:
+                # Stop the loop only after cancellation has settled, otherwise
+                # the future above can never resolve.
+                loop.call_soon_threadsafe(loop.stop)
 
-    async def stop_async(self) -> None:
-        """Async stop handler.
+        if self.ident is None:
+            # Never started — nothing to join, and join() would raise.
+            return
 
-        Cancels all running tasks, waits for cleanup, then stops the event
-        loop.
-        This is called internally by `stop()` and should not be called
-        directly.
+        self.join(timeout=timeout)
+        if self.is_alive():
+            Logger.error(
+                f"{self.name} still alive after {timeout}s — NNG teardown may abort"
+            )
+        else:
+            Logger.info(f"{self.name} stopped and joined")
 
-        Note:
-            This coroutine must run in the same event loop that it stops.
+    async def _cancel_tasks(self) -> None:
+        """Cancel every task in this loop except the caller.
+
+        Runs inside the event loop. Deliberately does NOT stop the loop — see
+        `stop()`, which stops it once this has settled.
         """
-        # Get all tasks except the current one
         current_task = asyncio.current_task()
         pending_tasks = [
             task
@@ -123,14 +151,27 @@ class AsyncCommsThread(Thread):
             if task is not current_task and not task.done()
         ]
 
-        # Cancel all pending tasks
         for task in pending_tasks:
             task.cancel()
 
-        # Wait for all tasks to complete cancellation
         if pending_tasks:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
             Logger.debug(f"{self.name} cancelled {len(pending_tasks)} pending tasks")
+
+    async def stop_async(self) -> None:
+        """Async stop handler.
+
+        Cancels all running tasks, waits for cleanup, then stops the event
+        loop.
+
+        Note:
+            This coroutine must run in the same event loop that it stops.
+            Prefer `stop()`, which also joins the thread — a caller that
+            awaits this alone cannot observe the loop actually stopping,
+            because stopping the loop prevents this coroutine's result from
+            ever being delivered.
+        """
+        await self._cancel_tasks()
 
         # Now stop the event loop
         self.event_loop.call_soon_threadsafe(self.event_loop.stop)

@@ -245,7 +245,29 @@ class NodeEngine(BaseEngine):
     def stop(self):
         self.stop_requested = True
         self.stop_node_engine()
+        self.stop_comms()
         super().stop()
+
+    @logged
+    def stop_comms(self):
+        """Stop the NNG comms thread before the interpreter tears down.
+
+        pynng registers an atexit hook that calls nng_fini(), destroying NNG's
+        global state. CPython does not join daemon threads before running
+        atexit hooks, so a comms thread still polling the bus at that point
+        calls into freed NNG internals and aborts the process
+        ("panic: pthread_mutex_lock: Invalid argument", ClickUp 869ed00ya).
+
+        ControllerEngine does the equivalent in its own stop_comms(); without
+        this, only the node engine core-dumped on every restart.
+        """
+        comms = getattr(CUE_HANDLER, "communications_thread", None)
+        if comms is None:
+            return
+        try:
+            comms.stop()
+        except Exception as e:
+            Logger.error(f"Error stopping NNG comms thread: {e}")
 
     def stop_node_engine(self):
         """Stop the NodeEngine elements"""
