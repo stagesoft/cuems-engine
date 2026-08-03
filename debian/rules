@@ -23,6 +23,11 @@ override_dh_install:
 	    debian/cuems-engine-mock/usr/bin/jack-volume
 	install -m 755 debian/mock-scripts/cuems-dmxplayer \
 	    debian/cuems-engine-mock/usr/bin/cuems-dmxplayer
+	# Stage no-op rsync shim + node-engine PATH drop-in (mock deploy bypass)
+	install -d debian/cuems-engine-mock/usr/lib/cuems/mock-bin
+	install -m 755 debian/mock-scripts/rsync debian/cuems-engine-mock/usr/lib/cuems/mock-bin/rsync
+	install -d debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d
+	install -m 644 debian/mock-rsync-dropin.conf debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d/10-mock-rsync.conf
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info

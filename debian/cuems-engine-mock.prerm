@@ -3,6 +3,12 @@ set -e
 
 case "$1" in
     remove|deconfigure)
+        # Remove the cuems-node-engine PATH drop-in for the mock rsync shim
+        rm -f /etc/systemd/system/cuems-node-engine.service.d/10-mock-rsync.conf
+        rmdir --ignore-fail-on-non-empty /etc/systemd/system/cuems-node-engine.service.d 2>/dev/null || true
+        if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+        fi
         if [ -d /run/systemd/system ]; then
             if command -v systemctl >/dev/null 2>&1; then
                 if systemctl is-active --quiet cuems-mock-videocomposer 2>/dev/null; then

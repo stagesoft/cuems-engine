@@ -1,5 +1,11 @@
-import pyossia as ossia
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 import time
+
+import pyossia as ossia
+
 
 def iterate_on_children(node):
 
@@ -14,12 +20,11 @@ iterate_on_children(dev.root_node)
 
 print(dev)
 globq = ossia.GlobalMessageQueue(dev)
-while(True):
-  res = globq.pop()
-  while(res != None):
-    parameter, value = res
-    print("globq: Got " +  str(parameter.node) + " => " + str(value))
+while True:
     res = globq.pop()
+    while res != None:
+        parameter, value = res
+        print("globq: Got " + str(parameter.node) + " => " + str(value))
+        res = globq.pop()
 
-  time.sleep(0.1)
-
+    time.sleep(0.1)

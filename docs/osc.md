@@ -4,5 +4,6 @@
 ::: cuemsengine.osc.OssiaClient
 ::: cuemsengine.osc.OssiaServer
 ::: cuemsengine.osc.PyOsc
+::: cuemsengine.osc.WebSocketOscHandler
 ::: cuemsengine.osc.helpers
 ::: cuemsengine.osc.endpoints

@@ -1,25 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
+from time import sleep
+from typing import Union
+
 # from threading import Thread
 from pyossia import LocalDevice
-from typing import Union
-from time import sleep
 
-from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ServerDevices, ServerSetupFunction
+from .OssiaNodes import STARTUP_DELAY, OssiaNodes
 
 OSCSERVER_LOCAL_PORT = 9000
 OSCSERVER_REMOTE_PORT = 9001
 
+
 class OssiaServer(OssiaNodes):
     def __init__(
-            self,
-            name: str | None = None,
-            log: bool = False,
-            host: str = "127.0.0.1",
-            remote_port: int = OSCSERVER_REMOTE_PORT,
-            local_port: int = OSCSERVER_LOCAL_PORT,
-            server: ServerSetupFunction = ServerDevices.OSC,
-            endpoints: Union[dict, list] | None = None
-        ):
+        self,
+        name: str | None = None,
+        log: bool = False,
+        host: str = "127.0.0.1",
+        remote_port: int = OSCSERVER_REMOTE_PORT,
+        local_port: int = OSCSERVER_LOCAL_PORT,
+        server: ServerSetupFunction = ServerDevices.OSC,
+        endpoints: Union[dict, list] | None = None,
+    ):
         super().__init__()
         if not name:
             name = self.__class__.__name__
@@ -35,7 +41,7 @@ class OssiaServer(OssiaNodes):
 
     def setup_server(self, server: ServerSetupFunction) -> None:
         """Create a local OSC server
-        
+
         Create a local device and set it up to handle oscquery or osc requests
         """
         if not self.device:
@@ -46,6 +52,6 @@ class OssiaServer(OssiaNodes):
         if not done:
             self.remove_device()
             raise Exception("Server setup failed")
-        
+
     def add_endpoints(self, endpoints) -> None:
         self.create_endpoints(endpoints)

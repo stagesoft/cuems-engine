@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main, rc_1]
+  pull_request:
+    branches: [main, rc_1]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached virtualenv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-3.11-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: poetry install --with dev --no-interaction
+
+      - name: black
+        run: poetry run black --check src/ tests/
+
+      - name: isort
+        run: poetry run isort --check src/ tests/
+
+      - name: flake8
+        run: poetry run flake8 src/ # PEP8 compliance for shipped code
+
+  test:
+    name: Tests
+    runs-on: ubuntu-22.04
+    needs: lint
+    permissions:
+      contents: write   # required to push the coverage badge to gh-pages
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11 (deadsnakes)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3.11 \
+            python3.11-dev \
+            python3.11-venv \
+            python3.11-distutils
+
+      - name: Install system packages
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libjack-jackd2-dev \
+            libsystemd-dev \
+            gcc \
+            pkg-config \
+            libavahi-client-dev \
+            wget
+          wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
+          wget https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O libmtcmaster.deb
+          wget https://github.com/stagesoft/rtpmidid/releases/download/v26.06-1stagelab1/librtpmidid0_26.01.1.g7f552_amd64.deb -O librtpmidid0.deb
+          # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11.
+          # --unpack skips postinst (py3compile needs a registered python3 >= 3.11).
+          sudo dpkg --force-depends --unpack "$(realpath python3-pyossia.deb)"
+          sudo dpkg --force-depends --unpack "$(realpath libmtcmaster.deb)"
+          sudo dpkg --force-depends --unpack "$(realpath librtpmidid0.deb)"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Configure Poetry for Python 3.11
+        run: |
+          poetry config virtualenvs.options.system-site-packages true
+          poetry env use python3.11
+
+      - name: Load cached virtualenv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-3.11-deadsnakes-systemd-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: poetry install --with dev --no-interaction
+
+      - name: Install Python 3.11 systemd bindings
+        run: poetry run pip install systemd-python==235
+
+      - name: Unit tests
+        run: |
+          poetry run pytest \
+            -m "not integration" \
+            -n auto \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-fail-under=45
+
+      - name: Integration fast tests
+        run: |
+          poetry run pytest \
+            -m "integration and not slow" \
+            --cov=src \
+            --cov-append \
+            --cov-report=term-missing
+
+      # No "Integration slow tests" step: the only two tests currently
+      # marked @pytest.mark.slow (test_cpu_usage.py, test_project_go.py) are
+      # both unreliable on a CI runner and are run manually/locally instead.
+      # See specs/planning/integration-slow-tests-investigation.md.
+
+      - name: Generate XML coverage report
+        run: poetry run coverage xml -o coverage.xml
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            .coverage
+            coverage.xml
+
+      - name: Generate coverage badge
+        if: github.event_name == 'push'
+        run: |
+          pip install "genbadge[coverage]"
+          mkdir -p _badge
+          genbadge coverage -i coverage.xml -o _badge/coverage.svg
+
+      - name: Deploy coverage badge to GitHub Pages
+        if: github.event_name == 'push'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: _badge
+          target-folder: badges
+          clean: false

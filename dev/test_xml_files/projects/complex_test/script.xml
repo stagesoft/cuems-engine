@@ -166,7 +166,7 @@
                             </Media>
                             <outputs>
                                 <VideoCueOutput>
-                                    <output_name>VideoOut1</output_name>
+                                    <output_name>0367f391-ebf4-48b2-9f26-000000000001_0</output_name>
                                     <output_geometry>
                                         <x_scale>1</x_scale>
                                         <y_scale>1</y_scale>
@@ -264,7 +264,7 @@
                             </Media>
                             <outputs>
                                 <VideoCueOutput>
-                                    <output_name>VideoOut2</output_name>
+                                    <output_name>0367f391-ebf4-48b2-9f26-000000000001_2</output_name>
                                     <output_geometry>
                                         <x_scale>1</x_scale>
                                         <y_scale>1</y_scale>
@@ -396,7 +396,7 @@
                     </Media>
                     <outputs>
                         <VideoCueOutput>
-                            <output_name>VideoOut3</output_name>
+                            <output_name>0367f391-ebf4-48b2-9f26-000000000001_3</output_name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>
@@ -466,7 +466,7 @@
                     </Media>
                     <outputs>
                         <VideoCueOutput>
-                            <output_name>VideoOut4</output_name>
+                            <output_name>0367f391-ebf4-48b2-9f26-000000000001_4</output_name>
                             <output_geometry>
                                 <x_scale>1</x_scale>
                                 <y_scale>1</y_scale>

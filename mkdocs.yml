@@ -3,6 +3,9 @@ repo_url: https://github.com/cuems/cuems-engine
 theme:
   name: material
 
+markdown_extensions:
+  - admonition
+
 plugins:
 - search
 - mkdocstrings:

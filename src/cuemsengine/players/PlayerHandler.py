@@ -1,22 +1,29 @@
-import subprocess
-from time import sleep
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-from cuemsutils.log import Logger
-from cuemsutils.cues import AudioCue, DmxCue, VideoCue
-from cuemsutils.cues.Cue import Cue
+import os
+import shutil
+import subprocess
 from functools import partial
 from threading import RLock
+from time import monotonic, sleep
 from typing import Callable
 
-from .AudioPlayer import AudioPlayer, AudioClient, start_audio_output
-from .VideoPlayer import VideoPlayer, VideoClient, VideoOutput
-from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
-from .DmxPlayer import DmxPlayer, DmxClient, start_dmx_player
+from cuemsutils.cues import AudioCue
+from cuemsutils.cues.Cue import Cue
+from cuemsutils.log import Logger
 
-from .Player import Player
 from ..tools.PortHandler import PORT_HANDLER
+from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
+from .AudioPlayer import AudioClient, AudioPlayer, start_audio_output
+from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
+from .GradientClient import GradientClient
+from .Player import Player
+from .VideoPlayer import VideoClient, VideoOutput
 
-DEFAULT_MEDIA_FOLDER = '/opt/cuems_library/media/'
+DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
+
 
 class PlayerHandler:
     """
@@ -27,7 +34,8 @@ class PlayerHandler:
 
     Holds a list of armed cues and provides methods to use them.
     """
-    _instance: 'PlayerHandler | None' = None
+
+    _instance: "PlayerHandler | None" = None
 
     # Instance attributes (declared for IDE/type checker support)
     _audio_output_generator: partial | None
@@ -39,6 +47,7 @@ class PlayerHandler:
     _dmx_player_client: DmxClient | None
     _player_endpoints_generator: partial | None
     _video_client: VideoClient | None
+    _gradient_client: GradientClient | None
     _video_outputs: dict[str, VideoOutput]
     _audio_outputs: dict[str, dict]
     _loaded_layer_ids: set[str]
@@ -46,6 +55,7 @@ class PlayerHandler:
     _lock: RLock
     _media_folder: str
     _node_uuid: str | None
+    _media_dims_cache: dict
 
     def __new__(cls, *args, **kwargs):
         """Singleton pattern: Ensure only one instance is created"""
@@ -61,6 +71,7 @@ class PlayerHandler:
             cls._instance._dmx_player_client = None
             cls._instance._player_endpoints_generator = None
             cls._instance._video_client = None
+            cls._instance._gradient_client = None
             cls._instance._video_outputs = {}
             cls._instance._audio_outputs = {}
             cls._instance._loaded_layer_ids = set()
@@ -68,8 +79,8 @@ class PlayerHandler:
             cls._instance._lock = RLock()
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
+            cls._instance._media_dims_cache = {}
         return cls._instance
-
 
     # ---------------------------
     # Players List Management
@@ -86,43 +97,43 @@ class PlayerHandler:
             return self._cue_players[cue]
 
     def remove_cue_player(self, cue: Cue):
-            """Removes a cue player"""
-            osc_client = None
-            cue_id = str(cue.id)
-            with self._lock:
-                try:
-                    player = self._cue_players.pop(cue)
-                except KeyError:
-                    # Try to find by ID in _audio_players_by_id
-                    player = self._audio_players_by_id.pop(cue_id, None)
-                    if player is None:
-                        Logger.debug(f'Cue player not found for cue {cue.id}')
-                        return
-                
-                # Also remove from ID-based tracking
-                self._audio_players_by_id.pop(cue_id, None)
-                
-                # Save OSC client reference before clearing
-                osc_client = getattr(cue, '_osc', None)
-                cue._osc = None
-            if isinstance(player, AudioPlayer):
-                killed = self._kill_audio_player(player, osc_client, cue_id)
-                # Free port AFTER process is dead to prevent concurrent arm
-                # from getting a port the OS still has bound (Bug 2 fix).
-                # Skip if kill failed — process still holds the port.
-                if killed:
-                    PORT_HANDLER.remove_ports(cue)
+        """Removes a cue player"""
+        osc_client = None
+        cue_id = str(cue.id)
+        with self._lock:
+            try:
+                player = self._cue_players.pop(cue)
+            except KeyError:
+                # Try to find by ID in _audio_players_by_id
+                player = self._audio_players_by_id.pop(cue_id, None)
+                if player is None:
+                    Logger.debug(f"Cue player not found for cue {cue.id}")
+                    return
+
+            # Also remove from ID-based tracking
+            self._audio_players_by_id.pop(cue_id, None)
+
+            # Save OSC client reference before clearing
+            osc_client = getattr(cue, "_osc", None)
+            cue._osc = None
+        if isinstance(player, AudioPlayer):
+            killed = self._kill_audio_player(player, osc_client, cue_id)
+            # Free port AFTER process is dead to prevent concurrent arm
+            # from getting a port the OS still has bound (Bug 2 fix).
+            # Skip if kill failed — process still holds the port.
+            if killed:
+                PORT_HANDLER.remove_ports(cue)
 
     def reset_all(self):
         """Complete reset of PlayerHandler for testing"""
-        Logger.debug('Performing complete PlayerHandler reset')
+        Logger.debug("Performing complete PlayerHandler reset")
         self.reset_video_layers()
         self._video_outputs = {}
         self._cue_players = {}
         self._outputs_map = None
         with self._lock:
             self._loaded_layer_ids.clear()
-
+            self._media_dims_cache = {}
 
     # ---------------------------
     # Audio Player Management
@@ -130,8 +141,10 @@ class PlayerHandler:
 
     def set_audio_output_generator(self, path: str, args: str):
         """Sets the audio player generator"""
-        Logger.info(f'Setting audio output generator to {path} {args}')
-        self._audio_output_generator = partial(start_audio_output, path=path, args=args)
+        Logger.info(f"Setting audio output generator to {path} {args}")
+        self._audio_output_generator = partial[tuple[AudioPlayer, AudioClient]](
+            start_audio_output, path=path, args=args
+        )
 
     def set_audio_outputs(self, audio_outputs: dict[str, dict]) -> None:
         """Store audio output configs keyed by <id>."""
@@ -141,28 +154,39 @@ class PlayerHandler:
         """Resolve an output <id> to its JACK port name (mapped_to)."""
         output = self._audio_outputs.get(output_id)
         if output:
-            return output.get('mapped_to')
+            return output.get("mapped_to")
         return None
 
-    def start_audio_mixer(self, audio_outputs: list, port: int, mixer_id: str, path: str = None, args: str | None = None) -> tuple[AudioMixer, MixerClient]:
+    def start_audio_mixer(
+        self,
+        audio_outputs: list,
+        port: int,
+        mixer_id: str,
+        path: str = None,
+        args: str | None = None,
+    ) -> tuple[AudioMixer, MixerClient]:
         """Starts the audio mixer for this node.
-        
+
         Args:
             audio_outputs: List of audio output configurations
             port: OSC port for jack-volume communication
             node_uuid: Unique identifier for this mixer node
             path: Optional path to jack-volume binary
-            
+
         Returns:
             Tuple containing the AudioMixer and MixerClient instances
         """
-        Logger.info(f'Starting audio mixer {mixer_id}')
+        Logger.info(f"Starting audio mixer {mixer_id}")
+        # Clean up any surviving jack-volume from a prior engine lifetime so the
+        # new mixer binds "0_mixer" cleanly (avoids the JackNameNotUnique rename
+        # that would leave the engine addressing a disconnected zombie).
+        self.kill_orphaned_mixer_processes()
         self._audio_mixer, self._audio_mixer_client = start_audio_mixer(
             audio_outputs=audio_outputs,
             port=port,
             mixer_id=mixer_id,
             path=path,
-            args=args
+            args=args,
         )
         return self._audio_mixer, self._audio_mixer_client
 
@@ -174,17 +198,21 @@ class PlayerHandler:
         """Returns the audio mixer client instance."""
         return self._audio_mixer_client
 
-    def _kill_audio_player(self, player: AudioPlayer, osc_client: AudioClient, cue_id: str) -> bool:
+    def _kill_audio_player(
+        self, player: AudioPlayer, osc_client: AudioClient, cue_id: str
+    ) -> bool:
         """Helper method to kill an audio player process.
 
         The order is critical: disconnect JACK ports first, THEN send /quit.
         If /quit is sent first the player destroys its JACK client immediately,
-        and subsequent disconnect calls hit non-existent ports which can corrupt
+        and subsequent disconnect calls hit non-existent ports which can
+        corrupt
         JACK's shared-memory semaphore registry.
 
         Returns:
             True if the process was successfully killed (or was already dead),
-            False if the process could not be killed (still alive after timeout).
+            False if the process could not be killed (still alive after
+            timeout).
         """
         if player is None:
             return True
@@ -192,23 +220,23 @@ class PlayerHandler:
         # 1. Disconnect player from the mixer BEFORE destroying its JACK client
         if self._audio_mixer is not None:
             try:
-                uuid_slug = ''.join(cue_id.split('-'))
-                player_name = f'Audio_Player-{uuid_slug}'
+                uuid_slug = "".join(cue_id.split("-"))
+                player_name = f"Audio_Player-{uuid_slug}"
                 self._audio_mixer.disconnect_player(player_name)
-                Logger.debug(f'Disconnected {player_name} from mixer')
+                Logger.debug(f"Disconnected {player_name} from mixer")
             except Exception as e:
-                Logger.warning(f'Failed to disconnect audio player from mixer: {e}')
+                Logger.warning(f"Failed to disconnect audio player from mixer: {e}")
 
         # 2. Send /quit OSC command to gracefully stop the player
         if osc_client is not None:
             try:
-                osc_client.set_value('/quit', True)
-                Logger.debug(f'Sent /quit command to audio player for cue {cue_id}')
+                osc_client.set_value("/quit", True)
+                Logger.debug(f"Sent /quit command to audio player for cue {cue_id}")
             except Exception as e:
-                Logger.warning(f'Failed to send /quit to audio player: {e}')
+                Logger.warning(f"Failed to send /quit to audio player: {e}")
 
             # Free the random OSC local port back into the pool
-            local_port = getattr(osc_client, 'local_port', None)
+            local_port = getattr(osc_client, "local_port", None)
             if local_port is not None:
                 PORT_HANDLER.remove_random_port(local_port)
 
@@ -219,31 +247,36 @@ class PlayerHandler:
             if player.p is not None:
                 player.p.kill()
                 player.p.wait(timeout=1.0)
-                Logger.debug(f'Killed audio player subprocess for cue {cue_id}')
+                Logger.debug(f"Killed audio player subprocess for cue {cue_id}")
         except subprocess.TimeoutExpired:
-            Logger.error(f'Audio player process for cue {cue_id} did not die after SIGKILL — port may still be bound')
+            Logger.error(
+                f"Audio player process for cue {cue_id} did not die after"
+                f"SIGKILL — port may still be bound"
+            )
             process_dead = False
         except Exception as e:
-            Logger.warning(f'Failed to kill audio player subprocess: {e}')
+            Logger.warning(f"Failed to kill audio player subprocess: {e}")
 
         # Wait for thread to finish
         try:
             player.join(timeout=0.5)
         except Exception as e:
-            Logger.warning(f'Failed to join audio player thread: {e}')
+            Logger.warning(f"Failed to join audio player thread: {e}")
 
         # 4. Verify JACK has removed the dead client's ports.
         #    wait() reaps the process, which triggers JACK to unregister the
         #    client. Poll briefly to confirm ports are gone before returning.
         if process_dead and self._audio_mixer is not None:
-            uuid_slug = ''.join(cue_id.split('-'))
-            player_name = f'Audio_Player-{uuid_slug}'
+            uuid_slug = "".join(cue_id.split("-"))
+            player_name = f"Audio_Player-{uuid_slug}"
             for _ in range(10):
-                if not self._audio_mixer.conn_man.port_exists(f'{player_name}:outport 0'):
+                if not self._audio_mixer.conn_man.port_exists(
+                    f"{player_name}:outport 0"
+                ):
                     break
                 sleep(0.1)
             else:
-                Logger.warning(f'JACK client {player_name} still has ports after kill')
+                Logger.warning(f"JACK client {player_name} still has ports after kill")
 
         return process_dead
 
@@ -258,14 +291,14 @@ class PlayerHandler:
             cue_players_to_remove = []
             for cue, player in self._cue_players.items():
                 if isinstance(player, AudioPlayer):
-                    osc_client = getattr(cue, '_osc', None)
+                    osc_client = getattr(cue, "_osc", None)
                     cue._osc = None
                     cue_players_to_remove.append((cue, player, osc_client))
             for cue, player, osc_client in cue_players_to_remove:
                 self._cue_players.pop(cue, None)
                 players_to_kill.append((str(cue.id), player, osc_client))
 
-        Logger.info(f'Killing {len(players_to_kill)} audio players during cleanup')
+        Logger.info(f"Killing {len(players_to_kill)} audio players during cleanup")
         for entry in players_to_kill:
             if len(entry) == 3:
                 cue_id, player, osc_client = entry
@@ -290,35 +323,36 @@ class PlayerHandler:
             return 0
 
         all_ports = self._audio_mixer.conn_man.get_ports(
-            pattern='Audio_Player-.*', is_audio=True, is_output=True
+            pattern="Audio_Player-.*", is_audio=True, is_output=True
         )
         if not all_ports:
             return 0
 
-        # Extract unique client names from port names (e.g. "Audio_Player-abc123:outport 0" → "Audio_Player-abc123")
+        # Extract unique client names from port names (e.g.
+        # "Audio_Player-abc123:outport 0" → "Audio_Player-abc123")
         jack_clients = set()
         for port_name in all_ports:
-            client_name = port_name.split(':')[0]
+            client_name = port_name.split(":")[0]
             jack_clients.add(client_name)
 
         # Build set of tracked player client names
         with self._lock:
             tracked_slugs = set()
             for cue_id in self._audio_players_by_id:
-                slug = ''.join(cue_id.split('-'))
-                tracked_slugs.add(f'Audio_Player-{slug}')
+                slug = "".join(cue_id.split("-"))
+                tracked_slugs.add(f"Audio_Player-{slug}")
 
         zombies = jack_clients - tracked_slugs
         if not zombies:
             return 0
 
-        Logger.warning(f'Found {len(zombies)} zombie JACK audio clients: {zombies}')
+        Logger.warning(f"Found {len(zombies)} zombie JACK audio clients: {zombies}")
         for client_name in zombies:
             try:
                 self._audio_mixer.disconnect_player(client_name)
-                Logger.info(f'Disconnected zombie JACK client {client_name}')
+                Logger.info(f"Disconnected zombie JACK client {client_name}")
             except Exception as e:
-                Logger.warning(f'Failed to disconnect zombie {client_name}: {e}')
+                Logger.warning(f"Failed to disconnect zombie {client_name}: {e}")
 
         return len(zombies)
 
@@ -331,9 +365,11 @@ class PlayerHandler:
         """
         import os
         import signal
+
         result = subprocess.run(
-            ['pgrep', '-f', 'cuems-audioplayer'],
-            capture_output=True, text=True
+            ["pgrep", "-f", "cuems-audioplayer"],
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             return
@@ -344,12 +380,54 @@ class PlayerHandler:
                 if player and player.p:
                     tracked_pids.add(player.p.pid)
 
-        for pid_str in result.stdout.strip().split('\n'):
+        for pid_str in result.stdout.strip().split("\n"):
             if not pid_str:
                 continue
             pid = int(pid_str)
             if pid not in tracked_pids:
-                Logger.warning(f'Killing orphaned audioplayer process {pid}')
+                Logger.warning(f"Killing orphaned audioplayer process {pid}")
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def kill_orphaned_mixer_processes(self):
+        """Kill jack-volume mixer processes not tracked by this engine.
+
+        Mirrors kill_orphaned_audio_processes for the mixer. On a node-engine
+        restart the previous jack-volume survives as an independent subprocess
+        and keeps the "0_mixer" JACK client name; a freshly spawned jack-volume
+        then hits JackNameNotUnique and is renamed by JACK, ending up a
+        disconnected zombie while the engine still addresses "0_mixer" (the
+        orphan) — every restart also leaks another zombie. Kill any survivor
+        first so the new mixer binds "0_mixer" cleanly.
+
+        Match "jack-volume -c" (the binary invoked with its client-name flag)
+        rather than the bare word, so an operator's `tail -f .../jack-volume.log`
+        or a grep isn't caught and killed. Covers both the plain and
+        "cuems-jack-volume" install names.
+        """
+        import os
+        import signal
+
+        result = subprocess.run(
+            ["pgrep", "-f", "jack-volume -c"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return
+
+        tracked_pid = None
+        if self._audio_mixer is not None and getattr(self._audio_mixer, "p", None):
+            tracked_pid = self._audio_mixer.p.pid
+
+        for pid_str in result.stdout.strip().split("\n"):
+            if not pid_str:
+                continue
+            pid = int(pid_str)
+            if pid != tracked_pid:
+                Logger.warning(f"Killing orphaned jack-volume mixer process {pid}")
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -362,16 +440,18 @@ class PlayerHandler:
     def new_audio_output(self, cue: AudioCue) -> None:
         """Creates a new audio output for the given cue
 
-        The player is stored in the player handler and the osc client is assigned to the cue.
-        After creating the player, it will be automatically connected to the audio mixer if one exists.
-        
+        The player is stored in the player handler and the osc client is
+        assigned to the cue.
+        After creating the player, it will be automatically connected to the
+        audio mixer if one exists.
+
         Args:
             cue: The cue to create the audio output for
 
         Returns:
             None
         """
-        Logger.debug(f'Creating new audio output for cue {cue.id}')
+        Logger.debug(f"Creating new audio output for cue {cue.id}")
         if self._audio_output_generator is None:
             raise ValueError("Audio output generator not set")
 
@@ -385,11 +465,13 @@ class PlayerHandler:
             existing_player = self._audio_players_by_id.pop(cue_id, None)
             self._cue_players.pop(cue, None)
         if existing_player is not None:
-            Logger.warning(f'Killing existing audio player for cue {cue_id} before re-arm')
+            Logger.warning(
+                f"Killing existing audio player for cue {cue_id} before re-arm"
+            )
             # Save and clear OSC client so loop_audioCue stops sending to the
             # dying player (it will hit AttributeError, caught by its blanket
             # except AttributeError handler and exit silently).
-            existing_osc = getattr(cue, '_osc', None)
+            existing_osc = getattr(cue, "_osc", None)
             cue._osc = None
             killed = self._kill_audio_player(existing_player, existing_osc, cue_id)
             # Free assigned port AFTER process is dead to avoid Bug 2's race.
@@ -397,71 +479,89 @@ class PlayerHandler:
             if killed:
                 PORT_HANDLER.remove_ports(cue)
 
-        ports = PORT_HANDLER.assign_ports(['audio_output'], cue)
+        ports = PORT_HANDLER.assign_ports(["audio_output"], cue)
         player, client = self._audio_output_generator(
-            port=ports['audio_output'],
-            media=self.media_path(cue.media['file_name']),
-            uuid=str(cue.id)
+            port=ports["audio_output"],
+            media=self.media_path(cue.media["file_name"]),
+            uuid=str(cue.id),
         )
         cue._osc = client
         self.set_player_endpoints(cue)
         self.store_cue_player(cue, player)
-        
+
         # Also track by cue ID string for cleanup when cue object is lost
         with self._lock:
             self._audio_players_by_id[str(cue.id)] = player
-        
+
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
-            uuid_slug = ''.join(str(cue.id).split('-'))
-            player_name = f'Audio_Player-{uuid_slug}'
+            uuid_slug = "".join(str(cue.id).split("-"))
+            player_name = f"Audio_Player-{uuid_slug}"
 
-            # Resolve each output_name to its JACK port via the ID in the mappings.
-            # output_name format: "{node_uuid}_{output_id}"  (e.g. "a3811d78-..._6")
-            # resolve_audio_port maps the numeric ID → JACK port name (e.g. "usb_audio:playback_1")
+            # Resolve each output_name to its JACK port via the ID in the
+            # mappings.
+            # output_name format: "{node_uuid}_{output_id}" (e.g.
+            # "a3811d78-..._6")
+            # resolve_audio_port maps the numeric ID → JACK port name (e.g.
+            # "usb_audio:playback_1")
             selected_outputs = []
-            for output in getattr(cue, 'outputs', []):
-                raw = output.get('output_name', '')
+            for output in getattr(cue, "outputs", []):
+                raw = output.get("output_name", "")
                 output_id = raw[37:] if len(raw) > 37 else None  # strip "{uuid}_"
                 if output_id is not None:
                     jack_port = self.resolve_audio_port(output_id)
                     if jack_port:
                         selected_outputs.append(jack_port)
                     else:
-                        Logger.warning(f'Cannot resolve audio output ID "{output_id}" to a JACK port')
+                        Logger.warning(
+                            f'Cannot resolve audio output ID "{output_id}" to'
+                            f"a JACK port"
+                        )
 
             if not selected_outputs:
-                Logger.warning(f'No valid audio outputs resolved for cue {cue.id}, skipping mixer connection')
-            else:
-                Logger.info(f'Connecting {player_name} to outputs: {selected_outputs}')
-                self._audio_mixer.connect_player_to_outputs(
-                    player_name=player_name,
-                    player_output_prefix='outport',
-                    selected_outputs=selected_outputs
+                Logger.warning(
+                    f"No valid audio outputs resolved for cue {cue.id},"
+                    f"skipping mixer connection"
                 )
-
+            else:
+                Logger.info(f"Connecting {player_name} to outputs: {selected_outputs}")
+                connected = self._audio_mixer.connect_player_to_outputs(
+                    player_name=player_name,
+                    player_output_prefix="outport",
+                    selected_outputs=selected_outputs,
+                )
+                if connected is False:
+                    # Route to the mixer failed: the cue would show armed/green
+                    # in the UI but produce no sound. Surface it loudly rather
+                    # than proceeding silently. (Not raised on purpose: aborting
+                    # the arm here could disrupt an in-progress GO chain.)
+                    Logger.error(
+                        f"Audio cue {cue.id} failed to route {player_name} to the mixer"
+                        " - it will be SILENT despite showing armed status "
+                        "(player ports may not have registered in time, or "
+                        "mixer inputs are missing)."
+                    )
 
     # ---------------------------
     # DMX Player Management
     # ---------------------------
 
-    def start_dmx_player(self, port: int, node_uuid: str, path: str, args: str | None = None) -> tuple[DmxPlayer, DmxClient]:
+    def start_dmx_player(
+        self, port: int, node_uuid: str, path: str, args: str | None = None
+    ) -> tuple[DmxPlayer, DmxClient]:
         """Starts the DMX player for this node.
-        
+
         Args:
             port: OSC port for dmxplayer communication
             node_uuid: Unique identifier for this player node
             path: Path to cuems-dmxplayer binary
-            
+
         Returns:
             Tuple containing the DmxPlayer and DmxClient instances
         """
-        Logger.info(f'Starting DMX player for node {node_uuid}')
+        Logger.info(f"Starting DMX player for node {node_uuid}")
         self._dmx_player, self._dmx_player_client = start_dmx_player(
-            port=port,
-            node_uuid=node_uuid,
-            path=path,
-            args=args
+            port=port, node_uuid=node_uuid, path=path, args=args
         )
         return self._dmx_player, self._dmx_player_client
 
@@ -480,8 +580,9 @@ class PlayerHandler:
     # def new_dmx_output(cls, cue: DmxCue) -> None:
     #     """Creates a new audio output for the given cue
 
-    #     The player is stored in the player handler and the osc client is assigned to the cue.
-        
+    # The player is stored in the player handler and the osc client is
+    # assigned to the cue.
+
     #     Args:
     #         cue: The cue to create the dmx output for
 
@@ -498,7 +599,6 @@ class PlayerHandler:
     #     cue._osc = client
     #     cls.store_cue_player(cue, player)
 
-
     # ---------------------------
     # Video Player Management
     # ---------------------------
@@ -509,28 +609,136 @@ class PlayerHandler:
 
     def set_video_client(self, port: int) -> None:
         """Sets the video client for this node."""
-        Logger.info(f'Setting video client for node {self._node_uuid}')
+        Logger.info(f"Setting video client for node {self._node_uuid}")
         self._video_client = VideoClient(player_port=port)
 
-    def start_video_outputs(self, output_names: dict[str, dict[str, any]]) -> None:
-        """Ensures that the all the required video output exist."""
-        Logger.info(f'Checking & starting video outputs for {output_names} ')
-        canvas_w, canvas_h = 0, 0
+    def get_gradient_client(self) -> GradientClient | None:
+        """
+        Returns the GradientClient instance, or None if not yet initialised.
+        """
+        return self._gradient_client
+
+    def set_gradient_client(self, port: int, node_name: str) -> None:
+        """Construct (or replace) the GradientClient for this node.
+
+        node_name must match gradient-motiond's own --node-name (defaults to
+        the OS hostname; see node-identity-contract.md in cuems-common) —
+        NOT the node's UUID, which the daemon's node_name filter will never
+        match, silently dropping every message.
+
+        Safe to call multiple times: any new call replaces the prior client.
+        PyOscClient is fire-and-forget UDP with no held resources, so no
+        teardown of the prior client is needed.
+        """
+        self._gradient_client = GradientClient(
+            host="127.0.0.1",
+            port=port,
+            node_name=node_name,
+        )
+        Logger.info(f"GradientClient: bound to 127.0.0.1:{port} node_name={node_name}")
+
+    def start_video_outputs(
+        self,
+        output_names: dict[str, dict[str, any]],
+        canvas_override: tuple[int, int] | None = None,
+    ) -> None:
+        """Ensures that the all the required video output exist.
+
+        ``canvas_override`` is an optional ``(width, height)`` carrying the
+        engine reader's authoritative canvas size — set when display.conf
+        has a ``canvas_size=`` global key. When provided, it must be >=
+        the per-region bounding box (we validate as defense in depth — the
+        reader already validates, but a stale caller could pass garbage).
+        When ``None``, fall back to bbox computed from the output regions.
+        """
+        Logger.info(f"Checking & starting video outputs for {output_names} ")
+        bbox_w, bbox_h = 0, 0
         for cfg in output_names.values():
-            region = cfg.get('canvas_region') or {}
-            right = region.get('x', 0) + region.get('width', 1920)
-            bottom = region.get('y', 0) + region.get('height', 1080)
-            canvas_w = max(canvas_w, right)
-            canvas_h = max(canvas_h, bottom)
+            region = cfg.get("canvas_region") or {}
+            right = region.get("x", 0) + region.get("width", 1920)
+            bottom = region.get("y", 0) + region.get("height", 1080)
+            bbox_w = max(bbox_w, right)
+            bbox_h = max(bbox_h, bottom)
+        if canvas_override is not None:
+            cw, ch = canvas_override
+            if cw < bbox_w or ch < bbox_h:
+                raise ValueError(
+                    f"canvas_override {cw}x{ch} is smaller than the"
+                    f"per-output "
+                    f"bounding box {bbox_w}x{bbox_h}; monitors would be"
+                    f"cropped"
+                )
+            canvas_w, canvas_h = cw, ch
+        else:
+            canvas_w, canvas_h = bbox_w, bbox_h
+        Logger.info(f"Canvas: {canvas_w}x{canvas_h} (bbox={bbox_w}x{bbox_h})")
         for output_name, output_config in output_names.items():
-            output_config['canvas_width'] = canvas_w
-            output_config['canvas_height'] = canvas_h
+            output_config["canvas_width"] = canvas_w
+            output_config["canvas_height"] = canvas_h
             video_output = VideoOutput(**output_config)
             video_output.apply_config(self._video_client)
             self._video_outputs[output_name] = video_output
 
     def get_video_output(self, output_name: str) -> VideoOutput:
         """Returns the VideoOutput object for a given output name."""
+        return self._video_outputs[output_name]
+
+    def _resolve_canvas_dimensions(self) -> tuple[int, int]:
+        """Return the node's canvas (width, height) in pixels.
+
+        All alias VideoOutputs on a node share the same canvas totals,
+        written by start_video_outputs. Raises if no aliases exist yet —
+        custom outputs have no independent canvas dimensions.
+        """
+        for vo in self._video_outputs.values():
+            return vo.canvas_width, vo.canvas_height
+        raise RuntimeError(
+            "Cannot resolve canvas dimensions: no named video outputs "
+            "are registered. Custom outputs require at least one alias "
+            "on the same node."
+        )
+
+    def make_custom_video_output(self, cue_output) -> VideoOutput:
+        """Build a VideoOutput for a per-cue custom region.
+
+        cue_output is a dict-like VideoCueOutput with a canvas_region
+        holding normalized floats in [0, 1]. Converts to pixel integers
+        so VideoOutput.get_layer_placement / get_layer_scale work the
+        same way they do for alias outputs.
+        """
+        region_norm = cue_output["canvas_region"]
+        canvas_w, canvas_h = self._resolve_canvas_dimensions()
+        region_px = {
+            "x": int(region_norm["x"] * canvas_w),
+            "y": int(region_norm["y"] * canvas_h),
+            "width": int(region_norm["width"] * canvas_w),
+            "height": int(region_norm["height"] * canvas_h),
+        }
+        return VideoOutput(
+            name=cue_output.get("output_name", "custom"),
+            canvas_region=region_px,
+            canvas_width=canvas_w,
+            canvas_height=canvas_h,
+            width=region_px["width"],
+            height=region_px["height"],
+        )
+
+    def resolve_video_output_for_cue(self, cue, output_name: str) -> VideoOutput:
+        """Resolve an output_name suffix to a VideoOutput.
+
+        For alias suffixes (<int>) looks up the cached VideoOutput.
+        For custom suffixes (custom_<n>) synthesizes a VideoOutput from
+        the matching VideoCueOutput's inline canvas_region.
+        """
+        if output_name.startswith("custom_"):
+            full = f"{self._node_uuid}_{output_name}"
+            cue_output = next(
+                (o for o in cue.outputs if o.get("output_name") == full),
+                None,
+            )
+            if cue_output is None:
+                raise KeyError(f"No VideoCueOutput match for {full}")
+            return self.make_custom_video_output(cue_output)
         return self._video_outputs[output_name]
 
     def register_layer(self, layer_id: str) -> None:
@@ -544,51 +752,58 @@ class PlayerHandler:
             self._loaded_layer_ids.discard(layer_id)
 
     def reset_videocomposer(self):
-        """Send atomic reset to videocomposer (removes all layers + resets master)."""
-        Logger.debug('Sending atomic reset to videocomposer')
+        """
+        Send atomic reset to videocomposer (removes all layers + resets
+        master).
+        """
+        Logger.debug("Sending atomic reset to videocomposer")
         if self._video_client is not None:
             try:
-                self._video_client.set_value('/videocomposer/reset', None)
+                self._video_client.set_value("/videocomposer/reset", None)
             except Exception as e:
-                Logger.warning(f'Error sending reset to videocomposer: {e}')
+                Logger.warning(f"Error sending reset to videocomposer: {e}")
             # Remove all layer endpoints from the OSC client
             with self._lock:
                 for layer_id in list(self._loaded_layer_ids):
                     try:
                         self._video_client.remove_layer_endpoints(layer_id)
                     except Exception as e:
-                        Logger.debug(f'Error removing layer endpoints {layer_id}: {e}')
+                        Logger.debug(f"Error removing layer endpoints {layer_id}: {e}")
         with self._lock:
             self._loaded_layer_ids.clear()
 
     def reset_video_layers(self):
-        """Unload all tracked video layers (video blackout). Legacy per-layer method."""
-        Logger.debug('Resetting video layers')
+        """
+        Unload all tracked video layers (video blackout). Legacy per-layer
+        method.
+        """
+        Logger.debug("Resetting video layers")
         with self._lock:
             if self._video_client is None:
                 self._loaded_layer_ids.clear()
                 return
             for layer_id in list(self._loaded_layer_ids):
                 try:
-                    self._video_client.set_value('/videocomposer/layer/unload', layer_id)
+                    self._video_client.set_value(
+                        "/videocomposer/layer/unload", layer_id
+                    )
                     self._video_client.remove_layer_endpoints(layer_id)
                 except Exception as e:
-                    Logger.debug(f'Error unloading layer {layer_id}: {e}')
+                    Logger.debug(f"Error unloading layer {layer_id}: {e}")
             self._loaded_layer_ids.clear()
 
     def quit_videocomposer(self):
         """Quits the videocomposer process."""
-        Logger.debug('Quitting videocomposer')
+        Logger.debug("Quitting videocomposer")
         if self._video_client is not None:
             try:
-                self._video_client.set_value('/videocomposer/quit', None)
+                self._video_client.set_value("/videocomposer/quit", None)
             except Exception as e:
-                Logger.debug(f'Error sending quit to videocomposer: {e}')
+                Logger.debug(f"Error sending quit to videocomposer: {e}")
         self._video_client = None
         self._video_outputs = {}
         with self._lock:
             self._loaded_layer_ids.clear()
-
 
     # ---------------------------
     # Helper functions
@@ -596,7 +811,7 @@ class PlayerHandler:
 
     def set_player_endpoints_generator(self, func: Callable, *args, **kwargs):
         """Sets the player endpoints generator"""
-        Logger.info(f'Setting player endpoints generator to {func}')
+        Logger.info(f"Setting player endpoints generator to {func}")
         self._player_endpoints_generator = partial(func, *args, **kwargs)
 
     def set_player_endpoints(self, cue: Cue) -> None:
@@ -606,27 +821,28 @@ class PlayerHandler:
         try:
             self._player_endpoints_generator(cue)
         except Exception as e:
-            Logger.error(f'Error setting player endpoints for cue {cue.id}: {e}')
-    
+            Logger.error(f"Error setting player endpoints for cue {cue.id}: {e}")
+
     def set_outputs_map(self, outputs_map: dict):
         """Set the outputs map for the player handler"""
         self._outputs_map = outputs_map
 
     def get_cue_output_name(self, cue: Cue) -> str | None:
         """Get the output name for a given cue from the outputs map.
-        
+
         Args:
             cue: The cue to get the output name for
 
         Returns:
-            The output name for the given cue or None if the cue is not found in the outputs map
-        
+            The output name for the given cue or None if the cue is not found
+            in the outputs map
+
         Raises:
             AttributeError: If the outputs map is not set
         """
         if self._outputs_map is None:
-            Logger.error('Outputs map not set')
-            raise AttributeError('Outputs map not set')
+            Logger.error("Outputs map not set")
+            raise AttributeError("Outputs map not set")
         outputs = self._outputs_map.get(cue.id, None)
         # outputs_map stores lists, but callers expect a single string
         if isinstance(outputs, list) and len(outputs) > 0:
@@ -635,19 +851,19 @@ class PlayerHandler:
 
     def get_all_cue_output_names(self, cue: Cue) -> list:
         """Get all output names for a given cue from the outputs map.
-        
+
         Args:
             cue: The cue to get the output names for
 
         Returns:
             List of output names for the given cue, or empty list if not found
-        
+
         Raises:
             AttributeError: If the outputs map is not set
         """
         if self._outputs_map is None:
-            Logger.error('Outputs map not set')
-            raise AttributeError('Outputs map not set')
+            Logger.error("Outputs map not set")
+            raise AttributeError("Outputs map not set")
         outputs = self._outputs_map.get(cue.id, None)
         if isinstance(outputs, list):
             return outputs
@@ -657,20 +873,80 @@ class PlayerHandler:
 
     def add_media_folder(self, path: str):
         """Adds a media folder to the player handler"""
-        path = path.split('/')
-        if path[-1] != 'media':
-            path.append('media')
-        self._media_folder = '/' + '/'.join(path)
+        path = path.split("/")
+        if path[-1] != "media":
+            path.append("media")
+        self._media_folder = "/" + "/".join(path)
         if self._media_folder[0:2] == "//":
             self._media_folder = self._media_folder[1:]
 
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""
-        return self._media_folder + '/' + file_name
+        return self._media_folder + "/" + file_name
+
+    def media_dimensions(self, file_name: str) -> tuple[int | None, int | None]:
+        """Return (width, height) px of the media's first video stream via
+        ffprobe, cached by (path, st_mtime). Returns (None, None) on any
+        failure (ffprobe missing/error/timeout, non-video media, file gone),
+        in which case callers fall back to the legacy region-ratio scale.
+        """
+        file_path = self.media_path(file_name)
+        try:
+            key = (file_path, os.stat(file_path).st_mtime)
+        except OSError:
+            return (None, None)
+        with self._lock:
+            if key in self._media_dims_cache:
+                return self._media_dims_cache[key]
+        # Probe OUTSIDE the lock so a slow ffprobe never blocks other arms.
+        # Two cues with the same file may both miss and both probe: a benign
+        # double-probe (NOT a real race) — leave it, do not "fix" with a lock
+        # held across the subprocess.
+        dims: tuple[int | None, int | None] = (None, None)
+        ffprobe = shutil.which("ffprobe")
+        if ffprobe:
+            t0 = monotonic()
+            try:
+                out = subprocess.run(
+                    [
+                        ffprobe,
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=width,height",
+                        "-of",
+                        "csv=p=0",
+                        file_path,
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=5,
+                    text=True,
+                )
+                parts = out.stdout.strip().split(",")
+                if out.returncode == 0 and len(parts) == 2:
+                    w, h = int(parts[0]), int(parts[1])
+                    if w > 0 and h > 0:
+                        dims = (w, h)
+            except (subprocess.TimeoutExpired, ValueError, OSError) as e:
+                Logger.warning(f"ffprobe failed for {file_path}: {e}")
+            Logger.debug(f"ffprobe {file_path} -> {dims} in {monotonic() - t0:.3f}s")
+        else:
+            Logger.warning("ffprobe not found; video layers use legacy region scale")
+        with self._lock:
+            self._media_dims_cache[key] = dims
+        return dims
 
     def add_node_uuid(self, uuid: str):
         """Adds a node uuid to the player handler"""
         self._node_uuid = uuid
+
+    @property
+    def node_uuid(self) -> str | None:
+        """Public read-only accessor for the node uuid."""
+        return self._node_uuid
 
 
 # ---------------------------

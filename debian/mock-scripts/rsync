@@ -1,0 +1,17 @@
+#!/bin/sh
+# Mock rsync for headless / cloud mock boxes (cuems-engine-mock).
+#
+# On a single-box mock the cuems project/media library is already local at
+# /opt/cuems_library, so the controller->node deploy sync is a no-op. The engine
+# (CuemsDeploy) invokes rsync twice against rsync://cuems_library_rsync@HOST/cuems
+# (a --list-only precheck, then the transfer); we recognise both by the dedicated
+# auth user "cuems_library_rsync" and short-circuit to success. Every OTHER rsync
+# invocation is delegated, unchanged, to the real binary.
+case " $* " in
+    *cuems_library_rsync*)
+        exit 0
+        ;;
+    *)
+        exec /usr/bin/rsync "$@"
+        ;;
+esac

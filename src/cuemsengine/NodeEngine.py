@@ -1,30 +1,58 @@
-from functools import partial
-from time import sleep
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 import os
 import subprocess
 import threading
+from time import sleep
 
-from cuemsutils.cues import CueList, VideoCue, AudioCue, DmxCue
-from cuemsutils.cues.MediaCue import MediaCue
+from cuemsutils.cues import CueList
 from cuemsutils.cues.Cue import Cue
+from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER
 from .osc.helpers import add_prefix_to_all
-from .tools.CuemsDeploy import CuemsDeploy
-from .tools.PortHandler import PORT_HANDLER
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
+from .tools.CuemsDeploy import CuemsDeploy
+from .tools.display_conf import read_display_conf
+from .tools.PortHandler import PORT_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
+
+
+def _append_output_latency_flag(args, player_conf: dict) -> str:
+    """Append --output-latency-ms <int> to args when the player's
+    settings.xml config has an explicit integer value.
+
+    settings.xml accepts integer (override) or the literal string
+    "auto" (use the binary's built-in default or auto-calibration).
+    xmlschema decodes integers as Python int and "auto" as str.
+    isinstance(value, int) distinguishes reliably; "auto" and None
+    both mean "don't emit the flag". See cuems-utils
+    test_output_latency_ms_type_round_trip for the typing contract.
+
+    args may be None (empty <args/> element decodes to None in xmlschema)
+    or an empty string — normalize both to '' before concatenation so the
+    spawned argv never carries a literal "None" token.
+    """
+    args = args or ""
+    value = player_conf.get("output_latency_ms")
+    if isinstance(value, int):
+        return f"{args} --output-latency-ms {value}".strip()
+    return args
+
 
 class NodeEngine(BaseEngine):
     """
     This engine manages players for each node
-    
+
     Communicates with the ControllerEngine via OSCQuery
-    
+
     Interacts with Player objects via OSC
 
     It is responsible for:
@@ -35,92 +63,114 @@ class NodeEngine(BaseEngine):
       - Handling player failures
       - Providing a clean interface for starting and stopping players
       - Providing a clean interface for monitoring player status
-    
+
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
         self._loading_lock = threading.Lock()
         self._loading = False
         self._project_generation: int = 0
-        self.nng_hub_address = f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
-        PORT_HANDLER.add_system_ports()
-        if hasattr(self, 'cm'):
-            PORT_HANDLER.add_config_ports(
-                get_config_ports(self.cm.node_conf)
+        # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
+        if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
+            self.nng_hub_address = (
+                f"tcp://{self.controller_ip}:{self.cm.node_conf['nng_hub_port']}"
             )
+            # add_system_ports() / add_config_ports() moved to
+            # BaseEngine.__init__ so the controller engine gets them too.
             self.deploy_manager = CuemsDeploy(
                 library_path=self.cm.library_path,
-                tmp_path=self.cm.tmp_path
+                tmp_path=self.cm.tmp_path,
+                controller_ip=self.controller_ip,  # set by set_config_manager()
             )
-            PLAYER_HANDLER.add_media_folder(
-                self.cm.library_path
-            )
+            PLAYER_HANDLER.add_media_folder(self.cm.library_path)
             PLAYER_HANDLER.set_player_endpoints_generator(
                 self.add_player_endpoints,
                 # TODO: Use node host from config
-                prefix = '/players'
+                prefix="/players",
             )
+        else:
+            self.nng_hub_address = None
+            self.deploy_manager = None
 
     def start(self):
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
-        self.set_oscquery_comms()  # Creates command dictionary and OSCQuery client
-        self.set_players()  # Creates player devices - must be before NNG callback
-        self._setup_nng_command_callback()  # Set up NNG command receiving (after players ready)
-        self.mtc_listener.start()
+        self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
+        # Creates command dictionary and OSCQuery client
+        self.set_oscquery_comms()
+        # Creates player devices - must be before NNG callback
+        self.set_players()
+        # Set up NNG command receiving (after players ready)
+        self._setup_nng_command_callback()
+        if self.mtc_listener is not None:
+            self.mtc_listener.start()
         super().start()
-    
+
     def _setup_nng_command_callback(self):
-        """Set up the callback for receiving commands via NNG from ControllerEngine.
-        
-        This provides push-based command delivery as an alternative to HTTP polling.
-        Commands are received via the NNG bus and routed to the appropriate handlers.
         """
-        if hasattr(CUE_HANDLER, 'communications_thread') and CUE_HANDLER.communications_thread:
-            CUE_HANDLER.communications_thread.set_command_callback(self._handle_nng_command)
+        Set up the callback for receiving commands via NNG from
+        ControllerEngine.
+
+        This provides push-based command delivery as an alternative to HTTP
+        polling.
+        Commands are received via the NNG bus and routed to the appropriate
+        handlers.
+        """
+        if (
+            hasattr(CUE_HANDLER, "communications_thread")
+            and CUE_HANDLER.communications_thread
+        ):
+            CUE_HANDLER.communications_thread.set_command_callback(
+                self._handle_nng_command
+            )
             Logger.info("NNG command callback registered for NodeEngine")
         else:
-            Logger.warning("CUE_HANDLER communications thread not available for command callback")
+            Logger.warning(
+                "CUE_HANDLER communications thread: "
+                "not available for command callback"
+            )
 
         from .cues.ActionHandler import ACTION_HANDLER
 
         ACTION_HANDLER.finalize_node_layer_bindings()
         ACTION_HANDLER.set_result_sink(self._action_result_sink)
 
-
     def _handle_nng_command(self, command_name: str, value, address: str = None):
         """Handle a command received via NNG from ControllerEngine.
-        
+
         Args:
-            command_name: The command name (e.g., 'go', 'load', 'stop', 'player_control')
+            command_name: The command name (e.g., 'go', 'load', 'stop',
+            'player_control')
             value: The command value
             address: The original OSC address (optional)
         """
         Logger.info(f"NNG command received: {command_name} = {repr(value)}")
-        
-        if command_name == 'player_control' and address:
-            # Handle player control messages (mixer volumes, video controls, etc.)
+
+        if command_name == "player_control" and address:
+            # Handle player control messages (mixer volumes, video controls,
+            # etc.)
             self._handle_player_control_message(address, value)
         else:
             # Handle standard commands (go, load, stop)
             self.run_command(command_name, value)
-    
+
     def _handle_player_control_message(self, address: str, value):
         """Handle player control messages received via NNG.
-        
+
         Routes to appropriate player handlers based on the OSC address.
         Supports two formats:
         1. Engine format: /engine/players/<uuid>/<type>/...
         2. Direct format: /<uuid>/<type>/... (from UI)
-        
+
         Args:
             address: The OSC address
             value: The value to set
         """
-        parts = address.strip('/').split('/')
-        
+        parts = address.strip("/").split("/")
+
         # Determine format and extract node_uuid, player_type, path_parts
-        if len(parts) >= 4 and parts[0] == 'engine' and parts[1] == 'players':
+        if len(parts) >= 4 and parts[0] == "engine" and parts[1] == "players":
             # Engine format: /engine/players/<node_uuid>/<type>/...
             node_uuid = parts[2]
             player_type = parts[3]
@@ -133,34 +183,45 @@ class NodeEngine(BaseEngine):
         else:
             Logger.warning(f"Invalid player control address: {address}")
             return
-        
+
         # Only handle messages for this node
         if node_uuid != self.cm.node_uuid:
             Logger.debug(f"Ignoring player message for other node: {node_uuid}")
             return
-        
-        Logger.debug(f"Handling player control: type={player_type}, path={path_parts}, value={value}")
-        
+
+        Logger.debug(
+            f"Handling player control: type={player_type}, path={path_parts},"
+            f"value={value}"
+        )
+
         # Route to appropriate handler based on player type
-        if player_type == 'video':
+        if player_type == "video":
             redirect_video_cmd(path_parts, value)
-        elif player_type == 'audio':
+        elif player_type == "audio":
             CUE_HANDLER.route_audio_message(path_parts, value)
-        elif player_type == 'dmx':
+        elif player_type == "dmx":
             CUE_HANDLER.route_dmx_message(path_parts, value)
-        elif player_type == 'audiomixer':
+        elif player_type == "audiomixer":
+            # Legacy: pre-2026 OSC format /{uuid}/audiomixer/{channel}.
+            # The current UI sends
+            # /{uuid}/audio/mixer/{output_index}/{channel}/volume,
+            # which routes via player_type == 'audio' →
+            # CueHandler.route_audio_message().
+            # Kept for backwards compatibility with any external tool still
+            # using
+            # the old format; new code should not target this path.
             # Direct audiomixer command: /<uuid>/audiomixer/<channel>
             # path_parts[0] is channel (e.g., '0', 'master')
             self._handle_audiomixer_command(path_parts, value)
-        elif player_type == 'jadeo':
+        elif player_type == "jadeo":
             # Direct video command: /<uuid>/jadeo/<cmd>
-            redirect_video_cmd(['jadeo'] + path_parts, value)
+            redirect_video_cmd(["jadeo"] + path_parts, value)
         else:
             Logger.debug(f"Unknown player type in control message: {player_type}")
-    
+
     def _handle_audiomixer_command(self, path_parts: list, value):
         """Handle direct audiomixer OSC command.
-        
+
         Args:
             path_parts: Remaining path parts after /<uuid>/audiomixer/
                        e.g., ['0'] for channel 0, ['master'] for master
@@ -169,22 +230,44 @@ class NodeEngine(BaseEngine):
         if not path_parts:
             Logger.warning("Empty audiomixer command path")
             return
-        
+
         channel = path_parts[0]
         # jack-volume expects /audiomixer/<client_name>/<channel>
-        mixer_cmd = f'/audiomixer/0_mixer/{channel}'
-        
+        mixer_cmd = f"/audiomixer/0_mixer/{channel}"
+
         try:
             PLAYER_HANDLER.get_audio_mixer_client().set_value(mixer_cmd, value)
             Logger.debug(f"Audiomixer command: {mixer_cmd} = {value}")
         except Exception as e:
             Logger.error(f"Error sending audiomixer command: {e}")
-        
+
     @logged
     def stop(self):
         self.stop_requested = True
         self.stop_node_engine()
+        self.stop_comms()
         super().stop()
+
+    @logged
+    def stop_comms(self):
+        """Stop the NNG comms thread before the interpreter tears down.
+
+        pynng registers an atexit hook that calls nng_fini(), destroying NNG's
+        global state. CPython does not join daemon threads before running
+        atexit hooks, so a comms thread still polling the bus at that point
+        calls into freed NNG internals and aborts the process
+        ("panic: pthread_mutex_lock: Invalid argument", ClickUp 869ed00ya).
+
+        ControllerEngine does the equivalent in its own stop_comms(); without
+        this, only the node engine core-dumped on every restart.
+        """
+        comms = getattr(CUE_HANDLER, "communications_thread", None)
+        if comms is None:
+            return
+        try:
+            comms.stop()
+        except Exception as e:
+            Logger.error(f"Error stopping NNG comms thread: {e}")
 
     def stop_node_engine(self):
         """Stop the NodeEngine elements"""
@@ -194,116 +277,122 @@ class NodeEngine(BaseEngine):
     def stop_video_devs(self):
         try:
             self.unload_video_devs()
-            Logger.info('Video devs stopped')
+            Logger.info("Video devs stopped")
         except Exception as e:
-            Logger.warning(f'Exception raised when stopping video devs: {e}')
+            Logger.warning(f"Exception raised when stopping video devs: {e}")
 
     def quit_video_devs(self):
         try:
             PLAYER_HANDLER.quit_videocomposer()
-            Logger.info('Videocomposer quit successfully')
+            Logger.info("Videocomposer quit successfully")
         except Exception as e:
             Logger.exception(e)
 
     def unload_video_devs(self):
         try:
             PLAYER_HANDLER.reset_videocomposer()
-            Logger.info('Videocomposer reset successfully')
+            Logger.info("Videocomposer reset successfully")
         except Exception as e:
             Logger.exception(e)
 
     #########################
     # OSCQuery logic
     #########################
-    def add_player_endpoints(self, cue: Cue, prefix: str = '/players'):
+    def add_player_endpoints(self, cue: Cue, prefix: str = "/players"):
         """Add player endpoints from a cue to the OSCQuery server
-        
+
         Args:
             cue: The cue containing the player client
             prefix: Prefix to add to all endpoint paths (default: '/players')
         """
-        if not hasattr(cue, '_osc') or cue._osc is None:
-            Logger.warning(f'Cue {cue.id} has no OSC client, cannot add endpoints')
+        if not hasattr(cue, "_osc") or cue._osc is None:
+            Logger.warning(f"Cue {cue.id} has no OSC client, cannot add endpoints")
             return
-        
+
         try:
             # Get endpoints from the player client
             endpoints = cue._osc.get_endpoints()
             if not endpoints:
-                Logger.warning(f'No endpoints found for cue {cue.id}')
+                Logger.warning(f"No endpoints found for cue {cue.id}")
                 return
-            
+
             # Add prefix to all endpoints
-            prefixed_endpoints = add_prefix_to_all(endpoints, f"{prefix}/{self.cm.node_uuid}/{cue.id}")
-            
+            prefixed_endpoints = add_prefix_to_all(
+                endpoints, f"{prefix}/{self.cm.node_uuid}/{cue.id}"
+            )
+
             # Add endpoints to OSCQuery server
-            if hasattr(self, 'oscquery_server') and self.oscquery_server:
+            if hasattr(self, "oscquery_server") and self.oscquery_server:
                 self.oscquery_server.add_endpoints(prefixed_endpoints)
-                Logger.debug(f'Added {len(prefixed_endpoints)} endpoints for cue {cue.id}')
+                Logger.debug(
+                    f"Added {len(prefixed_endpoints)} endpoints for cue {cue.id}"
+                )
             else:
-                Logger.warning('OSCQuery server not initialized, cannot add endpoints')
+                Logger.warning("OSCQuery server not initialized, cannot add endpoints")
         except Exception as e:
-            Logger.error(f'Error adding player endpoints for cue {cue.id}: {e}')
+            Logger.error(f"Error adding player endpoints for cue {cue.id}: {e}")
             Logger.exception(e)
 
     def set_oscquery_comms(self):
         """Set up the command dictionary for the NodeEngine.
-        
+
         Commands are received via NNG from ControllerEngine.
         OSCQuery client is no longer used since pyossia server was removed.
         """
         self.commands_dict = {
-            'deploy': self.ready_project,
-            'load': self.load_project,
-            'loadcue': None,
-            'go': self.go_script,
-            'gocue': self.go_script,
-            'pause': None,
-            'resetall': None,
-            'stop': self.stop_playback,
-            'setnextcue': self.set_next_cue,
-            'cue_enabled': self._handle_cue_enabled,
-            'test': None,
-            'unload': None,
-            'update': None,
+            "deploy": self.ready_project,
+            "load": self.load_project,
+            "loadcue": None,
+            "go": self.go_script,
+            "gocue": self.go_script,
+            "pause": None,
+            "resetall": None,
+            "stop": self.stop_playback,
+            "setnextcue": self.set_next_cue,
+            "cue_enabled": self._handle_cue_enabled,
+            "test": None,
+            "unload": None,
+            "update": None,
         }
 
     def route_message(self, parameter, value):
         # Exclude 'engine' common node
-        path_elements = str(parameter.node).split('/')[2:]
-        if path_elements[0] == 'command':
+        path_elements = str(parameter.node).split("/")[2:]
+        if path_elements[0] == "command":
             self.run_command(path_elements[1], value)
-        elif path_elements[0] == 'status':
-            Logger.debug(f'Status update received: {path_elements[1]} = {repr(value)}')
-        elif path_elements[0] == 'players':
+        elif path_elements[0] == "status":
+            Logger.debug(f"Status update received: {path_elements[1]} = {repr(value)}")
+        elif path_elements[0] == "players":
             # Exclude other nodes' players
             if path_elements[1] != self.cm.node_uuid:
-                Logger.debug(f'Ignoring player message for other node: {path_elements[1]}')
+                Logger.debug(
+                    f"Ignoring player message for other node: {path_elements[1]}"
+                )
                 return
             # Route the message to the appropriate player handler
-            if path_elements[2] == 'video':
+            if path_elements[2] == "video":
                 redirect_video_cmd(path_elements[3:], value)
-            if path_elements[2] == 'audio':
+            if path_elements[2] == "audio":
                 CUE_HANDLER.route_audio_message(path_elements[3:], value)
-            if path_elements[2] == 'dmx':
+            if path_elements[2] == "dmx":
                 CUE_HANDLER.route_dmx_message(path_elements[3:], value)
         else:
-            Logger.debug(f'Recieved unused OSCQuery path: {str(parameter.node)}')
+            Logger.debug(f"Recieved unused OSCQuery path: {str(parameter.node)}")
             return
 
     def run_command(self, command, value):
         with self._command_lock:
-            Logger.debug(f'NodeEngine executing command: {command}({repr(value)})')
+            Logger.debug(f"NodeEngine executing command: {command}({repr(value)})")
             if command in self.commands_dict.keys():
                 handler = self.commands_dict[command]
                 if handler is not None:
                     handler(value)
                     return True
                 else:
-                    Logger.warning(f'Command {command} has no handler')
+                    Logger.warning(f"Command {command} has no handler")
                     return False
             else:
-                Logger.error(f'Command {command} not found')
+                Logger.error(f"Command {command} not found")
                 return False
 
     #########################
@@ -313,149 +402,275 @@ class NodeEngine(BaseEngine):
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
+        self.set_gradient_client()
+
+    def set_gradient_client(self) -> None:
+        """
+        Wire GradientClient into PLAYER_HANDLER using settings from node_conf.
+        """
+        port = int(self.cm.node_conf["gradient_osc_port"])
+        node_name = self._resolve_gradient_node_name()
+        PLAYER_HANDLER.set_gradient_client(port=port, node_name=node_name)
+
+    def _resolve_gradient_node_name(self) -> str:
+        """
+        Resolve the identifier gradient-motiond's node_name filter expects.
+
+        gradient-motiond defaults its --node-name to the OS hostname (see
+        node-identity-contract.md in cuems-common); cuems-nodeconf keeps the
+        OS hostname in sync with network_map.xml's <role_id> and only
+        persists <hostname> as a legacy override when the two diverge. The
+        node's UUID is never what the daemon filters on.
+        """
+        node = self.cm.node_network_map or {}
+        node_name = node.get("hostname") or node.get("role_id")
+        if not node_name:
+            node_name = self.cm.node_uuid
+            Logger.warning(
+                "gradient_node_name: no role_id/hostname in network_map for "
+                f"node {self.cm.node_uuid}; falling back to node_uuid — "
+                "gradient-motiond's node_name filter will likely reject fades"
+            )
+        return node_name
 
     # Audio functions
     def set_audio_players(self):
         """Set the audio players and audio mixer"""
         # Initialize the audio mixer for this node
-        if self.cm.node_hw_outputs.get('audio_outputs'):
-            audio_outputs = self.cm.node_hw_outputs['audio_outputs']
-            Logger.info(f'Initializing audio mixer with {len(audio_outputs)} outputs')
-            
-            # Assign a port for the audio mixer
-            mixer_id = '0' # TODO: make this a unique identifier for the mixer
-            mixer_ports = PORT_HANDLER.assign_ports(['audio_mixer'])
-            PORT_HANDLER.add_config_ports(mixer_ports)
-            # Start the audio mixer
+        if self.cm.node_hw_outputs.get("audio_outputs"):
+            audio_outputs = self.cm.node_hw_outputs["audio_outputs"]
+            Logger.info(f"Initializing audio mixer with {len(audio_outputs)} outputs")
+
+            mixer_id = "0"  # TODO: make this a unique identifier for the mixer
+            # Start the audio mixer. The port draw is inside the try: it can
+            # now raise if the pool is exhausted, and losing the mixer must
+            # not abort the whole node start.
+            # (assign_ports(cue=None) registers via add_config_ports itself —
+            # the explicit second call that used to sit here was redundant.)
             try:
+                mixer_ports = PORT_HANDLER.assign_ports(["audio_mixer"])
                 PLAYER_HANDLER.start_audio_mixer(
                     audio_outputs=audio_outputs,
-                    port=mixer_ports['audio_mixer'],
+                    port=mixer_ports["audio_mixer"],
                     mixer_id=mixer_id,
-                    path=self.cm.node_conf['audiomixer']['path'],
-                    args=self.cm.node_conf['audiomixer']['args']
+                    path=self.cm.node_conf["audiomixer"]["path"],
+                    args=self.cm.node_conf["audiomixer"]["args"],
                 )
-                Logger.info(f'Audio mixer started successfully for mixer {mixer_id}')
+                Logger.info(f"Audio mixer started successfully for mixer {mixer_id}")
                 # Register mixer with Controller via NNG
                 try:
-                    CUE_HANDLER.communications_thread.add_player(f'audiomixer_{mixer_id}', None, timeout=0.1)
-                    Logger.info(f'Audio mixer {mixer_id} registered with Controller')
+                    CUE_HANDLER.communications_thread.add_player(
+                        f"audiomixer_{mixer_id}", None, timeout=0.1
+                    )
+                    Logger.info(f"Audio mixer {mixer_id} registered with Controller")
                 except Exception as e:
-                    Logger.warning(f'Could not register mixer with Controller: {e}')
+                    Logger.warning(f"Could not register mixer with Controller: {e}")
+
+                # Assert a known unity state at startup so the controller shadow
+                # (hence the UI) reflects real gain from t=0, then snapshot it.
+                try:
+                    mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+                    if mixer_client:
+                        mixer_client.reset_volumes()
+                    self._report_mixer_status()
+                except Exception as e:
+                    Logger.warning(f"Mixer startup state assert/report failed: {e}")
             except Exception as e:
-                Logger.error(f'Error starting audio mixer: {e}')
+                Logger.error(
+                    f"Error starting audio mixer: {e}. "
+                    f"Audio on this node will be SILENT."
+                )
                 Logger.exception(e)
         else:
-            Logger.info('No audio outputs detected, skipping audio mixer initialization')
-        
-        # Build audio output lookup keyed by <id> (mirrors video output pattern)
+            Logger.info(
+                "No audio outputs detected, skipping audio mixer initialization"
+            )
+
+        # Build audio output lookup keyed by <id> (mirrors video output
+        # pattern)
         audio_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get('audio', []):
+        for port_type_dict in self.cm.node_mappings.get("audio", []):
             for port_type_list in port_type_dict.values():
                 for port in port_type_list:
                     for _, output_data in port.items():
-                        output_id = str(output_data.get('id', output_data['name']))
-                        mappings = output_data.get('mappings', [])
-                        mapped_to = mappings[0]['mapped_to'] if mappings else output_data['name']
+                        output_id = str(output_data.get("id", output_data["name"]))
+                        mappings = output_data.get("mappings", [])
+                        mapped_to = (
+                            mappings[0]["mapped_to"]
+                            if mappings
+                            else output_data["name"]
+                        )
                         audio_outputs[output_id] = {
-                            'name': output_data['name'],
-                            'mapped_to': mapped_to,
+                            "name": output_data["name"],
+                            "mapped_to": mapped_to,
                         }
         PLAYER_HANDLER.set_audio_outputs(audio_outputs)
 
-        # Set the audio player generator
-        PLAYER_HANDLER.set_audio_output_generator(
-            self.cm.node_conf['audioplayer']['path'],
-            self.cm.node_conf['audioplayer']['args']
+        # Set the audio player generator. Append --output-latency-ms
+        # from settings.xml when the operator supplied an integer
+        # override (isinstance int); "auto" or absent ⇒ audioplayer
+        # runs its Phase-3 JACK-latency query path.
+        audio_args = _append_output_latency_flag(
+            self.cm.node_conf["audioplayer"]["args"],
+            self.cm.node_conf["audioplayer"],
         )
+        PLAYER_HANDLER.set_audio_output_generator(
+            self.cm.node_conf["audioplayer"]["path"],
+            audio_args,
+        )
+
+    def _report_mixer_status(self, output_index: str = "0") -> None:
+        """Snapshot the local mixer's authoritative gain to the controller.
+
+        Sent on SETTLE EVENTS only — mixer startup and after each
+        reset_volumes — never per UI write. A per-write report would race the
+        controller's synchronous optimistic populate (unordered NNG command
+        threads) and make faders jump backward on a fast drag; live UI writes
+        are already shadowed accurately controller-side, so the node only needs
+        to report the resets the controller can't observe.
+        """
+        try:
+            mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+            if not mixer_client:
+                return
+            entries = mixer_client.snapshot()
+            if not entries:
+                return
+            CUE_HANDLER.communications_thread.update_mixer_status(
+                entries, output_index=output_index, timeout=0.1
+            )
+            Logger.debug(f"Reported mixer status to controller: {entries}")
+        except Exception as e:
+            Logger.warning(f"Could not report mixer status: {e}")
 
     # Video functions
     def set_video_players(self):
         """Set the video players"""
         Logger.info(f'Setting video players with: {self.cm.node_conf["videoplayer"]}')
-        if not self.cm.node_hw_outputs['video_outputs']:
-            Logger.info('No video outputs detected.')
+        if not self.cm.node_hw_outputs["video_outputs"]:
+            Logger.info("No video outputs detected.")
             return
-        
-        vc_conf = self.cm.node_conf.get('videoplayer', {})
-        osc_video_port = int(vc_conf.get('osc_port', VIDEOCOMPOSER_OSC_PORT_DEFAULT))
-        PLAYER_HANDLER.set_video_client(osc_video_port)
-        PORT_HANDLER.add_config_ports({'videocomposer': osc_video_port})
-        
-        # Build video output configs from node_mappings
-        # Keys are <id> (stable integer, what cues reference via output_name)
-        # <name> is a human label, <mapped_to> is the DRM connector for videocomposer
+
+        PLAYER_HANDLER.add_node_uuid(self.cm.node_uuid)
+        vc_conf = self.cm.node_conf.get("videoplayer", {})
+        osc_video_port = int(vc_conf.get("osc_port", VIDEOCOMPOSER_OSC_PORT_DEFAULT))
+        # Declare BEFORE building the client: the client draws its own local
+        # OSC port from the pool, and must not be handed the videocomposer's.
+        # This is also the only registration of this port — it comes from the
+        # nested videoplayer/osc_port key, which get_config_ports() (top-level
+        # only) cannot see, so BaseEngine's hoisted call misses it.
+        PORT_HANDLER.add_config_ports({"videocomposer": osc_video_port})
+        try:
+            PLAYER_HANDLER.set_video_client(osc_video_port)
+        except Exception as e:
+            Logger.error(
+                f"Could not create the videocomposer OSC client: {e}. "
+                f"Video on this node will not respond."
+            )
+            Logger.exception(e)
+            return
+
+        # Canvas geometry comes from /run/cuems/display.conf, written by
+        # cuems-generate-display-conf (videocomposer's ExecStartPre). It's the
+        # same file the videocomposer reads, so engine + VC agree on canvas
+        # size and per-output regions without a handshake. The XML's optional
+        # <canvas_region> is a UI-template hint (normalized [0,1]) and is
+        # ignored here — engine never sources physical layout from XML.
+        display_regions, (canvas_w, canvas_h) = read_display_conf()
+
         video_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get('video', []):
+        for port_type_dict in self.cm.node_mappings.get("video", []):
             for port_type_list in port_type_dict.values():
                 for port in port_type_list:
                     for _, output_data in port.items():
-                        output_id = str(output_data.get('id', output_data['name']))
-                        name = output_data['name']
-                        region = output_data.get('canvas_region', {})
-                        mappings = output_data.get('mappings', [])
-                        mapped_to = mappings[0]['mapped_to'] if mappings else name
-                        x = region.get('x', 0)
-                        y = region.get('y', 0)
-                        width = region.get('width', 1920)
-                        height = region.get('height', 1080)
+                        output_id = str(output_data.get("id", output_data["name"]))
+                        name = output_data["name"]
+                        mappings = output_data.get("mappings", [])
+                        mapped_to = mappings[0]["mapped_to"] if mappings else name
+                        region = display_regions.get(mapped_to)
+                        if region is None:
+                            Logger.warning(
+                                f"DISPLAY_MISMATCH: XML output id={output_id} "
+                                f"name={name!r} maps to {mapped_to!r} which"
+                                f"is "
+                                f"not in display.conf; skipping. Available: "
+                                f"{sorted(display_regions.keys())}"
+                            )
+                            continue
                         video_outputs[output_id] = {
-                            'name': name,
-                            'mapped_to': mapped_to,
-                            'x': x,
-                            'y': y,
-                            'width': width,
-                            'height': height,
-                            'canvas_region': region if region else {'x': x, 'y': y, 'width': width, 'height': height},
+                            "name": name,
+                            "mapped_to": mapped_to,
+                            "x": region["x"],
+                            "y": region["y"],
+                            "width": region["width"],
+                            "height": region["height"],
+                            "canvas_region": dict(region),
                         }
-        PLAYER_HANDLER.start_video_outputs(video_outputs)
-
+        PLAYER_HANDLER.start_video_outputs(
+            video_outputs, canvas_override=(canvas_w, canvas_h)
+        )
 
     # DMX functions
     def set_dmx_players(self):
         """Set the DMX player for this node and register its endpoints."""
-        # Assign a port for the DMX player
-        dmx_ports = PORT_HANDLER.assign_ports(['dmx_player'])
-        PORT_HANDLER.add_config_ports(dmx_ports)
-
         # Get node UUID for player naming
-        node_uuid = self.cm.node_conf.get('uuid', 'default_node')
+        node_uuid = self.cm.node_conf.get("uuid", "default_node")
 
-        # Start the DMX player
+        # Start the DMX player. The port draw is inside the try: it can now
+        # raise if the pool is exhausted, and losing DMX must not abort the
+        # whole node start. (assign_ports(cue=None) registers via
+        # add_config_ports itself — the second call here was redundant.)
         try:
+            dmx_ports = PORT_HANDLER.assign_ports(["dmx_player"])
+            # Append --output-latency-ms from settings.xml when an
+            # integer override is present. Dmx has no "auto" form —
+            # absent ⇒ dmxplayer's 35 ms Phase-5A default stands.
+            dmx_args = _append_output_latency_flag(
+                self.cm.node_conf["dmxplayer"]["args"],
+                self.cm.node_conf["dmxplayer"],
+            )
             PLAYER_HANDLER.start_dmx_player(
-                port=dmx_ports['dmx_player'],
+                port=dmx_ports["dmx_player"],
                 node_uuid=node_uuid,
-                path=self.cm.node_conf['dmxplayer']['path'],
-                args=self.cm.node_conf['dmxplayer']['args']
+                path=self.cm.node_conf["dmxplayer"]["path"],
+                args=dmx_args,
             )
             try:
-                CUE_HANDLER.communications_thread.add_player(f'dmxplayer_{node_uuid}', None, timeout=0.1)
+                CUE_HANDLER.communications_thread.add_player(
+                    f"dmxplayer_{node_uuid}", None, timeout=0.1
+                )
             except Exception:
                 pass  # Ignore - NNG is for distributed nodes
-            Logger.info(f'DMX player started successfully for node {node_uuid}')
+            Logger.info(f"DMX player started successfully for node {node_uuid}")
         except Exception as e:
-            Logger.error(f'Error starting DMX player: {e}')
+            Logger.error(f"Error starting DMX player: {e}")
             Logger.exception(e)
             return
-        
+
     def quit_dmx_devs(self):
         """Quit the DMX player if it exists"""
         dmx_client = PLAYER_HANDLER.get_dmx_player_client()
         if dmx_client:
             try:
-                dmx_client.set_value('/quit', 1)
+                dmx_client.set_value("/quit", 1)
             except Exception as e:
                 Logger.exception(e)
-        CUE_HANDLER.communications_thread.remove_player(f'dmxplayer_{self.cm.node_uuid}')
-
+        CUE_HANDLER.communications_thread.remove_player(
+            f"dmxplayer_{self.cm.node_uuid}"
+        )
 
     #########################
     # Project logic
     #########################
     def ready_project(self, project):
-        """Prepare the project to be played"""
-        self.deploy_project(project)
+        """Prepare the project to be played.
+
+        deploy_project() runs in _load_project_inner BEFORE this point,
+        before the teardown of the previous project — so that a deploy
+        failure aborts the load without destroying running state.
+        Media deploy runs here because it is best-effort: a failure
+        logs but does not abort (cached media may already be on disk).
+        """
         self.cm.load_project_config(project)
         self.read_script(project)
         self.deploy_media(project)
@@ -469,23 +684,31 @@ class NodeEngine(BaseEngine):
         outputs_map = {}
         if cuelist is None:
             cuelist = self.script.cuelist
+        if cuelist.contents is None:
+            Logger.warning("Cuelist contents is None, skipping map_cue_outputs")
+            return outputs_map
         for cue in cuelist.contents:
             if isinstance(cue, CueList):
                 outputs_map.update(self.map_cue_outputs(cue))
+                continue
             elif not isinstance(cue, MediaCue):
                 continue
 
-            outputs = [x[1] for x in cue.get_all_output_names() if x[0] == self.cm.node_uuid]
+            outputs = [
+                x[1] for x in cue.get_all_output_names() if x[0] == self.cm.node_uuid
+            ]
             if outputs:
                 outputs_map[cue.id] = outputs
-        Logger.debug(f'Outputs map: {outputs_map}')
+        Logger.debug(f"Outputs map: {outputs_map}")
         return outputs_map
 
     def load_project(self, project):
         """Load the project files to the node"""
         with self._loading_lock:
             if self._loading:
-                Logger.warning(f'Load already in progress, ignoring duplicate load of {project}')
+                Logger.warning(
+                    f"Load already in progress, ignoring duplicate load of {project}"
+                )
                 return
             self._loading = True
 
@@ -497,27 +720,36 @@ class NodeEngine(BaseEngine):
 
     def _load_project_inner(self, project):
         # Don't allow loading while script is running
-        if self.get_status('running') == "yes":
-            Logger.warning(f'Cannot load project {project} while script is running. Stop first.')
-            return
+        if self.get_status("running") == "yes":
+            Logger.warning(
+                f"Cannot load project {project} while script is running. "
+                f"Stop the script first."
+            )
+            return False
+
+        # Deploy the critical project files (script.xml, mappings.xml,
+        # settings.xml) BEFORE tearing down the previous project. If the
+        # controller is unreachable we abort here with the previous
+        # project still armed and usable — better than ending up with
+        # everything stopped and no new project loaded.
+        if not self.deploy_project(project):
+            Logger.error(
+                f"Project deploy FAILED for {project} — aborting load; "
+                f"previous project remains unchanged"
+            )
+            return False
+
+        self._gradient_cancel_all("project load")
 
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
         CUE_HANDLER.stop_all_cues()
 
         # DMX: stop following MTC, blackout all universes.
-        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
-        if dmx_client:
-            try:
-                dmx_client.disable_mtcfollow()
-            except Exception as e:
-                Logger.warning(f'DMX disable mtcfollow failed: {e}')
-            try:
-                dmx_client.send_blackout()
-            except Exception as e:
-                Logger.warning(f'DMX blackout failed: {e}')
+        self._dmx_reset()
 
-        # Video: reset videocomposer (remove all layers, cancel loads, reset master).
+        # Video: reset videocomposer (remove all layers, cancel loads, reset
+        # master).
         self.unload_video_devs()
 
         # Audio: reset mixer volumes, kill all players, clean up JACK.
@@ -526,17 +758,29 @@ class NodeEngine(BaseEngine):
             try:
                 mixer_client.reset_volumes()
             except Exception as e:
-                Logger.warning(f'JACK volume reset failed: {e}')
+                Logger.warning(f"JACK volume reset failed: {e}")
+            # Report the reset so the UI reflects real (unity) gain, not the
+            # stale value it may have shown from a previous UI write.
+            self._report_mixer_status()
         PLAYER_HANDLER.kill_all_audio_players()
         PLAYER_HANDLER.kill_orphaned_audio_processes()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
 
         # Disarm all cues from the previous project.
         CUE_HANDLER.disarm_all()
-        
+
+        # Clear the engine's 24h MTC wrap accumulator on this project transition,
+        # co-orchestrated with the DMX blackout + videocomposer reset above (which
+        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
+        # reload's small backward wire delta can't trip the wire-driven reset, so
+        # do it explicitly here — else a project loaded after a >24h run starts
+        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
+
         # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
-        
+
         # Prepare the script to be played (arms new cues)
         self.ready_script()
 
@@ -546,23 +790,11 @@ class NodeEngine(BaseEngine):
         # Confirm the project is loaded
         self.set_show_lock_file()
         self.script.unix_name = project
-        self.set_status('load', project)
-        Logger.info(f'Project {project} loaded')
+        self.set_status("load", project)
+        Logger.info(f"Project {project} loaded")
 
         # Notify Controller that arming is complete (GO button can go green)
-        try:
-            from .comms.NodesHub import NodeOperation, OperationType, ActionType
-            operation = NodeOperation(
-                type=OperationType.STATUS,
-                action=ActionType.UPDATE,
-                sender=self.cm.node_uuid,
-                target='armed_ready',
-                data={'armed': 'yes'}
-            )
-            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-            Logger.debug('Notified Controller that arming after load is complete')
-        except Exception as e:
-            Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+        self._notify_armed_ready("arming after load")
 
         # Broadcast initial nextcue to UI
         self._broadcast_nextcue()
@@ -570,56 +802,90 @@ class NodeEngine(BaseEngine):
         return True
 
     def deploy_project(self, project):
-        """Deploy the project files to the node"""
-        self.deploy_manager.sync_files(project, 'project')
+        """Deploy the project files (script.xml, mappings.xml, settings.xml).
+
+        Critical path: if these fail to sync, the local copy may be stale
+        and arming cues against it is unsafe. Caller is expected to abort
+        the load on False.
+        """
+        return self.deploy_manager.sync_files(project, "project")
 
     def deploy_media(self, project):
-        """Deploy the media files (and their .idx sidecar indexes) to the node"""
+        """Deploy the media files (and their .idx sidecar indexes).
+
+        Best-effort: a failure here is recoverable if media is already
+        cached on disk. Returns False to surface the failure to logs,
+        but the caller continues the load.
+        """
         if not self.script:
-            Logger.error('No script loaded')
-            return
-        file_names = self.script.get_own_media_filenames(config=self.cm)
-        if len(file_names) == 0:
-            Logger.info('No media files to deploy')
-            return
-        # Also include .idx sidecar files for video assets (rsync silently
-        # skips any entry that does not exist on the source, so this is safe
-        # even when the index has not been created yet).
-        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
-        idx_names = [
-            f'indexes/{name}.idx'
-            for name in file_names
-            if os.path.splitext(name)[1].lower() in video_exts
-        ]
-        self.deploy_manager.sync_files(project, 'media', file_names + idx_names)
+            Logger.error("No script loaded")
+            return False
+        bare_names = self.script.get_own_media_filenames(config=self.cm)
+        if len(bare_names) == 0:
+            Logger.info("No media files to deploy")
+            return True
+        if not self.deploy_manager.sync_files(project, "media", bare_names):
+            Logger.error(
+                f"Media deploy failed for {project} — continuing with cached "
+                f"files; cues whose media is missing locally will fail on GO"
+            )
+            return False
+        return True
 
     def ensure_video_indexes(self):
-        """Run cuems-videoindexer on any video files that are missing a .idx sidecar.
+        """
+        Run cuems-videoindexer on any video files that are missing a .idx
+        sidecar.
 
-        This is a safety net for files that were copied manually or deployed to a
-        node that never ran the editor upload hook. For normally-uploaded files the
+        This is a safety net for files that were copied manually or deployed to
+        a
+        node that never ran the editor upload hook. For normally-uploaded files
+        the
         index was already created by the editor and this is a no-op.
         """
         if not self.script:
             return
         file_names = self.script.get_own_media_filenames(config=self.cm)
-        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.mpg'}
+        video_exts = {".mp4", ".mov", ".avi", ".mkv", ".mpg"}
         unindexed = []
         for name in file_names:
             ext = os.path.splitext(name)[1].lower()
             if ext not in video_exts:
                 continue
             full_path = PLAYER_HANDLER.media_path(name)
-            idx_dir = os.path.join(os.path.dirname(full_path), 'indexes')
-            idx_path = os.path.join(idx_dir, os.path.basename(full_path) + '.idx')
+            idx_dir = os.path.join(os.path.dirname(full_path), "indexes")
+            idx_path = os.path.join(idx_dir, os.path.basename(full_path) + ".idx")
             if not os.path.exists(idx_path):
                 unindexed.append(full_path)
         if unindexed:
-            Logger.info(f'ensure_video_indexes: indexing {len(unindexed)} video(s) missing .idx')
+            Logger.info(
+                f"ensure_video_indexes: indexing {len(unindexed)} video(s)"
+                f"missing .idx: "
+                f"{[os.path.basename(p) for p in unindexed]}"
+            )
             try:
-                subprocess.run(['cuems-videoindexer'] + unindexed, timeout=600)
+                result = subprocess.run(
+                    ["cuems-videoindexer"] + unindexed,
+                    timeout=600,
+                    capture_output=True,
+                    text=True,
+                )
             except Exception as e:
-                Logger.warning(f'ensure_video_indexes: indexer failed: {e}')
+                Logger.warning(f"ensure_video_indexes: indexer failed: {e}")
+                return
+            if result.returncode == 0:
+                Logger.info("ensure_video_indexes: indexer ok (rc=0)")
+                if result.stdout:
+                    Logger.debug(
+                        f"ensure_video_indexes stdout: {result.stdout.strip()}"
+                    )
+            else:
+                Logger.warning(
+                    "ensure_video_indexes: indexer returned"
+                    f"rc={result.returncode}. "
+                    f"stdout={result.stdout.strip()!r}"
+                    f"stderr={result.stderr.strip()!r}"
+                )
 
     #########################
     # Nextcue
@@ -631,76 +897,179 @@ class NodeEngine(BaseEngine):
             CUE_HANDLER.communications_thread.update_nextcue(cue_id, timeout=0.1)
             Logger.debug(f'Broadcast nextcue: {cue_id or "(none)"}')
         except Exception as e:
-            Logger.warning(f'Could not broadcast nextcue: {e}')
+            Logger.warning(f"Could not broadcast nextcue: {e}")
 
     def _arm_with_enabled_guard(self, cue, project_gen: int):
-        """Arm a cue and disarm if it was disabled or project changed while arming.
+        """
+        Arm a cue and disarm if it was disabled or project changed while
+        arming.
 
         Runs in a daemon thread. After arm() completes, re-checks
         cue.enabled and project generation to handle races where:
         - A disable command arrived while arm_cue() was loading media
         - A stop/reload invalidated this project's cues
+
+        Bounded post-STOP window: these checks run before/after arm(), not
+        during it — arm() can block up to ~15 s in the JACK port wait, so a
+        stale arm can spawn a player that outlives a STOP by that much until
+        the re-check below disarms it. It is armed but never revealed (no
+        /mtcfollow), so it is inaudible.
         """
         if self._project_generation != project_gen:
-            Logger.info(f'Aborting arm of {cue.id} — project generation changed')
+            Logger.info(f"Aborting arm of {cue.id} — project generation changed")
             return
-        CUE_HANDLER.arm(cue, init=True)
+        try:
+            CUE_HANDLER.arm(cue, init=True)
+        except Exception as exc:
+            Logger.error(f"Async re-arm of enabled cue {cue.id} failed: {exc}")
+            return
         # If project changed during arm, disarm the stale cue.
         if self._project_generation != project_gen:
             if CUE_HANDLER.find_armed_cue(cue):
                 CUE_HANDLER.disarm(cue)
-            Logger.info(f'Disarmed cue {cue.id} — project changed during async arm')
+            Logger.info(f"Disarmed cue {cue.id} — project changed during async arm")
             return
         # If cue was disabled while we were arming, disarm now.
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
             CUE_HANDLER.disarm(cue)
-            Logger.info(f'Disarmed cue {cue.id} — disabled during async arm')
+            Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
 
     def _action_result_sink(self, outcome: dict):
-        """Custom result sink for ActionHandler — extends default with cue_enabled sync."""
+        """
+        Custom result sink for ActionHandler — extends default with cue_enabled
+        sync.
+        """
         from .cues.ActionHandler import ACTION_HANDLER
+
         # Always run default behavior (sends action_cue_outcome via NNG)
         ACTION_HANDLER._default_result_sink(outcome)
 
-        # If an enable/disable action was applied, notify Controller
-        action_type = outcome.get('action_type')
-        status = outcome.get('status')
-        if action_type in ('enable', 'disable') and status == 'applied':
-            target_id = outcome.get('target_id')
+        # If an enable/disable action was applied, notify Controller and apply
+        # the local arm/disarm side effects (pre-arm the enabled cue so its GO
+        # doesn't hit the not-loaded fallback re-arm; disarm a disabled idle
+        # cue). 'applied_no_change' outcomes are deliberately excluded →
+        # idempotent under rapid toggles.
+        action_type = outcome.get("action_type")
+        status = outcome.get("status")
+        if action_type in ("enable", "disable") and status == "applied":
+            target_id = outcome.get("target_id")
             if target_id:
-                self._notify_cue_enabled(target_id, action_type == 'enable')
+                enabled = action_type == "enable"
+                # Notify FIRST: the Controller cache/UI update must never be
+                # starved by a side-effect failure (an exception here would be
+                # swallowed by _emit_outcome's blanket try/except).
+                self._notify_cue_enabled(target_id, enabled)
+                script = self.script
+                if script is None:
+                    # Project unloading concurrently — nothing to arm/disarm;
+                    # in-flight ReArm threads self-cancel on generation change.
+                    return
+                cue = script.find(target_id)
+                if cue is None:
+                    Logger.warning(
+                        f"cue_enabled side effects: cue {target_id} not found in script"
+                    )
+                    return
+                try:
+                    self._apply_cue_enabled_side_effects(cue, enabled)
+                except Exception as exc:
+                    Logger.error(
+                        f"cue_enabled side effects failed for {target_id}: {exc}"
+                    )
 
-    def _notify_cue_enabled(self, cue_id: str, enabled: bool):
-        """Send cue enabled status to Controller via NNG."""
-        from .comms.NodesHub import NodeOperation, OperationType, ActionType
+    def _gradient_cancel_all(self, context: str):
+        """Cancel all in-flight gradient fades.
+
+        Shared by _load_project_inner (project load) and stop_playback
+        (STOP) — both must flush queued fades before stopping cue threads,
+        so gradient OSC traffic never outlives the cues that started it.
+        """
+        gradient_client = PLAYER_HANDLER.get_gradient_client()
+        if gradient_client:
+            try:
+                gradient_client.send_cancel_all()
+            except Exception as exc:
+                Logger.error(f"gradient send_cancel_all failed on {context}: {exc}")
+        else:
+            Logger.debug(
+                f"gradient_client not initialised, skipping cancel_all on {context}"
+            )
+
+    def _dmx_reset(self):
+        """Stop DMX MTC following and blackout all universes.
+
+        Shared by _load_project_inner and stop_playback: both need the DMX
+        playhead frozen and outputs zeroed before video/audio teardown.
+        """
+        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
+        if dmx_client:
+            try:
+                dmx_client.disable_mtcfollow()
+            except Exception as e:
+                Logger.warning(f"DMX disable mtcfollow failed: {e}")
+            try:
+                dmx_client.send_blackout()
+            except Exception as e:
+                Logger.warning(f"DMX blackout failed: {e}")
+
+    def _notify_armed_ready(self, context: str):
+        """Notify Controller that this node finished (re)arming, so the GO
+        button can go green.
+
+        Shared by _load_project_inner (arming after load) and stop_playback
+        (re-arm after STOP).
+        """
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
         try:
             operation = NodeOperation(
                 type=OperationType.STATUS,
                 action=ActionType.UPDATE,
-                sender=self.cm.node_uuid if hasattr(self, 'cm') and self.cm else 'node',
-                target='cue_enabled',
-                data={'cue_id': cue_id, 'enabled': enabled}
+                sender=self.cm.node_uuid,
+                target="armed_ready",
+                data={"armed": "yes"},
+            )
+            CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
+            Logger.debug(f"Notified Controller that {context} is complete")
+        except Exception as e:
+            Logger.warning(f"Could not notify Controller of armed_ready: {e}")
+
+    def _notify_cue_enabled(self, cue_id: str, enabled: bool):
+        """Send cue enabled status to Controller via NNG."""
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        try:
+            operation = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=(
+                    self.cm.node_uuid if hasattr(self, "cm") and self.cm else "node"
+                ),
+                target="cue_enabled",
+                data={"cue_id": cue_id, "enabled": enabled},
             )
             CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
         except Exception as e:
-            Logger.warning(f'Could not notify cue_enabled: {e}')
+            Logger.warning(f"Could not notify cue_enabled: {e}")
 
     def set_next_cue(self, value):
-        """Handle setnextcue command from the UI — override next_cue_pointer."""
+        """
+        Handle setnextcue command from the UI — override next_cue_pointer.
+        """
         if not self.script:
-            Logger.warning('No script loaded, cannot set next cue.')
+            Logger.warning("No script loaded, cannot set next cue.")
             return
         cue = self.script.find(value)
         if cue:
             self.next_cue_pointer = cue
             if not CUE_HANDLER.find_armed_cue(cue):
-                Logger.info(f'Re-arming cue {cue.id} selected as next cue')
+                Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
             CUE_HANDLER._arm_ahead(cue)  # extend window from selected cue
             self._broadcast_nextcue()
-            Logger.info(f'Next cue overridden by UI: {value}')
+            Logger.info(f"Next cue overridden by UI: {value}")
         else:
-            Logger.warning(f'setnextcue: cue {value} not found in script')
+            Logger.warning(f"setnextcue: cue {value} not found in script")
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
@@ -708,43 +1077,68 @@ class NodeEngine(BaseEngine):
         Value format: "<cue_id> <0|1>" (space-separated UUID and enabled flag).
         """
         if not self.script:
-            Logger.warning('No script loaded, cannot toggle cue enabled')
+            Logger.warning("No script loaded, cannot toggle cue enabled")
             return
 
         if not value or not isinstance(value, str):
-            Logger.warning(f'Invalid cue_enabled value: {repr(value)}')
+            Logger.warning(f"Invalid cue_enabled value: {repr(value)}")
             return
 
-        parts = value.split(' ', 1)
-        if len(parts) != 2 or parts[1] not in ('0', '1'):
-            Logger.warning(f'Invalid cue_enabled format: {repr(value)}')
+        parts = value.split(" ", 1)
+        if len(parts) != 2 or parts[1] not in ("0", "1"):
+            Logger.warning(f"Invalid cue_enabled format: {repr(value)}")
             return
 
         cue_id, enabled_str = parts
-        enabled = enabled_str == '1'
+        enabled = enabled_str == "1"
 
         cue = self.script.find(cue_id)
         if not cue:
-            Logger.warning(f'cue_enabled: cue {cue_id} not found in script')
+            Logger.warning(f"cue_enabled: cue {cue_id} not found in script")
             return
 
         cue.enabled = enabled
+        self._apply_cue_enabled_side_effects(cue, enabled)
+
+        self._notify_cue_enabled(cue_id, enabled)
+        Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
+
+    def _apply_cue_enabled_side_effects(self, cue, enabled: bool):
+        """React to a cue's enabled-flag change: async re-arm on enable,
+        disarm (if idle) on disable.
+
+        Shared by _handle_cue_enabled (Controller-driven toggle) and
+        _action_result_sink (enable/disable ActionCue executed on this node).
+        Callers notify the Controller themselves — this method never does.
+        """
+        # A CueList target has no player of its own (arm_cue is a no-op for
+        # containers): react on its first enabled child instead, mirroring
+        # run_cueList/initial_cuelist_process's first-enabled-child walk.
+        if isinstance(cue, CueList):
+            child = next(
+                (c for c in getattr(cue, "contents", None) or [] if c.enabled), None
+            )
+            if child is not None:
+                self._apply_cue_enabled_side_effects(child, enabled)
+            return
 
         if not enabled:
-            # Disarm only if armed and NOT currently playing.
-            # A playing cue has a running go thread (_go_generation > 0) and is still loaded.
-            is_playing = (getattr(cue, '_go_generation', 0) > 0
-                          and getattr(cue, 'loaded', False))
-            if CUE_HANDLER.find_armed_cue(cue) and not is_playing:
+            # Disarm only if armed and NOT currently playing (never cut live
+            # playback). _playing is the lifecycle flag set by go() and
+            # cleared by disarm()/stop_all_cues() — unlike _go_generation,
+            # it goes False again when playback ends, so a played-then-
+            # re-armed cue can still be disarmed on disable.
+            if CUE_HANDLER.find_armed_cue(cue) and not getattr(cue, "_playing", False):
                 CUE_HANDLER.disarm(cue)
-                Logger.info(f'Disarmed disabled cue {cue_id}')
+                Logger.info(f"Disarmed disabled cue {cue.id}")
             # Recalculate next_cue_pointer if the disabled cue was next
-            if self.next_cue_pointer and self.next_cue_pointer.id == cue_id:
+            if self.next_cue_pointer and self.next_cue_pointer.id == cue.id:
                 self.next_cue_pointer = cue.get_next_cue()
                 self._broadcast_nextcue()
-                Logger.info(f'Next cue was disabled, advanced to {self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
+                next_id = self.next_cue_pointer.id if self.next_cue_pointer else "none"
+                Logger.info(f"Next cue was disabled, advanced to {next_id}")
         else:
-            # Re-arm in a daemon thread to avoid blocking _command_lock
+            # Re-arm in a daemon thread to avoid blocking the caller
             # (arm() is slow — media loading, process spawning).
             if cue._local and not CUE_HANDLER.find_armed_cue(cue):
                 gen = self._project_generation
@@ -752,12 +1146,9 @@ class NodeEngine(BaseEngine):
                     target=self._arm_with_enabled_guard,
                     args=(cue, gen),
                     daemon=True,
-                    name=f'ReArm:{cue_id}'
+                    name=f"ReArm:{cue.id}",
                 ).start()
-                Logger.info(f'Re-arming enabled cue {cue_id} (async)')
-
-        self._notify_cue_enabled(cue_id, enabled)
-        Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
+                Logger.info(f"Re-arming enabled cue {cue.id} (async)")
 
     #########################
     # Script logic
@@ -765,21 +1156,23 @@ class NodeEngine(BaseEngine):
     def ready_script(self):
         """Check if the script is ready to be played"""
         if not self.script:
-            Logger.warning('No script loaded, cannot process GO command.')
+            Logger.warning("No script loaded, cannot process GO command.")
             return
-        
+
         self.ongoing_cue = None
         self.next_cue_pointer = None
         self.go_offset = 0
         self._project_generation += 1  # Abort in-flight daemon arm threads
         self.unload_video_devs()
         CUE_HANDLER.disarm_all()
-        
+
         # Reset mixer volumes to default when preparing script
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
         if mixer_client:
             mixer_client.reset_volumes()
-        
+            # Report the reset so the UI reflects real (unity) gain.
+            self._report_mixer_status()
+
         self.initial_cuelist_process()
 
         # Set initial nextcue to the first enabled cue in the script
@@ -791,78 +1184,132 @@ class NodeEngine(BaseEngine):
                     break
             self.next_cue_pointer = first_enabled
 
-        Logger.info(f'Script {self.script.name} loaded and ready to be played')
+        Logger.info(f"Script {self.script.name} loaded and ready to be played")
 
     def go_script(self, value):
         if not self.script:
-            Logger.warning('No script loaded, cannot process GO command.')
+            Logger.warning("No script loaded, cannot process GO command.")
             return
 
         if not self.with_mtc:
-            Logger.warning('No MTC listener, cannot process GO command.')
+            Logger.warning("No MTC listener, cannot process GO command.")
             return
 
         # Determine the cue to go
         if not self.ongoing_cue:
-            # First GO - use next_cue_pointer (may have been overridden by setnextcue)
+            # First GO - use next_cue_pointer (may have been overridden by
+            # setnextcue)
             cue_to_go = self.next_cue_pointer or self.script.cuelist.contents[0]
-            Logger.info(f'GO command received. Starting script {self.script.name}')
+            Logger.info(f"GO command received. Starting script {self.script.name}")
         else:
             # Successive GO - advance to next cue
             if self.next_cue_pointer:
                 cue_to_go = self.next_cue_pointer
-                Logger.info(f'GO command received. Advancing to next cue: {cue_to_go.id}')
+                Logger.info(
+                    f"GO command received. Advancing to next cue: {cue_to_go.id}"
+                )
             else:
-                # No next cue - script has finished. Do not stop timecode or reset state.
-                Logger.info('No more cues. Press STOP to restart.')
+                # No next cue - script has finished. Do not stop timecode or
+                # reset state.
+                Logger.info("No more cues. Press STOP to restart.")
                 return
 
-        if not cue_to_go._local:
-            Logger.info(f'Actual cue outside node space. CUE : {cue_to_go.id}')
+        # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
+        # timeline accumulator) AND as the drift baseline (go_offset). Every node
+        # captures its own GO_mtc off the shared MTC timeline, so the anchors it
+        # derives agree with every other node's.
+        GO_mtc = self.mtc_listener.main_tc.milliseconds_exact
+
+        # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
+        # accumulating the timeline offset Σ of the cues we skip. A non-local
+        # ENABLED cue advances the timeline (Σ += chain_advance = prewait+postwait,
+        # body EXCLUDED — Auto continue overlaps) so our first local cue lands at
+        # its true slot; a disabled cue is transparent (Σ += 0). A cue
+        # that breaks the chain (post_go != 'go') is a hand-off point — stop and
+        # wait for the next GO. This lets every node fire its own local cues from
+        # the same GO press, each at its correct MTC slot, and (Σ += 0 on
+        # disabled) fixes the old local-disabled early-return that made a
+        # post-disabled cue never play.
+        original = cue_to_go
+        sigma_ms = 0.0
+        walked = 0
+        while cue_to_go is not None and not (cue_to_go._local and cue_to_go.enabled):
+            if cue_to_go.post_go != "go":
+                cue_to_go = None
+                break
+            if cue_to_go.enabled:
+                sigma_ms += CUE_HANDLER._chain_advance_ms(cue_to_go)
+            cue_to_go = getattr(cue_to_go, "_target_object", None)
+            walked += 1
+            if walked > 1024:
+                Logger.error("GO chain walk hit safety limit; aborting")
+                cue_to_go = None
+                break
+
+        if cue_to_go is None:
+            # No local+enabled cue reachable in this GO's chain (spent on cues
+            # owned by other nodes, or a standalone disabled cue). Advance our
+            # next_cue_pointer in lockstep with the node that DID play; otherwise
+            # this node wedges on a cue it can never play and every subsequent GO
+            # re-evaluates it. (next_cue_pointer is a global sequence property —
+            # depends only on post_go/enabled, never on locality.)
+            self.next_cue_pointer = original.get_next_cue()
+            self._broadcast_nextcue()
+            Logger.info(
+                f'No local+enabled cue in post_go="go" chain from {original.id}; '
+                f"nothing to play on this node. Advanced next cue to "
+                f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
+            )
             return
 
-        if not cue_to_go.enabled:
-            Logger.info(f'Cue {cue_to_go.id} is disabled, advancing to next enabled cue')
-            self.next_cue_pointer = cue_to_go.get_next_cue()
-            self._broadcast_nextcue()
-            return
+        if walked:
+            Logger.info(
+                f"GO: skipped {walked} cue(s) (Σ={sigma_ms:.1f}ms)."
+                f"Starting from local cue {cue_to_go.id}"
+            )
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
-            Logger.info(f'Cue {cue_to_go.id} not armed, re-arming before GO')
+            Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
             CUE_HANDLER.arm(cue_to_go, init=True)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
-                Logger.error(f'Failed to re-arm cue {cue_to_go.id}, cannot GO')
+                Logger.error(f"Failed to re-arm cue {cue_to_go.id}, cannot GO")
                 return
 
         # Update state
-        self.set_status('running', "yes")
+        self.set_status("running", "yes")
         self.ongoing_cue = cue_to_go
-        
-        # Start the cue
-        main_thread = CUE_HANDLER.go(
-            cue_to_go,
-            self.mtc_listener
-        )
-        
+
+        # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
+        # adds this cue's own prewait to derive the reveal anchor (start).
+        main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener, GO_mtc + sigma_ms)
+        Logger.info(f"Cue {cue_to_go.id} started on main thread: {main_thread.name}")
+
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
-        self.go_offset = self.mtc_listener.main_tc.milliseconds
+        # Drift baseline; consumed by BaseEngine.timecode = mtc - go_offset.
+        # The GO press instant itself (not the first local cue's arrival).
+        self.go_offset = GO_mtc
 
         # Broadcast nextcue to UI
         self._broadcast_nextcue()
 
-        Logger.info(f'Cue {cue_to_go.id} started. Next cue: {self.next_cue_pointer.id if self.next_cue_pointer else "none"}')
+        Logger.info(
+            f"Cue {cue_to_go.id} started. Next cue:"
+            f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
+        )
 
     def stop_playback(self, value=None):
         """Stop playback, full cleanup, then re-arm so GO is available again.
-        
+
         Does the cleanup that ready_script() doesn't handle (DMX blackout,
         disconnect video, kill audio), then delegates reset + re-arm to
         ready_script(). Notifies Controller when armed (GO button green).
         """
-        Logger.info('STOP command received. Stopping playback.')
-        
-        self.set_status('running', "no")
+        Logger.info("STOP command received. Stopping playback.")
+
+        self.set_status("running", "no")
+
+        self._gradient_cancel_all("stop")
 
         # Signal all running cue threads to stop immediately.
         # Must happen BEFORE blackout/reset so loop_cue threads don't
@@ -872,20 +1319,11 @@ class NodeEngine(BaseEngine):
 
         # DMX: disable MTC following first (freezes the playhead so queued
         # scenes can't fire), then blackout via OLA for instant visual reset.
-        dmx_client = PLAYER_HANDLER.get_dmx_player_client()
-        if dmx_client:
-            try:
-                dmx_client.disable_mtcfollow()
-            except Exception as e:
-                Logger.warning(f'DMX disable mtcfollow failed: {e}')
-            try:
-                dmx_client.send_blackout()
-            except Exception as e:
-                Logger.warning(f'DMX blackout failed: {e}')
-        
+        self._dmx_reset()
+
         # Unload all video layers (instant visual blackout)
         self.unload_video_devs()
-        
+
         # Kill all audio players (ready_script does not do this)
         PLAYER_HANDLER.kill_all_audio_players()
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
@@ -893,58 +1331,38 @@ class NodeEngine(BaseEngine):
         # Reset state + disarm + volume reset + re-arm cues
         if self.script:
             self.ready_script()
-            Logger.info(f'Project {self.script.name} reset and ready for GO.')
-            
-            # Notify Controller that re-arm is complete (GO button can go green)
-            try:
-                from .comms.NodesHub import NodeOperation, OperationType, ActionType
-                operation = NodeOperation(
-                    type=OperationType.STATUS,
-                    action=ActionType.UPDATE,
-                    sender=self.cm.node_uuid,
-                    target='armed_ready',
-                    data={'armed': 'yes'}
-                )
-                CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
-                Logger.debug('Notified Controller that re-arm is complete')
-            except Exception as e:
-                Logger.warning(f'Could not notify Controller of armed_ready: {e}')
+            Logger.info(f"Project {self.script.name} reset and ready for GO.")
+
+            # Notify Controller that re-arm is complete (GO button can go
+            # green)
+            self._notify_armed_ready("re-arm")
 
             # Broadcast nextcue (reset to first cue after stop)
             self._broadcast_nextcue()
         else:
-            Logger.info('Playback stopped (no script loaded).')
-        
-        Logger.info('Playback stopped.')
+            Logger.info("Playback stopped (no script loaded).")
+
+        Logger.info("Playback stopped.")
 
 
-## MISCELLANEOUS FUNCTIONS ##
+# --------- MISCELLANEOUS FUNCTIONS --------- #
+
 
 # helper functions
-def is_int(value: any) -> bool:
-    """Check if a value is an integer"""
-    try:
-        int(value)
-        return True
-    except ValueError:
-        return False
-
-def get_config_ports(node_conf: dict) -> dict:
-    """Create a dict of ports from the config"""
-    k = [i for i in node_conf.keys() if 'port' in i and is_int(node_conf[i])]
-    v = [int(node_conf[i]) for i in k]
-    return dict(zip(k, v))
+# is_int() and get_config_ports() moved to tools/config_ports.py — BaseEngine
+# needs them and importing NodeEngine from there would invert the dependency.
 
 
 def redirect_audio_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the audio command to the audio player"""
-    if path_parts[0] == 'mixer':
+    if path_parts[0] == "mixer":
         redirect_audio_mixer_cmd(path_parts[1:], value)
-    elif path_parts[0] == 'cue':
+    elif path_parts[0] == "cue":
         redirect_audio_player_cmd(path_parts[1:], value)
     else:
-        Logger.error(f'Invalid audio command: {path_parts}')
+        Logger.error(f"Invalid audio command: {path_parts}")
         return
+
 
 def redirect_audio_mixer_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the audio mixer command to the audio mixer
@@ -958,8 +1376,9 @@ def redirect_audio_mixer_cmd(path_parts: list[str], value: str) -> None:
         value: Value to set
     """
     output_index, channel, _ = path_parts
-    mixer_cmd = f'/audiomixer/0_mixer/{channel}'
+    mixer_cmd = f"/audiomixer/0_mixer/{channel}"
     PLAYER_HANDLER.get_audio_mixer_client().set_value(mixer_cmd, value)
+
 
 def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the audio mixer command to the audio mixer
@@ -968,30 +1387,32 @@ def redirect_audio_player_cmd(path_parts: list[str], value: str) -> None:
      <cue_uuid>/0/volume -> /vol0
      <cue_uuid>/1/volume -> /vol1
      ...
-    
+
     Args:
         path_parts: List of path parts
         value: Value to set
     """
     cue_uuid, channel, _ = path_parts
-    audio_cmd = f'/vol{channel}'
+    audio_cmd = f"/vol{channel}"
     cue = CUE_HANDLER.get_armed_cue(cue_uuid)
     if not cue:
-        Logger.error(f'Cue {cue_uuid} not found')
+        Logger.error(f"Cue {cue_uuid} not found")
         return
     client: AudioClient = cue._osc
     client.set_value(audio_cmd, value)
 
+
 def redirect_dmx_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the DMX command to the DMX player"""
-    dmx_index = path_parts.index('mixer') + 1 # +1 to skip the 'mixer' keyword
-    dmx_cmd = '/' + '/'.join(path_parts[dmx_index:])
+    dmx_index = path_parts.index("mixer") + 1  # +1 to skip the 'mixer' keyword
+    dmx_cmd = "/" + "/".join(path_parts[dmx_index:])
     client: DmxClient = PLAYER_HANDLER.get_dmx_player_client()
     client.set_value(dmx_cmd, value)
 
+
 def redirect_video_cmd(path_parts: list[str], value: str) -> None:
     """Redirect the video command to the video client"""
-    videocomposer_index = path_parts.index('videocomposer')
-    videocomposer_cmd = '/' + '/'.join(path_parts[videocomposer_index:])
+    videocomposer_index = path_parts.index("videocomposer")
+    videocomposer_cmd = "/" + "/".join(path_parts[videocomposer_index:])
     client: VideoClient = PLAYER_HANDLER.get_video_client()
     client.set_value(videocomposer_cmd, value)

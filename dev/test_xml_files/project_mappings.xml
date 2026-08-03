@@ -14,6 +14,7 @@
             <audio>
                 <outputs>
                     <output>
+                        <id>0</id>
                         <name>system:playback_1</name>
                         <mappings>
                             <mapped_to>system:playback_1</mapped_to>
@@ -21,6 +22,7 @@
                         </mappings>
                     </output>
                     <output>
+                        <id>1</id>
                         <name>system:playback_2</name>
                         <mappings>
                             <mapped_to>system:playback_2</mapped_to>
@@ -29,12 +31,14 @@
                 </outputs>
                 <inputs>
                     <input>
+                        <id>0</id>
                         <name>system:capture_1</name>
                         <mappings>
                             <mapped_to>system:capture_1</mapped_to>
                         </mappings>
                     </input>
                     <input>
+                        <id>1</id>
                         <name>system:capture_2</name>
                         <mappings>
                             <mapped_to>system:capture_2</mapped_to>
@@ -45,7 +49,14 @@
             <video>
                 <outputs>
                     <output>
+                        <id>0</id>
                         <name>0</name>
+                        <canvas_region>
+                            <x>0</x>
+                            <y>0</y>
+                            <width>1</width>
+                            <height>1</height>
+                        </canvas_region>
                         <mappings>
                             <mapped_to>0</mapped_to>
                             <mapped_to>VideoOut1</mapped_to>
@@ -64,12 +75,14 @@
             <audio>
                 <outputs>
                     <output>
+                        <id>0</id>
                         <name>system:playback_1</name>
                         <mappings>
                             <mapped_to>system:playback_1</mapped_to>
                         </mappings>
                     </output>
                     <output>
+                        <id>1</id>
                         <name>system:playback_2</name>
                         <mappings>
                             <mapped_to>system:playback_2</mapped_to>
@@ -80,7 +93,14 @@
             <video>
                 <outputs>
                     <output>
+                        <id>0</id>
                         <name>0</name>
+                        <canvas_region>
+                            <x>0</x>
+                            <y>0</y>
+                            <width>1</width>
+                            <height>1</height>
+                        </canvas_region>
                         <mappings>
                             <mapped_to>0</mapped_to>
                         </mappings>
@@ -90,4 +110,5 @@
             <dmx />
         </node>
     </nodes>
+    <new_nodes></new_nodes>
 </cms:CuemsProjectMappings>

@@ -1,11 +1,14 @@
-from ctypes import *
-#import .log
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
+from ctypes import c_char_p, c_uint, c_uint64, c_void_p, cdll
 
 try:
-    libmtcmaster = cdll.LoadLibrary('libmtcmaster.so.0')
-except:
+    libmtcmaster = cdll.LoadLibrary("libmtcmaster.so.0")
+except Exception as e:
     libmtcmaster = None
-    raise ImportError('libmtcmaster import error')
+    raise ImportError(f"libmtcmaster import error: {e}")
 
 # void* MTCSender_create()
 libmtcmaster.MTCSender_create.argtypes = None
@@ -15,11 +18,12 @@ libmtcmaster.MTCSender_create.restype = c_void_p
 libmtcmaster.MTCSender_release.argtypes = [c_void_p]
 libmtcmaster.MTCSender_release.restype = None
 
-# void MTCSender_openPort(void* mtcsender, unsigned int portnumber, const char* portname);
+# void MTCSender_openPort(void* mtcsender, unsigned int portnumber, const
+# char* portname);
 try:
     libmtcmaster.MTCSender_openPort.argtypes = [c_void_p, c_uint, c_char_p]
     libmtcmaster.MTCSender_openPort.restype = None
-except:
+except Exception:
     libmtcmaster.MTCSender_openPort = None
 
 # void MTCSender_play(void* mtcsender);

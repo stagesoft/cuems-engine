@@ -1,3 +1,25 @@
+cuems-engine (0.1.0rc4-1) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm (source moved 52 files since 0.1.0rc3-1);
+    bump upstream version 0.1.0rc1 -> 0.1.0rc4 to match.
+  * PORT_HANDLER: make the port-exclusion list actually exclude (869ed9wf7).
+    add_config_ports() passed set_ports() the same dict object it already
+    held, so the `previous_ports == ports` guard was an identity check that
+    always returned early and _all_used_ports stayed permanently empty — the
+    engine could draw its own oscquery_ws_port (9190). Ports are now split
+    into reservations (validated), config declarations (cannot raise) and
+    system observations (cannot raise); the system scan is port-based via
+    `ss -tuln` so it sees other users' sockets; draws reserve atomically and
+    are bind-probed before being handed out. add_system_ports()/
+    add_config_ports() moved to BaseEngine so the controller gets them too.
+  * cuems-engine-mock: carry forward the no-op rsync shim and cuems-node-engine
+    PATH drop-in introduced on rc_1 as 0.1.0rc2-3 (that entry is not in this
+    changelog — it was added on the rc_1 line after 0.1.0rc3-1 forked).
+    Retains the cuems-<component> wrapper names from 0.1.0rc3-2; the stale
+    audioplayer-cuems/dmxplayer-cuems mock scripts are removed.
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 03 Aug 2026 21:00:00 +0200
+
 cuems-engine (0.1.0rc3-2) bookworm; urgency=medium
 
   * cuems-engine-mock: rename drop-in wrapper binaries to match the new

@@ -1,15 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+
 from time import sleep
 from typing import Union
 
 from cuemsutils.log import Logger
+from pyossia import ossia
 
 from ..tools.PortHandler import PORT_HANDLER
-from .OssiaNodes import OssiaNodes, STARTUP_DELAY
 from .helpers import ClientDevices, ClientSetupFunction
-from pyossia import ossia
+from .OssiaNodes import STARTUP_DELAY, OssiaNodes
 
 OSCCLIENT_LOCAL_PORT = 9009
 OSCCLIENT_REMOTE_PORT = 9001
+
 
 class OssiaClient(OssiaNodes):
     def __init__(
@@ -19,7 +24,7 @@ class OssiaClient(OssiaNodes):
         remote_port: int = OSCCLIENT_REMOTE_PORT,
         remote_type: ClientSetupFunction = ClientDevices.OSC,
         endpoints: Union[dict, list] | None = None,
-        name: str = "cuems"
+        name: str = "cuems",
     ):
         super().__init__()
         self.host = host
@@ -39,7 +44,8 @@ class OssiaClient(OssiaNodes):
             raise RuntimeError("OssiaClient device not bound")
         Logger.debug(f"OssiaClient device bound: {self.device}")
 
-        # Skip nodes_from_device() for OSCQuery clients to preserve GMQ functionality
+        # Skip nodes_from_device() for OSCQuery clients to preserve GMQ
+        # functionality
         if remote_type == ClientDevices.OSCQUERY:
             self.nodes = {}
         else:
@@ -57,18 +63,19 @@ class OssiaClient(OssiaNodes):
 class NodeClient(OssiaClient):
     def __init__(self, host: str, local_port: int, endpoints: dict):
         super().__init__(
-            host = host,
-            local_port = local_port,
-            remote_type = ClientDevices.OSCQUERY,
-            endpoints = endpoints
+            host=host,
+            local_port=local_port,
+            remote_type=ClientDevices.OSCQUERY,
+            endpoints=endpoints,
         )
+
 
 class PlayerClient(OssiaClient):
     def __init__(self, player_port: int, endpoints: dict, name: str = "player"):
         super().__init__(
-            local_port = PORT_HANDLER.new_random_port(),
-            remote_port = player_port,
-            remote_type = ClientDevices.OSC,
-            endpoints = endpoints,
-            name = name
+            local_port=PORT_HANDLER.new_random_port(),
+            remote_port=player_port,
+            remote_type=ClientDevices.OSC,
+            endpoints=endpoints,
+            name=name,
         )

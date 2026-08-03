@@ -4,13 +4,13 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "cuemsengine"
-version = "0.1.0rc2"
+version = "0.1.0rc4"
 description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
 license = "GPL-3.0"
 authors = [
     "Ion Reguera <ion@stagelab.coop>",
-    "Adrià Masip <adria.back@gmail.com>"
+    "Adrià Masip <adria@stagelab.coop>"
 ]
 keywords = []
 classifiers = [
@@ -26,12 +26,19 @@ classifiers = [
     "Topic :: Multimedia :: Video :: Display"
 ]
 repository = "https://github.com/stagesoft/cuems-engine"
-documentation = "https://github.com/stagesoft/cuems-engine#readme"
-homepage = "https://github.com/stagesoft/cuems-engine"
+documentation = "https://stagesoft.github.io/cuems-engine/"
+homepage = "https://github.com/stagesoft/cuems-engine#readme"
+
+[tool.poetry.urls]
+"Documentation" = "https://stagesoft.github.io/cuems-engine/"
+"Source Code" = "https://github.com/stagesoft/cuems-engine"
+"Bug Tracker" = "https://github.com/stagesoft/cuems-engine/issues"
+"Changelog" = "https://github.com/stagesoft/cuems-engine/blob/rc_1/CHANGELOG.md"
+"Product Page" = "https://formitgo.com"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-cuemsutils = "0.1.0rc4"
+cuemsutils = ">=0.1.0rc10"
 mido = "1.3.3"
 packaging = "*"
 python-rtmidi = "*"
@@ -42,6 +49,12 @@ JACK-Client = ">=0.5.4"
 
 [tool.poetry.group.dev.dependencies]
 psutil = "*"
+# anyio ships the pytest plugin providing @pytest.mark.anyio, which
+# tests/test_cuems_deploy.py uses for its async tests. It was never declared —
+# it only happened to be present transitively on the dev box. Anywhere it is
+# not, those 13 tests fail outright with "async def functions are not natively
+# supported" instead of running, so the dependency has to be explicit.
+anyio = "*"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
 pytest-xdist = ">=3.0"
@@ -50,10 +63,12 @@ coverage = {extras = ["toml"], version = "*"}
 black = "*"
 isort = "*"
 flake8 = "*"
+autopep8 = "^2.3.2"
+flake8-pyproject = "^1.2.4"
 
 [tool.poetry.scripts]
-node-engine = "cuemsengine.scripts.node_engine:main"
 controller-engine = "cuemsengine.scripts.controller_engine:main"
+node-engine = "cuemsengine.scripts.node_engine:main"
 mock-audioplayer = "cuemsengine.scripts.mock_audioplayer:main"
 mock-jack-volume = "cuemsengine.scripts.mock_jack_volume:main"
 mock-dmxplayer = "cuemsengine.scripts.mock_dmxplayer:main"
@@ -114,7 +129,7 @@ exclude_lines = [
 
 [tool.black]
 line-length = 88
-target-version = ["py310"]
+target-version = ["py311"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -138,3 +153,7 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = "E203"

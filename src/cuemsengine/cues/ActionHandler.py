@@ -1,19 +1,29 @@
-"""Dedicated action-cue execution, extension hooks, and optional result sink."""
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
+"""
+Dedicated action-cue execution, extension hooks, and optional result sink.
+"""
 
 from __future__ import annotations
 
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from threading import Thread
+from typing import Any, Callable, Literal, Protocol
 
 from cuemsutils.cues import ActionCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
-from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..comms.NodeCommunications import NodeCommunications
+from ..comms.NodesHub import ActionType, NodeOperation, OperationType
+from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
@@ -25,6 +35,7 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "stop",
         "enable",
         "disable",
+        "fade_action",
         "fade_in",
         "fade_out",
         "go_to",
@@ -37,6 +48,21 @@ RegistrationLayer = Literal["cue_layer", "node_layer"]
 _ALL_ACTIONS: frozenset[str] = frozenset()
 
 
+class CueOrchestrator(Protocol):
+    """Subset of CueHandler needed by action dispatch (avoids circular import)."""
+
+    def arm(self, cue: Cue, init: bool = False) -> bool: ...
+
+    def disarm(self, cue: Cue) -> bool: ...
+
+    def go_from(
+        self,
+        start_cue: Cue,
+        mtc: MtcListener,
+        seed_ms: float | None = None,
+    ) -> Thread | None: ...
+
+
 def _filter_matches(action_type: str, filter_key: frozenset[str]) -> bool:
     if not filter_key:
         return True
@@ -45,7 +71,9 @@ def _filter_matches(action_type: str, filter_key: frozenset[str]) -> bool:
 
 @dataclass
 class ActionHookContext:
-    """Context passed to extension hooks (stable field names for integrators)."""
+    """
+    Context passed to extension hooks (stable field names for integrators).
+    """
 
     cue: ActionCue
     target: Cue | None
@@ -53,14 +81,17 @@ class ActionHookContext:
     action_type: str
     target_id: str | None
     outcome: dict | None = None
-    cue_handler: Any = None
+    cue_handler: CueOrchestrator | None = None
+    frozen_mtc_ms: float | None = None
 
 
 class ActionHandler:
-    """Owns ActionCue validation, default handlers, hooks, and result delivery."""
+    """
+    Owns ActionCue validation, default handlers, hooks, and result delivery.
+    """
 
     def __init__(self) -> None:
-        self._cue_handler: Any = None
+        self._cue_handler: CueOrchestrator | None = None
         self._lock = threading.Lock()
         self._hooks: dict[
             tuple[str, str, frozenset[str]], Callable[[ActionHookContext], Any]
@@ -70,12 +101,14 @@ class ActionHandler:
 
     # ---- binding ----
 
-    def bind_cue_handler(self, cue_handler: Any) -> None:
+    def bind_cue_handler(self, cue_handler: CueOrchestrator) -> None:
         """Bind the singleton cue orchestrator (arm, go, armed lookups)."""
         self._cue_handler = cue_handler
 
     def set_result_sink(self, sink: Callable[[dict], None] | None) -> None:
-        """Replace result delivery; None restores default (NNG via comms thread)."""
+        """
+        Replace result delivery; None restores default (NNG via comms thread).
+        """
         with self._lock:
             self._result_sink = sink
 
@@ -101,7 +134,10 @@ class ActionHandler:
         source: RegistrationLayer = "cue_layer",
         action_types: frozenset[str] | None = None,
     ) -> None:
-        """Register a hook; last registration wins for the same (phase, source, filter)."""
+        """
+        Register a hook; last registration wins for the same (phase, source,
+        filter).
+        """
         filter_key = action_types if action_types is not None else _ALL_ACTIONS
         key = (phase, source, filter_key)
         with self._lock:
@@ -120,7 +156,10 @@ class ActionHandler:
             self._hooks.pop(key, None)
 
     def finalize_node_layer_bindings(self) -> None:
-        """Call from NodeEngine after comms are ready (extension point; default no-op)."""
+        """
+        Call from NodeEngine after comms are ready (extension point; default
+        no-op).
+        """
         return
 
     # ---- hook resolution ----
@@ -194,7 +233,12 @@ class ActionHandler:
 
     # ---- main dispatch ----
 
-    def execute_action(self, cue: ActionCue, mtc: MtcListener) -> dict:
+    def execute_action(
+        self,
+        cue: ActionCue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float | None = None,
+    ) -> dict:
         action_type = cue.action_type
         target = cue._action_target_object
 
@@ -224,6 +268,7 @@ class ActionHandler:
             target_id=target_id,
             outcome=None,
             cue_handler=self._cue_handler,
+            frozen_mtc_ms=frozen_mtc_ms,
         )
 
         # before_dispatch hooks
@@ -248,7 +293,7 @@ class ActionHandler:
         ch = self._cue_handler
 
         def run_default() -> dict:
-            return handler(ch, target, mtc)
+            return handler(ch, cue, target, mtc, frozen_mtc_ms)
 
         def apply_wraps() -> dict:
             inner: Callable[[], dict] = run_default
@@ -282,9 +327,7 @@ class ActionHandler:
             dispatch_exc = False
         except Exception as exc:
             dispatch_exc = True
-            reason = (
-                f"{action_type} on {target_id} raised " f"{type(exc).__name__}: {exc}"
-            )
+            reason = f"{action_type} on {target_id} raised {type(exc).__name__}: {exc}"
             Logger.error(reason)
             result = self._action_result("failed", action_type, target_id, reason)
 
@@ -296,9 +339,7 @@ class ActionHandler:
                 try:
                     hook_fn(ctx)
                 except Exception as exc:
-                    reason = (
-                        f"after_dispatch hook raised " f"{type(exc).__name__}: {exc}"
-                    )
+                    reason = f"after_dispatch hook raised {type(exc).__name__}: {exc}"
                     Logger.error(reason)
                     result = self._action_result(
                         "failed", action_type, target_id, reason
@@ -329,33 +370,80 @@ class ActionHandler:
 
 
 # ---------------------------------------------------------------------------
-# Per-action handlers (module-level; signature: (cue_handler, target, mtc))
+# Per-action helpers
 # ---------------------------------------------------------------------------
 
 
-def _handle_play(ch: Any, target: Cue, mtc: MtcListener) -> dict:
-    target_id = target.id
+def _ready_action_target(action: str, target: Cue, ch: CueOrchestrator) -> dict | None:
+    """Ensure target is enabled and loaded before dispatch; arm if needed.
+
+    Returns a failure result dict on the first problem, or None if ready.
+    """
+    target_id = getattr(target, "id", None)
     if not target.enabled:
         return ActionHandler._action_result(
-            "failed", "play", target_id, "Target is disabled"
+            "failed", action, target_id, "Target is disabled"
         )
     if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
+        try:
+            ch.arm(target, init=True)
+        except Exception as exc:
+            return ActionHandler._action_result("failed", action, target_id, str(exc))
     if not getattr(target, "loaded", False):
         return ActionHandler._action_result(
-            "failed", "play", target_id, "Target could not be armed"
+            "failed", action, target_id, "Target could not be armed"
         )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Per-action handlers (module-level; signature: (cue_handler, action_cue,
+# target, mtc, frozen_mtc_ms))
+#
+# action_cue is the originating ActionCue/FadeCue (cue.action_type drives
+# dispatch);
+# target is the resolved cue._action_target_object. Most handlers only need
+# target;
+# fade_action needs both (action_cue carries fade params, target is what gets
+# faded).
+# ---------------------------------------------------------------------------
+
+
+def _handle_play(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    target_id = target.id
+    # Readiness gates the cue we would play locally. For a NON-local target,
+    # go_from walks PAST it to THIS node's own local cue (which go() re-arms),
+    # so don't gate on the non-local target — it can never arm here, and doing
+    # so silently dropped the controller's own cues on a cross-node loop-back.
+    if getattr(target, "_local", False):
+        fail = _ready_action_target("play", target, ch)
+        if fail is not None:
+            return fail
     target._stop_requested = False
     try:
-        ch.go(target, mtc)
+        # go_from (not go): walk the target's post_go='go' chain to THIS node's
+        # first local+enabled cue. A plain go() bails when `target` is local to
+        # another node, dropping this node's own cues on a cross-node loop-back
+        # (circular project). See CueHandler.go_from.
+        ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
-        return ActionHandler._action_result(
-            "failed", "play", target_id, str(exc)
-        )
+        return ActionHandler._action_result("failed", "play", target_id, str(exc))
     return ActionHandler._action_result("applied", "play", target_id)
 
 
-def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_pause(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -365,7 +453,13 @@ def _handle_pause(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "pause", target_id)
 
 
-def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_stop(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     target_id = target.id
     if getattr(target, "_stop_requested", False):
         return ActionHandler._action_result(
@@ -375,11 +469,23 @@ def _handle_stop(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     target._go_generation = getattr(target, "_go_generation", 0) + 1
     # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
     time.sleep(0.1)
-    ch.disarm(target)
+    try:
+        ch.disarm(target)
+    except Exception as exc:
+        return ActionHandler._action_result("failed", "stop", target_id, str(exc))
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
-def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_enable(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    # Pure flag flip. The arm/pre-load side effect for the newly enabled cue
+    # (async ReArm) lives in NodeEngine._action_result_sink, which reacts to
+    # this handler's 'applied' outcome.
     target_id = target.id
     if target.enabled:
         return ActionHandler._action_result(
@@ -389,7 +495,16 @@ def _handle_enable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "enable", target_id)
 
 
-def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_disable(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    # Pure flag flip. The disarm-if-idle side effect for the disabled cue
+    # lives in NodeEngine._action_result_sink, which reacts to this handler's
+    # 'applied' outcome (guarded by the cue's _playing lifecycle flag).
     target_id = target.id
     if not target.enabled:
         return ActionHandler._action_result(
@@ -399,22 +514,39 @@ def _handle_disable(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "disable", target_id)
 
 
-def _handle_fade_in(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_in(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
-    if not getattr(target, "loaded", False):
-        return ActionHandler._action_result(
-            "failed", "fade_in", target_id, "Target could not be armed"
-        )
+    # Only gate on a local target (see _handle_play) — non-local targets are
+    # walked past by go_from.
+    if getattr(target, "_local", False):
+        fail = _ready_action_target("fade_in", target, ch)
+        if fail is not None:
+            return fail
     target._stop_requested = False
-    ch.go(target, mtc)
+    try:
+        # go_from (not go): same cross-node walk as play — a plain go() would
+        # drop other nodes' cues on a chain owned by the target's node.
+        ch.go_from(target, mtc, frozen_mtc_ms)
+    except Exception as exc:
+        return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
     return ActionHandler._action_result("applied", "fade_in", target_id)
 
 
-def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_fade_out(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement fade envelope; currently identical to stop.
     # Also has the same zombie-process bug as the old stop handler:
     # bumps _go_generation but does not call disarm(), so player processes
@@ -426,21 +558,233 @@ def _handle_fade_out(ch: Any, target: Cue, mtc: MtcListener) -> dict:
     return ActionHandler._action_result("applied", "fade_out", target_id)
 
 
-def _handle_go_to(ch: Any, target: Cue, mtc: MtcListener) -> dict:
+def _handle_go_to(
+    ch: CueOrchestrator,
+    _action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
     # TODO: implement seek/position navigation; currently only arms the target
     Logger.info("go_to only arms target (seek not yet implemented)")
     target_id = target.id
-    if not getattr(target, "loaded", False):
-        ch.arm(target, init=True)
+    fail = _ready_action_target("go_to", target, ch)
+    if fail is not None:
+        return fail
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
-_ACTION_HANDLERS: dict[str, Callable[[Any, Cue, MtcListener], dict]] = {
+def _handle_fade_action(
+    ch: CueOrchestrator,
+    action_cue: Any,
+    target: Cue,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    """
+    Execute a FadeCue: arm target if needed, dispatch FadeCommand, set
+    _end_mtc.
+
+    action_cue is the FadeCue (curve_type, target_value, duration). target is
+    the
+    resolved AudioCue/VideoCue that will be faded. The handler MUST NOT disarm
+    target, set _fade_initial_volume, or call ch.go(target, mtc) — target is
+    expected to be already playing. The FadeCue itself is held in the cue
+    runner
+    by loop_fadeCue until _end_mtc.
+    """
+    from cuemsutils.tools.CTimecode import CTimecode
+
+    target_id = getattr(target, "id", None)
+    motion_id = str(action_cue.id)
+
+    fail = _ready_action_target("fade_action", target, ch)
+    if fail is not None:
+        return fail
+
+    gradient_client = PLAYER_HANDLER.get_gradient_client()
+    if gradient_client is None:
+        Logger.error(f"FadeCue {motion_id}: GradientClient not initialised")
+        return ActionHandler._action_result(
+            "failed",
+            "fade_action",
+            target_id,
+            "GradientClient not initialised",
+        )
+
+    if frozen_mtc_ms is not None:
+        start_mtc_ms = int(frozen_mtc_ms)
+    else:
+        start_mtc_ms = mtc.main_tc.milliseconds_rounded
+
+    try:
+        payloads = _build_fade_payload(target, action_cue, start_mtc_ms, motion_id)
+    except (ValueError, TypeError) as exc:
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, str(exc)
+        )
+
+    # Dispatch ALL entries before mutating anything. If any OSC send fails the
+    # target / FadeCue state must remain unchanged. Failure of one layer aborts
+    # the rest — the partial dispatch will be cleared by the next cancel_all
+    # (project stop or load).
+    for entry in payloads:
+        entry_motion_id = entry.pop("motion_id")
+        try:
+            gradient_client.send_fade(
+                motion_id=entry_motion_id,
+                osc_host="127.0.0.1",
+                osc_port=entry["osc_port"],
+                osc_path=entry["osc_path"],
+                start_value=entry["start_value"],
+                end_value=entry["end_value"],
+                start_mtc_ms=entry["start_mtc_ms"],
+                duration_ms=entry["duration_ms"],
+                curve_type=entry["curve_type"],
+                curve_params_json="{}",
+            )
+        except Exception as exc:
+            Logger.error(
+                f"FadeCue {motion_id}: OSC dispatch to gradient-motiond"
+                f"failed "
+                f"(target={target_id} motion_id={entry_motion_id} "
+                f"osc={entry['osc_path']}): {exc}"
+            )
+            return ActionHandler._action_result(
+                "failed",
+                "fade_action",
+                target_id,
+                f"OSC dispatch failed: {exc}",
+            )
+
+    # Record each fade's end_value engine-side (NO OSC push — set_value would
+    # jump the player to the final level instantly): gradient-motiond drives
+    # the player directly, so the client mirror never sees the fade. Without
+    # this, the next fade's start_value reads the pre-fade level.
+    for entry in payloads:
+        target._osc.record_value(entry["osc_path"], entry["end_value"])
+
+
+    # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
+    # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
+    framerate = mtc.main_tc.framerate
+    action_cue._start_mtc = CTimecode(
+        framerate=framerate, start_seconds=start_mtc_ms / 1000.0
+    )
+    action_cue._end_mtc = (
+        action_cue._start_mtc + action_cue.duration.return_in_other_framerate(framerate)
+    )
+
+    Logger.info(
+        f"FadeCue {motion_id}: dispatched {len(payloads)} start_fade(s) "
+        f"target={target_id} target_value={action_cue.target_value} "
+        f"duration={action_cue.duration.milliseconds_rounded}ms"
+    )
+    return ActionHandler._action_result("applied", "fade_action", target_id)
+
+
+def _build_fade_payload(
+    target_cue: Cue, fade_cue: Any, start_mtc_ms: int, motion_id: str
+) -> list[dict]:
+    """Build FadeCommand body dicts from target_cue + fade_cue.
+
+    Returns a list of dicts (one per OSC endpoint). For AudioCue this is a
+    single-element list; for VideoCue, one entry per layer in `_layer_ids`,
+    each with its own osc_path and a layer-suffixed `motion_id` so
+    gradient-motiond
+    can track per-layer completion.
+
+    Field names mirror the C++ parser at gradient-motion-engine
+    src/signal/FadeCommand.cpp parseStartFade: end_value (not target_value),
+    start_mtc_ms (not start_time). end_value is normalised to OSC scale
+    0.0-1.0 from FadeCue.target_value's UI scale 0-100; gradient-motiond
+    forwards end_value directly to OSC without further unit conversion.
+
+    start_value's source of truth is target_cue._osc (an AudioClient /
+    VideoClient — a PlayerClient subclass): whatever level is currently live
+    on the player, since external actors (OSC UI controls, other cues) can
+    change it after the cue was armed. The CuemsScript-stored level
+    (AudioCue.master_vol / VideoCue.opacity, both 0-100 int, same UI scale as
+    target_value) is deployed to the client as its initial value when the
+    cue is armed (arm_videoCue) / run (run_audioCue) — it is only consulted
+    here as a fallback, via get_value_if_set(), for the case where nothing
+    has been deployed to the client yet. Falls back further to 100 (full
+    volume/opacity) when even the script field is absent, matching each
+    field's own REQ_ITEMS default in cuemsutils.
+    """
+    from cuemsutils.cues import AudioCue, VideoCue
+
+    # Parser-built FadeCues bypass the utils setter (GenericParser assigns via
+    # dict.__setitem__), so duration can arrive as None or zero. gradient-motiond
+    # drops dur <= 0 over fire-and-forget UDP — without this guard the fade
+    # would report "applied" and record_value a level that never happened.
+    duration = fade_cue.duration
+    duration_ms = getattr(duration, "milliseconds_rounded", None)
+    if not isinstance(duration_ms, (int, float)) or duration_ms <= 0:
+        raise ValueError(
+            f"FadeCue {motion_id}: duration must be greater than zero "
+            f"(got {duration!r}); fix the fade duration in the project"
+        )
+
+    curve_type = fade_cue.curve_type
+    curve_type_str = (
+        curve_type.value if hasattr(curve_type, "value") else str(curve_type)
+    )
+    end_value = float(fade_cue.target_value) / 100.0
+
+    def _entry(
+        osc_path: str, entry_motion_id: str, script_default: float
+    ) -> dict:
+        live_value = target_cue._osc.get_value_if_set(osc_path)
+        start_value = live_value if live_value is not None else script_default
+        return {
+            "motion_id": entry_motion_id,
+            "osc_port": target_cue._osc.remote_port,
+            "osc_path": osc_path,
+            "start_value": start_value,
+            "end_value": end_value,
+            "start_mtc_ms": start_mtc_ms,
+            "duration_ms": duration_ms,
+            "curve_type": curve_type_str,
+        }
+
+    if isinstance(target_cue, AudioCue):
+        master_vol = getattr(target_cue, "master_vol", 100)
+        ratio_value = float(master_vol) / 100.0
+        return [_entry("/volmaster", motion_id, ratio_value)]
+
+    if isinstance(target_cue, VideoCue):
+        layer_ids = getattr(target_cue, "_layer_ids", []) or []
+        if not layer_ids:
+            raise ValueError(
+                f"VideoCue {getattr(target_cue, 'id', None)} has no _layer_ids"
+            )
+        opacity = getattr(target_cue, "opacity", 100)
+        ratio_value = float(opacity) / 100.0
+        return [
+            _entry(
+                f"/videocomposer/layer/{layer_id}/opacity",
+                f"{motion_id}_{layer_id}",
+                ratio_value,
+            )
+            for layer_id in layer_ids
+        ]
+
+    raise ValueError(
+        f"FadeCue target is not an AudioCue or VideoCue: "
+        f"{type(target_cue).__name__}"
+    )
+
+
+_ACTION_HANDLERS: dict[
+    str, Callable[[Any, Any, Cue, MtcListener, "float | None"], dict]
+] = {
     "play": _handle_play,
     "pause": _handle_pause,
     "stop": _handle_stop,
     "enable": _handle_enable,
     "disable": _handle_disable,
+    "fade_action": _handle_fade_action,
     "fade_in": _handle_fade_in,
     "fade_out": _handle_fade_out,
     "go_to": _handle_go_to,
