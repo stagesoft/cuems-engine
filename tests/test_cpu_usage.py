@@ -16,6 +16,15 @@ from cuemsengine.NodeEngine import NodeEngine
 
 from .fixtures import env_config_path, mock_config_manager
 
+# Absolute floor, in percent, for any tolerance derived from a measured CPU
+# baseline. psutil reports whole scheduler ticks over the sample window, so an
+# idle process legitimately samples 0.0% — and a tolerance of "baseline * 2" is
+# then 0.0, which *any* non-zero reading exceeds. That made these tests fail on
+# a fast/idle machine and pass on a busy one: the exact opposite of the
+# intended signal. Below this floor the readings are quantisation noise, not
+# CPU usage, so there is nothing to assert about.
+CPU_TOLERANCE_FLOOR = 1.0
+
 
 class TestBaseEngineCPUUsage:
     """Test class for monitoring CPU usage of BaseEngine instances"""
@@ -232,9 +241,11 @@ class TestBaseEngineCPUUsage:
         recovery_stats = self.monitor_cpu_usage(current_process, duration=3.0)
 
         # Verify CPU usage recovers to reasonable levels
-        assert recovery_stats["avg"] <= baseline_stats["avg"] * 2, (
+        tolerance = max(baseline_stats["avg"] * 2, CPU_TOLERANCE_FLOOR)
+        assert recovery_stats["avg"] <= tolerance, (
             f"CPU usage did not recover properly: "
-            f"{recovery_stats['avg']}% vs baseline {baseline_stats['avg']}%"
+            f"{recovery_stats['avg']}% vs baseline {baseline_stats['avg']}% "
+            f"(tolerance {tolerance}%)"
         )
 
         print(f"\nCPU Spike Recovery Test:")
@@ -270,7 +281,8 @@ class TestBaseEngineCPUUsage:
         readings = long_term_stats["readings"]
         if readings:
             mean = sum(readings) / len(readings)
-            outliers = [r for r in readings if abs(r - mean) > mean * 2]
+            spread = max(mean * 2, CPU_TOLERANCE_FLOOR)
+            outliers = [r for r in readings if abs(r - mean) > spread]
             assert len(outliers) < len(readings) * 0.1, (
                 f"Too many CPU usage outliers: "
                 f"{len(outliers)} out of {len(readings)}"

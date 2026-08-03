@@ -3,14 +3,33 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import pyossia
 from pyossia import ValueType
-from pytest import approx, raises
+from pytest import approx, mark, raises
 
 from cuemsengine.osc.OssiaClient import OssiaClient
 from cuemsengine.osc.OssiaServer import OssiaServer
 from cuemsengine.tools.PortHandler import PORT_HANDLER
 
 from .fixtures import _ossia_release, ossia_client_factory, ossia_server_factory
+
+# pyossia is neither pinned nor vendored: it comes from the system
+# dist-packages (the shared venv sets include-system-site-packages), and every
+# build reports itself as "0+unknown", so there is no version to compare
+# against. Older libossia builds have no Node.remove_child at all, which is
+# what node removal is implemented on. Probe the capability instead of the
+# version, and skip loudly rather than assert against an API the installed
+# build does not have.
+#
+# A current build (verified on the test2 cluster) does export it, so a skip
+# here means the HOST needs a newer pyossia — not that the test is wrong.
+requires_node_removal = mark.skipif(
+    not hasattr(pyossia.Node, "remove_child"),
+    reason=(
+        "installed pyossia has no Node.remove_child — node removal is "
+        "unsupported by this libossia build; update the system pyossia package"
+    ),
+)
 
 """Logging testing functions"""
 
@@ -58,6 +77,7 @@ def test_client_endpoint_str(ossia_client_factory):
             assert str(e) == "Node not found"
 
 
+@requires_node_removal
 def test_client_failed_value(ossia_client_factory):
     with ossia_client_factory(
         endpoints={"/test1": [ValueType.Int, None, None]}
@@ -337,6 +357,7 @@ def test_oscclient_in_separate_process(process_cleanup):
     PORT_HANDLER.remove_random_port(REMOTE)
 
 
+@requires_node_removal
 def test_server_node_removal_affects_children():
     # ARRANGE
     from time import sleep
@@ -361,6 +382,7 @@ def test_server_node_removal_affects_children():
         _ossia_release(server)
 
 
+@requires_node_removal
 def test_server_node_removal_affects_all_children():
     # ARRANGE
     from time import sleep
