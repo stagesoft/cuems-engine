@@ -12,6 +12,7 @@ from cuemsengine.osc.OssiaServer import OssiaServer
 from cuemsengine.tools.PortHandler import PORT_HANDLER
 
 from .fixtures import _ossia_release, ossia_client_factory, ossia_server_factory
+from .helpers import free_udp_port
 
 # pyossia is neither pinned nor vendored: it comes from the system
 # dist-packages (the shared venv sets include-system-site-packages), and every
@@ -276,9 +277,9 @@ def test_osc_client_to_server_transmission():
     }
     # Shared remote (outbound only); distinct listen ports. Matches prior
     # working layout — crossed local/remote duplex aborts inside libossia.
-    local_port = PORT_HANDLER.new_random_port()
-    common_port = PORT_HANDLER.new_random_port()
-    server_local = PORT_HANDLER.new_random_port()
+    local_port = free_udp_port()
+    common_port = free_udp_port()
+    server_local = free_udp_port()
 
     # ACT
     server = OssiaServer(
@@ -321,8 +322,8 @@ def test_oscclient_in_separate_process(process_cleanup):
     from cuemsengine.osc.helpers import ClientDevices
 
     client_res = Queue()
-    LOCAL = PORT_HANDLER.new_random_port()
-    REMOTE = PORT_HANDLER.new_random_port()
+    LOCAL = free_udp_port()
+    REMOTE = free_udp_port()
 
     # Create OssiaClient in separate process
     def run_client(result_queue):
@@ -368,8 +369,8 @@ def test_server_node_removal_affects_children():
             "/test/test1": [ValueType.Int, print_callback, 20],
             "/test/test2": [ValueType.Int, print_callback, 30],
         },
-        local_port=PORT_HANDLER.new_random_port(),
-        remote_port=PORT_HANDLER.new_random_port(),
+        local_port=free_udp_port(),
+        remote_port=free_udp_port(),
     )
     try:
         sleep(0.5)
@@ -395,8 +396,8 @@ def test_server_node_removal_affects_all_children():
             "/test1/test2/test3": [ValueType.Int, print_callback, 30],
             "/test1/test2/test3/test4": [ValueType.Int, print_callback, 30],
         },
-        local_port=PORT_HANDLER.new_random_port(),
-        remote_port=PORT_HANDLER.new_random_port(),
+        local_port=free_udp_port(),
+        remote_port=free_udp_port(),
     )
     try:
         sleep(0.5)

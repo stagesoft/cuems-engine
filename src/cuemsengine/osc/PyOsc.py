@@ -11,7 +11,14 @@ from pythonosc.udp_client import SimpleUDPClient
 
 PYOSC_HOST = "127.0.0.1"
 PYOSC_PORT = 10001
-PYOSC_MSG_TIMEOUT = 0.001
+# How long to wait for a reply to arrive. UDPClient.receive() blocks in recv()
+# until data lands, so this only ever bounds the FAILURE path — a reply that
+# comes back promptly still returns immediately, and raising this costs nothing
+# on the happy path. It used to be 0.001, which is a poll interval, not a
+# round-trip budget: any reply slower than 1 ms was treated as no reply at all.
+# (python-osc's own default is 30 s; 2 s is generous for localhost while still
+# failing fast when something is genuinely wrong.)
+PYOSC_MSG_TIMEOUT = 2.0
 
 
 def new_osc_client(cls) -> SimpleUDPClient:
@@ -29,8 +36,18 @@ class PyOscClient(object):
 
     def get_first_message(self, timeout=PYOSC_MSG_TIMEOUT) -> OscMessage:
         res = self.client.get_messages(timeout)
-        msg = next(res)
-        return msg
+        try:
+            return next(res)
+        except StopIteration:
+            # get_messages() is a generator that yields nothing when the wait
+            # elapses, so next() raises StopIteration. Letting that escape a
+            # regular function is a trap: Python re-labels it inside any
+            # enclosing generator, which is how a plain timeout surfaced as
+            # "RuntimeError: generator raised StopIteration" with no mention of
+            # OSC at all. Report what actually happened.
+            raise TimeoutError(
+                f"No OSC reply from {self.host}:{self.port} within {timeout}s"
+            ) from None
 
     def send_with_response(self, address: str, *args) -> OscMessage:
         self.send_message(address, *args)

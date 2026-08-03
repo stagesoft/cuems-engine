@@ -72,10 +72,20 @@ def test_project_go_from_controller(
     # ACT
     with timeout(10):
         controller_engine.go_script("complex_test")
-        sleep(1)
 
-    # ASSERT - Verify engines loaded project
-    assert node_engine.get_status("running") == "yes", "Node engine is not running"
+    # ASSERT - Verify engines loaded project.
+    # Poll for running=yes rather than sleeping a fixed 1s: the status reaches
+    # the node over the NNG bus, so a fixed wait races the bus whenever the
+    # machine is loaded. Same deadline pattern as the load wait above. This was
+    # one of the rotating flakes in 869ed41ey.
+    deadline = time() + 10.0
+    while node_engine.get_status("running") != "yes":
+        if time() > deadline:
+            raise AssertionError(
+                f"Node engine is not running "
+                f"(status={node_engine.get_status('running')!r})"
+            )
+        sleep(0.01)
 
     assert controller_engine.script is not None
     assert node_engine.script is not None

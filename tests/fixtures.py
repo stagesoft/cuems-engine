@@ -72,10 +72,12 @@ def ossia_client_factory():
     from cuemsengine.osc.OssiaClient import OssiaClient
     from cuemsengine.tools.PortHandler import PORT_HANDLER
 
+    from .helpers import free_udp_port
+
     @contextmanager
     def create_client(**kwargs):
-        kwargs.setdefault("local_port", PORT_HANDLER.new_random_port())
-        kwargs.setdefault("remote_port", PORT_HANDLER.new_random_port())
+        kwargs.setdefault("local_port", free_udp_port())
+        kwargs.setdefault("remote_port", free_udp_port())
         try:
             client = OssiaClient(**kwargs)
         except Exception:
@@ -98,10 +100,12 @@ def ossia_server_factory():
     from cuemsengine.osc.OssiaServer import OssiaServer
     from cuemsengine.tools.PortHandler import PORT_HANDLER
 
+    from .helpers import free_udp_port
+
     @contextmanager
     def create_server(**kwargs):
-        kwargs.setdefault("local_port", PORT_HANDLER.new_random_port())
-        kwargs.setdefault("remote_port", PORT_HANDLER.new_random_port())
+        kwargs.setdefault("local_port", free_udp_port())
+        kwargs.setdefault("remote_port", free_udp_port())
         try:
             server = OssiaServer(**kwargs)
         except Exception as e:
