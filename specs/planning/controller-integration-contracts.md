@@ -1,10 +1,16 @@
 # Controller Integration Contracts
 
-**Date:** 2026-05-19 — revised 2026-08-10 (synced with the locked ActionHandler decision)  
-**Scope:** Formal integration contracts for external hardware controller modules  
-**Status:** Design artifact — defines required interfaces before any implementation begins  
+**Date:** 2026-05-19 — revised 2026-08-10 (synced with the locked ActionHandler decision) —
+**validated 2026-08-10 against commit `e210b26`**
+**Scope:** Formal integration contracts for external hardware controller modules
+**Status:** Design artifact, code-validated — defines required interfaces before any implementation begins
 **Relates to:** `specs/planning/action-handler-architecture-analysis.md` — that document is authoritative for
-`ActionHandler` internals; this one is authoritative for the controller-facing surface. **They must stay in sync.**
+`ActionHandler` internals and carries the validation record; this one is authoritative for the controller-facing
+surface. **They must stay in sync.**
+
+> **What exists today.** Nothing in this document is implemented. Every protocol here is a target. The
+> per-contract *Implementation status* notes say precisely what is missing and which migration step delivers it.
+> `file.py:N` references are pinned to commit **`e210b26`**.
 
 ---
 
@@ -13,38 +19,48 @@
 External controllers (MIDI surfaces, LAN OSC controllers, USB HID devices) integrate
 with the engine through **three separate paths** depending on the nature of the event:
 
-| Event type | Path | Entry point |
-|---|---|---|
-| Discrete trigger (button → go/stop/fade) | Discrete-action pipeline | `ActionHandler.dispatch_action()` |
-| Continuous parameter (fader → volume) | Live-control routing layer | `CueHandler.route_<namespace>_message()` |
-| Hardware feedback (LED, motor fader) | Outcome-listener list | `ActionHandler.add_outcome_listener()` |
+| Event type | Path | Entry point | Exists? |
+|---|---|---|---|
+| Discrete trigger (button → go/stop/fade) | Discrete-action pipeline | `ActionHandler.dispatch_action()` | No — analysis Step 8 |
+| Continuous parameter (fader → volume) | Live-control routing layer | `CueHandler.route_control_event()` | No — unowned, see Contract 4 |
+| Hardware feedback (LED, motor fader) | Outcome-listener list | `ActionHandler.add_outcome_listener()` | No — analysis Step 6 |
 
 A single controller module will typically use **all three**. The first two paths must never be
 merged: routing continuous streams through `dispatch_action` invokes the full hook
 pipeline on every parameter tick.
 
 **Feedback uses listeners, not `after_dispatch` hooks.** A hook that raises rewrites the
-outcome to `failed` and breaks the hook loop. The expected failure mode of an LED write is
-an unplugged device — which must never turn an applied `play` into a `failed` outcome on the
+outcome to `failed` and breaks the hook loop (`ActionHandler.py:337-347`). The expected failure mode of an LED
+write is an unplugged device — which must never turn an applied `play` into a `failed` outcome on the
 Controller UI. Outcome listeners are exception-isolated and cannot alter a result. Hooks
 remain available for extensions that legitimately *participate* in an outcome
 (see analysis document §1 and §3.3).
 
 **Process scope.** Controller modules live in the **node-engine process** only.
-`ControllerEngine` imports neither `CueHandler` nor `ActionHandler`.
+`ControllerEngine.py` imports neither `CueHandler` nor `ActionHandler` — verified by grep at `e210b26`.
+
+**Where these protocols live.** Undecided — **decision brief in analysis document §12 A**. `CueHandlerProtocol`
+currently sits inside `ActionHandler.py` (as `CueOrchestrator`, renamed in analysis Step 4). The recommendation
+is a single `src/cuemsengine/contracts.py`, created at Step 4, with `TYPE_CHECKING`-only imports as a hard
+requirement (it is the only thing preventing a new `ActionHandler` ↔ `contracts` cycle, since
+`ActionHandlerProtocol` names `ActionHookContext` / `HookPhase` / `RegistrationLayer` / `ActionParams`), and
+with that hook vocabulary migrating into the same module at Step 8. **The call is needed before Step 4 starts**,
+earlier than this feature — deciding late costs a second move of `CueHandlerProtocol`.
 
 ---
 
 ## Lifecycle
 
 ```
-NodeEngine.set_players()
+NodeEngine.start()                              # NodeEngine.py:97
     │
-    ├─► PLAYER_HANDLER.set_gradient_client(...)       # existing pattern
-    ├─► PLAYER_HANDLER.set_<new_client>(...)          # future: set_midi_client, etc.
+    ├─► CUE_HANDLER.set_nng_comms(...)          # :98  — comms thread up
+    ├─► self.set_oscquery_comms()               # :101
+    ├─► self.set_players()                      # :103 — GradientClient bound here
+    ├─► self._setup_nng_command_callback()      # :104 — engine's own outcome listener
     │
     └─► ControllerModule.attach(action_handler, cue_handler, live_router, mtc)
-            │
+            │                                   # NEW call site, AFTER :104
             ├─► action_handler.add_outcome_listener(self._on_action_complete)
             ├─► optionally registers node_layer hooks (owner=self.module_id)
             ├─► opens hardware connection / starts listener thread
@@ -57,10 +73,25 @@ engine shutdown
             └─► closes hardware connection / stops listener thread
 ```
 
+**`attach()` goes after `_setup_nng_command_callback()`, not inside `set_players()`.** A previous revision of
+this document placed it inside `set_players()`. That ordering is wrong for one concrete reason: listeners fire
+in registration order (Contract 2), and `NodeEngine._action_result_sink` — which drives the Controller UI's
+`cue_enabled` sync — registers in `_setup_nng_command_callback` (`NodeEngine.py:134-137`, becoming
+`add_outcome_listener` at analysis Step 6). The engine's own listener must be first.
+
 **Lifetime is the process, not the project.** `attach()` runs once per process and `detach()`
 only at shutdown. Tying `detach()` to project load would close and reopen the hardware port on
 every load — slow for MIDI devices and a common failure point. A module that needs to react to a
 project change observes it through its own means; the engine does not re-attach.
+
+**No project is loaded at `attach()` time.** `NodeEngine.start()` completes the whole sequence above before any
+`load` command arrives over NNG. At `attach()`:
+
+- comms thread — **up** (`set_nng_comms` ran first),
+- `GradientClient` — **bound** (`set_players` → `set_gradient_client`, `NodeEngine.py:407-413`),
+- cue list — **empty**. `get_armed_cue_by_id` returns `None` for everything.
+
+Modules MUST resolve cues lazily, at event time, never during `attach()`.
 
 **`mtc` is supplied by `attach()`.** `dispatch_action` requires an `MtcListener` and a controller
 module has no other legitimate source for one.
@@ -97,10 +128,11 @@ class ControllerModuleProtocol(Protocol):
         live_router: "LiveControlRouterProtocol",
         mtc: "MtcListener",
     ) -> None:
-        """Called once per process, after NodeEngine.set_players() completes.
+        """Called once per process, at the end of NodeEngine.start().
 
-        The engine is fully initialised at this point: comms thread is up,
-        GradientClient is bound, cue list is loaded.
+        Engine state at this point: the comms thread is up and the
+        GradientClient is bound, but NO PROJECT IS LOADED and no cue is armed.
+        Resolve cues lazily at event time, never here.
 
         Implementations SHOULD:
         - register an outcome listener for hardware feedback
@@ -113,6 +145,7 @@ class ControllerModuleProtocol(Protocol):
 
         Implementations MUST NOT:
         - trigger any cue action during attach()
+        - look up cues during attach() — nothing is armed yet
         - block the calling thread for more than ~100 ms
         """
         ...
@@ -138,13 +171,16 @@ class ControllerModuleProtocol(Protocol):
         ...
 ```
 
+**Implementation status: NOT IMPLEMENTED.** No controller-module registry exists on `NodeEngine`, and there is
+no `attach`/`detach` call site. This is the first task of the controller-integration feature.
+
 ---
 
 ## Contract 2 — `ActionHandlerProtocol`
 
 The subset of `ActionHandler` that controller modules may call. Only methods listed
 here are part of the stable controller integration API. Accessing any other method
-(including `_default_result_sink`, `_emit_outcome`, `_hooks`) is a contract violation.
+(including `_default_result_sink`, `_emit_outcome`, `_dispatch`, `_hooks`) is a contract violation.
 
 ```python
 class ActionHandlerProtocol(Protocol):
@@ -171,10 +207,20 @@ class ActionHandlerProtocol(Protocol):
         target must be a live Cue object (look it up via
         CueHandlerProtocol.get_armed_cue_by_id before calling).
 
+        frozen_mtc_ms pins the action to a specific MTC position. Hardware
+        triggers normally pass None (dispatch at live MTC); it exists so a
+        module echoing a scripted chain can share that chain's snapshot.
+
         params carries the payload for actions that need more than
         (action_type, target). Required for 'fade_action'; omitting it there
         returns a 'failed' outcome naming the missing payload. Ignored by
         actions that do not read it.
+
+        BLOCKS. This call runs the handler synchronously on the caller's thread.
+        'stop' in particular sleeps 100 ms inside the handler
+        (ActionHandler.py:470) so loop_cue can observe _stop_requested before
+        disarm. Do not call dispatch_action from a thread that must stay
+        responsive to hardware input — hand it to a worker.
 
         Before/after/wrap hooks fire exactly as they do for script-driven
         actions — both entry points route through the same private _dispatch.
@@ -213,7 +259,9 @@ class ActionHandlerProtocol(Protocol):
         rewrites the outcome to 'failed' and breaks the hook loop.
 
         Controller modules MUST use source='node_layer' and owner=self.module_id.
-        source='cue_layer' is reserved for show-script extensions.
+        source='cue_layer' is reserved for show-script extensions, and is what
+        CueHandler.register_action_hook forwards (it exposes no owner and is not
+        a controller entry point).
 
         before_dispatch and after_dispatch fan out to every owner —
         cue_layer first, then node_layer, and within a layer in registration
@@ -244,7 +292,7 @@ class ActionHandlerProtocol(Protocol):
 
 `ActionParams` is the payload object for `dispatch_action`. Its field names mirror `FadeCue`
 so `_handle_fade_action` consumes it unchanged; it is mutable because that handler writes
-`_start_mtc` / `_end_mtc` back:
+`_start_mtc` / `_end_mtc` back (`ActionHandler.py:669-674`):
 
 ```python
 @dataclass
@@ -257,10 +305,31 @@ class ActionParams:
     _end_mtc: "CTimecode | None" = None
 ```
 
+**Three of the nine supported actions are stubs that still report `applied`.** Verified at `e210b26`; see
+analysis document P15. A controller module must not present these as working features:
+
+| Action | What it actually does |
+|---|---|
+| `fade_in` | identical to `play` — no fade envelope (`ActionHandler.py:523-524`) |
+| `fade_out` | sets `_stop_requested`, bumps `_go_generation`, **never calls `disarm()`** — leaks the player process on every invocation (`ActionHandler.py:549-557`) |
+| `go_to` | arms the target only — no seek or position navigation (`ActionHandler.py:567-568`) |
+
+All three return `"applied"`, so LED feedback driven off `outcome["status"]` will light green. `fade_out`'s
+missing `disarm()` is a defect its own in-code TODO acknowledges; whether it is fixed before `dispatch_action`
+ships is analysis §13 Q5. Until then, map buttons to `play` / `stop` rather than `fade_in` / `fade_out`.
+
+**`ActionParams.duration` must be non-zero.** `_build_fade_payload` raises `ValueError` on a `None`, zero or
+non-numeric duration (`ActionHandler.py:719-725`) — before any OSC dispatch or mirror write — because
+gradient-motiond silently drops `dur <= 0`. A hardware fade with a zero duration returns `failed`, not
+`applied`.
+
 **Implementation status.** `dispatch_action`, `ActionParams`, `add_outcome_listener`,
-`remove_outcome_listener`, `unregister_all_hooks` and the `owner` parameter do not exist yet.
+`remove_outcome_listener`, `unregister_all_hooks` and the `owner` parameter **do not exist yet**.
 They are scheduled in the analysis document's migration path: outcome listeners at **Step 6**,
-multi-owner hooks at **Step 7**, `dispatch_action` + `ActionParams` at **Step 8**.
+multi-owner hooks at **Step 7**, `dispatch_action` + `ActionParams` at **Step 8**. Today the outcome channel is
+a single replaceable sink (`set_result_sink`, `ActionHandler.py:107`) already claimed by
+`NodeEngine` (`NodeEngine.py:137`), and hook registrations evict each other — a module written against the
+current code would break the Controller UI's `cue_enabled` sync.
 
 `dispatch_action` is not a thin wrapper around `execute_action`. The pipeline body of
 `execute_action` is extracted into a private `_dispatch(...)`; `execute_action` resolves and
@@ -279,23 +348,34 @@ The subset of `CueHandler` that controller modules may call.
 
 This is the **same protocol** `ActionHandler` depends on internally
 (`CueHandlerProtocol`, renamed from `CueOrchestrator` in analysis Step 4). One definition,
-one name, both consumers.
+one name, both consumers — so the definition is the **union** of both consumers' needs, and it is
+reproduced identically in analysis document §4.
 
 ```python
 class CueHandlerProtocol(Protocol):
     """Stable API surface for action dispatch and external controller modules."""
 
-    communications_thread: "NodeCommunications | None"
+    communications_thread: "NodeCommunications"
 
     def get_armed_cue_by_id(self, cue_id: str) -> "Cue | None":
-        """Return the currently armed cue with this UUID, or None."""
+        """Return the currently armed cue with this UUID, or None.
+
+        Returns None for everything until a project is loaded — including for
+        the whole duration of attach().
+        """
         ...
 
     def get_cue_by_id(self, cue_id: str) -> "Cue | None":
         """Return any cue in the loaded project by UUID (armed or not), or None.
 
-        NOT YET IMPLEMENTED — add alongside controller integration.
-        Today only get_armed_cue_by_id and find_armed_cue exist.
+        NOT YET IMPLEMENTED, AND NOT A SIMPLE ADDITION. CueHandler holds no
+        script reference at all — it knows only _armed_cues. The project script
+        lives on NodeEngine (self.script); the lookup primitive is
+        CuemsScript.find(uuid) in cuemsutils. Placing this method requires
+        deciding who owns the script: see analysis document §13 Q2.
+
+        Today only get_armed_cue_by_id (CueHandler.py:951) and
+        find_armed_cue (CueHandler.py:108) exist.
         """
         ...
 
@@ -315,6 +395,7 @@ class CueHandlerProtocol(Protocol):
         NOT `go`. A plain go() bails when start_cue is local to another node,
         dropping this node's own cues on a cross-node loop-back (circular
         project). Every action handler that starts playback uses go_from.
+        go_from itself ends by delegating to self.go for the cue it finds.
         """
         ...
 
@@ -331,9 +412,23 @@ class CueHandlerProtocol(Protocol):
         ...
 ```
 
-`communications_thread` is declared for `ActionHandler`'s internal NNG outcome delivery, which
-reaches it through this protocol. Controller modules MUST NOT use it — send status through the
-engine, not around it.
+**Implementation status, member by member** (checked against `CueHandler` at `e210b26`):
+
+| Member | Status |
+|---|---|
+| `communications_thread` | Exists as a class annotation (`:42`), bound only by `set_nng_comms()` (`:64`) |
+| `arm` | Exists, `:284`, returns `bool` |
+| `disarm` | Exists, `:386`, returns `bool` |
+| `go_from` | Exists, `:517` |
+| `get_armed_cue_by_id` | Exists, `:951` |
+| `get_cue_by_id` | **Missing** |
+| `get_gradient_client` | **Missing** — analysis Step 4 |
+
+**`communications_thread` is declared but may not be bound.** The annotation at `CueHandler.py:42` creates no
+attribute; `set_nng_comms()` does. `ActionHandler`'s internal NNG outcome delivery therefore reads it with
+`getattr(ch, "communications_thread", None)` (`ActionHandler.py:218`) and that guard is an invariant, not an
+accident (analysis §1.2, §6). **Controller modules MUST NOT use it at all** — send status through the engine,
+not around it.
 
 ---
 
@@ -372,22 +467,42 @@ class LiveControlRouterProtocol(Protocol):
         ...
 ```
 
-`CueHandler.route_control_event` dispatches to the existing `route_audio_message`,
-`route_dmx_message`, and any future `route_lighting_message` / `route_midi_out_message`
-based on the namespace. This replaces the current pattern where `NodeEngine` dispatches
-directly to per-namespace methods — the controller module only needs one entry point.
+`CueHandler.route_control_event` dispatches to the existing `route_audio_message` (`CueHandler.py:871`),
+`route_dmx_message` (`CueHandler.py:923`), and any future `route_lighting_message` /
+`route_midi_out_message` based on the namespace. This replaces the current pattern where `NodeEngine`
+dispatches directly to per-namespace methods — the controller module only needs one entry point.
 
-**Implementation status: NOT YET IMPLEMENTED, and unowned.** Today
-`NodeEngine._handle_player_control_message` dispatches straight to `route_audio_message` /
-`route_dmx_message`. `route_control_event` has no step in the ActionHandler migration path —
-it is a prerequisite for the first controller module and needs its own spec and branch.
+**Implementation status: NOT IMPLEMENTED, and unowned.** Today
+`NodeEngine._handle_player_control_message` (`NodeEngine.py:158`) parses an OSC address and dispatches straight
+to `route_audio_message` / `route_dmx_message`. `route_control_event` has no step in the ActionHandler
+migration path — it is a prerequisite for the first controller module and needs its own spec and branch.
+
+Two details, one now resolved and one sharper than first stated — both checked against the real method bodies at
+`e210b26`:
+
+1. **The dotted `parameter` → `path_parts` mapping is a clean `split(".")` — resolved.**
+   `'mixer.0.master.volume'` → `['mixer', '0', 'master', 'volume']`, exactly `route_audio_message`'s documented
+   input. Two caveats to carry into the spec: the trailing `'volume'` element is **decorative** (the audio
+   routes build their OSC command from `path_parts[1]` / `path_parts[2]` only), and the DMX convention differs —
+   `route_dmx_message` searches for the literal `'mixer'` element and joins everything after it.
+2. **The value scale is not merely unspecified — the existing receivers already disagree.**
+
+   | Receiver | Scale handling |
+   |---|---|
+   | `route_audio_message`, `cue` branch (`CueHandler.py:907-916`) | clamps to 0.0–1.0; comment: "UI already sends 0.0-1.0 via `sliderToFloat()`" |
+   | `route_audio_message`, `mixer` branch (`CueHandler.py:884-899`) | `float(value)` — **no clamp, no scaling** |
+   | `route_dmx_message` (`CueHandler.py:923-949`) | passes `value` through **raw**, no conversion |
+
+   So the "normalized float 0.0–1.0" specified above would break DMX unless that branch rescales. Decide once,
+   in `route_control_event` — either the front door normalizes and each `route_*` rescales, or the front door is
+   scale-agnostic and the namespace defines the range. Analysis document §13 Q3.
 
 ---
 
 ## Contract 5 — `FadePayloadBuilderProtocol`
 
-Replaces the `isinstance` chain in `_build_fade_payload`. Each fadeable cue type
-registers its own builder. See analysis document B2 for the registry mechanism.
+Replaces the `isinstance` chain in `_build_fade_payload` (`ActionHandler.py:747`, `:752`). Each fadeable cue
+type registers its own builder. See analysis document §7 B2 for the registry mechanism.
 
 ```python
 class FadePayloadBuilderProtocol(Protocol):
@@ -424,26 +539,46 @@ class FadePayloadBuilderProtocol(Protocol):
         ...
 ```
 
+**Invariants that stay with the caller, not the builders.** The `FadeCue.duration > 0` check
+(`ActionHandler.py:719-725`) is a property of the FadeCue, not of the target type. It must live in the shared
+pre-builder path so every fadeable type inherits it — duplicating it per builder is how one type ends up
+without it.
+
 **Caller obligations — these fix live defects, they are not current behaviour.**
 See analysis document §7 B2 acceptance criteria.
 
 1. **Record `end_value` per entry, immediately after that entry's own successful send.**
-   The current code dispatches every entry and only then records, so a failure at layer *N*
-   loses the records for layers `0..N-1` that were already sent — their next fade then reads a
-   stale `start_value`. The "leave state unchanged on failure" invariant in the current comment
+   The current code dispatches every entry (`:630-657`) and only then records (`:663-664`), so a failure at
+   layer *N* loses the records for layers `0..N-1` that were already sent — their next fade then reads a
+   stale `start_value`. The "leave state unchanged on failure" invariant in the current comment (`:626-629`)
    is unachievable: the OSC sends are not atomic, so those layers *are* already faded on the
    player. The engine-side record must mirror what was actually sent.
 2. **The caller MUST NOT mutate returned dicts.** The builder does not retain them, but the
-   current code does `entry.pop("motion_id")` in the dispatch loop and re-reads the same dicts
-   in the record loop. Read `entry["motion_id"]`; do not pop.
+   current code does `entry.pop("motion_id")` in the dispatch loop (`:631`) and re-reads the same dicts
+   in the record loop (`:664`). Read `entry["motion_id"]`; do not pop.
 3. Builders are stateless and registered at module load for `AudioCue` and `VideoCue`; new
    fadeable types register their own. `SUPPORTED_CUE_ACTIONS` is closed, but this registry is
    **open** — it is one of the three OCP seams named in the analysis document §3.4.
+4. **Registry lookup key is undecided — decision brief in analysis document §12 B.** The current code uses
+   `isinstance`; the registry sketch uses an exact `type(target_cue)` match, which would stop resolving
+   subclasses. The recommendation is `functools.singledispatch` (MRO), matching the five cue registries that
+   already use it, plus a WARNING when a target resolves via an ancestor rather than an exact registration.
+
+**This whole contract is conditional on Decision B.** If `singledispatch` is chosen, `FadePayloadBuilderProtocol`
+**is not needed at all** — registered functions replace builder objects, and the contract reduces to a
+documented function signature plus the returned-dict key set above. It stays a `Protocol` class only if the
+dict-of-builder-objects shape is chosen. Whoever decides B updates this section.
+
+**Implementation status: NOT IMPLEMENTED.** `_build_fade_payload` is a module-level function with an
+isinstance chain, and `tests/test_fade_action_handler.py` imports it directly at 11 sites. Analysis Step 10 —
+separate feature branch. Note that §12 B also recommends splitting that step so the live P13 defect is fixed
+immediately (B2a) rather than waiting for the registry (B2b); only B2b affects this contract.
 
 ---
 
 ## Integration Pattern A — MIDI Controller (Discrete Triggers)
 
+Illustrative only — none of the engine API it calls exists yet.
 Mapping: physical button → go/stop/fade on a named cue.
 
 ```python
@@ -461,6 +596,7 @@ class MidiControllerBridge:
         self._open_midi_port()
         self._listener = threading.Thread(target=self._midi_loop, daemon=True)
         self._listener.start()
+        # No cue lookups here: nothing is armed at attach() time.
 
     def detach(self):
         self._stop_event.set()
@@ -488,7 +624,11 @@ class MidiControllerBridge:
         if target is None:
             Logger.warning(f"MIDI note {note}: cue {mapping['cue_id']} not armed")
             return
-        self._ah.dispatch_action(mapping["action_type"], target, self._mtc)
+        # dispatch_action BLOCKS (100 ms for 'stop'). Hand it to a worker so the
+        # MIDI read loop keeps draining the port.
+        self._dispatch_pool.submit(
+            self._ah.dispatch_action, mapping["action_type"], target, self._mtc
+        )
 
     def _handle_cc(self, control: int, raw_value: int):
         mapping = CC_MAP.get(control)    # {namespace, parameter}
@@ -499,6 +639,7 @@ class MidiControllerBridge:
 
     def _on_action_complete(self, outcome: dict):
         # Outcome listener — receives the final result dict, cannot alter it.
+        # Runs on the dispatch thread: no blocking I/O here.
         led_note = REVERSE_BUTTON_MAP.get((outcome["action_type"], outcome["target_id"]))
         if led_note is not None and outcome["status"] == "applied":
             self._set_led(led_note, ON if outcome["action_type"] == "play" else OFF)
@@ -508,7 +649,7 @@ class MidiControllerBridge:
 
 ## Integration Pattern B — LAN OSC Controller
 
-Mapping: OSC messages from a control surface (e.g. TouchOSC, Lemur) over UDP/TCP.
+Illustrative only. Mapping: OSC messages from a control surface (e.g. TouchOSC, Lemur) over UDP/TCP.
 
 ```python
 class LanOscControllerBridge:
@@ -560,6 +701,11 @@ class LanOscControllerBridge:
             )
 ```
 
+The OSC verb → `action_type` map above is a module-local convention, not an engine contract: the engine's
+vocabulary is `play`/`pause`/`stop`/`enable`/`disable`/`fade_in`/`fade_out`/`fade_action`/`go_to`
+(`ActionHandler.py:30-42`). `load`, `unload`, `wait`, `pause_project` and `resume_project` exist in the XSD
+`ActionType` enum but are **not implemented** — dispatching one returns `rejected`.
+
 ---
 
 ## What Controller Modules Must NOT Do
@@ -568,12 +714,33 @@ class LanOscControllerBridge:
 |---|---|
 | Import `CUE_HANDLER` as a module global | Bypasses DI; breaks test isolation. `ACTION_HANDLER` no longer exists. Note this is a **convention, not a mechanism**: `CUE_HANDLER` is still importable, so reviewers enforce it |
 | Call `ActionHandler.execute_action(action_cue, ...)` with a constructed `ActionCue` | Constructing `ActionCue` with `_action_target_object` pre-set is fragile; use `dispatch_action` with `ActionParams` |
-| Route continuous events through `dispatch_action` | Invokes full hook pipeline on every tick |
+| Route continuous events through `dispatch_action` | Invokes full hook pipeline on every tick, and `stop` blocks 100 ms per call |
+| Call `dispatch_action` from a thread that must stay responsive | It runs the handler synchronously; `stop` sleeps 100 ms (`ActionHandler.py:470`). Use a worker |
 | Access `_default_result_sink`, `_hooks`, `_emit_outcome`, `_dispatch` directly | Protected implementation details. Everything a module legitimately needs is on `ActionHandlerProtocol` — there is no case where reaching past it is correct |
 | Use `after_dispatch` hooks for hardware feedback | A raising hook rewrites the outcome to `failed`; an unplugged device would fail the show action. Use `add_outcome_listener` |
 | Register hooks with `source='cue_layer'` | That layer is reserved for show-script extensions |
 | Register hooks with the default `owner` | Owner-less registrations evict each other. Always pass `owner=self.module_id` |
 | Share a `module_id` with another attached module | `unregister_all_hooks(owner)` would tear down both |
 | Introduce a new action type | `SUPPORTED_CUE_ACTIONS` is deliberately closed — the vocabulary is shared with the XSD, the UI and the cross-node protocol |
-| Use `CueHandlerProtocol.communications_thread` | Send status through the engine, not around it |
+| Use `CueHandlerProtocol.communications_thread` | Send status through the engine, not around it. It is also unbound until `set_nng_comms()` runs |
+| Look up or trigger cues inside `attach()` | No project is loaded and nothing is armed at that point |
 | Block the engine thread in `attach()`, hook callbacks, or outcome listeners | All three run synchronously in the dispatch thread |
+
+---
+
+## Prerequisites Before the First Controller Module
+
+Ordered. Nothing below is done.
+
+0. **Decide the protocol home module** — analysis §12 A. Needed **before analysis Step 4**, not before this
+   feature, because Step 4 already moves and renames `CueHandlerProtocol`.
+1. **Analysis Steps 1–9** land — in particular Step 6 (outcome listeners), Step 7 (multi-owner hooks) and
+   Step 8 (`dispatch_action` + `ActionParams`). Contracts 1–3 are unimplementable before them.
+2. ~~Decide the protocol home module~~ — pulled forward to item 0 above.
+3. **`CueHandler.get_cue_by_id`** — new method, own tests (Contract 3).
+4. **`CueHandler.route_control_event`** — own spec and branch, including the dotted-path and 0–1 vs 0–100
+   decisions above (Contract 4).
+5. **`NodeEngine` controller-module registry** plus the `attach`/`detach` call sites at the position fixed in
+   *Lifecycle*.
+
+Contract 5 / analysis Step 10 is independent of all of the above and blocks only the next fadeable cue type.
