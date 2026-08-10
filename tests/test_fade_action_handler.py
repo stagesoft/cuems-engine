@@ -334,9 +334,7 @@ class TestBuildFadePayloadVideoSingleLayer:
         changed the live opacity since arm_videoCue deployed the cue's
         stored opacity, and that MUST be what a fade starts from.
         """
-        target_cue = _make_video_cue(
-            opacity=70, layer_ids=(2,), client_live_value=0.15
-        )
+        target_cue = _make_video_cue(opacity=70, layer_ids=(2,), client_live_value=0.15)
         fade_cue = _make_fade_cue(target_cue, target_value=100)
         from cuemsengine.cues.ActionHandler import _build_fade_payload
 
@@ -467,9 +465,7 @@ def test_build_payload_300ms_duration_passes():
     target_cue = _make_audio_cue()
     fade_cue = _make_fade_cue(target_cue)
     _set_duration_bypassing_setter(fade_cue, CTimecode("00:00:00.300"))
-    payloads = _build_fade_payload(
-        target_cue, fade_cue, start_mtc_ms=0, motion_id="x"
-    )
+    payloads = _build_fade_payload(target_cue, fade_cue, start_mtc_ms=0, motion_id="x")
     assert len(payloads) == 1
     assert payloads[0]["duration_ms"] == 300
 
