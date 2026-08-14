@@ -1,3 +1,29 @@
+cuems-engine (0.1.0rc5-1) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm; bump upstream version 0.1.0rc4 -> 0.1.0rc5.
+  * Auto continue now triggers the whole chain at one common trigger
+    (869ej3cc8). CueHandler._chain_advance_ms returned prewait + postwait, so
+    every cue's prewait cascaded into the arrival of every cue after it:
+    prewaits authored as absolute offsets from GO (5/35/65/95/380 s) played as
+    5/40/105/200/580, the last cue 3m20s late. Reported from Castillo Medina
+    del Campo (cupula2, 0.1.0rc4-1) on an all-DMX project, where it reads as
+    "auto follow" because each cue is on time relative to the previous one
+    FIRING. The advance is now zero: every cue in the chain shares the trigger
+    as its arrival and plays at trigger + its own prewait. postwait no longer
+    gates a chain whose pointer has already advanced; it keeps its meaning as a
+    real tail under Auto follow / Auto pause and as the cue's illumination hold.
+    NOT a DMX-specific rule — the chain arithmetic never looks at cue type; DMX
+    was simply the only type carrying a prewait in that show.
+  * Chains whose prewaits run BACKWARDS are still reached after their own
+    anchor and fire at dispatch; go_threaded now warns ("dispatched after its
+    anchor — firing LATE by ..."), where it used to mistime silently. The
+    dispatch reorder that closes the gap is deferred (see §8 of
+    Plans/prewait-chain-trigger-semantics.md in cuems-RELATIONS).
+  * ActionHandler planning docs and contracts landed on rc_1 since 0.1.0rc4-1;
+    poetry.lock refreshed with the CI lint fix.
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 14 Aug 2026 16:20:00 +0200
+
 cuems-engine (0.1.0rc4-1) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (source moved 52 files since 0.1.0rc3-1);

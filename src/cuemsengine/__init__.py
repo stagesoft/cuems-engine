@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
-__version__ = "0.1.0rc4"
+__version__ = "0.1.0rc5"
 
 from .ControllerEngine import ControllerEngine
 from .NodeEngine import NodeEngine

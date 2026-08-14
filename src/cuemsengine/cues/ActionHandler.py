@@ -24,7 +24,6 @@ from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
 
-
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
 # actions: load, unload, wait, pause_project, resume_project.
@@ -664,7 +663,6 @@ def _handle_fade_action(
     for entry in payloads:
         target._osc.record_value(entry["osc_path"], entry["end_value"])
 
-
     # Set _start_mtc / _end_mtc on the FadeCue so loop_fadeCue has a real
     # end-mtc to wait on. mtc.main_tc is the live MTC ticking forward.
     framerate = mtc.main_tc.framerate
@@ -732,9 +730,7 @@ def _build_fade_payload(
     )
     end_value = float(fade_cue.target_value) / 100.0
 
-    def _entry(
-        osc_path: str, entry_motion_id: str, script_default: float
-    ) -> dict:
+    def _entry(osc_path: str, entry_motion_id: str, script_default: float) -> dict:
         live_value = target_cue._osc.get_value_if_set(osc_path)
         start_value = live_value if live_value is not None else script_default
         return {
