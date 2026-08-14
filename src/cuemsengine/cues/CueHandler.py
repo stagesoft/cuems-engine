@@ -254,11 +254,13 @@ class CueHandler:
         offsets from GO (5/35/65/95/380 s) played as 5/40/105/200/580.
         Castillo Medina del Campo, 2026-08-14 — ClickUp 869ej3cc8.
 
-        ⚠ Returning anything non-zero here is NOT just an arithmetic change: the
-        chain is dispatched cue-by-cue at `start(k) + postwait(k)`, so a non-zero
-        advance re-opens the dispatch-ordering dependency documented in
-        Plans/prewait-chain-trigger-semantics.md §8. Re-audit that before
-        changing this value.
+        ⚠ Returning anything non-zero here is NOT just an arithmetic change.
+        The chain is now dispatched at its trigger and every cue parks on
+        `arrival + prewait`, so a non-zero advance would push a cue's anchor
+        past the moment its own thread already started waiting on — and it
+        would put the arrival of a rejoining cue (Plans/
+        prewait-dispatch-reorder-phase2.md §6) out of step with the pass that
+        stamped it. Re-audit that design before changing this value.
 
         Auto follow (post_go='go_at_end') breaks the chain walk and fires its
         next cue from loop_cue *after* the body, so it never reaches this

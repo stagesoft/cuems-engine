@@ -451,7 +451,9 @@ def _cancel_chain_behind(ch: CueOrchestrator, target: Cue, action: str) -> None:
     except Exception as exc:
         # The stop itself already applied; losing the sweep must not turn a
         # successful stop into a failed action.
-        Logger.error(f"{action}: could not cancel cues chained after {target.id}: {exc}")
+        Logger.error(
+            f"{action}: could not cancel cues chained after {target.id}: {exc}"
+        )
 
 
 def _handle_pause(

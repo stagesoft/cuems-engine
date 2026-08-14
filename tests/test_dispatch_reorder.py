@@ -124,7 +124,9 @@ def _run(ch, cue, mtc, order=None, **kw):
     kw.setdefault("go_gen", cue._go_generation)
     with (
         patch("cuemsengine.cues.CueHandler.run_cue", side_effect=rec("run_cue")) as rc,
-        patch("cuemsengine.cues.CueHandler.reveal_cue", side_effect=rec("reveal")) as rv,
+        patch(
+            "cuemsengine.cues.CueHandler.reveal_cue", side_effect=rec("reveal")
+        ) as rv,
         patch("cuemsengine.cues.CueHandler.loop_cue", side_effect=rec("loop")),
         patch("cuemsengine.cues.CueHandler.blank_cue"),
         patch(
