@@ -514,6 +514,10 @@ class CueHandler:
         """
         cancelled = []
         with self._lock:
+            # The pass this cue belongs to. Cues that a NEWER pass has since
+            # claimed are not ours to cancel — a loop-back can already have
+            # re-scheduled them against a fresh trigger.
+            target_epoch = getattr(cue, "_go_epoch", 0)
             self._chain_epoch = self._chain_epoch + 1
             epoch = self._chain_epoch
             # Mark the target too: a dispatch of it currently blocked in its
@@ -525,22 +529,22 @@ class CueHandler:
                 if getattr(cue, "post_go", None) == "go"
                 else None
             )
-            walked = 0
-            while node is not None:
-                if walked > 1024:
-                    Logger.error(
-                        "cancel_pending_descendants hit safety limit; aborting"
-                    )
-                    break
+            # A circular project (A→B→C→A) would otherwise re-mark the same
+            # cues on every revolution until the safety limit, reporting ~1024
+            # cancellations and firing that many remove_cue sends.
+            seen = set()
+            while node is not None and id(node) not in seen:
+                seen.add(id(node))
                 is_local = getattr(node, "_local", False)
-                if is_local and getattr(node, "enabled", False):
+                owned = getattr(node, "_go_epoch", 0) <= target_epoch
+                if is_local and owned and getattr(node, "enabled", False):
                     if not getattr(node, "_revealed", False):
                         node._stop_requested = True
                         node._go_generation = getattr(node, "_go_generation", 0) + 1
                         node._go_epoch = epoch
                         node._playing = False
                         cancelled.append(node)
-                elif is_local:
+                elif is_local and owned:
                     # Disabled: nothing to cancel, but claim it so enabling it
                     # later cannot rejoin a chain that was stopped.
                     node._go_epoch = epoch
@@ -548,7 +552,11 @@ class CueHandler:
                     # A chain break is a hand-off point, not a descendant.
                     break
                 node = getattr(node, "_target_object", None)
-                walked += 1
+                if len(seen) > 1024:
+                    Logger.error(
+                        "cancel_pending_descendants hit safety limit; aborting"
+                    )
+                    break
 
         # Outside the lock: a cancelled cue's thread leaves through the
         # generation guard, which sits upstream of the usual remove_cue, and
@@ -557,9 +565,11 @@ class CueHandler:
         for node in cancelled:
             self._end_illumination(node)
         if cancelled:
+            # str(): a cue's id is a Uuid, not a str, and join() would raise —
+            # inside the one log line that tells an operator this happened.
             Logger.info(
                 f"Stop of cue {cue.id} cancelled {len(cancelled)} scheduled "
-                f"cue(s) behind it: {', '.join(n.id for n in cancelled)}"
+                f"cue(s) behind it: {', '.join(str(n.id) for n in cancelled)}"
             )
         return len(cancelled)
 
@@ -611,8 +621,11 @@ class CueHandler:
         if not stamp:
             return False
         epoch, arrival_ms = stamp
+        if arrival_ms is None:
+            return False
 
         with self._lock:
+            barrier = self._last_stop_chain_epoch
             if epoch <= self._last_stop_chain_epoch:
                 Logger.info(
                     f"Cue {cue.id} enabled, but the chain it belonged to was "
@@ -645,7 +658,13 @@ class CueHandler:
             f"Cue {cue.id} enabled before its slot — rejoining the running "
             f"chain at {start_ms:.0f}ms"
         )
-        return self.go(cue, mtc, arrival_ms, unroll=False) is not None
+        # require_stop_epoch closes the window between the check above and the
+        # dispatch: the lock is dropped in between, and a STOP landing there
+        # must not be overridden by the fresh epoch this go() mints.
+        return (
+            self.go(cue, mtc, arrival_ms, unroll=False, require_stop_epoch=barrier)
+            is not None
+        )
 
     def disarm_all(self) -> None:
         """Disarms all cues."""
@@ -712,8 +731,12 @@ class CueHandler:
         """Record the pass that would have dispatched each skipped-disabled
         cue, so enabling it later can rejoin at its own slot.
 
-        Caller must hold self._lock.
+        Caller must hold self._lock. A None arrival is not an anchor a rejoin
+        could be pinned to (the thread derives its own from live MTC), so it is
+        not stamped at all rather than stamped with something unusable.
         """
+        if arrival_ms is None:
+            return
         for cue in skipped or ():
             try:
                 cue._chain_pass = (epoch, arrival_ms)
@@ -729,6 +752,7 @@ class CueHandler:
         chain_epoch: int = None,
         unroll: bool = True,
         stamp_skipped: list = None,
+        require_stop_epoch: int = None,
     ) -> Thread | None:
         """Starts a cue in a thread.
 
@@ -802,6 +826,19 @@ class CueHandler:
             # AFTER any arm above: that is what lets a STOP which landed
             # during a long arm window survive instead of being wiped by the
             # _stop_requested reset below (F4).
+            if (
+                require_stop_epoch is not None
+                and self._last_stop_chain_epoch != require_stop_epoch
+            ):
+                # The caller validated something against the STOP barrier and
+                # then had to drop the lock (the enable-rejoin does). A STOP
+                # landing in that window must win — otherwise the cue plays
+                # after the operator stopped the show.
+                Logger.warning(
+                    f"Refusing dispatch of cue {cue.id}: a STOP arrived while "
+                    f"it was being put back into its chain"
+                )
+                return None
             if chain_epoch <= self._last_stop_chain_epoch:
                 # For a continuation: the chain was stopped. For a fresh
                 # entry: a STOP landed while we were arming — it is newer than
@@ -826,6 +863,12 @@ class CueHandler:
                     return None
 
             cue._go_epoch = chain_epoch
+            # Recorded here, not in the spawned thread: a disable arriving in
+            # between has to find this cue's anchor to stamp a rejoin with, and
+            # in a loop project it would otherwise read the PREVIOUS cycle's.
+            # None (manual GO / go_at_end) means "derived from live MTC by the
+            # thread", which is not an anchor a rejoin can be pinned to.
+            cue._dispatch_arrival_ms = frozen_mtc_ms
             cue._stop_requested = False
             go_gen = getattr(cue, "_go_generation", 0) + 1
             cue._go_generation = go_gen
@@ -852,9 +895,18 @@ class CueHandler:
         )
         thread.start()
 
-        # Duration-aware lookahead: arm ahead until 2 cues with
-        # meaningful playback duration are ready.
-        self._arm_ahead(cue)
+        # Duration-aware lookahead: arm ahead until 2 cues with meaningful
+        # playback duration are ready. SYNCHRONOUS on the caller's thread, and
+        # arm() can block ~15s per audio cue — so it must not run where the
+        # caller is something that cannot afford to wait:
+        #   - a continuation's caller is the PREVIOUS cue's thread (dispatch
+        #     happens at chain entry now), and blocking it would delay that
+        #     cue's own reveal. Chain cues are armed by arm()'s recursion at
+        #     load and, failing that, by their own thread in go_threaded.
+        #   - a rejoin (unroll=False) is called from the command thread and
+        #     the cue is already armed by definition.
+        if not is_continuation and unroll:
+            self._arm_ahead(cue)
         return thread
 
     def go_from(
@@ -1022,9 +1074,10 @@ class CueHandler:
             Logger.debug(f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms")
 
         arrival_ms = frozen_mtc_ms
-        # Kept on the cue so a cancel can stamp the pass this dispatch belonged
-        # to (a disable/re-enable has to rejoin at this same anchor).
-        cue._dispatch_arrival_ms = arrival_ms
+        if getattr(cue, "_dispatch_arrival_ms", None) is None:
+            # go() records this under its accept lock; only the manual-GO /
+            # go_at_end paths (no seed) resolve their anchor here.
+            cue._dispatch_arrival_ms = arrival_ms
         # Single prewait application point (Fable 1.2): the cue's media and reveal
         # are anchored at start = arrival + prewait. prewait is NO LONGER a
         # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.

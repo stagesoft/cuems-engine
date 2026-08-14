@@ -141,6 +141,10 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
+            # An idle cue was never dispatched, so there is nothing parked to
+            # cancel — the real cancel_parked() returns False here, and a
+            # MagicMock's truthy default would wrongly suppress the disarm.
+            ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue)
 
@@ -164,6 +168,10 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
+            # An idle cue was never dispatched, so there is nothing parked to
+            # cancel — the real cancel_parked() returns False here, and a
+            # MagicMock's truthy default would wrongly suppress the disarm.
+            ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue)
 

@@ -28,6 +28,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
+from cuemsutils.tools.Uuid import Uuid  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 from cuemsengine.cues import ActionHandler as AH  # noqa: E402
 
@@ -106,19 +108,45 @@ class TestCancelWalk:
         assert ch.cancel_pending_descendants(a) == 0
         assert b._stop_requested is False
 
-    def test_a_cycle_terminates(self):
+    def test_a_cycle_cancels_each_cue_exactly_once(self):
+        """Circular projects are a supported shape (an ActionCue 'play' loops
+        back). Without a visited set the walk re-marks the same cues on every
+        revolution: ~1000 'cancelled' cues in the operator's log and one
+        remove_cue send each."""
+        a, b, c = _cue("A"), _cue("B"), _cue("C")
+        _chain(a, b, c)
+        c._target_object = a  # loop back to the head
+        ch = _ch()
+        assert ch.cancel_pending_descendants(a) == 2
+        assert ch.communications_thread.remove_cue.call_count == 2
+
+    def test_a_cue_owned_by_a_newer_pass_is_left_alone(self):
+        """A loop-back can re-schedule a cue against a fresh trigger while an
+        older pass is still running. Stopping the old pass must not kill the
+        new one's cue."""
         a, b = _cue("A"), _cue("B")
         _chain(a, b)
-        b._target_object = a  # circular project
+        a._go_epoch = 4  # the pass being stopped
+        b._go_epoch = 6  # already re-dispatched by a newer pass
         ch = _ch()
-        with patch("cuemsengine.cues.CueHandler.Logger") as log:
-            ch.cancel_pending_descendants(a)
-        assert log.error.called
+        ch._chain_epoch = 6
+        assert ch.cancel_pending_descendants(a) == 0
+        assert b._stop_requested is False
 
     def test_end_of_chain_terminates(self):
         a = _cue("A")
         ch = _ch()
         assert ch.cancel_pending_descendants(a) == 0
+
+    def test_works_with_real_cue_ids(self):
+        """A cue's id is a Uuid, not a str. Caught on the test rig: the
+        summary log line joined the ids and raised inside the very call that
+        was supposed to report the cancellation."""
+        a, b = _cue(Uuid()), _cue(Uuid())
+        _chain(a, b)
+        ch = _ch()
+        assert ch.cancel_pending_descendants(a) == 1
+        assert b._stop_requested is True
 
 
 class TestIllumination:

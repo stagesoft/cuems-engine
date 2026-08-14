@@ -176,6 +176,40 @@ class TestRejoin:
             assert ch.rejoin_chain(cue, _mtc(20000)) is True
             assert ch.rejoin_chain(cue, _mtc(21000)) is False
 
+    def test_a_stop_landing_during_the_rejoin_wins(self):
+        """rejoin_chain drops the lock between validating the barrier and
+        dispatching. A STOP in that window must not be overridden by the fresh
+        epoch the dispatch mints — the cue would play after the operator
+        stopped the show."""
+        ch = _ch()
+        cue = self._stamped(ch, prewait=60)
+        real_go = CueHandler.go
+
+        def stop_then_go(self_, c, mtc, frozen=None, **kw):
+            # the STOP lands after the barrier check, before the dispatch
+            if not getattr(self_, "_stopped_once", False):
+                self_._stopped_once = True
+                self_._chain_epoch += 1
+                self_._last_stop_chain_epoch = self_._chain_epoch
+            return real_go(self_, c, mtc, frozen, **kw)
+
+        with (
+            patch.object(CueHandler, "go", stop_then_go),
+            patch.object(CueHandler, "go_threaded"),
+        ):
+            assert ch.rejoin_chain(cue, _mtc(20000)) is False
+
+    def test_a_stamp_without_an_anchor_is_not_rejoined(self):
+        """A manual-GO/go_at_end pass has no seed; its arrival is derived from
+        live MTC by the thread, so there is nothing to pin a rejoin to."""
+        ch = _ch()
+        cue = _cue("B", prewait=10)
+        cue._chain_pass = (5, None)
+        ch._chain_epoch = 5
+        with patch.object(CueHandler, "go") as go:
+            assert ch.rejoin_chain(cue, _mtc(0)) is False
+        go.assert_not_called()
+
     def test_a_disabled_cue_is_not_rejoined(self):
         ch = _ch()
         cue = self._stamped(ch, prewait=60)

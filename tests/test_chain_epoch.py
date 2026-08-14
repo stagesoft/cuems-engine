@@ -172,6 +172,39 @@ class TestStopDuringArmWindow:
         assert gt.call_count == 0
         assert cue._stop_requested is True, "the STOP must survive go()"
 
+    def test_a_continuation_does_not_arm_ahead_on_the_caller_thread(self):
+        """_arm_ahead is synchronous and arm() can block ~15s per audio cue.
+        A continuation's caller is the PREVIOUS cue's thread now that dispatch
+        happens at chain entry, so running it there would delay that cue's own
+        reveal — silently, since its LATE check already ran."""
+        ch = _ch()
+        with patch.object(CueHandler, "go_threaded"):
+            ch.go(_cue(), _mtc(), 0.0, chain_epoch=1)
+        ch._arm_ahead.assert_not_called()
+
+    def test_a_rejoin_does_not_arm_ahead_either(self):
+        """unroll=False is the enable-rejoin, called from the command thread;
+        the cue is already armed by then."""
+        ch = _ch()
+        with patch.object(CueHandler, "go_threaded"):
+            ch.go(_cue(), _mtc(), 0.0, unroll=False)
+        ch._arm_ahead.assert_not_called()
+
+    def test_a_manual_go_still_arms_ahead(self):
+        ch = _ch()
+        with patch.object(CueHandler, "go_threaded"):
+            ch.go(_cue(), _mtc())
+        ch._arm_ahead.assert_called_once()
+
+    def test_the_dispatch_anchor_is_recorded_before_the_thread_starts(self):
+        """cancel_parked reads it to stamp a rejoin; if the spawned thread
+        wrote it, a disable arriving first would find the previous cycle's."""
+        ch = _ch()
+        cue = _cue()
+        with patch.object(CueHandler, "go_threaded"):
+            ch.go(cue, _mtc(), 4200.0, chain_epoch=1)
+        assert cue._dispatch_arrival_ms == 4200.0
+
     def test_a_continuation_does_not_arm_on_the_caller_thread(self):
         """Dispatch happens at chain entry, so go() for cue k+1 runs on cue
         k's thread — a ~15s audio arm there would delay k's own reveal. The

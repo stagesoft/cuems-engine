@@ -1152,13 +1152,22 @@ class NodeEngine(BaseEngine):
             # its anchor — nothing downstream re-reads `enabled`, so it would
             # otherwise still fire. Cancel it (a cue already playing is left
             # alone) and remember its slot in case it is enabled again.
-            CUE_HANDLER.cancel_parked(cue)
+            was_parked = CUE_HANDLER.cancel_parked(cue)
             # Disarm only if armed and NOT currently playing (never cut live
             # playback). _playing is the lifecycle flag set by go() and
             # cleared by disarm()/stop_all_cues() — unlike _go_generation,
             # it goes False again when playback ends, so a played-then-
             # re-armed cue can still be disarmed on disable.
-            if CUE_HANDLER.find_armed_cue(cue) and not getattr(cue, "_playing", False):
+            # A cue we just cancelled mid-pass is deliberately NOT disarmed:
+            # cancel_parked cleared _playing, which would make the guard below
+            # fire, and re-enabling it before its slot has to put it straight
+            # back — a disarm would cost an audio cue a ~15s re-arm and it
+            # would miss the slot it was supposed to keep.
+            if (
+                not was_parked
+                and CUE_HANDLER.find_armed_cue(cue)
+                and not getattr(cue, "_playing", False)
+            ):
                 CUE_HANDLER.disarm(cue)
                 Logger.info(f"Disarmed disabled cue {cue.id}")
             # Recalculate next_cue_pointer if the disabled cue was next
@@ -1330,9 +1339,10 @@ class NodeEngine(BaseEngine):
             stamp_skipped=skipped_disabled,
         )
         if main_thread is None:
-            # A fresh entry is not refused by the chain-epoch checks, so this
-            # is the disabled/non-local race (the cue changed under us between
-            # the walk and the dispatch). Say so instead of dereferencing None.
+            # Either a STOP landed while go() was re-arming this cue (the
+            # chain-epoch barrier then refuses the dispatch — that is the F4
+            # fix working), or the cue was disabled/became non-local between
+            # the walk and the dispatch. Say so instead of dereferencing None.
             Logger.error(f"Cue {cue_to_go.id} was not started; aborting GO")
             self.set_status("running", "no")
             self.ongoing_cue = None
