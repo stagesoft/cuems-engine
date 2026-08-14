@@ -491,6 +491,160 @@ class CueHandler:
                 cue._go_epoch = self._chain_epoch
                 cue._playing = False
 
+    def cancel_pending_descendants(self, cue: Cue) -> int:
+        """Cancel the cues an Auto-continue chain dispatched behind `cue`.
+
+        A chained cue only exists because its predecessor ran, so stopping a
+        cue must stop everything scheduled behind it. Under Phase 2 the whole
+        chain is dispatched at the trigger, so by now those cues are parked on
+        their own anchors and nothing else would hold them back — the
+        `_stop_requested` guard that used to sit in front of the dispatch has
+        moved to chain entry.
+
+        Never touches a cue that has already produced output (`_revealed`):
+        that one is on stage and stays there. The walk continues PAST it,
+        because the cues behind it still depend on the cue being stopped.
+        Non-local cues are skipped too — the node that owns them runs this same
+        walk on its own graph (ActionCues are local everywhere), so the union
+        covers the cluster.
+
+        Returns how many cues were cancelled.
+        """
+        cancelled = []
+        with self._lock:
+            self._chain_epoch = self._chain_epoch + 1
+            epoch = self._chain_epoch
+            # Mark the target too: a dispatch of it currently blocked in its
+            # own arm must not come back to life after this.
+            cue._go_epoch = epoch
+
+            node = (
+                getattr(cue, "_target_object", None)
+                if getattr(cue, "post_go", None) == "go"
+                else None
+            )
+            walked = 0
+            while node is not None:
+                if walked > 1024:
+                    Logger.error(
+                        "cancel_pending_descendants hit safety limit; aborting"
+                    )
+                    break
+                is_local = getattr(node, "_local", False)
+                if is_local and getattr(node, "enabled", False):
+                    if not getattr(node, "_revealed", False):
+                        node._stop_requested = True
+                        node._go_generation = getattr(node, "_go_generation", 0) + 1
+                        node._go_epoch = epoch
+                        node._playing = False
+                        cancelled.append(node)
+                elif is_local:
+                    # Disabled: nothing to cancel, but claim it so enabling it
+                    # later cannot rejoin a chain that was stopped.
+                    node._go_epoch = epoch
+                if getattr(node, "post_go", None) != "go":
+                    # A chain break is a hand-off point, not a descendant.
+                    break
+                node = getattr(node, "_target_object", None)
+                walked += 1
+
+        # Outside the lock: a cancelled cue's thread leaves through the
+        # generation guard, which sits upstream of the usual remove_cue, and
+        # the whole chain has been lit since the trigger — so the highlight
+        # has to be dropped here or the UI keeps showing dead cues as running.
+        for node in cancelled:
+            self._end_illumination(node)
+        if cancelled:
+            Logger.info(
+                f"Stop of cue {cue.id} cancelled {len(cancelled)} scheduled "
+                f"cue(s) behind it: {', '.join(n.id for n in cancelled)}"
+            )
+        return len(cancelled)
+
+    def cancel_parked(self, cue: Cue) -> bool:
+        """Cancel a cue that was dispatched but has not produced output yet.
+
+        Used when a cue is DISABLED after its chain was dispatched. Without
+        this the cue would still fire: the whole chain leaves at the trigger
+        and nothing downstream re-reads `enabled`. A cue that already
+        revealed is left alone — disabling never cuts live playback.
+
+        The cue keeps a stamp of the pass it was cancelled out of, so
+        re-enabling it before its slot puts it back (rejoin_chain).
+        """
+        if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
+            return False
+        with self._lock:
+            self._chain_epoch = self._chain_epoch + 1
+            epoch = self._chain_epoch
+            cue._stop_requested = True
+            cue._go_generation = getattr(cue, "_go_generation", 0) + 1
+            cue._go_epoch = epoch
+            cue._playing = False
+            # Remember where it would have played, so a re-enable can put it
+            # back at the same anchor instead of losing the slot.
+            arrival = getattr(cue, "_dispatch_arrival_ms", None)
+            if arrival is not None:
+                cue._chain_pass = (epoch, arrival)
+        self._end_illumination(cue)
+        Logger.info(f"Cue {cue.id} disabled before its slot — cancelled")
+        return True
+
+    def rejoin_chain(self, cue: Cue, mtc: MtcListener) -> bool:
+        """Put a cue enabled mid-pass back into its running chain.
+
+        The chain walk stamped this cue with the pass that would have
+        dispatched it while it was disabled. If that pass is still alive and
+        the cue's slot has not gone by, dispatch it at its original anchor so
+        it plays exactly when it was always going to.
+
+        Dispatched with unroll=False: the rest of the chain is already
+        running, and re-dispatching it would churn cues that are on stage.
+
+        Returns True if the cue was put back.
+        """
+        if not getattr(cue, "enabled", False) or not getattr(cue, "_local", False):
+            return False
+        stamp = getattr(cue, "_chain_pass", None)
+        if not stamp:
+            return False
+        epoch, arrival_ms = stamp
+
+        with self._lock:
+            if epoch <= self._last_stop_chain_epoch:
+                Logger.info(
+                    f"Cue {cue.id} enabled, but the chain it belonged to was "
+                    f"stopped — it will play on the next GO"
+                )
+                return False
+            if getattr(cue, "_go_epoch", 0) > epoch:
+                # A stop action (or a newer pass) claimed this cue after the
+                # stamp: a stop takes its scheduled descendants with it, and
+                # that outranks re-enabling one of them.
+                Logger.info(
+                    f"Cue {cue.id} enabled, but a stop already cancelled this "
+                    f"part of the chain — it will play on the next GO"
+                )
+                return False
+
+        start_ms = arrival_ms + cue.prewait.milliseconds_exact
+        now_ms = mtc.main_tc.milliseconds_exact
+        if start_ms < now_ms - self._LATE_DISPATCH_TOLERANCE_MS:
+            # Firing it now would put it on stage at the wrong moment, which
+            # mid-show is worse than not playing it at all.
+            Logger.warning(
+                f"Cue {cue.id} enabled after its slot (start={start_ms:.0f}ms, "
+                f"mtc={now_ms:.0f}ms) — NOT firing it late; it will play on "
+                f"the next GO"
+            )
+            return False
+
+        Logger.info(
+            f"Cue {cue.id} enabled before its slot — rejoining the running "
+            f"chain at {start_ms:.0f}ms"
+        )
+        return self.go(cue, mtc, arrival_ms, unroll=False) is not None
+
     def disarm_all(self) -> None:
         """Disarms all cues."""
         self.stop_all_cues()
@@ -722,9 +876,13 @@ class CueHandler:
         cue = start_cue
         sigma_ms = 0.0
         walked = 0
+        skipped_disabled = []
         while cue is not None and not (
             getattr(cue, "_local", False) and getattr(cue, "enabled", False)
         ):
+            if not getattr(cue, "enabled", False):
+                # Remember it: enabling it before its slot rejoins this pass.
+                skipped_disabled.append(cue)
             if getattr(cue, "post_go", None) != "go":
                 # chain break before any local cue — nothing for this node to do
                 cue = None
@@ -737,7 +895,15 @@ class CueHandler:
                 Logger.error("go_from walk hit safety limit; aborting")
                 return None
         if cue is None:
+            # No local cue to fire, but the disabled ones still get a pass to
+            # rejoin, or enabling one mid-show would do nothing at all.
+            if skipped_disabled:
+                self.stamp_pass(skipped_disabled, seed_ms)
             return None
+        if skipped_disabled:
+            return self.go(
+                cue, mtc, seed_ms + sigma_ms, stamp_skipped=skipped_disabled
+            )
         return self.go(cue, mtc, seed_ms + sigma_ms)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:

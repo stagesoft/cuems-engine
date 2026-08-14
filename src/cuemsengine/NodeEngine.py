@@ -933,6 +933,12 @@ class NodeEngine(BaseEngine):
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
             CUE_HANDLER.disarm(cue)
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
+            return
+        # Armed and still enabled: if it belongs to a chain that is running
+        # right now, put it back at its own slot. Checked here rather than
+        # before the arm because arm() can take ~15 s — long enough for the
+        # slot to pass, which rejoin_chain re-tests against live MTC.
+        self._rejoin_running_chain(cue)
 
     def _action_result_sink(self, outcome: dict):
         """
@@ -1103,6 +1109,17 @@ class NodeEngine(BaseEngine):
         self._notify_cue_enabled(cue_id, enabled)
         Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
 
+    def _rejoin_running_chain(self, cue) -> None:
+        """Put a cue enabled mid-pass back into its chain, if there is a
+        timeline to anchor it on (an engine built without MTC has none)."""
+        mtc = getattr(self, "mtc_listener", None)
+        if mtc is None:
+            return
+        try:
+            CUE_HANDLER.rejoin_chain(cue, mtc)
+        except Exception as exc:
+            Logger.error(f"Could not rejoin cue {cue.id} to its chain: {exc}")
+
     def _apply_cue_enabled_side_effects(self, cue, enabled: bool):
         """React to a cue's enabled-flag change: async re-arm on enable,
         disarm (if idle) on disable.
@@ -1115,6 +1132,13 @@ class NodeEngine(BaseEngine):
         # containers): react on its first enabled child instead, mirroring
         # run_cueList/initial_cuelist_process's first-enabled-child walk.
         if isinstance(cue, CueList):
+            # The chain walk stamps the object it walked past, which for a
+            # chain-link CueList is the container itself — so its rejoin is
+            # decided here, before handing the arm/disarm work to the child.
+            if enabled:
+                self._rejoin_running_chain(cue)
+            else:
+                CUE_HANDLER.cancel_parked(cue)
             child = next(
                 (c for c in getattr(cue, "contents", None) or [] if c.enabled), None
             )
@@ -1123,6 +1147,12 @@ class NodeEngine(BaseEngine):
             return
 
         if not enabled:
+            # Auto continue dispatches the whole chain at the trigger, so a
+            # cue disabled mid-pass may already be dispatched and parked on
+            # its anchor — nothing downstream re-reads `enabled`, so it would
+            # otherwise still fire. Cancel it (a cue already playing is left
+            # alone) and remember its slot in case it is enabled again.
+            CUE_HANDLER.cancel_parked(cue)
             # Disarm only if armed and NOT currently playing (never cut live
             # playback). _playing is the lifecycle flag set by go() and
             # cleared by disarm()/stop_all_cues() — unlike _go_generation,
@@ -1149,6 +1179,12 @@ class NodeEngine(BaseEngine):
                     name=f"ReArm:{cue.id}",
                 ).start()
                 Logger.info(f"Re-arming enabled cue {cue.id} (async)")
+            else:
+                # Already armed: nothing to wait for, so try to put it back
+                # into a running chain right away. (When an arm IS needed the
+                # rejoin runs at the end of it — the slot must be re-checked
+                # against the time the arm actually took.)
+                self._rejoin_running_chain(cue)
 
     #########################
     # Script logic
@@ -1221,19 +1257,20 @@ class NodeEngine(BaseEngine):
         GO_mtc = self.mtc_listener.main_tc.milliseconds_exact
 
         # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
-        # accumulating the timeline offset Σ of the cues we skip. A non-local
-        # ENABLED cue advances the timeline (Σ += chain_advance = prewait+postwait,
-        # body EXCLUDED — Auto continue overlaps) so our first local cue lands at
-        # its true slot; a disabled cue is transparent (Σ += 0). A cue
-        # that breaks the chain (post_go != 'go') is a hand-off point — stop and
-        # wait for the next GO. This lets every node fire its own local cues from
-        # the same GO press, each at its correct MTC slot, and (Σ += 0 on
-        # disabled) fixes the old local-disabled early-return that made a
-        # post-disabled cue never play.
+        # accumulating the timeline offset Σ of the cues we skip. Under Auto
+        # continue that advance is zero — every cue in the chain arrives at
+        # the trigger — so the walk is really about finding where THIS node's
+        # own segment starts. A cue that breaks the chain (post_go != 'go') is
+        # a hand-off point: stop and wait for the next GO. Disabled cues are
+        # transparent, but they are remembered: enabling one before its slot
+        # rejoins this same pass.
         original = cue_to_go
         sigma_ms = 0.0
         walked = 0
+        skipped_disabled = []
         while cue_to_go is not None and not (cue_to_go._local and cue_to_go.enabled):
+            if not cue_to_go.enabled:
+                skipped_disabled.append(cue_to_go)
             if cue_to_go.post_go != "go":
                 cue_to_go = None
                 break
@@ -1253,6 +1290,11 @@ class NodeEngine(BaseEngine):
             # this node wedges on a cue it can never play and every subsequent GO
             # re-evaluates it. (next_cue_pointer is a global sequence property —
             # depends only on post_go/enabled, never on locality.)
+            # Nothing dispatches here, so nothing would mint a pass — stamp the
+            # disabled cues anyway, or enabling one mid-show could never put it
+            # back into this GO's chain.
+            if skipped_disabled:
+                CUE_HANDLER.stamp_pass(skipped_disabled, GO_mtc)
             self.next_cue_pointer = original.get_next_cue()
             self._broadcast_nextcue()
             Logger.info(
@@ -1281,7 +1323,12 @@ class NodeEngine(BaseEngine):
 
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
-        main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener, GO_mtc + sigma_ms)
+        main_thread = CUE_HANDLER.go(
+            cue_to_go,
+            self.mtc_listener,
+            GO_mtc + sigma_ms,
+            stamp_skipped=skipped_disabled,
+        )
         if main_thread is None:
             # A fresh entry is not refused by the chain-epoch checks, so this
             # is the disabled/non-local race (the cue changed under us between
