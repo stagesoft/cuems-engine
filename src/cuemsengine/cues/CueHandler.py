@@ -137,6 +137,11 @@ class CueHandler:
     # Maximum cues to walk ahead. Prevents runaway on pathological chains.
     _MAX_LOOKAHEAD_DEPTH = 15
 
+    # Slack before a cue reached after its own anchor is reported as late.
+    # One frame at 25 fps — below that it is dispatch jitter, not a mistimed
+    # chain, and warning on it would flood the journal.
+    _LATE_DISPATCH_TOLERANCE_MS = 40
+
     @staticmethod
     def _effective_duration_ms(cue: Cue) -> float:
         """Effective time a cue occupies: prewait + body + postwait.
@@ -201,19 +206,38 @@ class CueHandler:
     @staticmethod
     def _chain_advance_ms(cue: Cue) -> float:
         """Timeline advance a cue contributes to a post_go='go' (Auto continue)
-        chain: prewait + postwait, **excluding the media body**.
+        chain: **zero**.
 
-        Auto continue overlaps: the next cue starts `postwait` after THIS cue's
-        play-start (not after it finishes), so the cue's own duration must NOT
-        push the next cue's slot. This is the ONLY difference from
-        _effective_duration_ms (which keeps body for arm-ahead lookahead).
+        Auto continue triggers the WHOLE chain at once. Every cue in it shares
+        one arrival — the chain trigger — and the only thing that separates the
+        cues is each cue's own prewait:
+
+            arrival(k) = chain_trigger
+            start(k)   = chain_trigger + prewait(k)
+
+        So a cue's own waits must not push the cues after it. `prewait` is a
+        per-cue offset from the common trigger, and `postwait` does not gate a
+        chain whose pointer has already advanced — it stays meaningful for
+        Auto follow / Auto pause (a real tail after the body) and for this
+        cue's own illumination window, but it contributes nothing here.
+
+        Previously this returned `prewait + postwait`, which made each cue's
+        prewait cascade into every following cue: prewaits authored as absolute
+        offsets from GO (5/35/65/95/380 s) played as 5/40/105/200/580.
+        Castillo Medina del Campo, 2026-08-14 — ClickUp 869ej3cc8.
+
+        ⚠ Returning anything non-zero here is NOT just an arithmetic change: the
+        chain is dispatched cue-by-cue at `start(k) + postwait(k)`, so a non-zero
+        advance re-opens the dispatch-ordering dependency documented in
+        Plans/prewait-chain-trigger-semantics.md §8. Re-audit that before
+        changing this value.
 
         Auto follow (post_go='go_at_end') breaks the chain walk and fires its
         next cue from loop_cue *after* the body, so it never reaches this
         accumulator — its body wait is real, not anchored. See CLAUDE.md
         "Cue play modes & pre/post-wait semantics".
         """
-        return cue.prewait.milliseconds_exact + cue.postwait.milliseconds_exact
+        return 0.0
 
     def _wait_mtc(
         self, cue: Cue, mtc: MtcListener, target_ms: float, go_gen: int = 0
@@ -635,19 +659,28 @@ class CueHandler:
         # Single prewait application point (Fable 1.2): the cue's media and reveal
         # are anchored at start = arrival + prewait. prewait is NO LONGER a
         # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
+        # Under Auto continue every cue in the chain shares `arrival` (the
+        # trigger), so this is the ONLY term that separates them.
         start_ms = arrival_ms + cue.prewait.milliseconds_exact
 
-        arrival_ms = frozen_mtc_ms
-        # Single prewait application point (Fable 1.2): the cue's media and reveal
-        # are anchored at start = arrival + prewait. prewait is NO LONGER a
-        # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
-        start_ms = arrival_ms + cue.prewait.milliseconds_exact
-
-        arrival_ms = frozen_mtc_ms
-        # Single prewait application point (Fable 1.2): the cue's media and reveal
-        # are anchored at start = arrival + prewait. prewait is NO LONGER a
-        # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
-        start_ms = arrival_ms + cue.prewait.milliseconds_exact
+        # The chain is dispatched cue-by-cue at start(k) + postwait(k), while
+        # every cue anchors at trigger + prewait(k). A chain whose prewaits run
+        # BACKWARDS is therefore reached after its own anchor: _reveal_wait
+        # returns instantly and the cue fires at dispatch instead of at its slot
+        # (for DMX the player's max(playHead, mtc_time) clamp does the same).
+        # Harmless for the common ascending chain, silent until now — say it out
+        # loud rather than mistime a show quietly. Plans/
+        # prewait-chain-trigger-semantics.md §5.3; the reorder that removes the
+        # gap entirely is §8.
+        now_ms = mtc.main_tc.milliseconds_exact
+        if start_ms < now_ms - self._LATE_DISPATCH_TOLERANCE_MS:
+            Logger.warning(
+                f"Cue {cue.id} dispatched after its anchor — firing LATE by "
+                f"{now_ms - start_ms:.0f}ms (start={start_ms:.0f}ms, "
+                f"mtc={now_ms:.0f}ms). In an Auto continue chain this means this "
+                f"cue's prewait is smaller than the previous cue's "
+                f"prewait + postwait."
+            )
 
         if cue._local:
             # Set up HELD at start_ms (video invisible / audio not-following /
