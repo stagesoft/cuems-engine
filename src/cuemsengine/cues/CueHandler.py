@@ -142,6 +142,27 @@ class CueHandler:
     # chain, and warning on it would flood the journal.
     _LATE_DISPATCH_TOLERANCE_MS = 40
 
+    # ---- chain epoch -----------------------------------------------------
+    # Class-level DEFAULTS only: the first bump shadows them with an instance
+    # attribute, so two handlers (the singleton and a test-built one) keep
+    # independent counters, and a handler built via object.__new__ still reads
+    # a sane value.
+    #
+    # _chain_epoch identifies one "pass" of a chain. It is bumped for every
+    # fresh chain entry (manual GO, go_from re-entry, enable-rejoin) and
+    # carried UNCHANGED through that pass's continuations, so a dispatch can
+    # be told apart from a dispatch belonging to a newer pass. Per-cue
+    # `_go_epoch` is the high-water mark of the newest pass that owns the cue.
+    # Needed because dispatch now happens at chain entry: two cascades can
+    # reach the same cue concurrently and `_go_generation` (last-writer-wins)
+    # cannot order them.
+    _chain_epoch = 0
+
+    # The epoch a STOP claimed for itself. Every continuation of a pass that
+    # started at or before it is refused — this is what makes a STOP landing
+    # inside a cue's ~15s arm window stick (F4).
+    _last_stop_chain_epoch = 0
+
     @staticmethod
     def _effective_duration_ms(cue: Cue) -> float:
         """Effective time a cue occupies: prewait + body + postwait.
@@ -451,9 +472,16 @@ class CueHandler:
         (disarm), which would otherwise undo the re-arm that follows.
         """
         with self._lock:
+            # Claim an epoch for this STOP and record it: every continuation
+            # of a pass that started at or before it is now refused, including
+            # one currently blocked inside go()'s re-arm fallback whose cue is
+            # not in _armed_cues yet (F4).
+            self._chain_epoch = self._chain_epoch + 1
+            self._last_stop_chain_epoch = self._chain_epoch
             for cue in self._armed_cues:
                 cue._stop_requested = True
                 cue._go_generation = getattr(cue, "_go_generation", 0) + 1
+                cue._go_epoch = self._chain_epoch
                 cue._playing = False
 
     def disarm_all(self) -> None:
@@ -473,9 +501,43 @@ class CueHandler:
     # Cue Execution
     # ---------------------------
 
+    def stamp_pass(self, skipped: list, arrival_ms: float) -> int:
+        """Mint a chain epoch and stamp `skipped` with it, dispatching nothing.
+
+        For the case where a chain walk finds NO local+enabled cue on this
+        node (every local cue in the chain is currently disabled): go() is
+        never called, so nothing would mint an epoch, and enabling one of
+        those cues later could not rejoin the pass. Returns the epoch.
+        """
+        with self._lock:
+            self._chain_epoch = self._chain_epoch + 1
+            epoch = self._chain_epoch
+            self._stamp_skipped_locked(skipped, epoch, arrival_ms)
+        return epoch
+
+    def _stamp_skipped_locked(
+        self, skipped: list | None, epoch: int, arrival_ms: float
+    ) -> None:
+        """Record the pass that would have dispatched each skipped-disabled
+        cue, so enabling it later can rejoin at its own slot.
+
+        Caller must hold self._lock.
+        """
+        for cue in skipped or ():
+            try:
+                cue._chain_pass = (epoch, arrival_ms)
+            except Exception:
+                pass
+
     @logged
     def go(
-        self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float = None,
+        chain_epoch: int = None,
+        unroll: bool = True,
+        stamp_skipped: list = None,
     ) -> Thread | None:
         """Starts a cue in a thread.
 
@@ -484,11 +546,21 @@ class CueHandler:
             mtc: The MTC listener
             frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained
             cues
+            chain_epoch: None for a FRESH chain entry (manual GO, go_from
+            re-entry, enable-rejoin) — mints a new epoch. Otherwise the epoch
+            of the pass this dispatch belongs to, which is validated against
+            the cue's own high-water mark and the STOP barrier.
+            unroll: False stops go_threaded from dispatching the rest of the
+            chain — used by the enable-rejoin, where the chain is already
+            unrolled and re-dispatching it would churn live cues.
+            stamp_skipped: cues the caller's chain walk skipped because they
+            are disabled; stamped with this pass so a later enable can rejoin.
 
         Returns:
-            Thread running the cue, or None if the cue is disabled or not
-            local to this node (the node owning the target will run it via
-            its own GO/post_go dispatch).
+            Thread running the cue, or None if the cue is disabled, not local
+            to this node (the node owning the target will run it via its own
+            GO/post_go dispatch), or the dispatch was refused as stale/after a
+            STOP.
         """
         if not cue.enabled:
             Logger.info(f"Cue {cue.id} is disabled, skipping execution")
@@ -503,32 +575,88 @@ class CueHandler:
             Logger.info(f"Cue {cue.id} is not local to this node, skipping execution")
             return None
         Logger.info(f"GO command received. Starting cue {cue.id}")
+
+        is_continuation = chain_epoch is not None
+        if not is_continuation:
+            # Fresh entry: claim the next epoch. It is greater than every
+            # recorded stop and every cue mark at this instant, so the checks
+            # below can only refuse it if a STOP arrives LATER — while this
+            # call is blocked in the re-arm fallback. That is the right
+            # outcome: the operator's STOP came after their GO.
+            with self._lock:
+                self._chain_epoch = self._chain_epoch + 1
+                chain_epoch = self._chain_epoch
+
         if not hasattr(cue, "loaded") or not cue.loaded:
             Logger.warning(
                 f"Cue {cue.id} not loaded at go() time — this should not"
                 f"happen, "
                 f"pre-arm may have failed. Re-arming as fallback."
             )
-            self.arm(cue, init=True)
-            if not hasattr(cue, "loaded") or not cue.loaded:
-                raise Exception(
-                    f"{cue.__class__.__name__} {cue.id} not loaded to go"
-                    f"(re-arm failed)"
-                )
+            # A continuation does NOT arm here: dispatch now happens at chain
+            # entry, so this call runs on the PREVIOUS cue's thread, and an
+            # audio arm can block ~15s on its JACK ports — delaying or killing
+            # that cue's own reveal. go_threaded arms the cue on its own
+            # thread instead, overlapping its own prewait.
+            if not is_continuation:
+                self.arm(cue, init=True)
+                if not hasattr(cue, "loaded") or not cue.loaded:
+                    raise Exception(
+                        f"{cue.__class__.__name__} {cue.id} not loaded to go"
+                        f"(re-arm failed)"
+                    )
 
-        cue._stop_requested = False
-        go_gen = getattr(cue, "_go_generation", 0) + 1
-        cue._go_generation = go_gen
-        # Lifecycle flag: True while a GO owns this cue; cleared by disarm()
-        # and stop_all_cues(). Unlike _go_generation (increment-only), this is
-        # a sound "currently playing" signal — the disable-action path uses it
-        # to decide whether disarming would cut live playback.
-        cue._playing = True
+        with self._lock:
+            # Validate + commit atomically. Both checks are deliberately made
+            # AFTER any arm above: that is what lets a STOP which landed
+            # during a long arm window survive instead of being wiped by the
+            # _stop_requested reset below (F4).
+            if chain_epoch <= self._last_stop_chain_epoch:
+                # For a continuation: the chain was stopped. For a fresh
+                # entry: a STOP landed while we were arming — it is newer than
+                # this GO, so it wins (the caller must tolerate None).
+                Logger.warning(
+                    f"Refusing dispatch of cue {cue.id}: a STOP ended this "
+                    f"chain (pass {chain_epoch} <= stop "
+                    f"{self._last_stop_chain_epoch})"
+                )
+                return None
+            if is_continuation:
+                if getattr(cue, "_go_epoch", 0) >= chain_epoch:
+                    # Either a newer pass already owns the cue (loop-back
+                    # racing the original unroll), or this same pass already
+                    # dispatched it — a post_go='go' cycle, which entry-time
+                    # dispatch would otherwise spin at thread-spawn rate.
+                    Logger.warning(
+                        f"Refusing stale/duplicate chain dispatch of cue "
+                        f"{cue.id} (cue pass {getattr(cue, '_go_epoch', 0)} >= "
+                        f"dispatch pass {chain_epoch})"
+                    )
+                    return None
+
+            cue._go_epoch = chain_epoch
+            cue._stop_requested = False
+            go_gen = getattr(cue, "_go_generation", 0) + 1
+            cue._go_generation = go_gen
+            # Output-commit flag: True once this cue has produced output
+            # (reveal, or the DMX scene send). The stop walk cancels only
+            # cues that have NOT committed — a playing cue is never cut.
+            cue._revealed = False
+            # Lifecycle flag: True while a GO owns this cue; cleared by
+            # disarm() and stop_all_cues(). Unlike _go_generation
+            # (increment-only), this is a sound "currently playing" signal —
+            # the disable-action path uses it to decide whether disarming
+            # would cut live playback.
+            cue._playing = True
+            # Stamped with the epoch minted in THIS lock section: reading it
+            # back off the cue afterwards could capture a newer unrelated
+            # dispatch's epoch and mis-anchor the rejoin.
+            self._stamp_skipped_locked(stamp_skipped, chain_epoch, frozen_mtc_ms)
 
         thread = Thread(
             name=f"GO:{cue.__class__.__name__}:{cue.id}",
             target=self.go_threaded,
-            args=[cue, mtc, frozen_mtc_ms, go_gen],
+            args=[cue, mtc, frozen_mtc_ms, go_gen, chain_epoch, unroll],
             daemon=True,
         )
         thread.start()
@@ -632,7 +760,13 @@ class CueHandler:
         return None, acc
 
     def go_threaded(
-        self, cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None, go_gen: int = 0
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float = None,
+        go_gen: int = 0,
+        chain_epoch: int = 0,
+        unroll: bool = True,
     ):
         """Runs a cue based on its properties.
 
@@ -644,6 +778,10 @@ class CueHandler:
                     generation has changed by the time the loop ends, another
                     go/stop cycle occurred and this thread must not touch the
                     cue.
+            chain_epoch: the pass this cue belongs to, carried unchanged into
+                    the continuation dispatch so the whole chain shares it.
+            unroll: False suppresses the continuation dispatch (enable-rejoin
+                    of a chain that is already unrolled).
         """
         # frozen_mtc_ms is this cue's ARRIVAL on the MTC timeline:
         # GO_mtc + Σ(effective durations of preceding cues in the chain).
@@ -733,7 +871,7 @@ class CueHandler:
             sleep(cue.postwait.milliseconds_rounded / 1000)
 
         post_go_thread = None
-        if cue.post_go == "go" and not cue._stop_requested and not superseded:
+        if cue.post_go == "go" and not cue._stop_requested and not superseded and unroll:
             # Walk the chain to THIS node's next local+enabled cue, accumulating
             # the timeline offset for the cues we skip (non-local: +eff so the
             # slot is right; disabled: +0). Every node walks the full chain and
@@ -741,7 +879,9 @@ class CueHandler:
             next_cue, next_arrival = self._next_local_fire(cue, arrival_ms)
             if next_cue is not None:
                 Logger.info(f"Running post go for next local cue: {next_cue.id}")
-                post_go_thread = self.go(next_cue, mtc, next_arrival)
+                post_go_thread = self.go(
+                    next_cue, mtc, next_arrival, chain_epoch=chain_epoch
+                )
 
         # Pre-arm go_at_end targets during playback. Runs after
         # run_cue() so current cue is already playing. The arm happens

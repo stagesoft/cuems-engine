@@ -245,8 +245,12 @@ class TestGoThreadedAnchoring:
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
             patch("cuemsengine.cues.CueHandler.loop_cue"),
         ):
-            ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen)
-        ch.go.assert_called_once_with(nxt, mtc, 9000.0)
+            ch.go_threaded(
+                cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen, chain_epoch=3
+            )
+        # the pass is carried unchanged into the continuation, so every cue in
+        # the chain is dispatched under one epoch
+        ch.go.assert_called_once_with(nxt, mtc, 9000.0, chain_epoch=3)
 
     def test_superseded_generation_does_not_fire(self):
         # go_gen=7 but the cue's live generation is 8 (a fresh GO/reload took
