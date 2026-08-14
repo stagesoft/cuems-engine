@@ -142,6 +142,13 @@ class CueHandler:
     # chain, and warning on it would flood the journal.
     _LATE_DISPATCH_TOLERANCE_MS = 40
 
+    # How far ahead of its start a cue performs its HELD setup (run_cue).
+    # Auto continue unrolls the whole chain from the trigger, so without this
+    # every cue would run_cue at GO — for video that is N layers decoding
+    # invisibly for the whole of their prewaits. Configurable per deployment;
+    # 5s covers 4K decode-at-offset with room to spare.
+    _RUN_AHEAD_MS = 5000
+
     # ---- chain epoch -----------------------------------------------------
     # Class-level DEFAULTS only: the first bump shadows them with an instance
     # attribute, so two handlers (the singleton and a test-built one) keep
@@ -501,6 +508,34 @@ class CueHandler:
     # Cue Execution
     # ---------------------------
 
+    def _warn_if_late(self, cue: Cue, mtc: MtcListener, start_ms: float) -> None:
+        """Say it out loud when a cue is reached after its own anchor.
+
+        Firing late is recoverable; firing late silently mistimes a show and
+        nobody knows why. Tolerance is one frame — below that it is jitter.
+        """
+        now_ms = mtc.main_tc.milliseconds_exact
+        if start_ms < now_ms - self._LATE_DISPATCH_TOLERANCE_MS:
+            Logger.warning(
+                f"Cue {cue.id} reached after its anchor — firing LATE by "
+                f"{now_ms - start_ms:.0f}ms (start={start_ms:.0f}ms, "
+                f"mtc={now_ms:.0f}ms). Its slot had already passed when the "
+                f"cue got here (seed in the past, a re-arm that overran its "
+                f"prewait, or an MTC jump)."
+            )
+
+    def _end_illumination(self, cue: Cue) -> None:
+        """Drop the sequence-view highlight for a cue that will not play.
+
+        Under Auto continue a cue is lit from the trigger, so any path that
+        abandons it before its normal end must clear the highlight or the UI
+        shows a dead cue as running.
+        """
+        try:
+            self.communications_thread.remove_cue(cue.id, timeout=0.1)
+        except Exception:
+            pass
+
     def stamp_pass(self, skipped: list, arrival_ms: float) -> int:
         """Mint a chain epoch and stamp `skipped` with it, dispatching nothing.
 
@@ -729,18 +764,23 @@ class CueHandler:
         return self._wait_mtc(cue, mtc, start.milliseconds_exact, go_gen)
 
     def _next_local_fire(
-        self, cue: Cue, arrival_ms: float
+        self, cue: Cue, arrival_ms: float, stamp_epoch: int = None
     ) -> tuple["Cue | None", float]:
         """From a just-played cue, walk its post_go='go' chain to THIS node's
         next local+enabled cue and return (that_cue_or_None, its_arrival_ms).
 
-        The arrival of the immediate target is arrival_ms + chain_advance(cue)
-        (prewait+postwait — Auto continue overlaps, body excluded). Cues we skip
-        along the way advance the accumulator: non-local ENABLED cues add their
-        chain advance (so the found cue lands at its true slot — the A-B-A case,
-        §3c Option 1); disabled cues add nothing (transparent). The
-        walk stops at a chain break (post_go != 'go') — an explicit hand-off
-        point — and is bounded against all-disabled/all-remote cycles.
+        Under Auto continue the chain advance is zero, so every cue in the
+        chain arrives at the same trigger; the accumulator is kept because the
+        helper is the one documented place expressing the rule. Cues we skip
+        are transparent, and the walk stops at a chain break (post_go != 'go')
+        — an explicit hand-off point — bounded against all-disabled/all-remote
+        cycles.
+
+        stamp_epoch: when given, disabled cues found on the way are stamped
+        with the pass that would have dispatched them, so enabling one later
+        can rejoin it at its own slot. Left None (the default) the walk touches
+        nothing — callers that only ask "who is next" must stay side-effect
+        free.
         """
         acc = arrival_ms + self._chain_advance_ms(cue)
         node = getattr(cue, "_target_object", None)
@@ -748,6 +788,15 @@ class CueHandler:
         while node is not None:
             if getattr(node, "_local", False) and getattr(node, "enabled", False):
                 return node, acc
+            if stamp_epoch is not None and not getattr(node, "enabled", False):
+                # Disabled: transparent to the timeline, but remember the pass
+                # so a re-enable before its slot can still rejoin. Stamped here
+                # too when the disabled cue is itself the chain break, which
+                # the walk reaches but does not walk past. Guarded so that a
+                # caller only asking "who is next" touches nothing at all —
+                # including this handler's own attributes, since the walk is
+                # also driven with a bare class or a stub as `self`.
+                self._stamp_one(node, stamp_epoch, acc)
             if getattr(node, "post_go", None) != "go":
                 return None, acc
             if getattr(node, "enabled", False):
@@ -758,6 +807,17 @@ class CueHandler:
                 Logger.error("post_go fire-walk hit safety limit; aborting")
                 return None, acc
         return None, acc
+
+    def _stamp_one(self, cue: Cue, epoch: int | None, arrival_ms: float) -> None:
+        """Stamp a single skipped-disabled cue, if stamping was asked for.
+
+        Gated on `epoch is not None` in full — including the lock — because the
+        walk is also called with a bare class or a stub as `self`.
+        """
+        if epoch is None:
+            return
+        with self._lock:
+            self._stamp_skipped_locked([cue], epoch, arrival_ms)
 
     def go_threaded(
         self,
@@ -794,6 +854,9 @@ class CueHandler:
             Logger.debug(f"Captured MTC snapshot for cue {cue.id}: {frozen_mtc_ms}ms")
 
         arrival_ms = frozen_mtc_ms
+        # Kept on the cue so a cancel can stamp the pass this dispatch belonged
+        # to (a disable/re-enable has to rejoin at this same anchor).
+        cue._dispatch_arrival_ms = arrival_ms
         # Single prewait application point (Fable 1.2): the cue's media and reveal
         # are anchored at start = arrival + prewait. prewait is NO LONGER a
         # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
@@ -801,37 +864,74 @@ class CueHandler:
         # trigger), so this is the ONLY term that separates them.
         start_ms = arrival_ms + cue.prewait.milliseconds_exact
 
-        # The chain is dispatched cue-by-cue at start(k) + postwait(k), while
-        # every cue anchors at trigger + prewait(k). A chain whose prewaits run
-        # BACKWARDS is therefore reached after its own anchor: _reveal_wait
-        # returns instantly and the cue fires at dispatch instead of at its slot
-        # (for DMX the player's max(playHead, mtc_time) clamp does the same).
-        # Harmless for the common ascending chain, silent until now — say it out
-        # loud rather than mistime a show quietly. Plans/
-        # prewait-chain-trigger-semantics.md §5.3; the reorder that removes the
-        # gap entirely is §8.
-        now_ms = mtc.main_tc.milliseconds_exact
-        if start_ms < now_ms - self._LATE_DISPATCH_TOLERANCE_MS:
-            Logger.warning(
-                f"Cue {cue.id} dispatched after its anchor — firing LATE by "
-                f"{now_ms - start_ms:.0f}ms (start={start_ms:.0f}ms, "
-                f"mtc={now_ms:.0f}ms). In an Auto continue chain this means this "
-                f"cue's prewait is smaller than the previous cue's "
-                f"prewait + postwait."
-            )
+        # Safety net. Auto continue dispatches the whole chain from the trigger
+        # and every prewait is >= 0, so a chain cue cannot be reached after its
+        # own anchor any more; what can still land here is a go_at_end/manual
+        # seed already in the past, or an MTC jump. Silence would mistime a show
+        # quietly. Plans/prewait-dispatch-reorder-phase2.md §4.
+        self._warn_if_late(cue, mtc, start_ms)
+
+        # Dispatch the rest of the chain NOW, at this cue's arrival — not after
+        # its reveal and postwait. Auto continue triggers the whole chain at
+        # once, so every cue must be free to park on its own anchor; dispatching
+        # at start(k)+postwait(k) reached a cue with a smaller prewait than its
+        # predecessor's after its anchor had already passed, and fired it late.
+        # Every cue of the pass carries the same chain_epoch, so a stale cascade
+        # (loop-back) and a cycle are both refused in go().
+        post_go_thread = None
+        if (
+            unroll
+            and cue.post_go == "go"
+            and not cue._stop_requested
+            and getattr(cue, "_go_generation", 0) == go_gen
+        ):
+            try:
+                # Walk to THIS node's next local+enabled cue; cues we skip are
+                # transparent (the advance is zero), and disabled ones are
+                # stamped with this pass so enabling one later can rejoin it.
+                next_cue, next_arrival = self._next_local_fire(
+                    cue, arrival_ms, stamp_epoch=chain_epoch
+                )
+                if next_cue is not None:
+                    Logger.info(
+                        f"Unrolling post_go chain: dispatching {next_cue.id} "
+                        f"at the trigger"
+                    )
+                    post_go_thread = self.go(
+                        next_cue, mtc, next_arrival, chain_epoch=chain_epoch
+                    )
+            except Exception as e:
+                # The chain is downstream work; losing it must not cost THIS
+                # cue its own reveal.
+                Logger.error(f"Chain dispatch from cue {cue.id} failed: {e}")
 
         if cue._local:
-            # Set up HELD at start_ms (video invisible / audio not-following /
-            # action not-yet-run / dmx self-scheduled from absolute mtc_time).
-            # Done at dispatch so the frame is pre-loaded before reveal.
-            run_cue(cue, mtc, start_ms)
+            # A continuation does not arm on the dispatching thread (that is the
+            # PREVIOUS cue's thread — a ~15s audio arm there would delay or kill
+            # its reveal). It arms here instead, on its own thread, overlapping
+            # its own prewait.
+            if not getattr(cue, "loaded", False):
+                Logger.warning(
+                    f"Cue {cue.id} not loaded at dispatch — arming on its own "
+                    f"thread before its slot."
+                )
+                self.arm(cue, init=True)
+                if not getattr(cue, "loaded", False):
+                    # The rest of the chain went out at entry, so this failure
+                    # costs this cue only.
+                    Logger.error(
+                        f"{cue.__class__.__name__} {cue.id} could not be armed; "
+                        f"it will not play. The rest of the chain is unaffected."
+                    )
+                    return
+                # The check above ran before the arm; an arm longer than this
+                # cue's runway makes it late, and that must not be silent.
+                self._warn_if_late(cue, mtc, start_ms)
 
             # Illuminate (sequence-view highlight) at the cue's ARRIVAL — the
-            # start of its prewait — NOT at dispatch. A post_go='go' cue is
-            # dispatched at the GO instant (cross-node walk fires local cues
-            # immediately), so highlighting at dispatch lit the cue up seconds
-            # before it actually starts. Gate on live MTC so it lights at its
-            # real slot, identically on every node.
+            # start of its prewait — NOT at dispatch. Under Auto continue every
+            # cue arrives at the trigger, so the whole chain lights together and
+            # each cue stays lit for prewait + max(body, postwait).
             if self._wait_mtc(cue, mtc, arrival_ms, go_gen) != "stopped":
                 try:
                     self.communications_thread.add_cue(
@@ -840,12 +940,53 @@ class CueHandler:
                 except Exception:
                     pass
 
+            # Park until the held setup is actually needed. Unrolling the chain
+            # at the trigger would otherwise run every cue's run_cue at GO —
+            # for video that is N layers decoding invisibly for the whole of
+            # their prewaits. A start already inside the window returns at once.
+            parked = self._wait_mtc(
+                cue, mtc, start_ms - self._RUN_AHEAD_MS, go_gen
+            )
+
+            if parked != "stopped":
+                # Set up HELD at start_ms (video invisible / audio not-following
+                # / action not-yet-run / dmx self-scheduled from absolute
+                # mtc_time), close enough to the slot that the frame is ready.
+                try:
+                    run_cue(cue, mtc, start_ms)
+                except Exception as e:
+                    # Illumination happens above, so a failure here would leave
+                    # the cue lit forever with a dead thread behind it.
+                    Logger.error(
+                        f"run_cue failed for {cue.__class__.__name__} "
+                        f"{cue.id}: {e}. The cue will not play."
+                    )
+                    self._end_illumination(cue)
+                    return
+                if isinstance(cue, DmxCue):
+                    # DMX has no reveal: the scene is already on its way with an
+                    # absolute mtc_time and the player self-schedules it. From
+                    # here it is committed and the stop walk must not treat it
+                    # as still cancellable.
+                    with self._lock:
+                        cue._revealed = True
+
             # MTC-gated reveal: wait until live MTC reaches start_ms, then reveal
             # (video /visible; audio /mtcfollow; action EXECUTE; dmx no-op). This
             # is what makes prewait/body/postwait real timeline gaps, honored
-            # identically on every node.
-            if self._reveal_wait(cue, mtc, go_gen) != "stopped":
-                reveal_cue(cue, mtc, start_ms)
+            # identically on every node. Skipped when the park was cancelled —
+            # run_cue never ran, so _start_mtc holds no anchor to wait on.
+            if parked != "stopped" and self._reveal_wait(cue, mtc, go_gen) != "stopped":
+                # Commit under the same lock the stop walk takes, so a cancel
+                # landing inside the 20ms poll gap cannot leak a reveal past it.
+                with self._lock:
+                    do_reveal = not cue._stop_requested and (
+                        getattr(cue, "_go_generation", 0) == go_gen
+                    )
+                    if do_reveal:
+                        cue._revealed = True
+                if do_reveal:
+                    reveal_cue(cue, mtc, start_ms)
 
         # A superseding GO/reload (new _go_generation, without _stop_requested)
         # can arrive during the now-MTC-gated reveal wait — that fresh thread
@@ -855,13 +996,15 @@ class CueHandler:
         # the generation check, so we only guard the outward actions here.
         superseded = getattr(cue, "_go_generation", 0) != go_gen
 
-        # Postwait for AUTO-CONTINUE only: DISPATCH pacing — paces the fire of
-        # the next cue so we don't arm the whole chain at once (the next cue's
-        # timeline slot is set by the arrival math below, not by this sleep),
-        # and it holds this thread past the body when post > body, which is what
-        # produces continue's `pre + max(body, post)` illumination. For
-        # pause/go_at_end the postwait is a REAL gap AFTER the body — handled by
-        # the MTC-gated tail below loop_cue, not by this sleep.
+        # Postwait for AUTO-CONTINUE only: ILLUMINATION hold. It no longer
+        # paces anything — the chain left at this cue's arrival, above — but it
+        # still holds this thread past the body when post > body, and that is
+        # the ONLY thing producing continue's `pre + max(body, post)` highlight
+        # (loop_cue never reads postwait, and remove_cue fires after it
+        # returns). Removing it would silently shorten the highlight to
+        # pre + body. For pause/go_at_end the postwait is a REAL gap AFTER the
+        # body — handled by the MTC-gated tail below loop_cue, not by this
+        # sleep.
         if (
             cue.post_go == "go"
             and cue.postwait > 0
@@ -869,19 +1012,6 @@ class CueHandler:
             and not superseded
         ):
             sleep(cue.postwait.milliseconds_rounded / 1000)
-
-        post_go_thread = None
-        if cue.post_go == "go" and not cue._stop_requested and not superseded and unroll:
-            # Walk the chain to THIS node's next local+enabled cue, accumulating
-            # the timeline offset for the cues we skip (non-local: +eff so the
-            # slot is right; disabled: +0). Every node walks the full chain and
-            # fires its own local segments at their correct slots (§3c Opt 1).
-            next_cue, next_arrival = self._next_local_fire(cue, arrival_ms)
-            if next_cue is not None:
-                Logger.info(f"Running post go for next local cue: {next_cue.id}")
-                post_go_thread = self.go(
-                    next_cue, mtc, next_arrival, chain_epoch=chain_epoch
-                )
 
         # Pre-arm go_at_end targets during playback. Runs after
         # run_cue() so current cue is already playing. The arm happens
