@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Tests for ControllerEngine cleanup consolidation and new commands.
 
@@ -150,37 +151,202 @@ class TestStopScriptRefactored:
 # ─── get_project_status ──────────────────────────────────────────────────
 
 
+UUID_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+def _loaded_script(uuid=UUID_A, unix_name="my_show"):
+    """A script mock standing in for a loaded project.
+
+    unix_name is always set explicitly: a bare Mock auto-vivifies the
+    attribute into a truthy Mock, so str(...) would yield a repr instead of
+    the empty string the code is supposed to produce when it is absent.
+    """
+    script = Mock()
+    script.id = uuid
+    script.unix_name = unix_name
+    return script
+
+
 class TestGetProjectStatus:
     def test_returns_none_when_not_running(self, controller):
         controller.set_status("running", "no")
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
 
     def test_returns_none_when_no_script(self, controller):
         controller.set_status("running", "no")
         controller.script = None
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
 
     def test_returns_running_with_uuid(self, controller):
         controller.set_status("running", "yes")
-        mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-        controller.script = mock_script
+        controller.script = _loaded_script()
         result = controller.get_project_status(None)
         assert result == {
             "status": "running",
-            "project_uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "project_uuid": UUID_A,
+            "project_unix_name": "my_show",
         }
 
-    def test_loaded_but_not_playing_returns_none(self, controller):
-        """A loaded but not playing project should report status 'none'."""
+    def test_loaded_but_not_playing_returns_loaded(self, controller):
+        """A loaded, stopped project is 'loaded' — not 'none'.
+
+        This is the whole point of 869dr2kzh: before it, this case was
+        indistinguishable from having no project at all, while
+        /engine/status/load went on naming the project.
+        """
         controller.set_status("running", "no")
-        mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-        controller.script = mock_script
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script()
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "loaded",
+            "project_uuid": UUID_A,
+            "project_unix_name": "my_show",
+        }
+
+    def test_script_without_load_status_is_none(self, controller):
+        """Window 1: mid-load, the script is gone but `load` may lag."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "")
+        controller.script = _loaded_script()
+        result = controller.get_project_status(None)
+        assert result["status"] == "none"
+
+    def test_load_status_without_script_is_none(self, controller):
+        """Window 2: a failed load leaves no script; never claim 'loaded'."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        controller.script = None
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
+
+    def test_running_wins_over_loaded(self, controller):
+        controller.set_status("running", "yes")
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script()
+        assert controller.get_project_status(None)["status"] == "running"
+
+    def test_script_without_unix_name_does_not_break_status(self, controller):
+        """unix_name is bolted on by load_project, not a CuemsScript field."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        script = Mock(spec=["id"])
+        script.id = UUID_A
+        controller.script = script
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "loaded",
+            "project_uuid": UUID_A,
+            "project_unix_name": "",
+        }
+
+    def test_running_without_script_degrades_to_none(self, controller):
+        """A status other than 'none' must always carry a uuid.
+
+        running=yes with no script should be unreachable — load and unload
+        both refuse while running — but if it happens, the reply must not
+        offer a 'running' the client cannot act on.
+        """
+        controller.set_status("running", "yes")
+        controller.script = None
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
+
+    def test_uuid_is_coerced_to_str(self, controller):
+        """CuemsScript.id is a Uuid, and the editor serialises this to JSON."""
+
+        class FakeUuid:
+            def __str__(self):
+                return UUID_A
+
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script(uuid=FakeUuid())
+        result = controller.get_project_status(None)
+        assert result["project_uuid"] == UUID_A
+        assert isinstance(result["project_uuid"], str)
+
+
+# ─── load_project clears the load status ────────────────────────────────
+
+
+class TestLoadProjectClearsLoadStatus:
+    """`load` must die with self.script, not survive it.
+
+    Until 869dr2kzh, load_project dropped the script before validating the
+    new project but never touched `load`, so a failed load left the engine
+    holding no project while /engine/status/load still named the previous
+    one — a lie the transport bar printed and power-bridge's project_loaded()
+    believed.
+    """
+
+    def test_failed_config_load_clears_load_status(self, controller):
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+        controller.cm.load_project_config.side_effect = Exception("boom")
+
+        with patch.object(controller, "error_to_editor"):
+            assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_failed_script_read_clears_load_status(self, controller):
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+
+        with (
+            patch.object(controller, "read_script", side_effect=Exception("boom")),
+            patch.object(controller, "error_to_editor"),
+        ):
+            assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_deploy_only_clears_load_status(self, controller):
+        """deploy_only drops the script too, so it must drop the name."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+
+        assert controller.load_project("new_show", deploy_only=True) is True
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_refused_load_while_running_leaves_load_status_alone(self, controller):
+        """The running guard returns before anything is cleared.
+
+        Never auto-stop a running project — and never quietly forget which
+        project is playing either.
+        """
+        controller.set_status("running", "yes")
+        controller.set_status("load", "playing_show")
+
+        assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == "playing_show"
 
 
 # ─── unload_project ─────────────────────────────────────────────────────

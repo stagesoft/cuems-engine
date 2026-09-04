@@ -1237,6 +1237,17 @@ class ControllerEngine(BaseEngine):
         # operator, just failed to load. A successful _resolve_cluster_state
         # overwrites it a few lines later.
         self._clear_load_diagnosis()
+        # The same argument, applied to the load status. reset_script() drops
+        # self.script, but nothing dropped `load`, so a failed load left the
+        # engine holding no project while still broadcasting the PREVIOUS
+        # project's name on /engine/status/load. That lie reached the transport
+        # bar and power-bridge alike — project_loaded() stayed True, so
+        # /setnextcue and /gocue were accepted against a project the engine no
+        # longer had. The two signals now die together, which is what lets
+        # get_project_status() trust either of them.
+        # Deliberate cost: during a *successful* load the transport bar shows
+        # "—" until the new name arrives, instead of the stale previous one.
+        self.set_status("load", "")
 
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -1292,9 +1303,13 @@ class ControllerEngine(BaseEngine):
             f"Cue enabled status initialised for {len(self.cue_enabled_status)} cues"
         )
 
-        # Update internal status
-        # TODO: send project UUID instead of name for robustness (would break
-        # UI contract)
+        # Update internal status.
+        # This broadcast carries the project's unix_name, NOT its uuid, and
+        # that is a decision rather than a leftover: the frontend prints this
+        # string in the transport bar and matches it against project.unix_name,
+        # so switching it to a uuid shows the operator a raw uuid and breaks
+        # that match. Consumers that need the uuid ask project_status, which
+        # returns both (869dr2k2h, closed the additive way).
         self.set_status("load", project_name)
 
         # Probe cluster, derive _required_nodes for GO gating, refresh <online>
@@ -1701,11 +1716,57 @@ class ControllerEngine(BaseEngine):
         return True
 
     def get_project_status(self, value, context=None):
-        """Return current project playback status."""
+        """Return the current project load/playback state.
+
+        Three states, deliberately distinct:
+
+        * `running` — a project is loaded AND playing.
+        * `loaded`  — a project is loaded and NOT playing. This is the state
+          the reply used to collapse into `none`, which made a loaded-but-
+          stopped project indistinguishable from no project at all — and left
+          this reply contradicting /engine/status/load, which kept naming the
+          project all along.
+        * `none`    — no project.
+
+        `loaded` says nothing about readiness: the GO gate waits on `armed`,
+        published separately on /engine/status/armed. A project whose nodes
+        never answer sits in `loaded` for the whole 120 s arm watchdog and
+        never becomes GO-able. Do not treat this field as a GO gate.
+
+        `project_uuid` is populated in both `running` and `loaded`, and the
+        invariant is one-way: **a status other than `none` always carries a
+        non-empty uuid**. That is why `running` with no script — which the
+        guards in load_project/unload_project should make unreachable —
+        degrades to `none` here rather than to a `running` a client cannot
+        act on.
+
+        `project_unix_name` is the same string /engine/status/load broadcasts,
+        returned here so a consumer that needs the uuid never has to make that
+        broadcast carry one (869dr2k2h).
+
+        The load state is read from two attributes that another thread can be
+        mutating mid-load. They are ANDed, so a torn read falls to `none` —
+        never to a `loaded` naming a project the engine does not hold.
+        """
         running = self.get_status("running") == "yes"
+        loaded = self.script is not None and bool(self.get_status("load"))
+
+        if running:
+            status = "running"
+        elif loaded:
+            status = "loaded"
+        else:
+            status = "none"
+
+        if status == "none" or self.script is None:
+            return {"status": "none", "project_uuid": "", "project_unix_name": ""}
+
+        # unix_name is not a CuemsScript field — load_project attaches it by
+        # hand — so any script built by another path simply lacks it.
         return {
-            "status": "running" if running else "none",
-            "project_uuid": (str(self.script.id) if running and self.script else ""),
+            "status": status,
+            "project_uuid": str(self.script.id),
+            "project_unix_name": str(getattr(self.script, "unix_name", "") or ""),
         }
 
     def get_cluster_status(self, value, context=None) -> dict:
