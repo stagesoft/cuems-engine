@@ -4,6 +4,7 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import asyncio
+import json
 import math
 import os
 import threading
@@ -105,6 +106,16 @@ class ControllerEngine(BaseEngine):
         self._pong_expected: set[str] = set()
         self._pong_event = threading.Event()
         self._cluster_lock = threading.Lock()
+        # What the last load found wrong with the cluster, kept so it can be
+        # pushed at load time AND replayed to a browser that connects later
+        # (with boot auto-load the UI is normally opened after the load).
+        # Initialised here on purpose: _on_ws_client_connect reads it, and a
+        # client connecting before the first load of a freshly restarted engine
+        # would otherwise raise AttributeError mid-coroutine and take the rest
+        # of the late-join dump down with it. _load_id is bumped on every
+        # resolve so a UI can tell an operator's retry from a reconnect replay.
+        self._load_diagnosis: dict | None = None
+        self._load_id: int = 0
         # One-shot watchdog: fires N seconds after _resolve_cluster_state if
         # _armed_nodes still doesn't cover _required_nodes (e.g. a node ponged
         # alive but then died mid-rsync). Logs an error listing the pending
@@ -1073,6 +1084,44 @@ class ControllerEngine(BaseEngine):
         ):
             self.communications_thread.broadcast_osc(f"/engine/status/{key}", value)
 
+    @staticmethod
+    def _cluster_warning_payload(diagnosis: dict | None) -> str:
+        """Serialize a load diagnosis for the OSC status channel.
+
+        OSC cannot carry lists, so this travels as a JSON string — the same
+        thing the codebase already does elsewhere on this channel. A cleared
+        diagnosis serializes to empty lists rather than being withheld: a clean
+        load after a bad one has to actively erase the previous warning, or it
+        stays on the operator's screen forever.
+        """
+        d = diagnosis or {}
+        return json.dumps(
+            {
+                "load_id": d.get("load_id", 0),
+                "project": d.get("project", ""),
+                "missing": d.get("missing", []),
+                "unreachable": d.get("unreachable", []),
+            }
+        )
+
+    def _broadcast_cluster_warning(self, diagnosis: dict | None) -> None:
+        """Push the load diagnosis to every connected UI. Always sent."""
+        self._broadcast_status(
+            "cluster_warning", self._cluster_warning_payload(diagnosis)
+        )
+
+    def _clear_load_diagnosis(self) -> None:
+        """Forget the last load's diagnosis and erase it from every UI.
+
+        Called wherever a load ENDS — a new load starting, a load failing
+        early, an unload — but deliberately NOT from _clear_playback_state(),
+        which also runs on STOP: a stopped project is still loaded, and its
+        missing nodes are still missing.
+        """
+        with self._cluster_lock:
+            self._load_diagnosis = None
+        self._broadcast_cluster_warning(None)
+
     async def _on_ws_client_connect(self, websocket) -> None:
         """Send full state dump to a newly connected WebSocket client."""
         from .osc.WebSocketOscHandler import build_osc_message
@@ -1084,6 +1133,20 @@ class ControllerEngine(BaseEngine):
                 data = build_osc_message(f"/engine/status/{key}", val)
                 if data:
                     await websocket.send(data)
+
+        # Last load's cluster diagnosis. Replayed here because with boot
+        # auto-load the browser is normally opened well after the load, so the
+        # push in _resolve_cluster_state has nobody listening.
+        with self._cluster_lock:
+            diagnosis = (
+                dict(self._load_diagnosis) if self._load_diagnosis else None
+            )
+        data = build_osc_message(
+            "/engine/status/cluster_warning",
+            self._cluster_warning_payload(diagnosis),
+        )
+        if data:
+            await websocket.send(data)
 
         # Per-cue playback status
         for cid, status in self.cue_status.items():
@@ -1168,6 +1231,12 @@ class ControllerEngine(BaseEngine):
         Logger.info(f"Loading project {project_name}")
         self._clear_playback_state()
         self.reset_script()
+        # Before anything can fail. load_project_config() and read_script()
+        # both return False further down, and without this the previous
+        # project's warning would stay on screen for a project that, to the
+        # operator, just failed to load. A successful _resolve_cluster_state
+        # overwrites it a few lines later.
+        self._clear_load_diagnosis()
 
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -1370,6 +1439,32 @@ class ControllerEngine(BaseEngine):
             Logger.warning(f"Could not read network_map: {e}")
         return out
 
+    def _node_label(self, uuid: str) -> str:
+        """Human-readable name for a node, for LOG LINES ONLY.
+
+        A bare UUID in a journal is unreadable under pressure, so the log says
+        `node01 (2b6f…)`. Wire payloads stay UUID-only: role_id/alias are
+        mutable projections per the node-identity contract, and the browser
+        already resolves them from initial_mappings. Two sources of truth for a
+        name is exactly what that contract forbids.
+        """
+        try:
+            node_list = (self.cm.network_map or {}).get("node_list", [])
+            for entry in node_list:
+                if not isinstance(entry, dict):
+                    continue
+                node = entry.get("node") or {}
+                if node.get("uuid") != uuid:
+                    continue
+                for field in ("alias", "role_id", "hostname"):
+                    name = node.get(field)
+                    if name:
+                        return f"{name} ({uuid[:8]}…)"
+                break
+        except Exception:
+            pass
+        return uuid
+
     def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
         """Broadcast a ping to all nodes and collect pong replies.
 
@@ -1470,25 +1565,47 @@ class ControllerEngine(BaseEngine):
             if in_alive and in_project:
                 continue  # the silent happy path — tracked via armed_ready
             if in_alive and not in_project:
-                Logger.info(f"node {uuid} online but unused by this project")
+                Logger.info(
+                    f"node {self._node_label(uuid)} online but unused by this "
+                    f"project"
+                )
             elif not in_alive and in_project:
+                # Say what the code below actually does. `required` is
+                # (adopted & alive & project), so this node is EXCLUDED from
+                # the gate: GO is enabled without it and its cues stay silent.
+                # The old wording here claimed "GO blocked", which sent anyone
+                # debugging a mute show from the journal the wrong way.
                 Logger.error(
-                    f"node {uuid} required by this project but did not "
-                    f"respond to ping; cues for it will not play. GO blocked."
+                    f"node {self._node_label(uuid)} is used by this project "
+                    f"but did not respond to ping; its cues will NOT play. "
+                    f"GO is NOT blocked — the node is excluded from the arm "
+                    f"gate."
                 )
             else:
                 Logger.warning(
-                    f"node {uuid} is adopted but did not respond to ping; "
-                    f"not required by this project — investigate why it is"
-                    f"offline"
+                    f"node {self._node_label(uuid)} is adopted but did not "
+                    f"respond to ping; not required by this project — "
+                    f"investigate why it is offline"
                 )
+
+        # The two categories worth telling the operator about. Warn loudly,
+        # never block: `required` below is untouched by any of this.
+        #
+        # The controller is excluded from both. It is added to `required`
+        # unconditionally, so it can never be a node whose cues silently do not
+        # play — and it is not always flagged `adopted` in network_map.xml, so
+        # without this it would be reported as "not in the cluster" on a
+        # perfectly healthy load. A false alarm here is worse than no alarm:
+        # it teaches operators to ignore the real one.
+        missing = sorted(project - adopted - {controller_uuid})
+        unreachable = sorted((project & adopted) - alive - {controller_uuid})
 
         # Project nodes that are NOT adopted at all — script is broken for
         # this cluster.
-        for uuid in sorted(project - adopted):
+        for uuid in missing:
             Logger.warning(
-                f"project references node {uuid} which is not in the cluster; "
-                f"cues for it will not fire"
+                f"project references node {self._node_label(uuid)} which is "
+                f"not in the cluster; cues for it will not fire"
             )
 
         required = (adopted & alive & project) | {controller_uuid}
@@ -1498,12 +1615,24 @@ class ControllerEngine(BaseEngine):
             self._required_nodes = required
             self._armed_nodes.clear()
             self._finished_nodes.clear()
+            self._load_id += 1
+            self._load_diagnosis = {
+                "load_id": self._load_id,
+                "project": str(self.get_status("load") or ""),
+                "missing": missing,
+                "unreachable": unreachable,
+            }
+            diagnosis = dict(self._load_diagnosis)
 
         Logger.info(
             f"Cluster state resolved: required={sorted(required)} "
             f"alive={sorted(alive)} adopted={sorted(adopted)} "
             f"project={sorted(project)}"
         )
+
+        # Tell the UI, even when both lists are empty — see
+        # _cluster_warning_payload.
+        self._broadcast_cluster_warning(diagnosis)
 
         # The probe's `alive` set is a runtime liveness snapshot (sub-second,
         # used here for GO gating). The <online> field in network_map.xml is
@@ -1615,7 +1744,21 @@ class ControllerEngine(BaseEngine):
             probed_at = time.monotonic()
             self._cluster_status_cache = (probed_at, payload)
 
-        return dict(payload, age_s=round(time.monotonic() - probed_at, 3))
+        # Read the diagnosis fresh, OUTSIDE the clamp. Folding it into the
+        # cached payload would serve the pre-transition diagnosis to any poll
+        # landing within CLUSTER_STATUS_CLAMP_S of a load, unload or reload —
+        # a warning outliving its cause, which is the worst outcome this
+        # surface has. The clamp exists to stop ping floods; a lock-guarded
+        # dict read is not a ping. Same treatment as age_s.
+        with self._cluster_lock:
+            diagnosis = dict(self._load_diagnosis) if self._load_diagnosis else {}
+
+        return dict(
+            payload,
+            age_s=round(time.monotonic() - probed_at, 3),
+            missing=diagnosis.get("missing", []),
+            unreachable=diagnosis.get("unreachable", []),
+        )
 
     def unload_project(self, value, context=None):
         """Unload the current project. Rejects if playback is running."""
@@ -1632,6 +1775,7 @@ class ControllerEngine(BaseEngine):
         with self._cluster_lock:
             self._required_nodes.clear()
             self._adopted_nodes.clear()
+        self._clear_load_diagnosis()
         self._forward_command_to_nodes("/engine/command/stop", value)
         Logger.info("Project unloaded")
         return True

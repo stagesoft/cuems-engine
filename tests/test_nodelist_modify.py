@@ -411,12 +411,22 @@ class TestClusterStatus:
             ),
         )
 
-    def test_returns_the_four_keys(self, controller):
+    def test_returns_the_expected_keys(self, controller):
+        """`missing`/`unreachable` were added later by the load-diagnosis work
+        (see test_cluster_warning.py); they ride on this same reply.
+        """
         p1, p2 = self._probe(controller, {"c", "n1"}, {"c", "n1", "n2"})
         with p1, p2:
             out = controller.get_cluster_status(None)
 
-        assert set(out) == {"alive", "adopted", "controller", "age_s"}
+        assert set(out) == {
+            "alive",
+            "adopted",
+            "controller",
+            "age_s",
+            "missing",
+            "unreachable",
+        }
         assert out["alive"] == ["c", "n1"]
         assert out["adopted"] == ["c", "n1", "n2"]
         assert isinstance(out["age_s"], float)
