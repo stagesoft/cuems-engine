@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import asyncio
 import math
@@ -230,14 +231,30 @@ class ControllerEngine(BaseEngine):
             "/engine/players/*", self._handle_player_osc_message
         )
 
-        # Register direct player handler for every adopted node in the network
-        # map.
-        # UI sends /{node_uuid}/<type>/... for both controller and worker
-        # nodes;
-        # without per-node registration the WS dispatcher silently drops the
-        # message and the NNG forward never happens.
-        # The set deduplicates so the controller's own UUID isn't registered
-        # twice (it appears in both node_conf and network_map['node_list']).
+        self._register_node_osc_handlers()
+
+        Logger.info("OSC command handlers registered for WebSocket receiving")
+
+    def _register_node_osc_handlers(self) -> None:
+        """Register the direct player OSC route for every adopted node.
+
+        UI sends /{node_uuid}/<type>/... for both controller and worker nodes;
+        without per-node registration the WS dispatcher silently drops the
+        message and the NNG forward never happens. The set deduplicates so the
+        controller's own UUID isn't registered twice (it appears in both
+        node_conf and network_map['node_list']).
+
+        Called at startup and again after a nodelist_modify, so a node adopted
+        from the UI gets its route without an engine restart. Re-registering is
+        safe: register_osc_handler is dict-keyed, so a repeat overwrites.
+
+        ⚠ get_nodes_by_adoption() mutates online/adopted from str to bool IN
+        PLACE, so it only survives one pass over a given dict. Call this either
+        at startup or immediately after ConfigManager.load_network_map() has
+        installed a fresh dict — see _reload_network_map(). A REMOVE leaves the
+        old route registered on purpose: traffic from a non-adopted node is
+        already filtered by _adopted_nodes at the callbacks.
+        """
         node_uuids: set[str] = set()
         own_uuid = (
             self.cm.node_conf.get("uuid", "") if hasattr(self, "cm") and self.cm else ""
@@ -259,8 +276,6 @@ class ControllerEngine(BaseEngine):
                 f"/{nuuid}/*", self._handle_direct_player_osc_message
             )
             Logger.info(f"Registered direct player OSC handler for /{nuuid}/*")
-
-        Logger.info("OSC command handlers registered for WebSocket receiving")
 
     def _handle_direct_player_osc_message(self, address: str, args: list):
         """Handle direct player OSC messages from UI (/<node_uuid>/<type>/...).
@@ -638,7 +653,10 @@ class ControllerEngine(BaseEngine):
 
         try:
             self.handle_editor_command(
-                action=item["action"], value=item["value"], context=context
+                action=item["action"],
+                value=item["value"],
+                context=context,
+                modify_action=item.get("modify_action"),
             )
         except Exception as e:
             Logger.error(f"{type(e)} handling editor command: {e}")
@@ -651,7 +669,24 @@ class ControllerEngine(BaseEngine):
                 request_uuid=request_uuid,
             )
 
-    def handle_editor_command(self, action, value, context=None):
+    def handle_editor_command(self, action, value, context=None, modify_action=None):
+        # nodelist_modify cannot ride the dispatch table below: every entry is
+        # invoked as command_dict[action](value, context) — a two-argument
+        # contract with nowhere to put modify_action. Registering it there sends
+        # modify_action=None to nodeconf, which answers
+        # {'OK': False, 'error': 'Invalid modify_action: None'} to EVERY click.
+        # So bind the message here and dispatch it directly.
+        if action == "nodelist_modify":
+            message = {
+                "action": action,
+                "value": value,
+                "modify_action": modify_action,
+            }
+            if self.nodelist_modify(message, context):
+                self.confirm_to_editor(context, type=action, value="OK")
+                self.set_editor_request("")
+            return
+
         command_dict = {
             "project_deploy": partial(self.load_project, deploy_only=True),
             "project_ready": self.load_project,
@@ -736,6 +771,130 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"{type(e)} sending nodeconf request: {e}")
             return False
+
+    def _nodelist_refuse(self, context, msg: str) -> bool:
+        """Refuse a nodelist_modify with one clean sentence for the operator.
+
+        Every failure path in nodelist_modify goes through here and returns
+        False. It must NOT raise: editor_command_callback's except clause also
+        replies (prefixing "Command <class 'RuntimeError'>: ..."), and the
+        editor wraps that again as "Engine reports error: ...". Raising after
+        replying would also put two replies on a single NNG Rep context.
+        """
+        Logger.error(f"nodelist_modify refused: {msg}")
+        self.error_to_editor(context, value=msg, action="nodelist_modify")
+        return False
+
+    def nodelist_modify(self, message: dict, context=None) -> bool:
+        """Adopt or un-adopt a node, then refresh our cached topology.
+
+        Forwards {'action','value','modify_action'} to cuems-nodeconf over
+        /tmp/nodeconf.ipc, which flips <adopted> in network_map.xml. On success
+        we re-read that file, because our own copy was loaded once at startup
+        (ConfigManager(load_all=True)) and would otherwise keep the GO gate
+        blind to the change until an engine restart.
+
+        Returns True only when nodeconf confirmed AND our reload succeeded; the
+        caller confirms "OK" to the editor on True. Every False path has
+        already sent an explanatory error.
+        """
+        node_uuid = message.get("value")
+        modify_action = message.get("modify_action")
+        Logger.info(f"nodelist_modify: {modify_action} node {node_uuid}")
+
+        # Adoption is a setup-time operation. Refuse (never stop anything) when
+        # a project is running, and also when one is merely loaded: the GO
+        # gate's _required_nodes snapshot is computed once, in load_project, so
+        # a REMOVE accepted now would leave it waiting on a node the operator
+        # just removed until the next load.
+        if self.get_status("running") == "yes":
+            return self._nodelist_refuse(
+                context,
+                "Cannot modify the node list while a project is running. "
+                "Stop playback first.",
+            )
+        if self.get_status("load"):
+            return self._nodelist_refuse(
+                context,
+                "Cannot modify the node list while a project is loaded. "
+                "Unload the project first.",
+            )
+
+        if not node_uuid or not isinstance(node_uuid, str):
+            return self._nodelist_refuse(
+                context, f"nodelist_modify needs a node uuid, got {node_uuid!r}"
+            )
+        if modify_action not in ("ADD", "REMOVE"):
+            return self._nodelist_refuse(
+                context,
+                f"Invalid modify_action: {modify_action!r}. Must be 'ADD' or 'REMOVE'",
+            )
+
+        try:
+            reply = self.communications_thread.request_to_nodeconf(message)
+        except Exception as e:
+            return self._nodelist_refuse(
+                context, f"Could not reach cuems-nodeconf: {type(e).__name__}: {e}"
+            )
+
+        # Communicator.send_request swallows every exception and returns None —
+        # an absent socket (nodeconf disabled, which is the fleet default) and a
+        # peer that never answers both land here.
+        if reply is None:
+            return self._nodelist_refuse(
+                context,
+                "The node configuration service (cuems-nodeconf) is not "
+                "responding. Is it enabled on this controller?",
+            )
+        if not isinstance(reply, dict):
+            return self._nodelist_refuse(
+                context, f"Unexpected reply from cuems-nodeconf: {reply!r}"
+            )
+        if not reply.get("OK", False):
+            return self._nodelist_refuse(
+                context, reply.get("error", "cuems-nodeconf reported an error")
+            )
+
+        Logger.info(
+            f"nodelist_modify: cuems-nodeconf confirmed {modify_action} "
+            f"for node {node_uuid}"
+        )
+
+        # nodeconf has already rewritten network_map.xml. If we cannot re-read
+        # it the operation is a PARTIAL success: the map (and so the editor and
+        # the UI) is correct, only this process is behind. Say exactly that
+        # instead of confirming OK over a stale topology.
+        try:
+            self._reload_network_map()
+        except Exception as e:
+            Logger.error(f"{type(e).__name__} reloading network_map: {e}")
+            return self._nodelist_refuse(
+                context,
+                f"Node {modify_action.lower()}ed, but the engine could not "
+                f"reload the topology ({type(e).__name__}: {e}) — restart "
+                f"cuems-controller-engine before loading a project.",
+            )
+        return True
+
+    def _reload_network_map(self) -> None:
+        """Re-read network_map.xml and re-register per-node OSC routes.
+
+        Targeted on purpose: ConfigManager.load_network_map() reassigns
+        self.cm.network_map to a NEW dict, so a concurrent reader sees either
+        the old one or the new one, never a torn one. A full
+        ConfigManager(load_all=True) would also re-read settings and mappings —
+        that is the "restart both daemons" trap, not what we want here.
+
+        ORDER MATTERS: _register_node_osc_handlers() calls
+        NetworkMap.get_nodes_by_adoption(), which mutates online/adopted from
+        str to bool IN PLACE and therefore survives only one pass over a given
+        dict (same hazard _adopted_uuids_from_network_map documents). It is safe
+        only on the freshly reloaded dict — never call it as a standalone
+        "shortcut" refresh.
+        """
+        self.cm.load_network_map()
+        Logger.info("network_map reloaded after a node list change")
+        self._register_node_osc_handlers()
 
     #########################
     # Status Updates (stub - OSCQuery removed)
