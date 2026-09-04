@@ -397,3 +397,83 @@ class TestTopologyReload:
         msg = mock_error.call_args[1]["value"]
         assert "could not reload the topology" in msg
         assert "restart cuems-controller-engine" in msg
+
+
+# ─── cluster_status (liveness for the UI) ────────────────────────────────
+
+
+class TestClusterStatus:
+    def _probe(self, controller, alive, adopted):
+        return (
+            patch.object(controller, "_probe_cluster_liveness", return_value=alive),
+            patch.object(
+                controller, "_adopted_uuids_from_network_map", return_value=adopted
+            ),
+        )
+
+    def test_returns_the_four_keys(self, controller):
+        p1, p2 = self._probe(controller, {"c", "n1"}, {"c", "n1", "n2"})
+        with p1, p2:
+            out = controller.get_cluster_status(None)
+
+        assert set(out) == {"alive", "adopted", "controller", "age_s"}
+        assert out["alive"] == ["c", "n1"]
+        assert out["adopted"] == ["c", "n1", "n2"]
+        assert isinstance(out["age_s"], float)
+
+    def test_never_returns_empty(self, controller):
+        """The dispatch path confirms only on a truthy result; an empty dict
+        would leave the editor waiting out its 25 s timeout.
+        """
+        p1, p2 = self._probe(controller, set(), set())
+        with p1, p2:
+            out = controller.get_cluster_status(None)
+
+        assert out  # truthy even with nothing adopted and nothing alive
+        assert out["alive"] == []
+        assert out["adopted"] == []
+
+    def test_repeat_calls_are_clamped(self, controller):
+        """A polling settings panel must not become a ping flood."""
+        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        with p1 as mock_probe, p2:
+            controller.get_cluster_status(None)
+            controller.get_cluster_status(None)
+            controller.get_cluster_status(None)
+
+        assert mock_probe.call_count == 1
+
+    def test_age_grows_between_clamped_calls(self, controller):
+        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        with p1, p2:
+            first = controller.get_cluster_status(None)
+            second = controller.get_cluster_status(None)
+
+        assert second["age_s"] >= first["age_s"]
+
+    def test_reachable_through_the_dispatch_table(self, controller):
+        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        with (
+            p1,
+            p2,
+            patch.object(controller, "confirm_to_editor") as mock_confirm,
+            patch.object(controller, "set_editor_request"),
+        ):
+            controller.handle_editor_command("cluster_status", None, context="ctx")
+
+        mock_confirm.assert_called_once()
+        assert mock_confirm.call_args[1]["type"] == "cluster_status"
+        assert isinstance(mock_confirm.call_args[1]["value"], dict)
+
+    def test_single_box_takes_the_early_return(self, controller):
+        """formitgo shape: one adopted node, itself. _probe_cluster_liveness
+        must answer {controller} without pinging anyone.
+        """
+        controller.communications_thread.nng_hub = Mock()
+        with patch.object(
+            controller, "_adopted_uuids_from_network_map",
+            return_value={controller._controller_uuid()},
+        ):
+            alive = controller._probe_cluster_liveness(timeout=0.1)
+
+        assert alive == {controller._controller_uuid()}

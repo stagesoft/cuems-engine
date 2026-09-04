@@ -23,6 +23,9 @@ from .core.libmtc import libmtcmaster
 NODECONF_IPC_PATH = "/tmp/nodeconf.ipc"
 # Adopt/un-adopt is a local XML rewrite; it has no business taking longer.
 NODECONF_TIMEOUT_S = 5.0
+# Shortest gap between two real cluster probes served to the UI. Each probe
+# pings every adopted node, and the settings panel polls while it is open.
+CLUSTER_STATUS_CLAMP_S = 2.0
 
 
 class ControllerEngine(BaseEngine):
@@ -702,6 +705,7 @@ class ControllerEngine(BaseEngine):
             "go_script": self.go_script,
             "project_status": self.get_project_status,
             "project_unload": self.unload_project,
+            "cluster_status": self.get_cluster_status,
         }
         if action in command_dict.keys():
             result = command_dict[action](value, context)
@@ -1369,6 +1373,17 @@ class ControllerEngine(BaseEngine):
     def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
         """Broadcast a ping to all nodes and collect pong replies.
 
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+
         The set of senders that respond within `timeout` is the authoritative
         "alive right now" view of the cluster. The controller's own UUID is
         always included (it never needs to ping itself).
@@ -1563,6 +1578,44 @@ class ControllerEngine(BaseEngine):
             "status": "running" if running else "none",
             "project_uuid": (str(self.script.id) if running and self.script else ""),
         }
+
+    def get_cluster_status(self, value, context=None) -> dict:
+        """Return who is adopted and who answers right now.
+
+        Two different signals, deliberately kept apart (the UI must never merge
+        them):
+
+        * `adopted` — from network_map.xml, i.e. what cuems-nodeconf knows.
+        * `alive`   — this engine's sub-second ping/pong, the only thing the GO
+          gate trusts. `<online>` in the XML is nodeconf's discovery view and
+          is NOT this.
+
+        `age_s` is how old the probe behind this answer is, computed here: the
+        browser cannot interpret our monotonic clock.
+
+        Read-only — it never loads, unloads, arms or stops anything, so it is
+        safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are
+        served from cache so a polling panel cannot turn into a ping flood.
+        Always returns a populated dict: the dispatch path confirms only on a
+        truthy result, and an empty one would leave the editor waiting out its
+        25 s timeout.
+        """
+        now = time.monotonic()
+        cached = getattr(self, "_cluster_status_cache", None)
+        if cached is not None and (now - cached[0]) < CLUSTER_STATUS_CLAMP_S:
+            probed_at, payload = cached
+        else:
+            alive = self._probe_cluster_liveness()
+            adopted = self._adopted_uuids_from_network_map()
+            payload = {
+                "alive": sorted(alive),
+                "adopted": sorted(adopted),
+                "controller": self._controller_uuid(),
+            }
+            probed_at = time.monotonic()
+            self._cluster_status_cache = (probed_at, payload)
+
+        return dict(payload, age_s=round(time.monotonic() - probed_at, 3))
 
     def unload_project(self, value, context=None):
         """Unload the current project. Rejects if playback is running."""
