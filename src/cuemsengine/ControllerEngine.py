@@ -780,9 +780,18 @@ class ControllerEngine(BaseEngine):
         replies (prefixing "Command <class 'RuntimeError'>: ..."), and the
         editor wraps that again as "Engine reports error: ...". Raising after
         replying would also put two replies on a single NNG Rep context.
+
+        Clears the pending editor request the same way the generic error path
+        does (see editor_command_callback): capture the uuid, clear it, then
+        reply with it explicitly, so no stale uuid is left behind for whatever
+        reads get_editor_request() next.
         """
         Logger.error(f"nodelist_modify refused: {msg}")
-        self.error_to_editor(context, value=msg, action="nodelist_modify")
+        request_uuid = self.get_editor_request()
+        self.set_editor_request("")
+        self.error_to_editor(
+            context, value=msg, request_uuid=request_uuid, action="nodelist_modify"
+        )
         return False
 
     def nodelist_modify(self, message: dict, context=None) -> bool:

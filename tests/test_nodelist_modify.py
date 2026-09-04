@@ -106,6 +106,35 @@ class TestModifyActionReachesNodeconf:
         assert mock_confirm.call_args[1]["value"] == "OK"
         assert mock_confirm.call_args[1]["type"] == "nodelist_modify"
 
+    def test_success_clears_the_pending_editor_request(self, controller):
+        """The generic dispatch path clears it after confirming; this one has
+        to do it for itself, and the archived version forgot to.
+        """
+        controller.communications_thread.request_to_nodeconf.return_value = _ok_reply()
+        with (
+            patch.object(controller, "confirm_to_editor"),
+            patch.object(controller, "set_editor_request") as mock_clear,
+            patch.object(controller, "_reload_network_map"),
+        ):
+            controller.handle_editor_command(
+                "nodelist_modify", NODE, context="ctx", modify_action="ADD"
+            )
+
+        mock_clear.assert_called_once_with("")
+
+    def test_refusal_clears_the_pending_editor_request(self, controller):
+        controller.set_status("running", "yes")
+        with (
+            patch.object(controller, "error_to_editor"),
+            patch.object(controller, "set_editor_request") as mock_clear,
+        ):
+            controller.nodelist_modify(
+                {"action": "nodelist_modify", "value": NODE, "modify_action": "ADD"},
+                "ctx",
+            )
+
+        mock_clear.assert_called_once_with("")
+
     def test_remove_is_forwarded_too(self, controller):
         controller.communications_thread.request_to_nodeconf.return_value = _ok_reply()
         with (
