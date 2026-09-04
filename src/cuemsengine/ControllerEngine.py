@@ -5,6 +5,7 @@
 
 import asyncio
 import math
+import os
 import threading
 import time
 from functools import partial
@@ -16,6 +17,12 @@ from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
+
+# Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
+# disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
+NODECONF_IPC_PATH = "/tmp/nodeconf.ipc"
+# Adopt/un-adopt is a local XML rewrite; it has no business taking longer.
+NODECONF_TIMEOUT_S = 5.0
 
 
 class ControllerEngine(BaseEngine):
@@ -839,8 +846,26 @@ class ControllerEngine(BaseEngine):
                 f"Invalid modify_action: {modify_action!r}. Must be 'ADD' or 'REMOVE'",
             )
 
+        # Fail fast when the daemon is not there at all. Measured on the rig:
+        # with the socket absent, request_to_nodeconf does NOT return quickly —
+        # it burns the full 15 s IPC timeout and then raises. Editor commands
+        # are serialized by the engine's single listener, so a second click
+        # queues behind the first and can blow the editor's own 25 s timeout,
+        # turning a clear refusal into "Engine did not respond". nodeconf ships
+        # disabled on most of the fleet, so this is the common path, not a rare
+        # one.
+        if not os.path.exists(NODECONF_IPC_PATH):
+            return self._nodelist_refuse(
+                context,
+                "The node configuration service (cuems-nodeconf) is not "
+                "running on this controller, so the node list cannot be "
+                "changed. Enable it with: systemctl enable --now cuems-nodeconf",
+            )
+
         try:
-            reply = self.communications_thread.request_to_nodeconf(message)
+            reply = self.communications_thread.request_to_nodeconf(
+                message, timeout=NODECONF_TIMEOUT_S
+            )
         except Exception as e:
             return self._nodelist_refuse(
                 context, f"Could not reach cuems-nodeconf: {type(e).__name__}: {e}"

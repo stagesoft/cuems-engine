@@ -31,6 +31,17 @@ def set_config_path():
     environ["CUEMS_CONF_PATH"] = str(test_conf_path)
 
 
+@pytest.fixture(autouse=True)
+def nodeconf_socket_present():
+    """Most tests exercise the hop past the socket pre-check.
+
+    Points the constant at a path that exists rather than patching
+    os.path.exists process-wide, which would also lie to engine startup.
+    """
+    with patch("cuemsengine.ControllerEngine.NODECONF_IPC_PATH", "/tmp"):
+        yield
+
+
 @pytest.fixture
 def controller():
     """A minimal ControllerEngine with the heavy dependencies mocked out."""
@@ -173,6 +184,41 @@ class TestModifyActionReachesNodeconf:
 
 
 class TestFailuresAreLegible:
+    def test_absent_socket_refuses_immediately(self, controller):
+        """Measured on the rig: with /tmp/nodeconf.ipc gone, the IPC call does
+        NOT fail fast — it burns the engine's full 15 s timeout. Editor
+        commands are serialized, so a second click queues behind the first and
+        can blow the editor's own 25 s timeout. nodeconf is disabled on most of
+        the fleet, so this is the common path.
+        """
+        with (
+            patch(
+                "cuemsengine.ControllerEngine.NODECONF_IPC_PATH",
+                "/tmp/definitely-not-a-nodeconf-socket",
+            ),
+            patch.object(controller, "error_to_editor") as mock_error,
+        ):
+            result = controller.nodelist_modify(
+                {"action": "nodelist_modify", "value": NODE, "modify_action": "ADD"},
+                "ctx",
+            )
+
+        assert result is False
+        controller.communications_thread.request_to_nodeconf.assert_not_called()
+        assert "not running" in mock_error.call_args[1]["value"]
+
+    def test_the_ipc_call_carries_an_explicit_timeout(self, controller):
+        """The default is the engine-wide 15 s; an XML rewrite needs seconds."""
+        controller.communications_thread.request_to_nodeconf.return_value = _ok_reply()
+        with patch.object(controller, "_reload_network_map"):
+            controller.nodelist_modify(
+                {"action": "nodelist_modify", "value": NODE, "modify_action": "ADD"},
+                "ctx",
+            )
+
+        kwargs = controller.communications_thread.request_to_nodeconf.call_args[1]
+        assert kwargs["timeout"] == 5.0
+
     def test_none_reply_is_an_error_not_a_traceback(self, controller):
         """An absent nodeconf socket returns None, not an exception."""
         controller.communications_thread.request_to_nodeconf.return_value = None
