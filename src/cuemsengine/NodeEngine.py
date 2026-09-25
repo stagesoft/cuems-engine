@@ -8,7 +8,7 @@ import subprocess
 import threading
 from time import sleep
 
-from cuemsutils.cues import CueList
+from cuemsutils.cues import AudioCue, CueList
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
@@ -82,6 +82,11 @@ class NodeEngine(BaseEngine):
         self._loading_lock = threading.Lock()
         self._loading = False
         self._project_generation: int = 0
+        # Bumped on EVERY set_next_cue call, even reselecting the same cue.
+        # Lets a PreArm background thread's should_continue notice a later
+        # selection landed and stop advancing its own (now stale) walk —
+        # 869f79ecc.
+        self._selection_epoch: int = 0
         # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
         if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
             self.nng_hub_address = (
@@ -1065,6 +1070,17 @@ class NodeEngine(BaseEngine):
     def set_next_cue(self, value):
         """
         Handle setnextcue command from the UI — override next_cue_pointer.
+
+        Arms the SELECTED cue synchronously (a GO right after this needs it
+        immediately), but extends the arm-ahead window in a background
+        PreArm:<id> thread. Badajoz, 2026-09-25 (869f79ecc): that extension
+        used to run here, synchronously, inside run_command's
+        _command_lock. A cold-boot pre-arm took ~500ms; a GO sent right
+        after (UI, power-bridge /gocue) waited for the lock, executed
+        late, and read its own MTC ~520ms later than the other nodes —
+        anchoring its whole Auto-continue chain late. See go_script /
+        _resolve_go_anchor for the anchor half of that fix; this is the
+        half that stops the delay from happening in the first place.
         """
         if not self.script:
             Logger.warning("No script loaded, cannot set next cue.")
@@ -1072,14 +1088,62 @@ class NodeEngine(BaseEngine):
         cue = self.script.find(value)
         if cue:
             self.next_cue_pointer = cue
+            self._selection_epoch += 1
+            selection_epoch = self._selection_epoch
+            project_gen = self._project_generation
+            script = self.script
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
-            CUE_HANDLER._arm_ahead(cue)  # extend window from selected cue
+            threading.Thread(
+                target=self._prearm_lookahead,
+                args=(cue, project_gen, selection_epoch, script),
+                daemon=True,
+                name=f"PreArm:{cue.id}",
+            ).start()
             self._broadcast_nextcue()
             Logger.info(f"Next cue overridden by UI: {value}")
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
+
+    def _prearm_lookahead(self, cue, project_gen, selection_epoch, script):
+        """Background half of set_next_cue — see its docstring.
+
+        should_continue re-checks BOTH the project generation (a STOP/load
+        bumps it, same guard as _arm_with_enabled_guard) and this
+        selection's own epoch (a later set_next_cue call bumps it even if
+        it reselects the same cue), so a stale walk stops advancing as
+        soon as either happens, without waiting for it to finish.
+
+        AudioCue is excluded from what this walk arms
+        (skip_arming_types): AudioMixer.connect_player_to_outputs' JACK-
+        port wait has no measured upper bound cheap enough to risk two
+        threads racing to arm the same slow audio cue. That risk is
+        exactly what backgrounding this walk would otherwise introduce —
+        audio keeps arming exactly as single-threaded as it does today.
+        """
+
+        def should_continue():
+            return (
+                self._project_generation == project_gen
+                and self._selection_epoch == selection_epoch
+            )
+
+        newly_armed = CUE_HANDLER._arm_ahead(
+            cue,
+            should_continue=should_continue,
+            skip_arming_types=(AudioCue,),
+        )
+        if newly_armed and self.script is not script:
+            # A different project loaded while this walk was running — its
+            # own reset already handled everything else; undo exactly what
+            # THIS walk armed, not a concurrent call's.
+            for armed_cue in newly_armed:
+                CUE_HANDLER.disarm(armed_cue)
+            Logger.info(
+                f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
+                "— project changed underneath the walk"
+            )
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
