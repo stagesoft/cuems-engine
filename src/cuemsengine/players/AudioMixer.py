@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from time import sleep
 
@@ -265,7 +266,7 @@ class AudioMixer(Player):
             the player ports never registered, no mixer inputs resolved, or any
             connection failed (caller should treat False as a silent cue).
         """
-        from time import sleep
+        from time import monotonic, sleep
 
         # Default to stereo (both outputs) if none specified
         if not selected_outputs:
@@ -309,8 +310,25 @@ class AudioMixer(Player):
         # None) for a missing port, so the old 'connections is not None' guard
         # made this loop break immediately and connect a not-yet-registered
         # port -> jackd 'Unknown source port' -> silent-but-green cue.
+        #
+        # 869f79ecc: only the FAILURE path left a trace (DEBUG per retry,
+        # WARNING on giving up); the success path -- which is every normal
+        # arm -- logged nothing, so nobody could tell whether this ~15s
+        # ceiling (max_retries * retry_delay) reflects real registration
+        # latency or is just an untested guess. It IS a guess -- CLAUDE.md:91
+        # explains the pipeline (OSC bind + RtMidi + FFmpeg probe before
+        # RtAudio registers the port) but gives no distribution, and the
+        # 2026-07 isil multilingual incident shows underestimating it once
+        # already cost a real show. Log the success path so the fleet's own
+        # journals can answer that instead of another guess.
+        wait_started = monotonic()
         for attempt in range(max_retries):
             if self.conn_man.port_exists(channel_0_output):
+                Logger.info(
+                    f"JACK port {channel_0_output} registered after "
+                    f"{monotonic() - wait_started:.3f}s (attempt {attempt + 1}"
+                    f"/{max_retries})"
+                )
                 break
             if attempt < max_retries - 1:
                 Logger.debug(
