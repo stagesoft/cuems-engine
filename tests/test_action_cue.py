@@ -1262,3 +1262,109 @@ class TestArmAheadNodeLocality:
 
         assert newly_armed == []
         assert any("safety limit" in r.getMessage() for r in caplog.records)
+
+
+class TestArmAheadCooperativeAndTypeSkip:
+    """The two remaining pieces NodeEngine.set_next_cue's PreArm background
+    thread needs from _arm_ahead (869f79ecc, Fix 2): a way to abort mid-walk
+    when the selection or project changes underneath it, and a way to leave
+    a slow cue TYPE to whichever single-threaded path already arms it today
+    -- AudioMixer.connect_player_to_outputs' JACK-port wait has no measured
+    upper bound cheap enough to risk two threads racing to arm the same
+    slow audio cue (2026-07 isil multilingual: underestimating that exact
+    wait once already cost a real show)."""
+
+    def _action(self, duration_ms, local=True):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        cue = ActionCue()
+        cue.enabled = True
+        cue._local = local
+        cue.action_type = "enable"
+        cue._action_target_object = _make_target()
+        cue._target_object = None
+        cue.post_go = "go_at_end"
+        if duration_ms > 0:
+            cue.prewait = CTimecode(start_seconds=duration_ms / 1000.0)
+        return cue
+
+    def _audio(self, local=True):
+        cue = AudioCue()
+        cue.enabled = True
+        cue._local = local
+        cue._target_object = None
+        return cue
+
+    def test_should_continue_false_stops_before_the_first_cue(self, handler, mtc):
+        a = self._action(2000)
+        b = self._action(2000)
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        newly_armed = handler._arm_ahead(start, should_continue=lambda: False)
+
+        assert not getattr(a, "loaded", False)
+        assert not getattr(b, "loaded", False)
+        assert newly_armed == []
+
+    def test_should_continue_false_after_first_stops_before_second(self, handler, mtc):
+        a = self._action(2000)
+        b = self._action(2000)
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        calls = {"n": 0}
+
+        def should_continue():
+            calls["n"] += 1
+            return calls["n"] <= 1  # True before a, False before b
+
+        newly_armed = handler._arm_ahead(start, should_continue=should_continue)
+
+        assert getattr(a, "loaded", False)
+        assert not getattr(b, "loaded", False)
+        assert len(newly_armed) == 1
+        assert newly_armed[0] is a
+
+    def test_skip_arming_types_leaves_that_cue_unarmed(self, handler, mtc):
+        audio = self._audio()
+        b = self._action(2000)
+        c = self._action(2000)
+        audio._target_object = b
+        b._target_object = c
+        start = _make_action_target()
+        start._target_object = audio
+
+        newly_armed = handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        assert not getattr(audio, "loaded", False)
+        assert getattr(b, "loaded", False)
+        assert getattr(c, "loaded", False)
+        assert len(newly_armed) == 2
+
+    def test_skip_arming_types_still_consumes_the_depth_limit(
+        self, handler, mtc, caplog
+    ):
+        # Unlike the non-local skip (which must NOT spend the depth budget
+        # -- another node's segment can be longer than it), a same-node
+        # type-skip DOES: it's still this node's own chain, just a type
+        # this call chooses not to arm.
+        audios = [self._audio() for _ in range(16)]
+        for i in range(len(audios) - 1):
+            audios[i]._target_object = audios[i + 1]
+        tail_a = self._action(2000)
+        tail_b = self._action(2000)
+        audios[-1]._target_object = tail_a
+        tail_a._target_object = tail_b
+        start = _make_action_target()
+        start._target_object = audios[0]
+
+        with caplog.at_level(logging.WARNING):
+            newly_armed = handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        assert not getattr(tail_a, "loaded", False)
+        assert not getattr(tail_b, "loaded", False)
+        assert newly_armed == []
+        assert any("depth limit" in r.getMessage() for r in caplog.records)
