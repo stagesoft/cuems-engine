@@ -267,21 +267,46 @@ class CueHandler:
             return "stopped"
         return "reached"
 
-    def _arm_ahead(self, start_cue: Cue) -> None:
+    def _arm_ahead(self, start_cue: Cue) -> list[Cue]:
         """Arm ahead in the target chain until 2 cues with meaningful
         duration are armed. Short/zero-duration cues are armed but don't
         count. CueList targets are skipped (handled by
         initial_cuelist_process).
+
+        Cues belonging to a DIFFERENT node (not `_local`) are also skipped,
+        transparently — arm() is a no-op for them anyway, so counting them
+        toward the budget (as this used to) starved THIS node's own segment
+        of any lookahead at all on a mixed-node chain: node01/controller
+        never pre-armed on Badajoz's actual chain shape, 2026-09-25,
+        869f79ecc. Unlike the CueList/disabled skips, a non-local run does
+        NOT consume `_MAX_LOOKAHEAD_DEPTH` — a whole other node's segment can
+        be longer than that — so it is bounded instead by the same
+        1024-step cycle guard `_next_local_fire` already uses against an
+        all-remote chain.
+
+        Returns the cues THIS call transitioned from unloaded to loaded —
+        not merely already-armed ones, and not ones a concurrent call
+        armed. The PreArm background thread (NodeEngine.set_next_cue) uses
+        this to undo exactly its own work if the project changes under it.
         """
         target = getattr(start_cue, "_target_object", None)
         counted = 0
         walked = 0
+        total_steps = 0
+        newly_armed: list[Cue] = []
 
         while (
             isinstance(target, Cue)
             and counted < 2
             and walked < self._MAX_LOOKAHEAD_DEPTH
         ):
+            total_steps += 1
+            if total_steps > 1024:
+                Logger.error(
+                    f"_arm_ahead from {start_cue.id} hit the cross-node "
+                    "safety limit (1024 steps); aborting"
+                )
+                break
             if isinstance(target, CueList):
                 # CueLists are containers — skip, don't count
                 target = getattr(target, "_target_object", None)
@@ -291,8 +316,16 @@ class CueHandler:
                 target = getattr(target, "_target_object", None)
                 walked += 1
                 continue
-            if not getattr(target, "loaded", False):
+            if not getattr(target, "_local", False):
+                # Another node's cue — transparent, doesn't spend the depth
+                # budget (see docstring).
+                target = getattr(target, "_target_object", None)
+                continue
+            already_loaded = getattr(target, "loaded", False)
+            if not already_loaded:
                 self.arm(target, init=True)
+                if getattr(target, "loaded", False):
+                    newly_armed.append(target)
             if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
                 counted += 1
             target = getattr(target, "_target_object", None)
@@ -304,6 +337,8 @@ class CueHandler:
                 f"from cue {start_cue.id} with only {counted}/2 real-duration "
                 f"cues found. Remaining cues will rely on safety-net re-arm."
             )
+
+        return newly_armed
 
     def arm(self, cue: Cue, init=False) -> bool:
         """Arms a cue by appending it to the armed_cues list."""
