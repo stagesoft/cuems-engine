@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Unit tests for ActionCue execution through ActionHandler.
 
@@ -1168,3 +1169,96 @@ class TestArmAhead:
         handler._arm_ahead(start)
 
         assert getattr(cue, "loaded", False)
+
+
+class TestArmAheadNodeLocality:
+    """_arm_ahead must treat a cue belonging to ANOTHER node as transparent,
+    the way CueLists and disabled cues already are (Badajoz 2026-09-25,
+    869f79ecc). arm() was already a no-op for a non-local cue -- but the old
+    code counted it toward the 2-cue budget anyway, so a node whose own
+    cues come LATER in a mixed-node Auto-continue chain never got any
+    lookahead at all and fell back to arming at go() time on every run.
+    """
+
+    def _cue(self, duration_ms, local):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        cue = ActionCue()
+        cue.enabled = True
+        cue._local = local
+        cue.action_type = "enable"
+        cue._action_target_object = _make_target()
+        cue._target_object = None
+        cue.post_go = "go_at_end"
+        if duration_ms > 0:
+            cue.prewait = CTimecode(start_seconds=duration_ms / 1000.0)
+        return cue
+
+    def _chain(self, specs):
+        """specs: list of (duration_ms, local) tuples, wired in order."""
+        cues = [self._cue(d, loc) for d, loc in specs]
+        for i in range(len(cues) - 1):
+            cues[i]._target_object = cues[i + 1]
+        return cues
+
+    def test_skips_non_local_cues_without_arming_or_counting_them(self, handler, mtc):
+        # A-A-A-B-B-B, all real duration, walked from this node's (B's) own
+        # start cue.
+        cues = self._chain(
+            [
+                (2000, False),
+                (2000, False),
+                (2000, False),
+                (2000, True),
+                (2000, True),
+                (2000, True),
+            ]
+        )
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        newly_armed = handler._arm_ahead(start)
+
+        for c in cues[:3]:
+            assert not getattr(c, "loaded", False), "non-local cue must not arm"
+        assert getattr(cues[3], "loaded", False)
+        assert getattr(cues[4], "loaded", False)
+        assert not getattr(cues[5], "loaded", False)  # 2-cue budget already met
+        # identity checks, not `in`/`==` -- ActionCue()'s default id (and
+        # therefore its equality) collides across instances in this library
+        assert len(newly_armed) == 2
+        assert any(c is cues[3] for c in newly_armed)
+        assert any(c is cues[4] for c in newly_armed)
+        assert not any(c is cues[0] for c in newly_armed)
+
+    def test_leading_non_local_run_does_not_trip_the_depth_limit(
+        self, handler, mtc, caplog
+    ):
+        # 16 non-local cues ahead of 2 real local ones. The OLD code would
+        # exhaust _MAX_LOOKAHEAD_DEPTH (15) on the non-local run alone and
+        # never reach this node's own cues; skipping them must not consume
+        # that budget.
+        specs = [(0, False)] * 16 + [(2000, True), (2000, True)]
+        cues = self._chain(specs)
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        with caplog.at_level(logging.WARNING):
+            newly_armed = handler._arm_ahead(start)
+
+        assert getattr(cues[16], "loaded", False)
+        assert getattr(cues[17], "loaded", False)
+        assert not any("depth limit" in r.getMessage() for r in caplog.records)
+
+    def test_all_non_local_cycle_terminates(self, handler, mtc, caplog):
+        # A pathological all-remote chain must not spin forever. Bounded by
+        # the same 1024-step cycle guard _next_local_fire already uses.
+        cues = self._chain([(0, False)] * 1100)
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        with caplog.at_level(logging.ERROR):
+            newly_armed = handler._arm_ahead(start)
+
+        assert newly_armed == []
+        assert any("safety limit" in r.getMessage() for r in caplog.records)
