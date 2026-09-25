@@ -2,6 +2,16 @@
 
 export DH_VIRTUALENV_INSTALL_ROOT=/usr/lib
 
+# The build venv needs --use-system-packages (pyossia and systemd come from
+# Debian), but that also lets pip treat anything installed on the BUILD HOST
+# as satisfied and skip vendoring it. On jump, the system python3-rtmidi
+# 1.4.7 made the deb ship without python-rtmidi; installing it removed
+# rtmidi/ and killed MTC (test2, 2026-09-25, ClickUp 869f79ecc). Make pip
+# ignore host-installed packages and the builder's ~/.local; the system
+# packages stay importable at runtime.
+export PIP_IGNORE_INSTALLED=1
+export PYTHONNOUSERSITE=1
+
 %:
 	dh $@ --with python-virtualenv
 
@@ -12,6 +22,11 @@ override_dh_virtualenv:
 		--use-system-packages
 	# Ensure packaging is installed in venv (mido requires it)
 	/usr/lib/cuems/bin/pip install --force-reinstall packaging || true
+	# Fail the build rather than ship a deb whose MTC listener cannot work:
+	# the python-rtmidi package must be vendored (its compiled module comes
+	# from cuems-utils; the .so is stripped below). See the export above.
+	test -f debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/rtmidi/__init__.py \
+		|| { echo "ERROR: python-rtmidi was not vendored into the venv"; exit 1; }
 
 override_dh_install:
 	dh_install
