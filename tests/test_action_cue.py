@@ -1403,3 +1403,56 @@ class TestArmAheadTypeSkipReachesRecursion:
         assert any(x is a for x in armed)
         assert not any(x is b for x in armed), "recursion armed a skipped type"
         assert not getattr(b, "loaded", False)
+
+
+class TestPreArmWalkThroughRecursion:
+    """test2, 2026-09-25, race B (869f79ecc): a project reload landed while
+    the PreArm walk's arm(A) was in flight; arm()'s own post_go=="go"
+    recursion then armed B from the OLD project after the reset -- past the
+    should_continue checkpoint, and outside newly_armed, so the cleanup that
+    disarms "what this walk armed" could not see it. It only failed to leak
+    because B's outputs no longer resolved under the new mappings."""
+
+    def _chain(self):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        def action():
+            c = ActionCue()
+            c.enabled = True
+            c._local = True
+            c.action_type = "enable"
+            c._action_target_object = _make_target()
+            c.post_go = "go"
+            c.prewait = CTimecode(start_seconds=2.0)
+            return c
+
+        a, b = action(), action()
+        a._target_object = b
+        b._target_object = None
+        start = _make_action_target()
+        start._target_object = a
+        return start, a, b
+
+    def test_recursion_armed_cues_are_reported_as_newly_armed(self, handler, mtc):
+        start, a, b = self._chain()
+        with patch("cuemsengine.cues.CueHandler.arm_cue"):
+            newly = handler._arm_ahead(start, should_continue=lambda: True)
+        assert any(x is a for x in newly)
+        assert any(x is b for x in newly), "recursion-armed cue not reported"
+
+    def test_recursion_stops_at_the_checkpoint(self, handler, mtc):
+        start, a, b = self._chain()
+        state = {"ok": True}
+
+        def fake_arm_cue(cue):
+            if cue is a:
+                state["ok"] = False  # a reload lands while arm(a) is in flight
+
+        with patch(
+            "cuemsengine.cues.CueHandler.arm_cue", side_effect=fake_arm_cue
+        ) as m:
+            newly = handler._arm_ahead(start, should_continue=lambda: state["ok"])
+        armed = [c.args[0] for c in m.call_args_list]
+        assert any(x is a for x in armed)
+        assert not any(x is b for x in armed), "recursion ran past the checkpoint"
+        assert any(x is a for x in newly)
