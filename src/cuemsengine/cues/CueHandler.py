@@ -1385,10 +1385,14 @@ class CueHandler:
             and cue.postwait > 0
             and not cue._stop_requested
         )
-        # Snapshot the follow target's generation BEFORE the tail: next_cue_pointer
-        # was set to this very target at OUR dispatch, so a manual GO during the
-        # (black-screen) tail starts the same object — the auto-fire below must
-        # then YIELD or the target runs twice. GO preempts the tail.
+        # Snapshot the follow target's generation BEFORE the tail, so the
+        # auto-fire below can YIELD if a newer GO starts the target during the
+        # tail — otherwise it would run twice. Only an EXPLICIT selection of the
+        # target (setnextcue + GO) does that: a plain GO does not, because
+        # Cue.get_next_cue() skips go/go_at_end targets, so next_cue_pointer
+        # already points past the whole chain and a plain GO in the tail fires
+        # the cue after it while the target still auto-follows. QLab-like; kept
+        # deliberately (Ion, 2026-09-26; verified on test2, ClickUp 869ej4x38).
         target_gen0 = (
             getattr(cue._target_object, "_go_generation", 0)
             if cue._target_object
