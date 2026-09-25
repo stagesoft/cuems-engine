@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """Tests for NodeEngine.start() late-bind protocol (T023a)."""
 
 import sys
@@ -324,3 +325,96 @@ class TestHandleCueEnabledDelegates:
         assert cue.enabled is False
         node._apply_cue_enabled_side_effects.assert_called_once_with(cue, False)
         node._notify_cue_enabled.assert_called_once_with(cue.id, False)
+
+
+# ---------------------------------------------------------------------------
+# GO anchor -- the controller's own MTC instant, not each node's live read
+# (Badajoz 2026-09-25: setnextcue's synchronous _arm_ahead held
+# _command_lock for ~500ms; by the time go_script ran, this node's own MTC
+# read ~520ms later than the other two boxes', anchoring its whole
+# Auto-continue chain late. MTC-following cannot correct a wrong anchor.)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveGoAnchor:
+    """_resolve_go_anchor prefers the controller's GO instant over this
+    node's own live MTC read, with a bounded, explained fallback."""
+
+    def _node(self, local_ms):
+        from cuemsengine.NodeEngine import NodeEngine
+
+        node = object.__new__(NodeEngine)
+        node.mtc_listener = _MM()
+        node.mtc_listener.main_tc.milliseconds_exact = local_ms
+        return node
+
+    def test_uses_controller_instant_within_tolerance(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 79240.0}) == 79240.0
+
+    def test_accepts_controller_instant_slightly_ahead(self):
+        # go_script on the controller runs microseconds before this node
+        # reads its own MTC to compute lag -- allow a small future slack.
+        node = self._node(local_ms=1000.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 1150.0}) == 1150.0
+
+    def test_falls_back_to_local_when_value_is_none(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor(None) == 79760.0
+
+    def test_falls_back_to_local_when_value_is_a_bare_string(self):
+        # the editor's go_script path still sends an arbitrary string
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor("complex_test") == 79760.0
+
+    def test_falls_back_to_local_when_dict_lacks_the_key(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor({}) == 79760.0
+
+    def test_falls_back_to_local_when_controller_instant_is_far_in_the_future(self):
+        node = self._node(local_ms=1000.0)
+        # 201ms ahead of local -- past the 200ms future-slack tolerance, so
+        # this reads as a stale or misrouted message, not a fast controller
+        assert node._resolve_go_anchor({"go_mtc_ms": 1201.0}) == 1000.0
+
+    def test_falls_back_to_local_when_lag_looks_like_a_24h_wrap_asymmetry(self):
+        # the controller resets its 24h wrap accumulator on load AND stop;
+        # a node resets it only on load -- an implausibly stale controller
+        # value must not be trusted over the node's own MTC.
+        node = self._node(local_ms=90_000_000.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 0.0}) == 90_000_000.0
+
+
+class TestGoScriptUsesResolvedAnchor:
+    """go_script must seed the chain from _resolve_go_anchor's result, not a
+    raw live MTC read. The anchor-selection logic itself is covered by
+    TestResolveGoAnchor above; this only pins the wiring."""
+
+    def _node_ready_to_go(self):
+        node = _make_node()
+        node.with_mtc = True
+        node.mtc_listener = _MM()
+        node.ongoing_cue = None
+        cue = _FakeCue(cue_id="cue-1", enabled=True, local=True)
+        node.next_cue_pointer = cue
+        node.set_status = _MM()
+        return node, cue
+
+    def test_anchors_from_resolve_go_anchor_result(self):
+        node, cue = self._node_ready_to_go()
+        with (
+            patch("cuemsengine.NodeEngine.CUE_HANDLER") as mock_ch,
+            patch.object(
+                node, "_resolve_go_anchor", return_value=79240.0
+            ) as mock_resolve,
+        ):
+            mock_ch.find_armed_cue.return_value = True
+            mock_ch.go.return_value = _MM()
+            node.go_script({"go_mtc_ms": 79240.0})
+
+        mock_resolve.assert_called_once_with({"go_mtc_ms": 79240.0})
+        mock_ch.go.assert_called_once()
+        call_args = mock_ch.go.call_args.args
+        assert call_args[0] is cue
+        assert call_args[2] == 79240.0  # GO_mtc + Σ(0, chain breaks at cue itself)
+        assert node.go_offset == 79240.0
