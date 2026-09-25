@@ -8,7 +8,7 @@ import subprocess
 import threading
 from time import sleep
 
-from cuemsutils.cues import AudioCue, CueList
+from cuemsutils.cues import CueList
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
@@ -1121,12 +1121,15 @@ class NodeEngine(BaseEngine):
         it reselects the same cue), so a stale walk stops advancing as
         soon as either happens, without waiting for it to finish.
 
-        AudioCue is excluded from what this walk arms
-        (skip_arming_types): AudioMixer.connect_player_to_outputs' JACK-
-        port wait has no measured upper bound cheap enough to risk two
-        threads racing to arm the same slow audio cue. That risk is
-        exactly what backgrounding this walk would otherwise introduce —
-        audio keeps arming exactly as single-threaded as it does today.
+        Audio is pre-armed here like any other local cue. It was excluded
+        at first (skip_arming_types=(AudioCue,)) for fear of a slow JACK
+        port wait racing a GO for the same cue; measured instead
+        (2026-09-25): the port appears 0-0.6 s after the engine starts
+        waiting (Badajoz, taller, test2 node01), and a fully concurrent
+        spawn of 16 audioplayers takes ~4.2 s -- while this walk adds at
+        most one extra concurrent arm. Excluding audio cost ~320 ms of late
+        audio on every run where audio follows local cues. If that ever has
+        to be revisited, skip_arming_types is still the lever.
         """
 
         def should_continue():
@@ -1135,11 +1138,7 @@ class NodeEngine(BaseEngine):
                 and self._selection_epoch == selection_epoch
             )
 
-        newly_armed = CUE_HANDLER._arm_ahead(
-            cue,
-            should_continue=should_continue,
-            skip_arming_types=(AudioCue,),
-        )
+        newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
         if newly_armed and self.script is not script:
             # A different project loaded while this walk was running — its
             # own reset already handled everything else; undo exactly what
