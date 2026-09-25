@@ -385,7 +385,10 @@ class CueHandler:
                 continue
             already_loaded = getattr(target, "loaded", False)
             if not already_loaded:
-                self.arm(target, init=True)
+                if skip_arming_types:
+                    self.arm(target, init=True, skip_types=skip_arming_types)
+                else:
+                    self.arm(target, init=True)
                 if getattr(target, "loaded", False):
                     newly_armed.append(target)
             if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
@@ -402,9 +405,18 @@ class CueHandler:
 
         return newly_armed
 
-    def arm(self, cue: Cue, init=False) -> bool:
-        """Arms a cue by appending it to the armed_cues list."""
+    def arm(self, cue: Cue, init=False, skip_types: tuple[type, ...] = ()) -> bool:
+        """Arms a cue by appending it to the armed_cues list.
+
+        skip_types: cue types this call — including its own post_go /
+        ActionCue-target recursion — must not arm. Passed down by
+        _arm_ahead(skip_arming_types=...); without it the recursion armed
+        an AudioCue on the PreArm thread whenever audio followed a local cue
+        in an Auto-continue chain (test2, 2026-09-25, 869f79ecc).
+        """
         if cue is None:
+            return False
+        if skip_types and isinstance(cue, skip_types):
             return False
 
         needs_disarm = False
@@ -491,7 +503,10 @@ class CueHandler:
         # _loading sentinel prevents cycles; loaded guard prevents re-arm.
         if cue.post_go == "go" and cue._target_object:
             if cue._target_object.enabled:
-                self.arm(cue._target_object, init)
+                if skip_types:
+                    self.arm(cue._target_object, init, skip_types=skip_types)
+                else:
+                    self.arm(cue._target_object, init)
 
         # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm
         # target
@@ -500,7 +515,10 @@ class CueHandler:
         # expects target_cue already armed before reading its OSC cache).
         if isinstance(cue, ActionCue) and cue._action_target_object:
             if cue.action_type in ("play", "fade_action"):
-                self.arm(cue._action_target_object, init)
+                if skip_types:
+                    self.arm(cue._action_target_object, init, skip_types=skip_types)
+                else:
+                    self.arm(cue._action_target_object, init)
 
         return True
 
