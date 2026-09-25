@@ -474,7 +474,13 @@ class TestSetNextCuePreArm:
         release.set()
         _join_prearm(cue.id)
 
-    def test_prearm_passes_should_continue_and_audio_carveout(self):
+    def test_prearm_passes_should_continue_and_arms_audio_too(self):
+        """869f79ecc, decided 2026-09-26 on measured data: audio is NOT
+        excluded from the PreArm walk any more. JACK port waits measured
+        0-0.6 s per audioplayer (Badajoz, taller, test2 node01) and at most
+        one extra concurrent arm results from PreArm, far from arm()'s 5 s
+        waiter timeout; excluding it cost ~320 ms of late audio on every
+        run where audio follows local cues."""
         cue = _FakeCue(cue_id="cue-1")
         node = self._node(cue)
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
@@ -487,9 +493,7 @@ class TestSetNextCuePreArm:
         call = ch._arm_ahead.call_args
         assert call.args[0] is cue
         assert callable(call.kwargs["should_continue"])
-        from cuemsutils.cues import AudioCue
-
-        assert call.kwargs["skip_arming_types"] == (AudioCue,)
+        assert not call.kwargs.get("skip_arming_types"), "audio must not be excluded"
 
     def test_repeated_selection_bumps_selection_epoch(self):
         cue_a = _FakeCue(cue_id="cue-a")
