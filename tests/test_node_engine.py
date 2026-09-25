@@ -107,6 +107,12 @@ def _join_rearm(cue_id, timeout=2.0):
             t.join(timeout)
 
 
+def _join_prearm(cue_id, timeout=2.0):
+    for t in threading.enumerate():
+        if t.name == f"PreArm:{cue_id}":
+            t.join(timeout)
+
+
 class TestApplyCueEnabledSideEffects:
 
     def test_enable_local_unarmed_arms_async(self):
@@ -410,3 +416,155 @@ class TestGoScriptUsesResolvedAnchor:
         assert call_args[0] is cue
         assert call_args[2] == 79240.0  # GO_mtc + Σ(0, chain breaks at cue itself)
         assert node.go_offset == 79240.0
+
+
+# ---------------------------------------------------------------------------
+# setnextcue's lookahead moves off _command_lock (Badajoz 2026-09-25,
+# 869f79ecc). The incident's ~500ms delay lived entirely in _arm_ahead's
+# walk from the selected cue, not in arming the selected cue itself -- that
+# stays synchronous (a GO right after setnextcue needs it immediately).
+# ---------------------------------------------------------------------------
+
+
+class TestSetNextCuePreArm:
+
+    def _node(self, cue):
+        node = _make_node(script_cue=cue)
+        node._project_generation = 1
+        node._selection_epoch = 0
+        return node
+
+    def test_arms_selected_cue_synchronously_before_returning(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-1")
+            ch.arm.assert_called_once_with(cue, init=True)
+        _join_prearm(cue.id)
+
+    def test_lookahead_runs_off_the_calling_thread(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        release = threading.Event()
+        entered = threading.Event()
+
+        def blocking_arm_ahead(*args, **kwargs):
+            entered.set()
+            release.wait(timeout=2.0)
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = blocking_arm_ahead
+            t0 = time.time()
+            node.set_next_cue("cue-1")
+            elapsed = time.time() - t0
+        assert elapsed < 0.2, "set_next_cue must not block on _arm_ahead"
+        assert _wait_until(entered.is_set), "PreArm thread never started"
+        release.set()
+        _join_prearm(cue.id)
+
+    def test_prearm_passes_should_continue_and_audio_carveout(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert ch._arm_ahead.called
+        call = ch._arm_ahead.call_args
+        assert call.args[0] is cue
+        assert callable(call.kwargs["should_continue"])
+        from cuemsutils.cues import AudioCue
+
+        assert call.kwargs["skip_arming_types"] == (AudioCue,)
+
+    def test_repeated_selection_bumps_selection_epoch(self):
+        cue_a = _FakeCue(cue_id="cue-a")
+        cue_b = _FakeCue(cue_id="cue-b")
+        node = _make_node()
+        node.script.find.side_effect = [cue_a, cue_b]
+        node._project_generation = 1
+        node._selection_epoch = 0
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True  # already armed -- skip sync arm
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-a")
+            assert node._selection_epoch == 1
+            node.set_next_cue("cue-b")
+            assert node._selection_epoch == 2
+        _join_prearm(cue_a.id)
+        _join_prearm(cue_b.id)
+
+    def test_should_continue_reflects_the_epoch_at_spawn_time(self):
+        """869f79ecc blocker #3: a stale PreArm thread's should_continue
+        must go False as soon as a LATER selection lands, even though it
+        captured its own epoch before that happened."""
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        captured = {}
+
+        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+            captured["should_continue"] = should_continue
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = capture_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert captured["should_continue"]() is True
+        node._selection_epoch += 1  # a later selection landed
+        assert captured["should_continue"]() is False
+
+    def test_project_generation_bump_also_stops_the_walk(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        captured = {}
+
+        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+            captured["should_continue"] = should_continue
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = capture_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert captured["should_continue"]() is True
+        node._project_generation += 1  # a STOP/load bumped it
+        assert captured["should_continue"]() is False
+
+    def test_disarms_newly_armed_cues_when_project_changed_underneath(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        armed_by_walk = _FakeCue(cue_id="armed-by-walk")
+
+        def swap_script_and_return(target, should_continue=None, skip_arming_types=()):
+            node.script = MagicMock()  # a different project loaded meanwhile
+            return [armed_by_walk]
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = swap_script_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+            ch.disarm.assert_called_once_with(armed_by_walk)
+
+    def test_does_not_disarm_anything_when_same_script(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        armed_by_walk = _FakeCue(cue_id="armed-by-walk")
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = [armed_by_walk]
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+            ch.disarm.assert_not_called()
