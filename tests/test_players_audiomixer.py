@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import logging
 from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
@@ -288,6 +290,51 @@ class TestConnectPlayerToOutputs:
             result = m.connect_player_to_outputs(self.PLAYER, "outport", self.OUTS)
         assert result is False
         cm.connect_by_name.assert_not_called()
+
+    def test_success_logs_elapsed_time_and_attempts(self, caplog):
+        """869f79ecc: the success path left no trace before this -- only
+        failure was logged (DEBUG per retry, WARNING on giving up). Right-
+        sizing the retry ceiling (currently an unmeasured ~15s, CLAUDE.md:91)
+        against arm()'s wait timeout needs real registration-latency data
+        from test2/the fleet, not another guess; this is step 1, pure
+        logging, no behaviour change."""
+        ports = {"test_mixer:input_1", "test_mixer:input_2"}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+
+        def register_ports(_delay):
+            ports.update({self.CH0, self.CH1})
+
+        with (
+            patch("time.sleep", side_effect=register_ports),
+            caplog.at_level(logging.INFO),
+        ):
+            result = m.connect_player_to_outputs(self.PLAYER, "outport", self.OUTS)
+
+        assert result is True
+        matches = [
+            r
+            for r in caplog.records
+            if self.PLAYER in r.getMessage() and "registered" in r.getMessage()
+        ]
+        assert len(matches) == 1, caplog.records
+        assert "attempt" in matches[0].getMessage()
+
+    def test_immediate_registration_still_logs(self, caplog):
+        """attempt 0 (no wait at all) must log too, not just the retried case."""
+        ports = {self.CH0, self.CH1, "test_mixer:input_1", "test_mixer:input_2"}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with (
+            patch("time.sleep"),
+            caplog.at_level(logging.INFO),
+        ):
+            result = m.connect_player_to_outputs(self.PLAYER, "outport", self.OUTS)
+        assert result is True
+        assert any(
+            self.PLAYER in r.getMessage() and "registered" in r.getMessage()
+            for r in caplog.records
+        )
 
 
 class TestPlayerConnectionsCorrect:
