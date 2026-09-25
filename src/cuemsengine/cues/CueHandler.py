@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from threading import Event, Lock, Thread
 from time import sleep
+from typing import Callable
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -297,7 +298,12 @@ class CueHandler:
             return "stopped"
         return "reached"
 
-    def _arm_ahead(self, start_cue: Cue) -> list[Cue]:
+    def _arm_ahead(
+        self,
+        start_cue: Cue,
+        should_continue: Callable[[], bool] | None = None,
+        skip_arming_types: tuple[type, ...] = (),
+    ) -> list[Cue]:
         """Arm ahead in the target chain until 2 cues with meaningful
         duration are armed. Short/zero-duration cues are armed but don't
         count. CueList targets are skipped (handled by
@@ -314,10 +320,26 @@ class CueHandler:
         1024-step cycle guard `_next_local_fire` already uses against an
         all-remote chain.
 
+        should_continue: an optional predicate, re-checked before each cue.
+        Returning False stops the walk at that point without touching
+        anything further. Used by the PreArm background thread
+        (NodeEngine.set_next_cue) to abandon a stale selection or a
+        reloaded project instead of racing the new state.
+
+        skip_arming_types: cue types this call must not arm() or count —
+        left armed for whichever single-threaded path reaches them later
+        instead. Only AudioCue is ever passed here in production: two
+        threads racing to arm the same slow audio cue is exactly the
+        Badajoz-adjacent race this fix must not introduce (see
+        NodeEngine.set_next_cue and AudioMixer.connect_player_to_outputs).
+        Unlike the non-local skip above, this DOES consume the depth
+        budget — it is still this node's own chain, just a type this call
+        chooses not to arm.
+
         Returns the cues THIS call transitioned from unloaded to loaded —
         not merely already-armed ones, and not ones a concurrent call
-        armed. The PreArm background thread (NodeEngine.set_next_cue) uses
-        this to undo exactly its own work if the project changes under it.
+        armed. The PreArm background thread uses this to undo exactly its
+        own work if the project changes under it.
         """
         target = getattr(start_cue, "_target_object", None)
         counted = 0
@@ -337,6 +359,12 @@ class CueHandler:
                     "safety limit (1024 steps); aborting"
                 )
                 break
+            if should_continue is not None and not should_continue():
+                Logger.info(
+                    f"_arm_ahead from {start_cue.id} stopped early — caller "
+                    "asked to abort (stale selection or reloaded project)"
+                )
+                break
             if isinstance(target, CueList):
                 # CueLists are containers — skip, don't count
                 target = getattr(target, "_target_object", None)
@@ -350,6 +378,10 @@ class CueHandler:
                 # Another node's cue — transparent, doesn't spend the depth
                 # budget (see docstring).
                 target = getattr(target, "_target_object", None)
+                continue
+            if isinstance(target, skip_arming_types):
+                target = getattr(target, "_target_object", None)
+                walked += 1
                 continue
             already_loaded = getattr(target, "loaded", False)
             if not already_loaded:
