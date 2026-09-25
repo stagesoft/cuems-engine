@@ -66,6 +66,16 @@ class NodeEngine(BaseEngine):
 
     """
 
+    # GO anchor tolerance (Badajoz 2026-09-25 fix): how far the controller's
+    # shipped GO instant may disagree with this node's own MTC before
+    # _resolve_go_anchor distrusts it and falls back to a live local read.
+    # Positive: the controller may be slightly AHEAD of this node's own read
+    # (its go_script runs microseconds before this node computes the lag).
+    # Negative: this node may lag the controller by up to 10s before the
+    # value is treated as stale/misrouted rather than "node was just slow".
+    _GO_ANCHOR_FUTURE_TOL_MS = 200.0
+    _GO_ANCHOR_MAX_LAG_MS = 10_000.0
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
@@ -1186,6 +1196,40 @@ class NodeEngine(BaseEngine):
 
         Logger.info(f"Script {self.script.name} loaded and ready to be played")
 
+    def _resolve_go_anchor(self, value):
+        """Resolve the GO_mtc anchor for this GO.
+
+        Prefers the controller's own GO instant, shipped as
+        value == {"go_mtc_ms": <float>} by ControllerEngine.go_script.
+        Falls back to this node's own live MTC read (today's behaviour,
+        and the only thing an older controller ever sends) whenever
+        `value` doesn't carry a usable one, or the controller's instant
+        looks implausible against this node's own MTC.
+
+        Badajoz, 2026-09-25: a node whose setnextcue pre-arm held
+        _command_lock for ~500ms read its own MTC ~520ms later than the
+        other two boxes at GO time and anchored its whole Auto-continue
+        chain late. MTC-following cannot correct a wrong anchor -- only
+        agreeing on one does.
+        """
+        local = self.mtc_listener.main_tc.milliseconds_exact
+        if isinstance(value, dict):
+            ctrl = value.get("go_mtc_ms")
+            if isinstance(ctrl, (int, float)) and not isinstance(ctrl, bool):
+                lag = local - ctrl
+                if -self._GO_ANCHOR_FUTURE_TOL_MS <= lag <= self._GO_ANCHOR_MAX_LAG_MS:
+                    Logger.info(
+                        f"GO anchored at controller instant {ctrl:.1f}ms "
+                        f"(node lag {lag:.1f}ms)"
+                    )
+                    return ctrl
+                Logger.warning(
+                    f"GO anchor from controller ({ctrl:.1f}ms) implausible "
+                    f"against local MTC ({local:.1f}ms, lag {lag:.1f}ms) -- "
+                    "using local MTC instead"
+                )
+        return local
+
     def go_script(self, value):
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
@@ -1215,10 +1259,12 @@ class NodeEngine(BaseEngine):
                 return
 
         # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
-        # timeline accumulator) AND as the drift baseline (go_offset). Every node
-        # captures its own GO_mtc off the shared MTC timeline, so the anchors it
-        # derives agree with every other node's.
-        GO_mtc = self.mtc_listener.main_tc.milliseconds_exact
+        # timeline accumulator) AND as the drift baseline (go_offset).
+        # Resolved from the controller's own instant when it shipped one
+        # (see _resolve_go_anchor) -- every node then derives its anchors
+        # from the SAME value, rather than each reading its own MTC
+        # whenever it happens to execute this command.
+        GO_mtc = self._resolve_go_anchor(value)
 
         # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
         # accumulating the timeline offset Σ of the cues we skip. A non-local
