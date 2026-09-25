@@ -1080,9 +1080,21 @@ class ControllerEngine(BaseEngine):
         # this is safe to send unconditionally; a node running this fix falls
         # back to its own local MTC (NodeEngine._resolve_go_anchor) whenever
         # this dict is absent, malformed, or the lag looks wrong.
+        # Only a LIVE reading may become the cluster's anchor: a listener that
+        # never opened its port reads 0.0 forever, and shipping that made
+        # every node fire 4.48s late on test2 (2026-09-25). Without a live
+        # reading, send the GO without an anchor -- each node falls back to
+        # its own MTC, exactly as before this fix.
         go_value = value
         if self.mtc_listener is not None:
-            go_value = {"go_mtc_ms": self.mtc_listener.main_tc.milliseconds_exact}
+            if self.mtc_listener.is_receiving():
+                go_value = {"go_mtc_ms": self.mtc_listener.main_tc.milliseconds_exact}
+            else:
+                Logger.error(
+                    "GO: controller MTC listener is not receiving -- sending GO "
+                    "without a shared anchor; each node will anchor on its own "
+                    "MTC. Check the controller's MIDI/MTC setup."
+                )
 
         # Forward GO to NodeEngine via NNG (needed when called from editor;
         # when called from WebSocket the comms layer also forwards, but the
