@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from threading import Event, Lock, Thread
 from time import sleep
 from typing import Callable
@@ -22,6 +23,22 @@ from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from .run_cue import blank_cue, reveal_cue, run_cue
+
+
+@dataclass
+class _ArmWalk:
+    """State one background arm-ahead walk carries into arm()'s own
+    post_go / ActionCue-target recursion (869f79ecc).
+
+    Without it the recursion armed cues the walk excluded (audio), ran past
+    the walk's should_continue checkpoint (a reload landing mid-arm), and
+    armed cues the walk could not report -- so its cleanup could not undo
+    them (test2, 2026-09-25).
+    """
+
+    skip_types: tuple[type, ...] = ()
+    should_continue: Callable[[], bool] | None = None
+    armed: list = field(default_factory=list)
 
 
 class CueHandler:
@@ -316,6 +333,14 @@ class CueHandler:
         walked = 0
         total_steps = 0
         newly_armed: list[Cue] = []
+        # Only a background walk (NodeEngine's PreArm) passes these; then its
+        # rules reach arm()'s own recursion and newly_armed is the walk's
+        # exact record. Every other caller keeps arm()'s original call shape.
+        walk = (
+            _ArmWalk(skip_arming_types, should_continue, newly_armed)
+            if (should_continue is not None or skip_arming_types)
+            else None
+        )
 
         while (
             isinstance(target, Cue)
@@ -355,12 +380,12 @@ class CueHandler:
                 continue
             already_loaded = getattr(target, "loaded", False)
             if not already_loaded:
-                if skip_arming_types:
-                    self.arm(target, init=True, skip_types=skip_arming_types)
+                if walk is not None:
+                    self.arm(target, init=True, walk=walk)
                 else:
                     self.arm(target, init=True)
-                if getattr(target, "loaded", False):
-                    newly_armed.append(target)
+                    if getattr(target, "loaded", False):
+                        newly_armed.append(target)
             if self._effective_duration_ms(target) >= self._ARM_WINDOW_THRESHOLD_MS:
                 counted += 1
             target = getattr(target, "_target_object", None)
@@ -375,19 +400,21 @@ class CueHandler:
 
         return newly_armed
 
-    def arm(self, cue: Cue, init=False, skip_types: tuple[type, ...] = ()) -> bool:
+    def arm(self, cue: Cue, init=False, walk: _ArmWalk | None = None) -> bool:
         """Arms a cue by appending it to the armed_cues list.
 
-        skip_types: cue types this call — including its own post_go /
-        ActionCue-target recursion — must not arm. Passed down by
-        _arm_ahead(skip_arming_types=...); without it the recursion armed
-        an AudioCue on the PreArm thread whenever audio followed a local cue
-        in an Auto-continue chain (test2, 2026-09-25, 869f79ecc).
+        walk: set only by a background _arm_ahead walk (NodeEngine's PreArm).
+        Its excluded types and should_continue checkpoint also govern this
+        call's own post_go / ActionCue-target recursion, and every cue this
+        call chain actually arms is recorded in walk.armed (869f79ecc).
         """
         if cue is None:
             return False
-        if skip_types and isinstance(cue, skip_types):
-            return False
+        if walk is not None:
+            if walk.skip_types and isinstance(cue, walk.skip_types):
+                return False
+            if walk.should_continue is not None and not walk.should_continue():
+                return False
 
         needs_disarm = False
         do_arm = False
@@ -445,6 +472,8 @@ class CueHandler:
                 if not found:
                     self._armed_cues.append(cue)
                     self._armed_cues_set.add(cue.id)
+            if walk is not None:
+                walk.armed.append(cue)
             if isinstance(cue, AudioCue):
                 try:
                     self.communications_thread.add_player(
@@ -473,8 +502,8 @@ class CueHandler:
         # _loading sentinel prevents cycles; loaded guard prevents re-arm.
         if cue.post_go == "go" and cue._target_object:
             if cue._target_object.enabled:
-                if skip_types:
-                    self.arm(cue._target_object, init, skip_types=skip_types)
+                if walk is not None:
+                    self.arm(cue._target_object, init, walk=walk)
                 else:
                     self.arm(cue._target_object, init)
 
@@ -485,8 +514,8 @@ class CueHandler:
         # expects target_cue already armed before reading its OSC cache).
         if isinstance(cue, ActionCue) and cue._action_target_object:
             if cue.action_type in ("play", "fade_action"):
-                if skip_types:
-                    self.arm(cue._action_target_object, init, skip_types=skip_types)
+                if walk is not None:
+                    self.arm(cue._action_target_object, init, walk=walk)
                 else:
                     self.arm(cue._action_target_object, init)
 

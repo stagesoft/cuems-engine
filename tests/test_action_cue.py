@@ -1315,13 +1315,17 @@ class TestArmAheadCooperativeAndTypeSkip:
         start = _make_action_target()
         start._target_object = a
 
-        calls = {"n": 0}
+        # State-based, not call-counting: should_continue is also consulted
+        # inside arm() and its recursion now, so the number of calls is an
+        # implementation detail. Flip to False once `a` has been armed.
+        state = {"ok": True}
 
-        def should_continue():
-            calls["n"] += 1
-            return calls["n"] <= 1  # True before a, False before b
+        def fake_arm_cue(cue):
+            if cue is a:
+                state["ok"] = False
 
-        newly_armed = handler._arm_ahead(start, should_continue=should_continue)
+        with patch("cuemsengine.cues.CueHandler.arm_cue", side_effect=fake_arm_cue):
+            newly_armed = handler._arm_ahead(start, should_continue=lambda: state["ok"])
 
         assert getattr(a, "loaded", False)
         assert not getattr(b, "loaded", False)
