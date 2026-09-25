@@ -329,6 +329,7 @@ class TestGoScriptAnchor:
         self._armed(controller)
         controller.mtc_listener = Mock()
         controller.mtc_listener.main_tc.milliseconds_exact = 79240.0
+        controller.mtc_listener.is_receiving.return_value = True
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
@@ -349,6 +350,21 @@ class TestGoScriptAnchor:
     def test_forwards_none_value_unchanged_when_mtc_listener_is_none(self, controller):
         self._armed(controller)
         assert controller.mtc_listener is None
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_called_once_with("/engine/command/go", None)
+
+    def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
+        """test2, 2026-09-25: the controller's listener never opened a port
+        (python-rtmidi missing from a bad build), read 0.0 at GO, and every
+        node accepted 0.0 as the anchor -- 4.48s late. A listener that is
+        present but not receiving must not be trusted: send the GO without
+        an anchor, so each node falls back to its own MTC (pre-fix
+        behaviour)."""
+        self._armed(controller)
+        controller.mtc_listener = Mock()
+        controller.mtc_listener.main_tc.milliseconds_exact = 0.0
+        controller.mtc_listener.is_receiving.return_value = False
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with("/engine/command/go", None)
