@@ -1368,3 +1368,38 @@ class TestArmAheadCooperativeAndTypeSkip:
         assert not getattr(tail_b, "loaded", False)
         assert newly_armed == []
         assert any("depth limit" in r.getMessage() for r in caplog.records)
+
+
+class TestArmAheadTypeSkipReachesRecursion:
+    """test2, 2026-09-25 (869f79ecc): skip_arming_types filtered _arm_ahead's
+    own arm() calls, but arm() recurses into a post_go=="go" target (and an
+    ActionCue play target) by itself -- so the PreArm thread still armed an
+    AudioCue that followed a local video in the chain. The carve-out must
+    reach that recursion too, or it does not keep audio off the PreArm
+    thread at all."""
+
+    def test_recursion_does_not_arm_a_skipped_type(self, handler, mtc):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        a = ActionCue()
+        a.enabled = True
+        a._local = True
+        a.action_type = "enable"
+        a._action_target_object = _make_target()
+        a.post_go = "go"  # arm(a) recurses into its target
+        a.prewait = CTimecode(start_seconds=2.0)
+        b = AudioCue()
+        b.enabled = True
+        b._local = True
+        b._target_object = None
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        with patch("cuemsengine.cues.CueHandler.arm_cue") as mock_arm_cue:
+            handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        armed = [c.args[0] for c in mock_arm_cue.call_args_list]
+        assert any(x is a for x in armed)
+        assert not any(x is b for x in armed), "recursion armed a skipped type"
+        assert not getattr(b, "loaded", False)
