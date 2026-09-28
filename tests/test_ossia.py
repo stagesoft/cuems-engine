@@ -87,13 +87,13 @@ def test_client_failed_value(ossia_client_factory):
         assert "/test1" in client.nodes.keys()
         with raises(ValueError) as e:
             client.set_value("/test1", "no_int")
-        assert str(e.value) == "Could not set /test1 to no_int"
+        assert str(e.value) == "Could not set /test1 to no_int (got 0)"
 
         client_node = client.get_node("/test1")
         assert client_node.parameter.value == 0
         with raises(ValueError) as e:
             client.set_value(client_node, "no_int")
-        assert str(e.value) == "Could not set /test1 to no_int"
+        assert str(e.value) == "Could not set /test1 to no_int (got 0)"
 
         client.remove_node("/test1")
         assert len(client.nodes) == 0
@@ -115,6 +115,54 @@ def test_client_failed_value(ossia_client_factory):
             )
         assert str(e.value) == "callback must have 1 or 2 parameters"
 
+
+
+# pyossia stores Float and the elements of List/Vec2f as float32, so a
+# float64 that is not exactly representable reads back rounded (1200/2160
+# comes back as 0.5555555820465088). set_value must accept that readback —
+# the value was already pushed over OSC before the check (869f8hfra: every
+# video layer's /scale raised a false "Could not set" on this).
+@mark.parametrize(
+    "sent, stored, expected",
+    [
+        (1200 / 2160, 0.5555555820465088, True),
+        ([1200 / 2160, 1200 / 2160], [0.5555555820465088, 0.5555555820465088], True),
+        ([0.1, 7], [0.10000000149011612, 7], True),
+        ([[0.1, 0.2], [0.3]], [[0.10000000149011612, 0.20000000298023224], [0.30000001192092896]], True),
+        (1920.3, 1920.300048828125, True),
+        (0.0, 0.0, True),
+        (1, 1.0, True),
+        ([1, 2], [1, 2], True),
+        (["/media/clip.mov", "layer_0"], ["/media/clip.mov", "layer_0"], True),
+        ([0.5, 0.5], [0.5, 0.25], False),
+        ([0.5, 0.5], [0.5], False),
+        ([0.5, 0.5], 0.5, False),
+        ("no_int", 0, False),
+        (0.5, "0.5", False),
+        (float("nan"), float("nan"), False),
+    ],
+)
+def test_values_match(sent, stored, expected):
+    from cuemsengine.osc.OssiaNodes import OssiaNodes
+
+    assert OssiaNodes._values_match(sent, stored) is expected
+
+
+@mark.parametrize(
+    "value_type, value",
+    [
+        (ValueType.List, [1200 / 2160, 1200 / 2160]),
+        (ValueType.Vec2f, [1200 / 2160, 1200 / 2160]),
+        (ValueType.List, [1, 2]),
+        (ValueType.List, [0.1, 7]),
+        (ValueType.List, ["/media/clip.mov", "layer_0"]),
+        (ValueType.Float, 1920.3),
+    ],
+)
+def test_set_value_accepts_float32_readback(ossia_client_factory, value_type, value):
+    with ossia_client_factory(endpoints={"/test1": [value_type, None, None]}) as client:
+        client.set_value("/test1", value)  # must not raise
+        assert "/test1" in client._explicit_values
 
 def test_client_list_endpoints(ossia_client_factory):
     endpoints = ["/test1", "/test2", "/test3"]
