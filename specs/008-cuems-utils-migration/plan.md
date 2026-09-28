@@ -65,10 +65,17 @@ Constitution v1.1.0. Checked, **not amended**.
 | **III. Integration & contract** | ✅ | Contract tests for `cluster_status`/`cluster_warning` and the public surface are written first; moved tests feed a **real typed map** instead of stubbing the reader (clarify Q4) — the constitution's own "not mocks" rule |
 | **IV. Simplicity / YAGNI** | ✅ | Deletes: `find_hosts`, the mutation workaround, the ORDER-MATTERS convention, two fade handlers, five wraps. Adds: one reader, one duration helper — each justified by a current defect. No shim: the `None` → zero rule preserves existing behaviour made explicit, not a compatibility path |
 | **V. Observability** | ✅ | Two silent paths become logged: >1 controller (error) and `None` duration (warning naming the cue) |
-| Workflow §4 — *"Each PR MUST … include test evidence (CI pass)"* | ⚠ **exception** | CI is red by construction until rc16 publishes (clarify Q3). See Complexity Tracking |
+| Workflow §4 — *"Each PR MUST … include test evidence (CI pass)"* | ✅ | **Followed, not excepted**: CI is red by construction until rc16 publishes (clarify Q3), so **no PR is opened from this branch until the re-lock turns CI green** (FR-017a). D27 already forbids merging before the coordinated release, so the rule costs nothing |
+| Workflow §5 — atomic commits | ✅ | One commit per story checkpoint; the rc3 bump (T038) is its own commit, because the tag is cut on it |
+| Tech standards — SPDX header on every new source file | ✅ | Standing rule in tasks.md; covers every new test file and the duration helper |
 | Workflow §6 — `scripts/link-dev.sh` supported | ✅ | untouched |
 | Workflow §7 — layout | ✅ | all artefacts in `specs/008-*/`; the relations text is a hand-off file here, not `docs/` |
 | Tech standards — CI blocks on lint | ✅ | black/isort/flake8 run locally on every changed file, since CI can't |
+
+**Post-`/speckit.analyze` re-check**: the earlier Workflow §4 *exception* was replaced by the
+no-PR-before-re-lock rule (analyze C1) — the constitution is followed, not excepted. CI is still red
+by construction on this branch, as recorded in `evidence/ci-red-by-construction.md`; every suite
+claim is a local run with its environment recorded, and lint runs locally.
 
 **Post-design re-check (after Phase 1)**: unchanged. The contracts add one test file
 (`test_public_surface.py`) and no production abstraction. The R10 reading of exit criterion 4
@@ -125,6 +132,7 @@ tests/
 ├── test_public_surface.py                  # NEW — contracts/public-surface.md
 ├── test_media_duration.py                  # NEW — FR-016a characterization + FR-016b
 ├── test_version_single_source.py           # NEW — FR-019b: __version__ vs its three copies
+├── test_default_mappings_valid.py          # off XmlReaderWriter: CuemsScript.validate + ConfigManager loaders (SC-010)
 └── test_project_load.py                    # parametrized over v1 and v2 script (SC-007)
 
 dev/test_xml_files/
@@ -142,7 +150,10 @@ debian/changelog (0.1.0rc3-1 UNRELEASED) · pyproject.toml:41 (pin) · debian/co
 
 ## Phasing (input to `/speckit.tasks`)
 
-Order is load-bearing; each phase ends on a recorded suite run.
+Order is load-bearing; each phase ends on a recorded suite run. These are the plan's work phases;
+`tasks.md` numbers its phases differently — mapping: plan 0 → tasks Phase 2; plan 1 → the *Tests*
+subsections of tasks Phases 3–4; plan 2 → US1 T016–T017 and US2 T029; plan 3 → US1 T019–T021;
+plan 4 → US2 T030–T031 and US5; plan 5 → US3, US4 and Phase 8.
 
 | Phase | Content | Exit |
 |---|---|---|
@@ -159,5 +170,4 @@ Upstream reports (UR-1…4) and the relations hand-off can be written in paralle
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
-| Constitution Workflow §4: PRs from this branch cannot show a CI pass until `cuemsutils` 0.1.0rc16 is published | The release gate (FR-017) requires `>=0.1.0rc16`; rc16 is unpublished and, by D27, `cuems-utils` publishes last. `poetry install` in CI then refuses the stale lock | A temporary git-source dependency (pin would not state the gate until swapped); publishing rc16 early (reverses D27); leaving the pin unbounded (the whole of C7). **Mitigation**: every suite claim is a local run with its environment recorded (FR-001 format), lint runs locally, and `evidence/ci-red-by-construction.md` names the one step that clears it (re-lock at publish) |
 | Exit criterion 4 read as "no workaround survives" rather than literally "no adoption reader exists" (research R10) | With no public partition (UR-1), some reader of `adopted` must exist | Importing internal `partition_by_adoption` (clarify Q1 rejected it); leaving two readers (keeps the divergence F3 describes) |

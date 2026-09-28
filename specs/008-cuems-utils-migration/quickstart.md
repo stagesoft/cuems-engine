@@ -43,7 +43,7 @@ Record each tool's exact invocation and output in the step file.
 | 001 | `grep -rn 'node_type\|NodeType\.' src/` | no output. Exempt, by name, reason "not shipped": `dev/network_map.xml`, `dev/CuemsEngine_old.py` |
 | 002 | `ls $E/*failing-first*` | one file per site, each naming the value it failed on |
 | 003 | `grep -rnE 'cuemsutils\.(xml\|config)' src/` and `poetry run pytest tests/test_public_surface.py` | no output; green |
-| 004 | `grep -rn 'get_nodes_by_adoption\|_adopted_uuids_from_network_map\|find_hosts' src/ tests/` | no output |
+| 004 | `grep -rn 'get_nodes_by_adoption\|_adopted_uuids_from_network_map\|find_hosts' src/ tests/ \| grep -v tests/test_public_surface.py` | no output (the guard's ban list names them by design) |
 | 005 | `sed -n 41p pyproject.toml; grep -n 'cuems-utils\|cuems-common' debian/control` | ranges as in `contracts/package-relations.md`; lock re-lock recorded **not performed** until rc16 publishes |
 | 006 | `poetry run pytest -q -p no:cacheprovider > $E/final-suite.txt` | green; counts recorded beside the baseline (28 F / 7 E / 720 P) with retirements from `$E/test-retirements.md` |
 | 007 | load + GO a v1 and a v2 `script.xml` (below) | both recorded |

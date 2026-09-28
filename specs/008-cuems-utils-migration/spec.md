@@ -5,9 +5,9 @@ branch hook deliberately **not** run — this repository's share of the ecosyste
 lives on the shared branch name, see `specs/planning/xml-refactor/00-runnable-flow.md` §1)
 **Base**: `feat/nodelist-modify-dispatch` @ `dbc9e6d` (decision 2026-09-25, not `rc_1`)
 **Created**: 2026-09-28
-**Status**: Clarified 2026-09-28 — 3 specify questions + 5 clarify questions answered; duration-wrap cleanup brought into scope by the maintainer; ready for `/speckit.plan`
+**Status**: Planned and tasked 2026-09-28; `/speckit.analyze` findings applied — ready for `/speckit.implement`
 **Input**: `specs/planning/xml-refactor/` bundle (00–04), `00-runnable-flow.md` §3 context block,
-and seven measurements taken 2026-09-28 at `afbd5cf` that the bundle does not carry (M1–M7).
+and thirteen measurements taken 2026-09-28 at `afbd5cf` that the bundle does not carry (M1–M13).
 
 ## Context
 
@@ -31,7 +31,7 @@ are two of them.
 | **M2** | `dev/test_xml_files/network_map.xml` is **not** a non-shipped exempt fixture: `tests/fixtures.py:35`, `:128`, `:442` load it and seven test files depend on it | It moves **out** of the exempt set and **into** scope. The exempt set is `dev/network_map.xml` and `dev/CuemsEngine_old.py` only |
 | **M3** | `partition_by_adoption` has **no public path**. It exists only on `cuemsutils.xml.settings.NetworkMap`, which is internal (Q14). Inventory groups 2 and 3 and exit criterion 3 cannot all hold as written | Resolved by **Q1 → A**: public read + upstream report UR-1 |
 | **M4** | "`script` is at version 2, the other five at 1" is stale: `versioning.CURRENT_VERSION` has `script` 2, `settings` 2, `hardware_outputs` 2; `network_map`, `project_mappings`, `project_settings` 1. The library's own comment (`versioning.py:30-32`) repeats the stale claim | Upstream report (UR-2). The engine reads neither retired `settings` field — measured by grep over `src/` |
-| **M5** | The deploy manifest (`CuemsDeploy.py:647-652`) ships `script.xml` **and** the project's `mappings.xml` and `settings.xml` | C11 reaches `script` only today; a future version bump of `project_mappings` or `project_settings` extends it (FR-021) |
+| **M5** | The deploy manifest (`CuemsDeploy.py:647-652`) ships `script.xml` **and** the project's `mappings.xml` and `settings.xml` | C11 reaches `script` only today; a future version bump of `project_mappings` or `project_settings` extends it (FR-020) |
 | **M6** | Converting the `network_map` fixture to `node_role` is itself the failing-first test for FR-030a-ii sites 1–2: against the pre-migration code, `_controller_ip_from_map` then raises *"No controller node found"* on a map that contains one | The red baseline and TDD's red step coincide; they are separated in time by FR-002 |
 | **M7** | `poetry.lock` pins `cuemsutils` **0.1.0rc11** from PyPI; the dev environment is an editable sibling at rc16 whose installed metadata is stale at rc12. `poetry install` (CLAUDE.md's build step) would silently replace the editable library with rc11 | rc16 is also unpublished; resolved by clarify: pin now, re-lock at publish, CI red by construction meanwhile (FR-017, FR-017a) |
 | **M8** | By reading (to be confirmed by a characterization test in the plan): `find_hosts` (`BaseEngine.py:433`) calls `get_nodes_by_adoption` **on `self.cm.network_map`** — the typed document, which on the post-007 library carries no such method — a *third* independent defect in the same method, before the wrapper bug F1 names | Supports **Q2 → A** (delete); the characterization run confirms or refutes it before deletion |
@@ -261,7 +261,8 @@ green against the replacement contract.
 **Acceptance Scenarios**:
 
 1. **Given** the migrated tree, **When** searched, **Then** `get_nodes_by_adoption`,
-   `_adopted_uuids_from_network_map` and `find_hosts` appear nowhere in `src/` or `tests/`, and
+   `_adopted_uuids_from_network_map` and `find_hosts` appear nowhere in `src/` or `tests/` (except
+   the ban list in `tests/test_public_surface.py`), and
    `find_hosts`' pre-deletion failure is captured in `evidence/`.
 2. **Given** the migrated tree, **When** searched, **Then** no `fade_in`/`fade_out` handler or
    supported-action entry remains, and the spec's ordering statement (FR-014) is cited where they
@@ -298,8 +299,9 @@ green against the replacement contract.
   work runs first and in order, with no engine change: (1) convert
   `dev/test_xml_files/network_map.xml` to `node_role` and capture the run; (2) convert
   `dev/test_xml_files/settings.xml` to version 2. After step 2, every remaining failure MUST be a
-  recorded FR-003 failing-first test, each named in the evidence with the reason it fails; any other
-  failure blocks implementation.
+  recorded failing-first test of FR-003 (controller lookup, sites 1–2) or FR-007 (version-1 script
+  load, M9), each named in the evidence with the reason it fails; any other failure blocks
+  implementation.
 - **FR-003**: Every FR-030a-ii site (§1 of the inventory: `BaseEngine.py` :33, :410, :440, :443) MUST
   have captured evidence of failing against the pre-migration value, verified to fail **for the value
   it was written to catch**. Sites 1–2 (`:33`, `:410`): the step-1 run of FR-002 against the
@@ -314,14 +316,14 @@ green against the replacement contract.
 - **FR-005**: The controller MUST be identified by the library's role vocabulary, not by the string
   `"NodeType.master"`. The `CONTROLLER_NETWORK_FLAG` constant is removed or redefined from the
   library's role type; no string literal of either vocabulary remains in `src/`.
-- **FR-006**: `find_hosts` MUST be deleted (Q2), taking with it the only `online == "True"`
-  comparison and its `get_nodes_by_adoption` call. Wherever the engine still reads `online` or
-  `adopted`, it consumes the boolean the library provides; no string comparison of either remains.
-
 - **FR-005a**: When the node map holds more than one controller, the controller-IP fallback MUST
   log a structured error listing every controller's uuid and ip, then return the first match in
   map order. It MUST NOT raise for this reason. A test MUST show both the error and the returned
   address; it fails against the pre-migration code, which logs nothing.
+- **FR-006**: `find_hosts` MUST be deleted (Q2), taking with it the only `online == "True"`
+  comparison and its `get_nodes_by_adoption` call. Wherever the engine still reads `online` or
+  `adopted`, it consumes the boolean the library provides; no string comparison of either remains.
+
 
 **Group 2 — deprecated imports**
 
@@ -362,7 +364,8 @@ green against the replacement contract.
 - **FR-012**: The `fade_in`/`fade_out` handlers, their supported-action entries and dispatch-table
   entries MUST be deleted.
 - **FR-013**: The deletion MUST NOT land in a build that can run against a library without the
-  script 1→2 conversion — enforced by FR-017's floor.
+  script 1→2 conversion — enforced by FR-017's floor, so the commit raising the `debian/control`
+  and `pyproject.toml` floor precedes the commit deleting the handlers.
 - **FR-014**: The spec states the ordering the deletion depends on: *the library's convert-on-read
   rewrites `fade_in`/`fade_out` to `play`/`stop` before the engine ever sees the document; that is
   behaviour-preserving because these two handlers already did exactly that; therefore the handlers
@@ -372,6 +375,7 @@ green against the replacement contract.
 
 - **FR-015**: `BaseEngine.py:505`'s hardcoded `"script.xml"` (vs `cuems-editor`'s configured
   `script_file_name`) MUST be recorded as a trap for `cuems-utils` feature 012, and left unchanged.
+
 **Group 6 — the duration wraps (in scope by decision, 2026-09-28)**
 
 - **FR-016**: The five `CTimecode(cue.media.duration)` re-wraps MUST be removed —
@@ -400,7 +404,10 @@ green against the replacement contract.
   recorded in `evidence/` with its cause, and every suite result claimed by this feature MUST be a
   local run with its environment recorded (FR-001's format). No `poetry install` or `poetry lock` is
   run in the development environment during this feature: it would replace the editable sibling
-  with rc11, or fail.
+  with rc11, or fail. **No pull request is opened from `feat/xml-refactor` until the re-lock has
+  turned CI green** — constitution Workflow §4 ("each PR MUST include test evidence (CI pass)") is
+  followed, not excepted. This costs nothing D27 did not already impose: nothing merges before the
+  coordinated release.
 - **FR-018**: `debian/control` MUST NOT add a `Breaks:` of its own. It MUST raise the
   `cuems-common` floor from `>= 1.0.0` to the release carrying `Breaks: cuems-nodeconf (<< 0.1.0-8)`,
   so that installing the engine beside a nodeconf that still writes `<node_type>` is refused
@@ -444,7 +451,12 @@ green against the replacement contract.
   comment in `versioning.py` (M4); **UR-3** the stale editable-install metadata (rc12 vs rc16) that
   makes the environment misreport its own version (M7), if it is the library's to fix; **UR-4**
   `Uuid` is equal and hash-equal to `str` but not orderable, so `sorted()` over node uuids raises
-  (M12).
+  (M12); **UR-5** `XmlReaderWriter.validate`'s deprecation message recommends
+  `CuemsScript.validate` for every schema, but that validates only a loaded show script — the public
+  surface has no stand-alone validator for `settings`/`network_map`/`project_*` documents, only the
+  `ConfigManager` loaders (measured 2026-09-28).
+- **FR-023**: The F2a interaction (socket existence used as nodeconf readiness) is recorded for
+  whoever fixes `cuems-nodeconf`; this feature does not add another caller of that probe.
 - **FR-023a**: The deletion of `find_hosts` MUST be recorded against
   `cuems-relations/Plans/phase2-engine-late-binding.md:198-204` (R3), whose decision not to add a
   split-brain guard rests on "`find_hosts` raises on >1 controller" — a guard that has never run,
@@ -454,8 +466,6 @@ green against the replacement contract.
   before this feature. After it, the premise is **partly** true: >1 controller is now detected and
   logged (FR-005a), but not refused. Recorded in the same hand-off as FR-019(b), so R3's owner can
   decide whether logging suffices.
-- **FR-023**: The F2a interaction (socket existence used as nodeconf readiness) is recorded for
-  whoever fixes `cuems-nodeconf`; this feature does not add another caller of that probe.
 
 ### Key Entities
 
@@ -477,7 +487,8 @@ Exit criteria from `00-runnable-flow.md` §6, adjusted by M2/M3:
   pre-migration value, for the right reason.
 - **SC-003**: A search of shipped sources for internal `cuemsutils` imports returns **zero**.
 - **SC-004**: `get_nodes_by_adoption`, `_adopted_uuids_from_network_map` and `find_hosts` appear
-  nowhere.
+  nowhere in `src/` or `tests/`, except in `tests/test_public_surface.py`, whose ban list names
+  them by design.
 - **SC-005**: The two dependency declarations agree and are bounded above. The lock resolves rc16 —
   or, while rc16 is unpublished, is recorded **not performed** with CI's red-by-construction state
   (FR-017a), and carried as an open release step.
@@ -489,7 +500,9 @@ Exit criteria from `00-runnable-flow.md` §6, adjusted by M2/M3:
   `v0.1.0rc3 — UNRELEASED` entry and in the handed-off `cuems-relations` draft, and is checked off as
   an exit criterion; `__version__` is `0.1.0rc3` and the version drift test (FR-019b) is green.
 - **SC-009**: Every hardware/cluster item not performed is recorded **not performed**, per entry.
-- **SC-010**: Zero `cuemsutils` deprecation warnings are emitted during a full suite run.
+- **SC-010**: Zero `cuemsutils` deprecation warnings are emitted during a full suite run —
+  including `tests/test_default_mappings_valid.py`, which moves off `XmlReaderWriter`: script
+  fixtures via `CuemsScript.validate`, config fixtures via the public `ConfigManager` loaders.
 - **SC-011**: A search of `src/` for `CTimecode(cue.media.duration)` returns **zero**, and every
   duration characterization test (FR-016a) is green before and after the removal.
 
@@ -499,9 +512,10 @@ Nothing releases from this branch alone (D27).
 
 ## Assumptions
 
-- **A1**: The M1 red baseline is environmental in cause (library ahead of fixtures), not a regression
-  in engine code: every failure traces to one of two fixture files. Converting fixtures is test work
-  within this feature's scope, not a change to engine behaviour.
+- **A1**: The M1 red baseline's *visible* failures are environmental (library ahead of fixtures):
+  each traces to one of two fixture files, and converting them is test work, not a change to engine
+  behaviour. Behind them sits a third cause that **is** an engine defect — M9, the version-1 script
+  load — which surfaces only once the `network_map` fixture is converted, and is FR-007's to fix.
 - **A2**: The editable sibling `cuems-utils` at `0ba239b` is representative of `0.1.0rc16`; no tag
   `v0.1.0rc16` exists locally (tags stop at rc14), so the version is read from `__version__`.
 - **A3**: The engine reads neither `audio_cards` nor `universes` from `settings` (grep over `src/`,
