@@ -61,6 +61,8 @@ class CueOrchestrator(Protocol):
         seed_ms: float | None = None,
     ) -> Thread | None: ...
 
+    def cancel_pending_descendants(self, cue: Cue) -> int: ...
+
 
 def _filter_matches(action_type: str, filter_key: frozenset[str]) -> bool:
     if not filter_key:
@@ -436,6 +438,24 @@ def _handle_play(
     return ActionHandler._action_result("applied", "play", target_id)
 
 
+def _cancel_chain_behind(ch: CueOrchestrator, target: Cue, action: str) -> None:
+    """Take the target's scheduled Auto-continue descendants down with it.
+
+    Auto continue dispatches the whole chain at the trigger, so the cues after
+    the target are already parked on their own anchors by the time an action
+    stops it. They must not fire — a chained cue only exists because its
+    predecessor ran. Cues that are already playing are left alone.
+    """
+    try:
+        ch.cancel_pending_descendants(target)
+    except Exception as exc:
+        # The stop itself already applied; losing the sweep must not turn a
+        # successful stop into a failed action.
+        Logger.error(
+            f"{action}: could not cancel cues chained after {target.id}: {exc}"
+        )
+
+
 def _handle_pause(
     ch: CueOrchestrator,
     _action_cue: Any,
@@ -449,6 +469,10 @@ def _handle_pause(
             "applied_no_change", "pause", target_id, "Already stopped/paused"
         )
     target._stop_requested = True
+    # Deliberately no generation bump on the target itself — the postwait tail
+    # relies on that. Its chain is another matter: those cues were dispatched
+    # only because this one was going to run.
+    _cancel_chain_behind(ch, target, "pause")
     return ActionHandler._action_result("applied", "pause", target_id)
 
 
@@ -466,6 +490,7 @@ def _handle_stop(
         )
     target._stop_requested = True
     target._go_generation = getattr(target, "_go_generation", 0) + 1
+    _cancel_chain_behind(ch, target, "stop")
     # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
     time.sleep(0.1)
     try:
@@ -554,6 +579,7 @@ def _handle_fade_out(
     target_id = target.id
     target._stop_requested = True
     target._go_generation = getattr(target, "_go_generation", 0) + 1
+    _cancel_chain_behind(ch, target, "fade_out")
     return ActionHandler._action_result("applied", "fade_out", target_id)
 
 

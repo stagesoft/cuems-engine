@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """Tests for NodeEngine.start() late-bind protocol (T023a)."""
 
 import sys
@@ -106,6 +107,12 @@ def _join_rearm(cue_id, timeout=2.0):
             t.join(timeout)
 
 
+def _join_prearm(cue_id, timeout=2.0):
+    for t in threading.enumerate():
+        if t.name == f"PreArm:{cue_id}":
+            t.join(timeout)
+
+
 class TestApplyCueEnabledSideEffects:
 
     def test_enable_local_unarmed_arms_async(self):
@@ -141,6 +148,10 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
+            # An idle cue was never dispatched, so there is nothing parked to
+            # cancel — the real cancel_parked() returns False here, and a
+            # MagicMock's truthy default would wrongly suppress the disarm.
+            ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue)
 
@@ -164,6 +175,10 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
+            # An idle cue was never dispatched, so there is nothing parked to
+            # cancel — the real cancel_parked() returns False here, and a
+            # MagicMock's truthy default would wrongly suppress the disarm.
+            ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue)
 
@@ -316,3 +331,252 @@ class TestHandleCueEnabledDelegates:
         assert cue.enabled is False
         node._apply_cue_enabled_side_effects.assert_called_once_with(cue, False)
         node._notify_cue_enabled.assert_called_once_with(cue.id, False)
+
+
+# ---------------------------------------------------------------------------
+# GO anchor -- the controller's own MTC instant, not each node's live read
+# (Badajoz 2026-09-25: setnextcue's synchronous _arm_ahead held
+# _command_lock for ~500ms; by the time go_script ran, this node's own MTC
+# read ~520ms later than the other two boxes', anchoring its whole
+# Auto-continue chain late. MTC-following cannot correct a wrong anchor.)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveGoAnchor:
+    """_resolve_go_anchor prefers the controller's GO instant over this
+    node's own live MTC read, with a bounded, explained fallback."""
+
+    def _node(self, local_ms):
+        from cuemsengine.NodeEngine import NodeEngine
+
+        node = object.__new__(NodeEngine)
+        node.mtc_listener = _MM()
+        node.mtc_listener.main_tc.milliseconds_exact = local_ms
+        return node
+
+    def test_uses_controller_instant_within_tolerance(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 79240.0}) == 79240.0
+
+    def test_accepts_controller_instant_slightly_ahead(self):
+        # go_script on the controller runs microseconds before this node
+        # reads its own MTC to compute lag -- allow a small future slack.
+        node = self._node(local_ms=1000.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 1150.0}) == 1150.0
+
+    def test_falls_back_to_local_when_value_is_none(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor(None) == 79760.0
+
+    def test_falls_back_to_local_when_value_is_a_bare_string(self):
+        # the editor's go_script path still sends an arbitrary string
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor("complex_test") == 79760.0
+
+    def test_falls_back_to_local_when_dict_lacks_the_key(self):
+        node = self._node(local_ms=79760.0)
+        assert node._resolve_go_anchor({}) == 79760.0
+
+    def test_falls_back_to_local_when_controller_instant_is_far_in_the_future(self):
+        node = self._node(local_ms=1000.0)
+        # 201ms ahead of local -- past the 200ms future-slack tolerance, so
+        # this reads as a stale or misrouted message, not a fast controller
+        assert node._resolve_go_anchor({"go_mtc_ms": 1201.0}) == 1000.0
+
+    def test_falls_back_to_local_when_lag_looks_like_a_24h_wrap_asymmetry(self):
+        # the controller resets its 24h wrap accumulator on load AND stop;
+        # a node resets it only on load -- an implausibly stale controller
+        # value must not be trusted over the node's own MTC.
+        node = self._node(local_ms=90_000_000.0)
+        assert node._resolve_go_anchor({"go_mtc_ms": 0.0}) == 90_000_000.0
+
+
+class TestGoScriptUsesResolvedAnchor:
+    """go_script must seed the chain from _resolve_go_anchor's result, not a
+    raw live MTC read. The anchor-selection logic itself is covered by
+    TestResolveGoAnchor above; this only pins the wiring."""
+
+    def _node_ready_to_go(self):
+        node = _make_node()
+        node.with_mtc = True
+        node.mtc_listener = _MM()
+        node.ongoing_cue = None
+        cue = _FakeCue(cue_id="cue-1", enabled=True, local=True)
+        node.next_cue_pointer = cue
+        node.set_status = _MM()
+        return node, cue
+
+    def test_anchors_from_resolve_go_anchor_result(self):
+        node, cue = self._node_ready_to_go()
+        with (
+            patch("cuemsengine.NodeEngine.CUE_HANDLER") as mock_ch,
+            patch.object(
+                node, "_resolve_go_anchor", return_value=79240.0
+            ) as mock_resolve,
+        ):
+            mock_ch.find_armed_cue.return_value = True
+            mock_ch.go.return_value = _MM()
+            node.go_script({"go_mtc_ms": 79240.0})
+
+        mock_resolve.assert_called_once_with({"go_mtc_ms": 79240.0})
+        mock_ch.go.assert_called_once()
+        call_args = mock_ch.go.call_args.args
+        assert call_args[0] is cue
+        assert call_args[2] == 79240.0  # GO_mtc + Σ(0, chain breaks at cue itself)
+        assert node.go_offset == 79240.0
+
+
+# ---------------------------------------------------------------------------
+# setnextcue's lookahead moves off _command_lock (Badajoz 2026-09-25,
+# 869f79ecc). The incident's ~500ms delay lived entirely in _arm_ahead's
+# walk from the selected cue, not in arming the selected cue itself -- that
+# stays synchronous (a GO right after setnextcue needs it immediately).
+# ---------------------------------------------------------------------------
+
+
+class TestSetNextCuePreArm:
+
+    def _node(self, cue):
+        node = _make_node(script_cue=cue)
+        node._project_generation = 1
+        node._selection_epoch = 0
+        return node
+
+    def test_arms_selected_cue_synchronously_before_returning(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-1")
+            ch.arm.assert_called_once_with(cue, init=True)
+        _join_prearm(cue.id)
+
+    def test_lookahead_runs_off_the_calling_thread(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        release = threading.Event()
+        entered = threading.Event()
+
+        def blocking_arm_ahead(*args, **kwargs):
+            entered.set()
+            release.wait(timeout=2.0)
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = blocking_arm_ahead
+            t0 = time.time()
+            node.set_next_cue("cue-1")
+            elapsed = time.time() - t0
+        assert elapsed < 0.2, "set_next_cue must not block on _arm_ahead"
+        assert _wait_until(entered.is_set), "PreArm thread never started"
+        release.set()
+        _join_prearm(cue.id)
+
+    def test_prearm_passes_should_continue_and_arms_audio_too(self):
+        """869f79ecc, decided 2026-09-26 on measured data: audio is NOT
+        excluded from the PreArm walk any more. JACK port waits measured
+        0-0.6 s per audioplayer (Badajoz, taller, test2 node01) and at most
+        one extra concurrent arm results from PreArm, far from arm()'s 5 s
+        waiter timeout; excluding it cost ~320 ms of late audio on every
+        run where audio follows local cues."""
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert ch._arm_ahead.called
+        call = ch._arm_ahead.call_args
+        assert call.args[0] is cue
+        assert callable(call.kwargs["should_continue"])
+        assert not call.kwargs.get("skip_arming_types"), "audio must not be excluded"
+
+    def test_repeated_selection_bumps_selection_epoch(self):
+        cue_a = _FakeCue(cue_id="cue-a")
+        cue_b = _FakeCue(cue_id="cue-b")
+        node = _make_node()
+        node.script.find.side_effect = [cue_a, cue_b]
+        node._project_generation = 1
+        node._selection_epoch = 0
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True  # already armed -- skip sync arm
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-a")
+            assert node._selection_epoch == 1
+            node.set_next_cue("cue-b")
+            assert node._selection_epoch == 2
+        _join_prearm(cue_a.id)
+        _join_prearm(cue_b.id)
+
+    def test_should_continue_reflects_the_epoch_at_spawn_time(self):
+        """869f79ecc blocker #3: a stale PreArm thread's should_continue
+        must go False as soon as a LATER selection lands, even though it
+        captured its own epoch before that happened."""
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        captured = {}
+
+        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+            captured["should_continue"] = should_continue
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = capture_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert captured["should_continue"]() is True
+        node._selection_epoch += 1  # a later selection landed
+        assert captured["should_continue"]() is False
+
+    def test_project_generation_bump_also_stops_the_walk(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        captured = {}
+
+        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+            captured["should_continue"] = should_continue
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = capture_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+
+        assert captured["should_continue"]() is True
+        node._project_generation += 1  # a STOP/load bumped it
+        assert captured["should_continue"]() is False
+
+    def test_disarms_newly_armed_cues_when_project_changed_underneath(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        armed_by_walk = _FakeCue(cue_id="armed-by-walk")
+
+        def swap_script_and_return(target, should_continue=None, skip_arming_types=()):
+            node.script = MagicMock()  # a different project loaded meanwhile
+            return [armed_by_walk]
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = swap_script_and_return
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+            ch.disarm.assert_called_once_with(armed_by_walk)
+
+    def test_does_not_disarm_anything_when_same_script(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        armed_by_walk = _FakeCue(cue_id="armed-by-walk")
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = [armed_by_walk]
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+            ch.disarm.assert_not_called()

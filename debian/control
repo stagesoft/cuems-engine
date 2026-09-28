@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 Source: cuems-engine
 Section: python
 Priority: optional
@@ -15,7 +18,7 @@ Package: cuems-engine
 Architecture: all
 Depends: ${misc:Depends},
          ${python3:Depends},
-         cuems-utils (>= 0.1.0rc4),
+         cuems-utils (>= 0.1.0rc13),
          cuems-common (>= 1.0.0),
          python3 (>= 3.11),
          python3-pyossia (>= 2.0.0-rc6+124+cuems3),

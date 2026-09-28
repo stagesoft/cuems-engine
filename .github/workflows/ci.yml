@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 name: CI
 
 on:
@@ -76,6 +80,7 @@ jobs:
             gcc \
             pkg-config \
             libavahi-client-dev \
+            librtmidi6 \
             wget
           wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
           wget https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O libmtcmaster.deb
@@ -83,6 +88,10 @@ jobs:
           # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11.
           # --unpack skips postinst (py3compile needs a registered python3 >= 3.11).
           sudo dpkg --force-depends --unpack "$(realpath python3-pyossia.deb)"
+          # --force-depends skips libmtcmaster's own Depends, so librtmidi6
+          # (librtmidi.so.6, jammy universe 5.0.0-2) is installed above; without
+          # it every test that imports cuemsengine errored on
+          # "libmtcmaster import error: librtmidi.so.6" and CI ran 0 tests.
           sudo dpkg --force-depends --unpack "$(realpath libmtcmaster.deb)"
           sudo dpkg --force-depends --unpack "$(realpath librtpmidid0.deb)"
 

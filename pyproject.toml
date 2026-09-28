@@ -1,10 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "cuemsengine"
-version = "0.1.0rc5"
+version = "0.1.0rc6"
 description = "Engine infraestructure of the CueMS system"
 readme = "README.md"
 license = "GPL-3.0"
@@ -38,7 +42,10 @@ homepage = "https://github.com/stagesoft/cuems-engine#readme"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-cuemsutils = ">=0.1.0rc10"
+# >=rc13: AudioCue.master_vol defaults to 100 (0-100 scale) there, which
+# FadeActionHandler divides by 100; rc11 still defaulted it to 1 (a fade
+# from a fresh AudioCue started at 1%).
+cuemsutils = ">=0.1.0rc13"
 mido = "1.3.3"
 packaging = "*"
 python-rtmidi = "*"

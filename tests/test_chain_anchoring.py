@@ -194,8 +194,12 @@ def _go_threaded_cue(
         SimpleNamespace(
             id="c",
             _local=True,
+            # A cue only reaches go_threaded armed: go() arms a fresh entry
+            # before spawning, and a continuation arms itself on entry.
+            loaded=True,
             _stop_requested=False,
             _go_generation=cur_gen,
+            _revealed=False,
             post_go=post_go,
             _target_object=target,
             prewait=CTimecode(framerate=25, start_seconds=prewait_ms / 1000),
@@ -203,6 +207,27 @@ def _go_threaded_cue(
         ),
         go_gen,
     )
+
+
+class _AdvancingMtc:
+    """MTC that moves forward by the duration of each sleep.
+
+    go_threaded now parks until `start - _RUN_AHEAD_MS` before its held setup,
+    so a test whose timeline never moves would spin forever on any anchor that
+    is still ahead.
+    """
+
+    def __init__(self, ms=0.0):
+        self.main_tc = SimpleNamespace(
+            milliseconds_exact=float(ms),
+            milliseconds_rounded=int(ms),
+            framerate=25.0,
+            frames=int(round(ms / 1000 * 25)),
+        )
+
+    def advance(self, seconds):
+        self.main_tc.milliseconds_exact += float(seconds) * 1000.0
+        self.main_tc.milliseconds_rounded = int(self.main_tc.milliseconds_exact)
 
 
 class TestGoThreadedAnchoring:
@@ -245,8 +270,10 @@ class TestGoThreadedAnchoring:
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
             patch("cuemsengine.cues.CueHandler.loop_cue"),
         ):
-            ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen)
-        ch.go.assert_called_once_with(nxt, mtc, 9000.0)
+            ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen, chain_epoch=3)
+        # the pass is carried unchanged into the continuation, so every cue in
+        # the chain is dispatched under one epoch
+        ch.go.assert_called_once_with(nxt, mtc, 9000.0, chain_epoch=3)
 
     def test_superseded_generation_does_not_fire(self):
         # go_gen=7 but the cue's live generation is 8 (a fresh GO/reload took
@@ -404,15 +431,17 @@ class TestLateDispatchIsLogged:
     def _run(self, prewait_ms, live_mtc_ms, arrival_ms):
         ch = self._ch()
         cue, go_gen = _go_threaded_cue(prewait_ms=prewait_ms, post_go="go")
+        # Advancing clock: the run-ahead park blocks until the cue's slot is
+        # near, which a frozen timeline would never reach.
+        mtc = _AdvancingMtc(live_mtc_ms)
         with (
             patch("cuemsengine.cues.CueHandler.run_cue"),
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
             patch("cuemsengine.cues.CueHandler.loop_cue"),
+            patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
             patch("cuemsengine.cues.CueHandler.Logger") as log,
         ):
-            ch.go_threaded(
-                cue, _mtc(ms=live_mtc_ms), frozen_mtc_ms=arrival_ms, go_gen=go_gen
-            )
+            ch.go_threaded(cue, mtc, frozen_mtc_ms=arrival_ms, go_gen=go_gen)
         return log
 
     def test_warns_when_dispatched_after_its_anchor(self):

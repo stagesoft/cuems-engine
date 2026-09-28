@@ -1,3 +1,59 @@
+cuems-engine (0.1.0rc6-1) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm; bump upstream version 0.1.0rc5 -> 0.1.0rc6.
+  * GO anchor shipped by the controller (869f79ecc). Every node used to read
+    its own MTC as the GO instant WHEN it executed the GO, so a node whose GO
+    queued behind a slow command anchored its whole chain late. At Badajoz
+    (0.1.0rc5-1), node02's first run after a cold boot played its video ~0.5 s
+    behind: setnextcue's lookahead loaded three videos under the command lock
+    and the GO that followed 0.2 ms later waited for it. The controller now
+    captures the instant and ships it as {"go_mtc_ms": ...}; a node adopts it
+    when its own lag is within [-200 ms, +10 s], logs "GO anchored at
+    controller instant ...", and otherwise falls back to its local MTC with a
+    WARNING. Mixed old/new controller and node versions keep working.
+  * The controller only ships that anchor while its MTC is live
+    (MtcListener.is_receiving(), any quarter frame or timecode sysex in the
+    last 0.5 s). A dead MTC input used to become every node's anchor at 0.0,
+    which fired the whole cluster seconds late; now it logs an ERROR and each
+    node falls back to its own MTC.
+  * setnextcue's lookahead runs on a PreArm:<cue> background thread, off the
+    command lock, so the GO that follows a cue selection no longer waits for
+    the next cues to load. Only the selected cue is still armed synchronously.
+    The walk stops at its next cue on a new selection, a project reload or a
+    STOP, and disarms what it armed if a different project was loaded
+    meanwhile. Audio cues are pre-armed like any other local cue.
+  * The arm-ahead walk treats other nodes' cues as transparent: no arm, no
+    count toward its 2-cue budget, no lookahead depth consumed. In a mixed
+    chain (node02 x3 -> node01 x3 -> controller x4) only the first node used to
+    pre-arm its segment; the others re-armed at GO time on every run ("not
+    loaded at go() time", late dispatches up to 840 ms on the controller).
+  * The Auto continue chain is dispatched at its trigger, not cue by cue
+    (869ej4x38): every cue's dispatch and run are scheduled from the trigger,
+    each firing at trigger + its own prewait, so prewaits that run backwards
+    fire on time instead of LATE (closes the gap 0.1.0rc5-1 only warned
+    about). A chain epoch orders concurrent dispatches, a STOP takes the whole
+    pending chain with it, and a cue enabled mid-chain rejoins at its own slot.
+    A plain GO during an Auto follow tail still fires its target after the
+    chain, as before (documented, not changed).
+  * AudioMixer logs how long each JACK port took to register when it succeeds
+    ("JACK port ... registered after Xs (attempt N/max)"), to size the 15 s
+    registration ceiling from field data.
+  * debian/rules builds the venv isolated from the build host
+    (PIP_IGNORE_INSTALLED=1, PYTHONNOUSERSITE=1) and fails the build if
+    python-rtmidi was not vendored. A host with python3-rtmidi installed made
+    pip skip it, and the resulting deb left MTC reading 0.0 forever.
+  * Depends: cuems-utils (>= 0.1.0rc13), was >= 0.1.0rc4. FadeActionHandler
+    divides AudioCue.master_vol by 100, and only rc13 moved its default from
+    1 (the old 0.0-1.0 scale) to 100: on an older cuems-utils a fade from an
+    AudioCue with no deployed volume starts at 1%. The fleet already runs
+    rc14; pyproject/poetry.lock require >= rc13 too (locked rc14).
+  * CI installs librtmidi6 so the unit tests import cuemsengine again (they
+    had silently run 0 tests on rc_1 since at least 2026-08-10); running them
+    is what exposed the cuems-utils floor above. black/isort fixes on the
+    files above.
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 28 Sep 2026 17:22:28 +0200
+
 cuems-engine (0.1.0rc5-1) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm; bump upstream version 0.1.0rc4 -> 0.1.0rc5.
