@@ -286,7 +286,7 @@ class NodeEngine(BaseEngine):
 
     def stop_node_engine(self):
         """Stop the NodeEngine elements"""
-        CUE_HANDLER.disarm_all()
+        CUE_HANDLER.disarm_all(reason="shutdown")
         self.stop_video_devs()
 
     def stop_video_devs(self):
@@ -782,7 +782,7 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
 
         # Disarm all cues from the previous project.
-        CUE_HANDLER.disarm_all()
+        CUE_HANDLER.disarm_all(reason="load")
 
         # Clear the engine's 24h MTC wrap accumulator on this project transition,
         # co-orchestrated with the DMX blackout + videocomposer reset above (which
@@ -941,12 +941,12 @@ class NodeEngine(BaseEngine):
         # If project changed during arm, disarm the stale cue.
         if self._project_generation != project_gen:
             if CUE_HANDLER.find_armed_cue(cue):
-                CUE_HANDLER.disarm(cue)
+                CUE_HANDLER.disarm(cue, reason="project_changed")
             Logger.info(f"Disarmed cue {cue.id} — project changed during async arm")
             return
         # If cue was disabled while we were arming, disarm now.
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
-            CUE_HANDLER.disarm(cue)
+            CUE_HANDLER.disarm(cue, reason="disabled")
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
             return
         # Armed and still enabled: if it belongs to a chain that is running
@@ -1144,7 +1144,7 @@ class NodeEngine(BaseEngine):
             # own reset already handled everything else; undo exactly what
             # THIS walk armed, not a concurrent call's.
             for armed_cue in newly_armed:
-                CUE_HANDLER.disarm(armed_cue)
+                CUE_HANDLER.disarm(armed_cue, reason="project_changed")
             Logger.info(
                 f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
                 "— project changed underneath the walk"
@@ -1241,7 +1241,7 @@ class NodeEngine(BaseEngine):
                 and CUE_HANDLER.find_armed_cue(cue)
                 and not getattr(cue, "_playing", False)
             ):
-                CUE_HANDLER.disarm(cue)
+                CUE_HANDLER.disarm(cue, reason="disabled")
                 Logger.info(f"Disarmed disabled cue {cue.id}")
             # Recalculate next_cue_pointer if the disabled cue was next
             if self.next_cue_pointer and self.next_cue_pointer.id == cue.id:
@@ -1282,7 +1282,7 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self._project_generation += 1  # Abort in-flight daemon arm threads
         self.unload_video_devs()
-        CUE_HANDLER.disarm_all()
+        CUE_HANDLER.disarm_all(reason="ready_script")
 
         # Reset mixer volumes to default when preparing script
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()

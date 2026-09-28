@@ -153,7 +153,7 @@ class TestApplyCueEnabledSideEffects:
             # MagicMock's truthy default would wrongly suppress the disarm.
             ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
-            ch.disarm.assert_called_once_with(cue)
+            ch.disarm.assert_called_once_with(cue, reason="disabled")
 
     def test_disable_playing_does_not_disarm(self):
         cue = _FakeCue(playing=True)
@@ -180,7 +180,7 @@ class TestApplyCueEnabledSideEffects:
             # MagicMock's truthy default would wrongly suppress the disarm.
             ch.cancel_parked.return_value = False
             node._apply_cue_enabled_side_effects(cue, False)
-            ch.disarm.assert_called_once_with(cue)
+            ch.disarm.assert_called_once_with(cue, reason="disabled")
 
     def test_disable_next_cue_advances_pointer_and_broadcasts(self):
         follow = _FakeCue(cue_id="cue-2")
@@ -221,7 +221,7 @@ class TestArmWithEnabledGuard:
             ch.arm.side_effect = slow_arm
             ch.find_armed_cue.return_value = True
             node._arm_with_enabled_guard(cue, project_gen=1)
-            ch.disarm.assert_called_once_with(cue)
+            ch.disarm.assert_called_once_with(cue, reason="disabled")
 
     def test_generation_change_mid_arm_disarms(self):
         cue = _FakeCue()
@@ -234,7 +234,7 @@ class TestArmWithEnabledGuard:
             ch.arm.side_effect = gen_bump_arm
             ch.find_armed_cue.return_value = True
             node._arm_with_enabled_guard(cue, project_gen=1)
-            ch.disarm.assert_called_once_with(cue)
+            ch.disarm.assert_called_once_with(cue, reason="project_changed")
 
     def test_generation_change_before_arm_aborts(self):
         cue = _FakeCue()
@@ -567,7 +567,7 @@ class TestSetNextCuePreArm:
             ch._arm_ahead.side_effect = swap_script_and_return
             node.set_next_cue("cue-1")
             _join_prearm(cue.id)
-            ch.disarm.assert_called_once_with(armed_by_walk)
+            ch.disarm.assert_called_once_with(armed_by_walk, reason="project_changed")
 
     def test_does_not_disarm_anything_when_same_script(self):
         cue = _FakeCue(cue_id="cue-1")
