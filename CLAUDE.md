@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+-->
+
 # cuems-engine
 
 Part of the **CUEMS** ecosystem — see the [`cuems-RELATIONS`](https://github.com/stagesoft/cuems-RELATIONS) repo for the system index, architecture diagram, and protocol/port map.
@@ -107,4 +113,6 @@ Engine → VideoComposer and engine → DmxPlayer are inter-component protocols 
 - **On a controller that MASKS `jack-alsa-bridges`, `systemctl restart cuems-node-engine` fails** ("Unit ... is masked") because the masked unit is in the `Requires=` closure; boot works (the target transaction tolerates it) but unit-level restart + `Restart=on-failure` auto-restart don't. A `Requires=`/`After=` drop-in reset does **not** clear the edge (only `Wants=` reset does). Fix: unmask + stub the audio units (`ExecStart=/bin/true`, `Type=oneshot`, `RemainAfterExit=yes`) so the Requires are satisfied by no-ops.
 - **Single-box controller won't arm if `network_map.xml`'s controller `<ip>` isn't locally reachable.** node-engine dials `tcp://<controller-ip>:9093` for the NNG hub; a dead/absent `<ip>` leaves it in TCP SYN-SENT forever with no error log → never receives `load` → never arms (`409 not_armed`). Diagnose: `ss -tnp | grep :9093` (SYN-SENT from node-engine). Fix for single-box: set controller `<ip>` to `127.0.0.1` (hub listens on 0.0.0.0). Only valid with no real remote nodes; if nodeconf is enabled it re-owns `<ip>` and writes a real assigned local addr (also fine).
 - **Isolated MTC-harness injection on a live host is polluted by the engine's own MtcMaster** (ALSA client 130 emits periodic resync full-frames at position 0 even with no project loaded → interleaves with harness frames → spurious +24h wraps). Stop the whole stack first: `systemctl stop cuems-controller-engine cuems-node-engine cuems-midiconnector rtpmidid cuems-videocomposer`. Run MTC tools as root (`/dev/snd/seq` is `root:audio`).
+- **pyossia reads floats back as float32 — lists included.** `OssiaNodes.set_value` pushes (the OSC message is already sent) and then reads the parameter back to check it; `1200/2160` comes back as `0.5555555820465088`. Compare with `OssiaNodes._values_match` (tolerant, recursive), never `==`. Until 869f8hfra, lists were compared strictly, so every non-dyadic video `/scale` logged a false "Could not set" on every arm. The failure message carries `(got <readback>)` — read it before believing a write failed.
+- **The videocomposer auto-unloads a layer silently unless `/loop 1` is on.** `loop_videoCue` sends `/loop 1` right after reveal, which disables auto-unload. But for a `post_go = go` cue it arrives only after the postwait sleep, so a finite clip shorter than its postwait vanishes at end-of-file (869f8jn2q). `disarm` logs every call with a reason at DEBUG; look for `Disarmed video cue … (cue_end)`.
 - Engine canvas (bbox of ALL `display.conf` `[output:*]` regions) vs videocomposer canvas (connected DRM connectors only) can diverge on partially-cabled rigs — a **known accepted limitation**, don't ad-hoc fix. See the videocomposer CLAUDE.md.
