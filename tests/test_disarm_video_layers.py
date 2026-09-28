@@ -151,3 +151,45 @@ def test_disarm_all_passes_its_reason_to_every_cue(handler, player_handler):
     ):
         handler.disarm_all(reason="load")
     assert [c.kwargs.get("reason") for c in disarm.call_args_list] == ["load", "load"]
+
+
+def test_a_failing_hide_still_unloads_the_layer(handler, player_handler):
+    """visible 0 is cosmetic; a failure there must not skip the unload,
+    or the layer stays loaded and the cue has already forgotten it."""
+    cue = _armed_video_cue()
+    player_handler.register_layer("cue_0")
+    client = cue._osc
+
+    def set_value(path, value):
+        if path.endswith("/visible"):
+            raise ValueError("Node not found")
+
+    client.set_value.side_effect = set_value
+    with patch("cuemsengine.cues.CueHandler.Logger") as logger:
+        handler.disarm(cue, reason="cue_end")
+
+    client.set_value.assert_any_call("/videocomposer/layer/unload", "cue_0")
+    client.remove_layer_endpoints.assert_called_once_with("cue_0")
+    assert not player_handler.is_layer_registered("cue_0")
+    warnings = [str(c.args[0]) for c in logger.warning.call_args_list]
+    assert any("cue_0" in w and "visible" in w for w in warnings)
+
+
+def test_ready_script_disarms_with_its_callers_reason():
+    """STOP reaches disarm_all through ready_script; its log must say stop."""
+    from cuemsengine.NodeEngine import NodeEngine
+
+    ne = object.__new__(NodeEngine)
+    ne.script = MagicMock()
+    ne._project_generation = 0
+    with (
+        patch.object(ne, "unload_video_devs"),
+        patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch,
+        patch("cuemsengine.NodeEngine.PLAYER_HANDLER") as ph,
+    ):
+        ph.get_audio_mixer_client.return_value = None
+        try:
+            ne.ready_script(reason="stop")
+        except Exception:
+            pass  # only the disarm_all call matters here
+    ch.disarm_all.assert_called_once_with(reason="stop")

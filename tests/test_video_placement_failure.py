@@ -120,3 +120,12 @@ class TestRunPlacementFailure:
         cue._osc = MagicMock()
         _run(cue, NO_OUTPUT)
         assert cue._placement_failed == ["layer_0"]
+
+
+    def test_successful_reapply_clears_the_arm_failure(self):
+        cue = _make_video_cue()
+        cue._layer_ids = ["layer_0"]
+        cue._osc = MagicMock()
+        cue._placement_failed = ["layer_0"]
+        _run(cue, _working_output())
+        assert cue._placement_failed == []
