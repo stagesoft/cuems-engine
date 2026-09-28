@@ -486,12 +486,16 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 client.set_value(f"{layer_path}/position", [x, y])
                 sx, sy = output.get_layer_scale(media_w, media_h)
                 client.set_value(f"{layer_path}/scale", [sx, sy])
+                # Applied now: clear a failure recorded at arm.
+                failed = getattr(cue, "_placement_failed", None)
+                if failed and layer_id in failed:
+                    failed.remove(layer_id)
             except (KeyError, RuntimeError, ValueError) as e:
                 _record_placement_failure(cue, layer_id)
                 Logger.error(
                     f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
-                    f" placement/scale re-apply at GO NOT applied, layer will"
-                    f" render at default geometry ({type(e).__name__}: {e})"
+                    f" position/scale re-apply at GO NOT applied, either may be"
+                    f" left at its default ({type(e).__name__}: {e})"
                 )
             except Exception:
                 _record_placement_failure(cue, layer_id)

@@ -797,7 +797,7 @@ class NodeEngine(BaseEngine):
         self.ready_project(project)
 
         # Prepare the script to be played (arms new cues)
-        self.ready_script()
+        self.ready_script(reason="load")
 
         # Start cue dependencies
         # self.set_players()
@@ -1271,8 +1271,12 @@ class NodeEngine(BaseEngine):
     #########################
     # Script logic
     #########################
-    def ready_script(self):
-        """Check if the script is ready to be played"""
+    def ready_script(self, reason: str = "ready_script"):
+        """Check if the script is ready to be played.
+
+        ``reason`` is passed to disarm_all so its log names the caller
+        (``load``, ``stop``).
+        """
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
             return
@@ -1282,7 +1286,7 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self._project_generation += 1  # Abort in-flight daemon arm threads
         self.unload_video_devs()
-        CUE_HANDLER.disarm_all(reason="ready_script")
+        CUE_HANDLER.disarm_all(reason=reason)
 
         # Reset mixer volumes to default when preparing script
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
@@ -1504,7 +1508,7 @@ class NodeEngine(BaseEngine):
 
         # Reset state + disarm + volume reset + re-arm cues
         if self.script:
-            self.ready_script()
+            self.ready_script(reason="stop")
             Logger.info(f"Project {self.script.name} reset and ready for GO.")
 
             # Notify Controller that re-arm is complete (GO button can go

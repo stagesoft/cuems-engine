@@ -188,8 +188,8 @@ def arm_videoCue(cue: VideoCue):
             cue._placement_failed.append(layer_id)
             Logger.error(
                 f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
-                f" placement/scale NOT applied, layer will render at default"
-                f" geometry ({type(e).__name__}: {e})"
+                f" position/scale NOT applied, either may be left at its default"
+                f" ({type(e).__name__}: {e})"
             )
         except Exception:
             cue._placement_failed.append(layer_id)
