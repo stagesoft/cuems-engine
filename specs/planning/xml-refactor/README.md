@@ -26,6 +26,7 @@ The other files are what its CONTEXT block asks for, brought in-repo.
 | [`02-consumer-audit-findings.md`](02-consumer-audit-findings.md) | C7 and C11 — this repository's two findings from the 2026-09-03 consumer audit | What the audit measured here, and why |
 | [`03-migration-inventory.md`](03-migration-inventory.md) | Every call site, **re-measured 2026-09-25** against the live tree | Your working inventory. Every line number upstream recorded has moved |
 | [`04-findings-new-to-this-pass.md`](04-findings-new-to-this-pass.md) | Five findings the upstream flow could not know | Two are live defects independent of this migration; **F2a is the three-repository branch cluster this feature's base belongs to**. Read before scoping |
+| [`05-session-prompt.md`](05-session-prompt.md) | A paste-ready prompt that starts this feature in a fresh agent session or on another machine | Use it instead of explaining the above by hand. It carries the base-branch decision, the sequencing verdict, the four non-negotiables and the out-of-scope list |
 
 ## The one thing to understand before starting
 
