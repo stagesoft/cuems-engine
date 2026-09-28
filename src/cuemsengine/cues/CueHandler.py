@@ -1069,9 +1069,7 @@ class CueHandler:
                 self.stamp_pass(skipped_disabled, seed_ms)
             return None
         if skipped_disabled:
-            return self.go(
-                cue, mtc, seed_ms + sigma_ms, stamp_skipped=skipped_disabled
-            )
+            return self.go(cue, mtc, seed_ms + sigma_ms, stamp_skipped=skipped_disabled)
         return self.go(cue, mtc, seed_ms + sigma_ms)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
@@ -1279,9 +1277,7 @@ class CueHandler:
             # at the trigger would otherwise run every cue's run_cue at GO —
             # for video that is N layers decoding invisibly for the whole of
             # their prewaits. A start already inside the window returns at once.
-            parked = self._wait_mtc(
-                cue, mtc, start_ms - self._RUN_AHEAD_MS, go_gen
-            )
+            parked = self._wait_mtc(cue, mtc, start_ms - self._RUN_AHEAD_MS, go_gen)
 
             if parked != "stopped":
                 # Set up HELD at start_ms (video invisible / audio not-following

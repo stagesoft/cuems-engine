@@ -30,8 +30,8 @@ sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
 from cuemsutils.tools.Uuid import Uuid  # noqa: E402
 
-from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 from cuemsengine.cues import ActionHandler as AH  # noqa: E402
+from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
 
 def _cue(id, post_go="go", local=True, enabled=True, revealed=False, target=None):

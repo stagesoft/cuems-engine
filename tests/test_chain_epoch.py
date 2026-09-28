@@ -43,9 +43,7 @@ def _mtc(ms=0):
 
 
 def _cue(id="c", loaded=True, enabled=True, local=True, **kw):
-    return SimpleNamespace(
-        id=id, loaded=loaded, enabled=enabled, _local=local, **kw
-    )
+    return SimpleNamespace(id=id, loaded=loaded, enabled=enabled, _local=local, **kw)
 
 
 def _ch():
