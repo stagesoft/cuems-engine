@@ -132,10 +132,10 @@ implementation task starts, with the run captured under `evidence/`.
 
 **Independent test**: `sed -n 48p pyproject.toml`; `grep -n 'cuems-utils\|cuems-common' debian/control` match the contract.
 
-- [ ] T038 [P] [US3] `pyproject.toml:48` `>=0.1.0rc13` → `cuemsutils = ">=0.1.0rc16,<0.1.1"`. Do **not** run `poetry lock`
-- [ ] T039 [P] [US3] `debian/control:18` `cuems-utils (>= 0.1.0rc4)` → `cuems-utils (>= 0.1.0rc16),` + `cuems-utils (<< 0.1.1~),`; `:19` → `cuems-common (>= 1.3.0-23~),`; comment block above `Depends:` in the style of `../cuems-common/debian/control:51-56` (C7 gate; inherited `Breaks: cuems-nodeconf (<< 0.1.0-8)` because the engine reads `node_role`; no `Breaks:` of the engine's own). Do not touch `debian/changelog`
-- [ ] T040 [US3] Write `$E/ci-red-by-construction.md`: CI's `poetry install --with dev` (`.github/workflows/ci.yml`) resolves the tracked lock at rc14, which lacks `NodeRole`, `CuemsScript.load` and the versioned schemas (measured) — red from Phase 2 onward, and `poetry install` refuses the stale lock after T038; rc16 unpublished (PyPI latest rc14, checked 2026-09-28); the one step that clears it is `poetry lock` once rc16 is on PyPI; **no PR from this branch until then** (FR-017a, Workflow §4)
-- [ ] T041 [US3] Record in `$E/not-performed.md` unless a packaging sandbox exists (then perform and capture): `dpkg` refusal against `cuems-utils` 0.1.1 and against `cuems-nodeconf` < 0.1.0-8 via the `cuems-common` floor; the re-lock (SC-005) — reason: rc16 unpublished
+- [X] T038 [P] [US3] `pyproject.toml:48` `>=0.1.0rc13` → `cuemsutils = ">=0.1.0rc16,<0.1.1"`. Do **not** run `poetry lock`
+- [X] T039 [P] [US3] `debian/control:18` `cuems-utils (>= 0.1.0rc4)` → `cuems-utils (>= 0.1.0rc16),` + `cuems-utils (<< 0.1.1~),`; `:19` → `cuems-common (>= 1.3.0-23~),`; comment block above `Depends:` in the style of `../cuems-common/debian/control:51-56` (C7 gate; inherited `Breaks: cuems-nodeconf (<< 0.1.0-8)` because the engine reads `node_role`; no `Breaks:` of the engine's own). Do not touch `debian/changelog`
+- [X] T040 [US3] Write `$E/ci-red-by-construction.md`: CI's `poetry install --with dev` (`.github/workflows/ci.yml`) resolves the tracked lock at rc14, which lacks `NodeRole`, `CuemsScript.load` and the versioned schemas (measured) — red from Phase 2 onward, and `poetry install` refuses the stale lock after T038; rc16 unpublished (PyPI latest rc14, checked 2026-09-28); the one step that clears it is `poetry lock` once rc16 is on PyPI; **no PR from this branch until then** (FR-017a, Workflow §4)
+- [X] T041 [US3] Record in `$E/not-performed.md` unless a packaging sandbox exists (then perform and capture): `dpkg` refusal against `cuems-utils` 0.1.1 and against `cuems-nodeconf` < 0.1.0-8 via the `cuems-common` floor; the re-lock (SC-005) — reason: rc16 unpublished
 
 ---
 

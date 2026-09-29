@@ -42,10 +42,12 @@ homepage = "https://github.com/stagesoft/cuems-engine#readme"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-# >=rc13: AudioCue.master_vol defaults to 100 (0-100 scale) there, which
-# FadeActionHandler divides by 100; rc11 still defaulted it to 1 (a fade
-# from a fresh AudioCue started at 1%).
-cuemsutils = ">=0.1.0rc13"
+# >=rc16: node_role vocabulary (NodeRole/NodeIndex), CuemsScript.load with
+# version-1 -> 2 script conversion, and the versioned schemas this engine reads
+# (feature 008). Subsumes the earlier rc13 floor (AudioCue.master_vol 0-100).
+# <0.1.1: 0.1.1 removes the deprecated surface; the release gate (C7) keeps an
+# untested library line out.
+cuemsutils = ">=0.1.0rc16,<0.1.1"
 mido = "1.3.3"
 packaging = "*"
 python-rtmidi = "*"
