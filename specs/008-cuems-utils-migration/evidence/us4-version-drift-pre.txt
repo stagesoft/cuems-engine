@@ -1,0 +1,6 @@
+# T042 — FR-019b drift test, before any version change (all copies 0.1.0rc2)
+# 2026-09-29T16:51:05+02:00  engine 5f6ed93
+$ poetry run pytest -q -p no:cacheprovider tests/test_version_single_source.py -rA
+PASSED tests/test_version_single_source.py::test_pyproject_version_is_the_source_version
+PASSED tests/test_version_single_source.py::test_changelog_top_entry_is_the_source_version
+============================== 2 passed in 0.75s ===============================

@@ -1,0 +1,8 @@
+# T044 failing-first — FR-019b: __version__ bumped to 0.1.0rc7, copies not yet (after the T043 backfill: CHANGELOG top = rc6)
+# 2026-09-29T16:53:18+02:00  engine 5f6ed93+worktree
+$ poetry run pytest -q -p no:cacheprovider tests/test_version_single_source.py
+E       AssertionError: pyproject.toml [tool.poetry] version is '0.1.0rc2' but cuemsengine.__version__ is '0.1.0rc7': set pyproject.toml to '0.1.0rc7'
+E       AssertionError: CHANGELOG.md's newest entry is v0.1.0rc6 but cuemsengine.__version__ is '0.1.0rc7': add a '## v0.1.0rc7' entry on top
+FAILED tests/test_version_single_source.py::test_pyproject_version_is_the_source_version
+FAILED tests/test_version_single_source.py::test_changelog_top_entry_is_the_source_version
+============================== 2 failed in 0.83s ===============================

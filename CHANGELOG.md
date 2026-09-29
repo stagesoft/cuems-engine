@@ -1,5 +1,263 @@
 # Changelog
 
+## v0.1.0rc7 — UNRELEASED
+
+Moves the engine onto `cuems-utils` 0.1.0rc16's public API. Nodes are identified by
+`node_role` (not `node_type`), shows load through `CuemsScript.load` — so version-1 `script.xml`
+files load again, converted in memory — and node and cue ids are handled as the library delivers
+them, which removes a `cluster_status` crash on any node map the current library loads. Ships
+together with `cuems-utils` 012–014; **read the upgrade notes before deploying.**
+
+### Added
+
+- The controller's node map lookup reads `node_role=controller` through the library's
+  `NodeIndex`. A map with more than one controller is logged (one error listing each
+  `uuid=… ip=…`) and the first controller in map order is used.
+- A node whose `settings.xml` still carries the NOT PROVISIONED sentinel uuid logs one error
+  naming `cuems-init-node` and exits before loading its configuration, instead of failing later
+  with a generic "node not found".
+- An empty `<duration/>` on an audio or video cue is treated as zero with one warning naming the
+  cue (it used to be zero silently).
+- `cuemsengine.tools.ids` (`as_id` / `id_str`): the engine's one place for converting ids.
+
+### Changed
+
+- **Show loading**: `read_script` uses `CuemsScript.load`. A version-1 `script.xml` is converted
+  in memory (the file on disk is left alone); a script newer than the installed library is
+  refused with the library's error.
+- **Adoption**: one read-only reader of `adopted` feeds OSC route registration, the liveness
+  probe, the GO gate and `cluster_status`. Re-reading `network_map.xml` after a node-list change
+  is no longer order-sensitive.
+- **Identity**: ids are `Uuid` where the library delivers one (uuid4) and text otherwise; they
+  enter engine code through `as_id` and leave it — sorts, JSON, OSC, logs — as text through
+  `id_str`. `cluster_status` and `cluster_warning` keep their shape and stay lists of strings;
+  pong/armed/finished senders and project nodes now match the map's ids one member per node.
+- **`fade_out` is now a real stop — a behaviour change.** The library rewrites a version-1
+  script's `fade_in`/`fade_out` actions to `play`/`stop` on read. `fade_in` → `play` behaves as
+  before. A converted `fade_out` runs `stop`, which **disarms** its target (the old handler left
+  player processes behind) and answers a repeat with `applied_no_change`.
+- Dependencies: `cuemsutils >= 0.1.0rc16, < 0.1.1` (`pyproject.toml`); `debian/control`
+  `cuems-utils (>= 0.1.0rc16)`, `cuems-utils (<< 0.1.1~)` and `cuems-common (>= 1.3.0-23~)`,
+  the last inheriting `Breaks: cuems-nodeconf (<< 0.1.0-8)` because the engine reads
+  `<node_role>`.
+- `cuemsengine.__version__` is the single version source; `pyproject.toml` and this file's top
+  entry are kept equal to it by a test.
+
+### Removed
+
+- `BaseEngine.find_hosts` (no caller; it could not run against the current library) and the
+  `CONTROLLER_NETWORK_FLAG` constant.
+- The engine's uses of the library's deprecated and internal surface: `XmlReaderWriter`,
+  `NetworkMap.get_nodes_by_adoption` (which mutated the map it read) and the string-parsing
+  workaround around it.
+- The `fade_in` / `fade_out` action handlers; an in-memory ActionCue that still carries one is
+  rejected as unsupported.
+- `BaseEngine.node_host` (assigned, never read).
+
+### Upgrade notes
+
+1. **Upgrade every node host before the controller.**
+2. Why: at show load the controller's library converts the show's `script.xml` to version 2 and
+   deploys it to the nodes. A node on an older library cannot read it, and no package manager
+   stands between the controller's deploy and the node's read. Nodes upgraded first read
+   version-1 documents fine.
+3. What the deploy ships and at which schema version: `script.xml` **2**, the project's
+   `mappings.xml` 1, the project's `settings.xml` 1.
+4. `cuems-utils` 012's node re-mint (every node converging on a uuid4 identity) goes out in the
+   **same upgrade** as rc7 engines and never runs under an older engine: a re-minted map hands
+   the engine `Uuid` node ids, which a pre-rc7 engine's `cluster_status` cannot sort.
+
+## v0.1.0rc6 — 2026-09-28
+
+<!-- source: git log --no-merges fc8d2bb..956a0f3 (31 commits); debian/bookworm 0.1.0rc6-1 (7f6e475) -->
+
+Auto continue chains are dispatched at their trigger, the controller ships the GO instant so
+every node anchors its chain on the same MTC value, and the arm-ahead lookahead moves off the
+command lock. Raises the `cuemsutils` floor to rc13.
+
+### Added
+
+#### Chain dispatch at the trigger (869ej4x38)
+
+- A chain epoch orders concurrent chain dispatches and keeps a STOP in force against older
+  cascades (`b85ce26`).
+- The Auto continue chain is dispatched at its trigger, not cue by cue: each cue fires at
+  trigger + its own prewait, so prewaits that run backwards fire on time instead of late
+  (`0ffb166`).
+- A stop takes its scheduled chain with it, and a cue enabled mid-chain rejoins at its own slot
+  (`6e6d432`). A plain GO during an Auto follow tail still fires its target after the chain —
+  documented, not changed (`c24db51`).
+
+#### GO anchor shipped by the controller (869f79ecc)
+
+- The controller captures the GO instant and ships it inside the GO command
+  (`{"go_mtc_ms": ...}`); a node adopts it when its own lag is within [-200 ms, +10 s] and
+  otherwise falls back to its local MTC with a warning. Mixed old/new controller and node
+  versions keep working (`17482b1`, `7b35ccf`).
+- `AudioMixer` logs how long each JACK port took to register on success, to size the 15 s
+  ceiling from field data (`2942305`).
+
+### Changed
+
+#### Arm-ahead lookahead (869f79ecc)
+
+- `setnextcue`'s lookahead runs on a `PreArm:<cue>` background thread, off the command lock, so
+  the GO that follows a cue selection no longer waits for the next cues to load; only the
+  selected cue is still armed synchronously (`423cccc`).
+- `_arm_ahead` treats other nodes' cues as transparent (no arm, no budget, no depth), returns
+  what it newly armed, and gains a cooperative abort and a per-type carve-out; the PreArm walk
+  governs `arm()`'s own recursion, and audio cues are pre-armed like any other local cue
+  (`77e4237`, `afef5da`, `ed18516`, `8f2710e`, `5fe9d6e`).
+- Dependency: `cuemsutils >= 0.1.0rc13` (was rc4 in `debian/control`): `FadeActionHandler`
+  divides `AudioCue.master_vol` by 100, and only rc13 moved its default to 100 — on older
+  libraries a fade from an AudioCue with no deployed volume started at 1% (`956a0f3`).
+
+### Fixed
+
+- The controller ships the GO anchor only while its MTC input is live (any quarter frame or
+  timecode sysex in the last 0.5 s); a dead input used to become every node's anchor at 0.0
+  (`432c042`).
+- The stop-cancel summary joined cue ids, which are `Uuid`s, and crashed inside the log line
+  that reports what a stop cancelled (`6068dd8`, `0a9563f`).
+- CI installs `librtmidi6` so the unit tests import `cuemsengine` again (`1b54369`); black/isort
+  on the phase 2 files (`c006e40`, `361b391`).
+- Packaging (debian/bookworm `0.1.0rc6-1`): the build venv is isolated from the build host and
+  the build fails if `python-rtmidi` was not vendored — a host with `python3-rtmidi` installed
+  produced a deb whose MTC read 0.0 forever.
+
+## v0.1.0rc5 — 2026-08-14
+
+<!-- source: git log --no-merges 2abf26d..fc8d2bb (5 commits); debian/bookworm 0.1.0rc5-1 (8b57710) -->
+
+Auto continue triggers the whole chain at one common trigger.
+
+### Changed
+
+- **Auto continue (869ej3cc8)**: `CueHandler._chain_advance_ms` is now zero. It returned
+  prewait + postwait, so every cue's prewait cascaded into every later cue: prewaits authored as
+  absolute offsets from GO (5/35/65/95/380 s) played as 5/40/105/200/580. Every cue now shares the
+  trigger as its arrival and plays at trigger + its own prewait; postwait keeps its meaning as a
+  real tail under Auto follow / Auto pause and as the illumination hold. Not a DMX rule — DMX was
+  the only cue type carrying a prewait in the reporting show (Castillo Medina del Campo)
+  (`fc8d2bb`).
+- A chain whose prewaits run backwards is still reached after its anchor and fires at dispatch;
+  `go_threaded` now warns "firing LATE" instead of mistiming silently (closed in rc6).
+- ActionHandler architecture analysis and controller-integration contracts documented
+  (`be4e4f6`, `3645308`, `afff04a`); CI lint fixed and `poetry.lock` refreshed (`e210b26`).
+
+## v0.1.0rc4 — 2026-08-03
+
+<!-- source: git log --no-merges v0.1.0rc2..2abf26d (100 commits); debian/bookworm 0.1.0rc4-1 (15d50b6) -->
+
+MTC-anchored cue timing (prewait, body and postwait as real MTC-timeline gaps with a held/reveal
+mechanism), FadeCue fixes against `gradient-motiond`, the JACK port-wait fix for silent audio
+cues, controller discovery via `controller.local`, and a restored test/CI pipeline.
+
+### Added
+
+#### MTC-anchored cue timing
+
+- MTC-gated reveal: `run_cue` sets a cue up held (video invisible, audio not following, action
+  not yet run) and `reveal_cue` shows it when live MTC reaches its start (`e1883a3`).
+- prewait/body/postwait anchored as real MTC-timeline gaps, honoured identically on every node
+  (`1855769`).
+- Auto-follow / Auto-pause postwait is a real MTC-gated tail after the media body (`2ca443d`).
+
+#### Controller and cluster
+
+- Nodes resolve the controller as `controller.local` (mDNS), falling back to the
+  `network_map.xml` `<ip>` (`92d006a`).
+- The UI gets an authoritative, node-sourced read-back of mixer gain (`5ae765e`).
+- `enable`/`disable` actions arm/disarm their target, so runtime-enabled cues are pre-armed
+  (`334b553`).
+
+#### Deploy and packaging
+
+- `CuemsDeploy` sync/async branching with a blocking subprocess fallback (`18ef2c4`).
+- `cuems-engine-mock` binary package for headless/UI-dev boxes (`22b54bb`).
+
+### Changed
+
+- Dependencies: `cuemsutils >= 0.1.0rc9`, then `>= 0.1.0rc10` (lxml 6.1.0 / CVE-2026-41066,
+  media duration) (`165b48a`, `ef1f790`); lock at rc11 (`f490e34`); pyossia floor
+  `2.0.0-rc6+124+cuems3` — cuems2 has no `Node.remove_child` (`dd60f76`); Poetry 2.4.1
+  (`546c8ee`).
+- `NodeEngine`'s load and stop share extracted teardown/re-arm helpers (`b476984`); the
+  ActionHandler → CueHandler circular import is resolved with a protocol (`4d53856`).
+- Code formatted with black/isort/flake8 (PEP 8) across `src/` and `tests/`.
+
+### Fixed
+
+#### Cue timing
+
+- Auto-continue pre/post-wait timing, illumination and the cross-node loop (`46acadf`).
+- `next_cue_pointer` advances when a GO has no local cue (`fb8feb8`).
+- `_effective_duration_ms`: DMX fade times are milliseconds, not seconds (`31bae8c`).
+- Video wraparound is enabled early for infinite-loop cues, so the first loop does not freeze on
+  its last frame (`41ab6bc`).
+- CueList children that reach their trigger un-armed are re-armed (`c9b8aa5`).
+
+#### Audio
+
+- Wait for the player's JACK port before wiring it to the mixer — the cue played green but
+  silent (`e0896f2`, `3b56c2f`); fail fast when there is no JACK server at all (`c20a4e4`).
+
+#### FadeCue / gradient-motiond
+
+- `node_name` sent to gradient-motiond is the node's `role_id`/hostname, not its uuid, and
+  cancel messages carry it (`45bbe9b`).
+- Fade `start_value` comes from the live client, and consecutive fades chain from the recorded
+  `end_value` (`2608ea8`, `afebe48`, `d642f2c`).
+- FadeCue illumination is held for the fade duration on every node (`89bbd9b`); a FadeCue
+  duration <= 0 fails loudly at reveal (`9b8c837`).
+
+#### Other
+
+- `PORT_HANDLER`'s exclusion list actually excludes; ports are bind-probed before being handed
+  out (869ed9wf7) (`2abf26d`).
+- Video layers render at native size and no longer bleed into neighbouring outputs (`fe595db`).
+- `MtcListener` aligned with the unified C++ receiver across 24 h (`608fed2`).
+- The NNG comms thread is stopped and joined before interpreter exit (`a4e5e61`).
+- Action handlers wrapped in try/except (`18ec2cd`).
+- Packaging: engine services restart on package upgrade (`b698d64`); `cuems-engine-mock` carries
+  forward the rsync shim and PATH drop-in and keeps the `cuems-<component>` wrapper names
+  (debian/bookworm `0.1.0rc4-1`).
+
+### Tests
+
+- Testing workflow with coverage report (`9faa30c`); PR protections and a contributors' code of
+  conduct (`0f38840`); the integration suite no longer hangs and slow tests are split
+  (`cfcfb9f`); the suite runs in a single process again and no longer collides with a live CUEMS
+  install (`f287f0e`, `4cad9ff`, 869ed41ey).
+
+## v0.1.0rc3 — 2026-04-16
+
+<!-- source: debian/bookworm 0.1.0rc3-1 / 0.1.0rc3-2 (git show 7f6e475:debian/changelog, lines 105-132);
+     first-parent packaging commits 99460bb (merge rc_1, 45 non-merge commits), 30af517, 0e0e284 -->
+
+Cut from the packaging line before the `v0.1.0rc2` tag (2026-05-19). Its changes reached the
+engine source through `rc_1` and are part of the rc2 entry below; this records the packaging
+release.
+
+### Changed
+
+- Player binaries renamed: `audioplayer-cuems` → `cuems-audioplayer`, `dmxplayer-cuems` →
+  `cuems-dmxplayer` (kill scripts, PlayerHandler pgrep filter, mock wrappers) (`1202b06`).
+- Stale `dev/cuems-node-engine.service` removed; the unit in `cuems-common` is the single source
+  (`5f0be1a`).
+- `cuems-engine-mock`: drop-in wrappers renamed to the `cuems-<component>` convention;
+  `Conflicts:` covers `cuems-dmxplayer` too; postinst reports the right install path (`0e0e284`,
+  `0.1.0rc3-2`).
+
+### Added
+
+- Cue enable/disable toggle via WebSocket OSC; disabled cues are skipped in nextcue, GO, arming
+  and auto-chains (`2256c56`, `856173e`).
+
+### Fixed
+
+- Arm waits for an in-progress arm instead of failing on concurrent access (`fe9339f`).
+
 ## v0.1.0rc2 — 2026-05-19
 
 Major feature release. Adds FadeCue integration with `gradient-motiond`, direct UDP OSC
