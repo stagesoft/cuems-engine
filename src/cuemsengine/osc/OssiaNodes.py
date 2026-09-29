@@ -212,9 +212,7 @@ class OssiaNodes(object):
         if isinstance(sent, (list, tuple)):
             if not isinstance(stored, (list, tuple)) or len(sent) != len(stored):
                 return False
-            return all(
-                OssiaNodes._values_match(a, b) for a, b in zip(sent, stored)
-            )
+            return all(OssiaNodes._values_match(a, b) for a, b in zip(sent, stored))
         if isinstance(sent, float) or isinstance(stored, float):
             if isinstance(sent, (int, float)) and isinstance(stored, (int, float)):
                 return math.isclose(
