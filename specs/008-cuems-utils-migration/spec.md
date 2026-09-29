@@ -6,10 +6,11 @@ lives on the shared branch name, see `specs/planning/xml-refactor/00-runnable-fl
 **Base**: `feat/nodelist-modify-dispatch` @ `dbc9e6d` (decision 2026-09-25), then `rc_1` @ `956a0f3`
 merged in at `27b27f5` (2026-09-29) — see M14
 **Created**: 2026-09-28
-**Status**: Re-analysed 2026-09-29 after merging `rc_1`; identity policy, versioning and FR-014 revised
+**Status**: Re-analysed 2026-09-29 after merging `rc_1`; identity policy, versioning and FR-014 revised;
+shrunk the same day to ship with `cuems-utils` 012–014 (M19–M21)
 **Input**: `specs/planning/xml-refactor/` bundle (00–04), `00-runnable-flow.md` §3 context block,
-and measurements the bundle does not carry: M1–M13 (2026-09-28, pre-merge) and M14–M18 (2026-09-29,
-after merging `rc_1`).
+and measurements the bundle does not carry: M1–M13 (2026-09-28, pre-merge), M14–M18 (2026-09-29,
+after merging `rc_1`) and M19–M21 (2026-09-29, `cuems-utils` 011–014 review).
 
 ## Context
 
@@ -57,6 +58,15 @@ are two of them.
 | **M16** | `cuemsutils`' `Uuid` (`cuemsutils/tools/Uuid.py`) is a plain object: `==`/`hash` match its `str`, formatting and `__json__` work; `<`, slicing, `len`, `+`, `.split`, `isinstance(…, str)` do not; the constructor **refuses anything not uuid4**. The library's uuid decoder is **lenient**: a uuid4 decodes to `Uuid`, anything else (uuid1, the nil uuid carried by real editor payloads) stays the raw `str` — the same map field is `Uuid` or `str` depending on the value (measured: a uuid1 map loads, uuid `str`). `settings.xsd`'s `uuid` is `NonEmptyString`, so `node_conf["uuid"]` is always `str`. 6 of the 11 uuid literals in `tests/` are not uuid4 | FR-024–FR-029, the identity policy |
 | **M17** | `fade_out` is **not** equivalent to `stop` (`ActionHandler.py:567-583` vs `_handle_stop`): `stop` answers a repeat with `applied_no_change` and **disarms** the target; `fade_out` does neither — its own TODO names *"the same zombie-process bug as the old stop handler"*. `fade_in` is code-identical to `play`. True before the merge too; `rc_1` adds `_cancel_chain_behind` to both, keeping the difference | FR-014 corrected: the `fade_out` → `stop` conversion is a behaviour **change** (a fix), not preservation |
 | **M18** | `rc_1`'s `6068dd8` hit the M12 class on the rig: `Cue.id` is a `Uuid`, and `', '.join` over ids crashed the stop-cancel summary | Confirms the class is wider than node uuids; FR-026 |
+
+**Measured 2026-09-29, reviewing `cuems-utils` 011–014** (library checkout moved `0ba239b` →
+`996617f`, 011 merged; the engine suite against it fails the **same 35 ids**, 28 F / 7 E / 831 P):
+
+| # | Finding | Consequence |
+|---|---|---|
+| **M19** | Feature **012** (uuid4 convergence) is unblocked but unspecified: it narrows `network_map.xsd`'s `UuidType` to uuid4 and re-mints every node identity with `cuems-init-node`. The fleet carries **no** uuid4 today (both controllers a cloned uuid1 `a3811d78-099f-11f0-a075-<mac>`, `node01` a uuid5), so every map uuid decodes as `str` now and as `Uuid` after 012. `settings.xsd:66` stays `NonEmptyString` — `node_conf["uuid"]` is `str` before and after | Group 7's egress fixes are what keep `cluster_status`/`_node_label` alive after the re-mint; ingress stays needed for the own uuid, wire ids and `output_name`. **rc7 ships with 012–014** (clarified) — no pre-012 bridges |
+| **M20** | Feature **011** (landed) made the nil uuid `00000000-0000-0000-0000-000000000000` the **NOT PROVISIONED** sentinel in `settings.xml` (`cuemsutils.tools.identity_check.SENTINEL`; fix: `cuems-init-node`). On such a node `ConfigManager(load_all=True)` raises *"Node with uuid 00000000-… not found"* and the engine exits with a generic *"Exception while loading config"*; `ConfigManager(load_all=False).node_uuid` reads the sentinel without raising | FR-027 becomes the sentinel pre-load check (G2) |
+| **M21** | `BaseEngine.node_host` (`:315`, `http://<last 12 chars of the uuid>.local` — the MAC for a uuid1, random for a uuid4) is assigned and **never read**. 012's re-mint leaves stale `<uuid>_<output_id>` prefixes in `<output_name>` wherever its reach misses a script (brief §10.2), schema-valid; the engine derives project nodes from `output_name[:36]`, so such a node surfaces in `cluster_warning.missing` — the only operator-visible detector of an incomplete re-mint. 014 retires `default_mappings.xml` and flags a namespace typo in `dev/test_xml_files/outputs.xml` (X15) | `node_host` deleted (FR-025); FR-026 pins the stale-prefix case (G5); 014 items recorded, not acted on |
 
 All other coordinates in `03-migration-inventory.md` were re-verified unchanged at `afbd5cf`:
 `BaseEngine.py` :17/:33/:410/:433/:440/:443/:505; `ControllerEngine.py` :15/:287/:937-943/:1418
@@ -170,6 +180,15 @@ five `CTimecode(cue.media.duration)` wraps; `pyproject.toml:41`; `debian/control
   `debian/bookworm` release commits** (rc3 2026-04-16, rc4 2026-08-03, rc5 2026-08-14, rc6
   2026-09-28), each entry covering what that release shipped; rc3 carries one line recording that it
   was cut from a line predating the `v0.1.0rc2` tag. The rc2 entry is left untouched.
+
+- Q: Does rc7 reach the field before `cuems-utils` 012's re-mint? → A: **No — rc7 ships together
+  with 012–014's pending work** (maintainer, 2026-09-29). So the engine never runs against a
+  non-uuid4 map in the field, and 008 is **shrunk**: no pre-012 bridges (no uuid1-shape test
+  matrix, no removal marker, no non-uuid4 warning); FR-027 reduces to the NOT PROVISIONED
+  sentinel; FR-028 stays "all uuid4". Gates kept: **G1** release order (FR-019d), **G2** sentinel
+  (FR-027), **G5** stale-prefix detection (FR-026), **G6** evidence pinned to a library commit
+  (FR-001); plus `node_host` deleted (FR-025). G2's scope — a **pre-load check**, not only a message
+  — taken as recommended (the maintainer confirmed the shrink without choosing; revisit if wrong).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -330,10 +349,12 @@ green against the replacement contract.
   before it can serve an adopt. This feature must not deepen that dependency; the fix is nodeconf's.
 - **Empty `node_list`** (fresh node boot): the controller-IP fallback raises its existing
   "No nodes found" error, unchanged.
-- **A non-uuid4 id** (uuid1 fleet id, the nil uuid from an editor payload): kept as `str`, exactly
-  as the library keeps it; compared, hashed and emitted like any other id. The engine's **own**
-  uuid or any map uuid that is not uuid4 is logged once at startup/map load as a warning naming the
-  re-mint (`cuems-utils` feature 012) — observable, never fatal.
+- **A non-uuid4 id** (the nil uuid from an editor payload, a `"controller"` fallback string): kept
+  as `str`, exactly as the library keeps it; compared, hashed and emitted like any other id. A
+  non-uuid4 **map** uuid cannot occur in the field: rc7 ships with 012, whose schema refuses it.
+- **An unprovisioned node** (own uuid is the nil sentinel, M20): the engine refuses to start with
+  *"NOT PROVISIONED — run cuems-init-node"*, before the full config load, instead of the generic
+  *"Node with uuid 00000000-… not found"*.
 
 ## Requirements *(mandatory)*
 
@@ -345,7 +366,10 @@ green against the replacement contract.
   change, with the commit, the library version and the library's source (editable path or wheel)
   recorded alongside. *(Done 2026-09-28: `evidence/baseline-suite.txt`; re-captured after the
   `rc_1` merge 2026-09-29: `evidence/baseline-suite-postmerge.txt`, 28 F / 7 E / 831 P — the
-  post-merge file is the baseline every later comparison uses.)*
+  post-merge file is the baseline every later comparison uses.)* **Every** evidence capture
+  also records `git -C ../cuems-utils rev-parse HEAD`; when the library moves mid-feature, the
+  failing test ids are diffed against the baseline before work continues (G6 — done once already:
+  `0ba239b` → `996617f`, identical).
 - **FR-002**: `/speckit.implement` MUST NOT start on an **unexplained** red suite. Per Q3, fixture
   work runs first and in order, with no engine change: (1) convert
   `dev/test_xml_files/network_map.xml` to `node_role` and capture the run; (2) convert
@@ -500,6 +524,11 @@ green against the replacement contract.
   Sources: `git log --no-merges` over each range and `debian/bookworm`'s own `debian/changelog`
   entries (`git show 7f6e475:debian/changelog`). Same style as the rc2 entry; ClickUp ids kept where
   the commits carry them.
+- **FR-019d** *(G1)*: The rc7 `### Upgrade notes`, the `cuems-relations` hand-off and the exit
+  criteria MUST state the release order with `cuems-utils` 012: **rc7 engines and 012's node
+  re-mint go out in the same upgrade; the re-mint never runs under a pre-rc7 engine**, because a
+  re-minted map decodes every node uuid as `Uuid`, which pre-rc7 `cluster_status` cannot sort (M12,
+  M19). An upstream note asks 012's migration guide to say the same (UR-8).
 - **FR-020**: Both texts MUST list the documents the deploy path ships (`script.xml`, project
   `mappings.xml`, project `settings.xml`) with their current schema versions, so that a future bump
   of `project_mappings` or `project_settings` is visibly a C11 change (M5).
@@ -509,25 +538,33 @@ green against the replacement contract.
 - **FR-024**: One engine helper converts an id at **ingress**, mirroring the library's own uuid
   decoder (M16): a `Uuid` passes through; a uuid4 `str` becomes `Uuid`; any other non-empty `str`
   stays `str`; empty/`None` becomes `None`. It never raises. Ingress sites: `node_conf["uuid"]`
-  (`BaseEngine.py:315`, `:325`; `ControllerEngine.py:167`, `:281`, `:350`, `:385`, `:1422`, `:1441`;
+  (`BaseEngine.py:325`; `ControllerEngine.py:167`, `:281`, `:350`, `:385`, `:1422`, `:1441`;
   `NodeEngine.py:632`), `output_name[:36]` (`ControllerEngine.py:987`), NNG `operation.sender`
   (`:551`, `:568`, `:588`), the direct-player OSC address (`:310`), editor cue ids (`:472`, `:609`),
   and map uuids in the adoption reader and `_node_label` (`:1458`, `:1483`).
 - **FR-025**: One engine helper renders an id at **egress** as `str`. Every operation `Uuid` does not
   support goes through it: sorting (`key=str`; `ControllerEngine.py:1557`, `:1588`, `:1626-1627`,
-  `:1654-1655`, `:1703`, `:1766-1767`), slicing (`_node_label`'s `uuid[:8]` `:1488`,
-  `BaseEngine.py:315`'s `[-12:]`), `.split`/`join` slugs, JSON and OSC arguments, string
-  concatenation.
+  `:1654-1655`, `:1703`, `:1766-1767`), slicing (`_node_label`'s `uuid[:8]` `:1488`),
+  `.split`/`join` slugs, JSON and OSC arguments, string concatenation. `BaseEngine.node_host`
+  (`:64`, `:315`) is **deleted**, not converted: it is never read, and its MAC-from-uuid1 meaning
+  ends with 012 (M21); the one test asserting it (`tests/test_core_baseengine.py:30`) retires as a
+  recorded event.
 - **FR-026**: Every id set the controller keeps (`_armed_nodes`, `_finished_nodes`,
   `_pong_responses`, adopted, alive, project, required) holds ingress-converted ids, so a `Uuid`
   and its `str` never coexist as two members. A test MUST show a controller whose own uuid is `str`
   and whose map uuids are `Uuid` resolving `required`, `missing` and `unreachable` correctly; it
-  fails against the pre-migration code.
-- **FR-027**: A non-uuid4 own uuid or map uuid is logged **once** as a warning at startup / map
-  load, naming the value and the re-mint (`cuems-utils` feature 012). Never fatal.
+  fails against the pre-migration code. The same test pins **G5**: a project whose `output_name`
+  prefix is a uuid absent from the map (a stale pre-re-mint identity, M21) lists that uuid in
+  `missing` — the engine's detector of an incomplete 012 re-mint.
+- **FR-027**: *(Reduced 2026-09-29, M20.)* Before the full config load, the engine reads its own
+  uuid (`ConfigManager(load_all=False).node_uuid`) and, if it equals `cuems-utils`' NOT
+  PROVISIONED sentinel, logs one ERROR — *"NOT PROVISIONED — run cuems-init-node"* — and exits,
+  instead of the generic *"Node with uuid 00000000-… not found"*. No warning for other non-uuid4
+  ids: rc7 ships with 012, whose schema refuses them in maps.
 - **FR-028**: Every uuid literal in `tests/` and `dev/test_xml_files/` MUST be uuid4 (6 of 11 are
-  not, M16), replaced with fixed uuid4 values — except literals whose purpose is a non-uuid4 input,
-  which are kept, named and justified in the test that uses them (FR-027's test).
+  not, M16), replaced with fixed uuid4 values. The only exceptions are named inputs of a test
+  whose subject is a non-uuid4 value: the nil sentinel (FR-027) and `tests/test_ids.py`'s
+  helper-contract cases (nil, uuid1).
 - **FR-029**: The helpers live in one engine module; `cuemsutils.tools.Uuid` is imported only there
   and in tests. No engine code constructs `Uuid` elsewhere. Upstream report **UR-6**: the library
   has no public id-coercion helper — its decoder is internal (`cuemsutils.xml.adapters`) — so the
@@ -548,7 +585,11 @@ green against the replacement contract.
   `CuemsScript.validate` for every schema, but that validates only a loaded show script — the public
   surface has no stand-alone validator for `settings`/`network_map`/`project_*` documents, only the
   `ConfigManager` loaders (measured 2026-09-28); **UR-6** no public id-coercion helper (FR-029);
-  **UR-7** the `fade_out` → `stop` conversion is not behaviour-preserving in this engine (M17).
+  **UR-7** the `fade_out` → `stop` conversion is not behaviour-preserving in this engine (M17);
+  **UR-8** for 012's clarification pass: the re-mint ships with rc7 engines (FR-019d); type
+  `settings.xml`'s `node/uuid` so the library delivers it as `Uuid` (sentinel kept valid); confirm
+  `identity_check.SENTINEL` as public surface — drafted as a paste-ready prompt in
+  `upstream-reports/PROMPT-012-clarify.md`.
 - **FR-023**: The F2a interaction (socket existence used as nodeconf readiness) is recorded for
   whoever fixes `cuems-nodeconf`; this feature does not add another caller of that probe.
 - **FR-023a**: The deletion of `find_hosts` MUST be recorded against
@@ -595,15 +636,16 @@ Exit criteria from `00-runnable-flow.md` §6, adjusted by M2/M3:
 - **SC-008**: The nodes-before-controller ordering exists in `CHANGELOG.md`'s
   `v0.1.0rc7 — UNRELEASED` entry and in the handed-off `cuems-relations` draft; `CHANGELOG.md` holds
   rc3–rc6 entries (FR-019c); `__version__` is `0.1.0rc7`, the version drift test (FR-019b) is green,
-  and `debian/changelog` is unchanged from the merge.
+  and `debian/changelog` is unchanged from the merge. The rc7 upgrade notes and the hand-off state
+  FR-019d's release order with 012.
 - **SC-009**: Every hardware/cluster item not performed is recorded **not performed**, per entry.
 - **SC-010**: Zero `cuemsutils` deprecation warnings are emitted during a full suite run —
   including `tests/test_default_mappings_valid.py`, which moves off `XmlReaderWriter`: script
   fixtures via `CuemsScript.validate`, config fixtures via the public `ConfigManager` loaders.
 - **SC-011**: A search of `src/` for `CTimecode(cue.media.duration)` returns **zero**, and every
   duration characterization test (FR-016a) is green before and after the removal.
-- **SC-012**: Every uuid literal under `tests/` and `dev/test_xml_files/` is uuid4 except the named
-  FR-027 cases; the identity tests (FR-024–FR-026) are green; no `sorted(`, slice, `.split` or
+- **SC-012**: Every uuid literal under `tests/` and `dev/test_xml_files/` is uuid4 except FR-028's
+  named cases; the sentinel pre-load check (FR-027) is tested; the identity tests (FR-024–FR-026) are green; no `sorted(`, slice, `.split` or
   `join` over an id in `src/` operates on a raw id without the egress helper.
 
 Then, and only then, the signed annotated tag `xml-refactor-merge-candidate` on `feat/xml-refactor`,
@@ -622,8 +664,8 @@ Nothing releases from this branch alone (D27).
   2026-09-28), so the settings 1→2 conversion needs no engine change.
 - **A4**: cuemsutils features 011–014 do not block this feature (verified by the bundle in both
   directions); feature 013's edits to `NodeEngine.py` `node_hw_outputs` are out of scope here.
-  Feature 012's uuid re-mint is not a prerequisite either: the identity policy tolerates non-uuid4
-  ids exactly as the library does (FR-024), and warns (FR-027).
+  Feature 012 is not a prerequisite for *implementing* 008; it is a **co-requisite for releasing**
+  it — rc7 ships together with 012–014 (clarified 2026-09-29, FR-019d).
 - **A7**: Versions are cut on `debian/bookworm` (M15); this branch never edits `debian/changelog`.
 - **A5**: The constitution (v1.1.0) needs no amendment. Principle II is satisfied by FR-003;
   Principle I is served by deleting rather than rewriting (`find_hosts`, Q2). YAGNI supports

@@ -253,3 +253,20 @@ records it as a behaviour change; UR-7 upstream.
 ## R11 addendum — upstream reports
 
 UR-6 no public id-coercion helper (R14). UR-7 `fade_out` → `stop` is a behaviour change here (R15).
+
+## R16 — `cuems-utils` 011–014 and the id plan (2026-09-29)
+
+Library checkout moved `0ba239b` → `996617f` (011 merged, 28 commits); the engine suite against it
+fails the same 35 ids (`comm` empty both ways) — G6 applied once. 012 (uuid4 convergence) is
+unspecified: brief in `../cuems-utils/specs/planning/etc-cuems-first-install-execution.md` §"Feature
+012" and `etc-cuems-first-install.md` §9–§10 (fleet uuid1/uuid5, `UuidType` narrowing, literal
+36-char re-mint, stale `output_name` prefixes). 011: nil uuid = NOT PROVISIONED
+(`cuemsutils/tools/identity_check.py`, `SENTINEL`); `ConfigManager(load_all=True)` on it raises
+*"Node with uuid 00000000-… not found"*, while `load_all=False` reads `node_uuid` safely (measured).
+`BaseEngine.node_host` is assigned at `:315` and never read (grep over `src/`).
+
+**Decision** (clarified: rc7 ships with 012–014): no pre-012 bridges. FR-027 → sentinel pre-load
+check; FR-028 all uuid4; G1 release order; G5 stale-prefix case; G6 evidence pinned to a library
+commit; `node_host` deleted. 014 notes (not acted on): `default_mappings.xml` retires — T031's
+`load_net_and_node_mappings` case goes with it; X15 namespace typo in
+`dev/test_xml_files/outputs.xml`. Upstream: UR-8, `upstream-reports/PROMPT-012-clarify.md`.

@@ -23,7 +23,9 @@ now gets silently wrong. Seven groups:
 6. **Duration wraps** removed, `None` → zero made explicit and logged.
 7. **Identity**: `Uuid` canonical **as the library delivers it** — `as_id` at ingress (uuid4 →
    `Uuid`, anything else stays `str`, mirroring the library's own lenient decoder), `id_str` at
-   egress (sorts, slices, JSON, OSC). Test ids all uuid4.
+   egress (sorts, slices, JSON, OSC). Test ids all uuid4. **Shrunk 2026-09-29**: rc7 ships with
+   `cuems-utils` 012–014, so no pre-012 bridges; the NOT PROVISIONED sentinel (011) gets a pre-load
+   check; `node_host` is deleted; release order with 012 stated (G1).
 
 Plus the release: `CHANGELOG.md` rc3–rc6 backfilled from history, **rc7 `UNRELEASED`** on top,
 `__version__` the single source, `debian/changelog` left to the packaging branch; the rc7 commit is
@@ -78,7 +80,7 @@ Constitution v1.1.0. Checked, **not amended**.
 | **II. TDD (non-negotiable)** | ✅ | Failing-first with captured evidence for every behaviour change: FR-003 sites 1–2, FR-005a, FR-007, FR-009a, FR-016b, FR-019b, FR-024–FR-027 (`test_ids`, `test_cluster_identity`, the non-uuid4 warning). Removals are refactors under characterization (FR-016a, T048, T052) or discharged by captured pre-deletion runs |
 | **III. Integration & contract** | ✅ | Contract tests first (`cluster_status`, public surface, ids); moved tests feed **real typed maps**, never a stubbed reader |
 | **IV. Simplicity / YAGNI** | ✅ | Deletes more than it adds. Adds: one reader, one duration helper, one ids module — each tied to a measured defect. No shim: `None` → zero and non-uuid4-as-`str` both preserve existing behaviour, made explicit |
-| **V. Observability** | ✅ | Silent paths become logged: >1 controller (error), `None` duration (warning), non-uuid4 own/map uuid (one warning, FR-027) |
+| **V. Observability** | ✅ | Silent or misleading paths become explicit: >1 controller (error), `None` duration (warning), an unprovisioned node (NOT PROVISIONED instead of a generic load error, FR-027), a stale pre-re-mint `output_name` prefix (listed in `cluster_warning.missing`, FR-026) |
 | Workflow §4 — PR CI pass | ✅ | Followed: no PR from this branch until the re-lock turns CI green (FR-017a) |
 | Workflow §5 — atomic commits | ✅ | One commit per checkpoint; backfill + rc7 bump (T043+T044) one commit, the tag's target |
 | Workflow §6, §7; SPDX; lint | ✅ | `link-dev.sh` untouched; artefacts in `specs/008-*/`; SPDX on every new file; lint locally |

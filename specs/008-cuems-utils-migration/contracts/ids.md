@@ -23,7 +23,10 @@ string concatenation, JSON, an OSC argument or address.
 
 ## `is_uuid4(value) -> bool`
 
-For FR-027's one-time warning only.
+Kept for tests and the identity audit; FR-027 no longer warns on non-uuid4 ids (shrunk
+2026-09-29 — rc7 ships with `cuems-utils` 012, whose schema refuses them in maps). The NOT
+PROVISIONED sentinel is checked by equality with `cuemsutils.tools.identity_check.SENTINEL`, not
+here.
 
 ## Invariants the tests pin
 

@@ -60,6 +60,9 @@ Opening summary paragraph, then `### Added` / `### Changed` / `### Removed` sect
    version-1 documents fine.
 3. The documents the deploy ships and their schema versions: `script.xml` **2**,
    `mappings.xml` 1, `settings.xml` 1.
+4. **G1 (FR-019d)**: `cuems-utils` 012's node re-mint (uuid4 convergence) goes out in the **same**
+   upgrade as rc7 engines and never runs under an older engine — a re-minted map hands the engine
+   `Uuid` node ids, which pre-rc7 `cluster_status` cannot sort.
 
 ## `cuems-relations` hand-off (`handoff-relations-release-order.md`, this directory)
 

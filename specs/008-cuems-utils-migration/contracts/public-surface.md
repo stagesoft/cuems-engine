@@ -22,6 +22,7 @@ Guarded by a test (`tests/test_public_surface.py`), modelled on `cuems-nodeconf`
 | `cuemsutils.tools.NodeList.NodeRole`, `NodeIndex` | controller lookup (FR-005) |
 | `cuemsutils.tools.CTimecode.CTimecode` | duration helper (FR-016b) — already imported |
 | `cuemsutils.tools.Uuid.Uuid` | **only** in `src/cuemsengine/tools/ids.py` (FR-029); the guard fails on any other `src/` import of it |
+| `cuemsutils.tools.identity_check.SENTINEL` | the NOT PROVISIONED pre-load check in `BaseEngine` (FR-027); public status to be confirmed upstream (UR-8) |
 
 ## Anti-vacuity guard
 

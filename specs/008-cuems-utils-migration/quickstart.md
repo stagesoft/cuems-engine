@@ -51,7 +51,7 @@ Record each tool's exact invocation and output in the step file.
 | 009 | `$E/not-performed.md` | every hardware/cluster item listed, performed or **not performed** |
 | 010 | `poetry run pytest -q -rw -p no:cacheprovider 2>&1 \| grep -iE 'deprecat.*cuemsutils\|cuemsutils.*deprecat'` | no output (other libraries' deprecations are out of scope) |
 | 011 | `grep -rn 'CTimecode(cue.media.duration)' src/` | no output |
-| 012 | `poetry run pytest tests/test_ids.py tests/test_cluster_identity.py tests/test_identity_sweep.py`; `$E/identity-audit.md`; research R14's uuid-literal scan | green; every audit hit resolved or justified; all literals uuid4 except FR-027's named cases |
+| 012 | `poetry run pytest tests/test_ids.py tests/test_cluster_identity.py tests/test_identity_sweep.py`; `$E/identity-audit.md`; research R14's uuid-literal scan | green (incl. the G5 stale-prefix and G2 sentinel cases); every audit hit resolved or justified; all literals uuid4 except FR-028's named cases |
 
 ## 3. SC-007 — v1 and v2 show load
 
