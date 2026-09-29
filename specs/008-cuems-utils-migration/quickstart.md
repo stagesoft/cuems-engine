@@ -27,6 +27,7 @@ poetry run pytest -q -p no:cacheprovider > $E/step1-network-map-converted.txt 2>
 #   FR-003 sites 1-2 (controller not found on a map that has one)
 #   FR-007 (script load: version-1 document rejected)            <- M9
 #   step 2's settings fixture
+#   M12/M16: TypeError '<' not supported between instances of 'Uuid' (a sorted() over map uuids)
 
 # step 2: settings fixture -> version 2
 poetry run python -m cuemsutils.xml.convert_documents dev/test_xml_files/settings.xml
@@ -51,7 +52,7 @@ Record each tool's exact invocation and output in the step file.
 | 009 | `$E/not-performed.md` | every hardware/cluster item listed, performed or **not performed** |
 | 010 | `poetry run pytest -q -rw -p no:cacheprovider 2>&1 \| grep -iE 'deprecat.*cuemsutils\|cuemsutils.*deprecat'` | no output (other libraries' deprecations are out of scope) |
 | 011 | `grep -rn 'CTimecode(cue.media.duration)' src/` | no output |
-| 012 | `poetry run pytest tests/test_ids.py tests/test_cluster_identity.py tests/test_identity_sweep.py`; `$E/identity-audit.md`; research R14's uuid-literal scan | green (incl. the G5 stale-prefix and G2 sentinel cases); every audit hit resolved or justified; all literals uuid4 except FR-028's named cases |
+| 012 | `poetry run pytest tests/test_ids.py tests/test_cluster_identity.py tests/test_identity_sweep.py`; `$E/identity-audit.md`; research R14's uuid-literal scan | green (incl. the G5 stale-prefix and G2 sentinel cases); every audit hit resolved or justified; every literal in `tests/` and in loaded fixtures uuid4 except FR-028's named cases; the unloaded fixtures listed out of scope |
 
 ## 3. SC-007 — v1 and v2 show load
 

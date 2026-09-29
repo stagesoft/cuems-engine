@@ -270,3 +270,9 @@ check; FR-028 all uuid4; G1 release order; G5 stale-prefix case; G6 evidence pin
 commit; `node_host` deleted. 014 notes (not acted on): `default_mappings.xml` retires — T031's
 `load_net_and_node_mappings` case goes with it; X15 namespace typo in
 `dev/test_xml_files/outputs.xml`. Upstream: UR-8, `upstream-reports/PROMPT-012-clarify.md`.
+
+**R14 correction (2026-09-29, analyze H1)**: the literal scan above matched only *quoted* tokens in
+`tests/*.py`. A full scan (every 36-char token in `tests/` and `dev/test_xml_files/`) finds 40
+distinct literals, 15 not uuid4. The 6 in `tests/` are the ones listed; the other 9 sit in
+fixtures no test and no `src/` code loads (`test_jsons.txt`, the `sample_*.xml` and `script_one_*.xml`
+files) — out of scope for FR-028, by name.

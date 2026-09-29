@@ -21,12 +21,9 @@ Never raises. Idempotent: `as_id(as_id(x)) == as_id(x)`.
 `str(value)`; `None` → `""`. The only way an id reaches a sort key, a slice, `.split`, `join`,
 string concatenation, JSON, an OSC argument or address.
 
-## `is_uuid4(value) -> bool`
-
-Kept for tests and the identity audit; FR-027 no longer warns on non-uuid4 ids (shrunk
-2026-09-29 — rc7 ships with `cuems-utils` 012, whose schema refuses them in maps). The NOT
-PROVISIONED sentinel is checked by equality with `cuemsutils.tools.identity_check.SENTINEL`, not
-here.
+No other helper. An `is_uuid4` predicate was dropped (2026-09-29, analyze C1): after the shrink it
+had no production caller. Tests and the identity audit (T055) use a local uuid4 regex; the NOT
+PROVISIONED sentinel is checked by equality with `cuemsutils.tools.identity_check.SENTINEL`.
 
 ## Invariants the tests pin
 

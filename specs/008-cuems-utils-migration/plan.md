@@ -99,7 +99,7 @@ specs/008-cuems-utils-migration/
 │   ├── cluster-payloads.md     # cluster_status / cluster_warning — shape unchanged, str at egress
 │   ├── public-surface.md       # allowed cuemsutils imports + guard; Uuid only in tools/ids.py
 │   ├── controller-lookup.md    # _controller_ip_from_map, incl. >1 controller
-│   ├── ids.md                  # as_id / id_str / is_uuid4 — Group 7
+│   ├── ids.md                  # as_id / id_str — Group 7
 │   └── package-relations.md    # pins, cuems-common floor, rc7 + rc3–rc6 backfill, hand-off
 ├── checklists/requirements.md
 ├── evidence/                   # baseline-suite.txt (pre-merge), baseline-suite-postmerge.txt, …
@@ -111,7 +111,7 @@ specs/008-cuems-utils-migration/
 
 ```text
 src/cuemsengine/
-├── tools/ids.py              # NEW — as_id, id_str, is_uuid4 (T010)
+├── tools/ids.py              # NEW — as_id, id_str (T010)
 ├── core/BaseEngine.py        # :17 import; :33 constant; :315/:325 own uuid; :401-415 controller
 │                             #   lookup; :417-449 find_hosts DELETED; :503-510 read_script
 ├── ControllerEngine.py       # :15 import; :259-298 registration; :272-277, :937-943 docstrings;

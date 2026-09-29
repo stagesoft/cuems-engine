@@ -256,8 +256,9 @@ with a legacy fade action, and record both.
 4. **Given** a loaded show, **When** audio, video and DMX cues play, loop and reach their end,
    **Then** their durations, framerate conversions and follow/postwait timing are identical to
    before the duration-wrap cleanup.
-5. **Given** a cue built in memory with no media duration, **When** it runs, **Then** it behaves as
-   a zero-length cue as before, and a warning naming the cue is logged.
+5. **Given** a version-2 `script.xml` whose media cue has an empty `<duration/>` (schema-valid, M13),
+   **When** it runs, **Then** it behaves as a zero-length cue as before, and a warning naming the cue
+   is logged.
 6. **Given** a `script.xml` newer than the installed library supports, **When** the project loads,
    **Then** the load fails with the library's distinguishable "newer than library" error surfaced to
    the operator, not a generic parse error.
@@ -561,8 +562,13 @@ green against the replacement contract.
   PROVISIONED sentinel, logs one ERROR — *"NOT PROVISIONED — run cuems-init-node"* — and exits,
   instead of the generic *"Node with uuid 00000000-… not found"*. No warning for other non-uuid4
   ids: rc7 ships with 012, whose schema refuses them in maps.
-- **FR-028**: Every uuid literal in `tests/` and `dev/test_xml_files/` MUST be uuid4 (6 of 11 are
-  not, M16), replaced with fixed uuid4 values. The only exceptions are named inputs of a test
+- **FR-028**: Every uuid literal in `tests/`, and in every `dev/test_xml_files/` fixture the suite
+  loads, MUST be uuid4 — replaced with fixed uuid4 values. Measured 2026-09-29 (full scan, not only
+  quoted literals): 40 distinct literals, 15 not uuid4; the **6** in scope are all in `tests/`
+  (`test_controller_gating.py` ×3, `test_controller_commands.py`, `test_node_comms_mixer.py`,
+  `test_node_comms_ping.py` ×2), and no loaded fixture carries one. **Out of scope, by name, reason
+  "not loaded by any test or by `src/`"**: `test_jsons.txt`, `sample_audiocue.xml`, `sample_cue.xml`, `sample_cuelist.xml`, `sample_dmxcue.xml`, `sample_videocue.xml`, `script_one_cue_in_a_cuelist.xml`, `script_one_simple_cue.xml` (8 uuid1s, `12345678-aaaa-…`, and the nil uuid
+  as `<target>`, which there means "no target"). The only exceptions are named inputs of a test
   whose subject is a non-uuid4 value: the nil sentinel (FR-027) and `tests/test_ids.py`'s
   helper-contract cases (nil, uuid1).
 - **FR-029**: The helpers live in one engine module; `cuemsutils.tools.Uuid` is imported only there
@@ -644,8 +650,8 @@ Exit criteria from `00-runnable-flow.md` §6, adjusted by M2/M3:
   fixtures via `CuemsScript.validate`, config fixtures via the public `ConfigManager` loaders.
 - **SC-011**: A search of `src/` for `CTimecode(cue.media.duration)` returns **zero**, and every
   duration characterization test (FR-016a) is green before and after the removal.
-- **SC-012**: Every uuid literal under `tests/` and `dev/test_xml_files/` is uuid4 except FR-028's
-  named cases; the sentinel pre-load check (FR-027) is tested; the identity tests (FR-024–FR-026) are green; no `sorted(`, slice, `.split` or
+- **SC-012**: Every uuid literal in `tests/` and in the fixtures the suite loads is uuid4 except
+  FR-028's named cases (the unloaded files are listed out of scope); the sentinel pre-load check (FR-027) is tested; the identity tests (FR-024–FR-026) are green; no `sorted(`, slice, `.split` or
   `join` over an id in `src/` operates on a raw id without the egress helper.
 
 Then, and only then, the signed annotated tag `xml-refactor-merge-candidate` on `feat/xml-refactor`,
@@ -658,8 +664,10 @@ Nothing releases from this branch alone (D27).
   each traces to one of two fixture files, and converting them is test work, not a change to engine
   behaviour. Behind them sits a third cause that **is** an engine defect — M9, the version-1 script
   load — which surfaces only once the `network_map` fixture is converted, and is FR-007's to fix.
-- **A2**: The editable sibling `cuems-utils` at `0ba239b` is representative of `0.1.0rc16`; no tag
-  `v0.1.0rc16` exists locally (tags stop at rc14), so the version is read from `__version__`.
+- **A2**: The editable sibling `cuems-utils` is representative of `0.1.0rc16`; no tag
+  `v0.1.0rc16` exists locally (tags stop at rc14), so the version is read from `__version__`. The
+  checkout moves: recorded at `0ba239b` for the first baseline and `996617f` since 2026-09-29, with an
+  identical failing set (M19); every later capture records its commit (G6, FR-001).
 - **A3**: The engine reads neither `audio_cards` nor `universes` from `settings` (grep over `src/`,
   2026-09-28), so the settings 1→2 conversion needs no engine change.
 - **A4**: cuemsutils features 011–014 do not block this feature (verified by the bundle in both
