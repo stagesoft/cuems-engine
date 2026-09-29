@@ -1,0 +1,166 @@
+# T029 failing-first — FR-007: complex show load, script v1 vs v2, unchanged read_script (XmlReaderWriter)
+# 2026-09-29T14:44:50+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Expected: script-v1 red at read_script ('character data between child elements not allowed'); script-v2 green.
+$ poetry run pytest -q -p no:cacheprovider tests/test_project_load.py -k complex_project
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 21 items / 19 deselected / 2 selected
+
+tests/test_project_load.py F.                                            [100%]
+
+=================================== FAILURES ===================================
+______________ test_complex_project_load_on_controller[script-v1] ______________
+
+project = 'complex_test', mock_config_path = None, mock_avahi_resolve = None
+mock_library_path = PosixPath('/disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files')
+mock_controller_ip = None
+engine_cleanup = <function engine_cleanup.<locals>.register_engine at 0x7f99e113d080>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f99e116d990>
+
+    @pytest.mark.parametrize(
+        "project",
+        ["complex_test", "complex_test_v2"],
+        ids=["script-v1", "script-v2"],
+    )
+    def test_complex_project_load_on_controller(
+        project,
+        mock_config_path,
+        mock_avahi_resolve,
+        mock_library_path,
+        mock_controller_ip,
+        engine_cleanup,
+        caplog,
+    ):
+        """A show loads whichever script.xml version it carries (FR-007).
+    
+        complex_test_v2 is complex_test converted to version 2 by the library's
+        own converter.
+        """
+        # ARRANGE
+        controller_engine = ControllerEngine(with_mtc=False)
+        controller_engine.set_oscquery_server(port=free_tcp_port())
+        # ACT
+        controller_engine.load_project(project)
+    
+        # ASSERT
+>       assert controller_engine.script is not None
+E       assert None is not None
+E        +  where None = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f99e1da5cd0>.script
+
+tests/test_project_load.py:115: AssertionError
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:111 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:72 Starting ControllerEngine with PID 1209830
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f99e1742750>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f99e1742750>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:75 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:75 Controller IP: 127.0.0.1
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:130 ControllerEngine@0367f391-ebf4-48b2-9f26-000000000001 initialized, waitingstart signal
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 All used ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 Random ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 Config ports: [5555, 7000, 7100, 9092, 9190, 9191]
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 All used ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 Random ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 Config ports: [5555, 7000, 7100, 9092, 9190, 9191]
+DEBUG    cuemsengine.osc.helpers:OssiaServer.py:49 creating oscquery server on 127.0.0.1:33375 ->9507
+INFO     cuemsengine.ControllerEngine:test_project_load.py:112 Loading project complex_test
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:152 Setting property armed to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:152 Setting property nextcue to 
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1187 Midi TimeCode requires with_mtc to be True.
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f99e1742750>, 'complex_test') and kwargs: {}
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:418 Project complex_test settings not found. Keeping default settings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project mappings not found. Adopting default mappings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project complex_test mappings loaded
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f99e1da5cd0>, 'complex_test') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/projects/complex_test/script.xml
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: failed validating <Element 'duration' at 0x7f99e0f9ba60> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+ERROR    cuemsengine.ControllerEngine:test_project_load.py:112 Error loading project script: failed validating <Element 'duration' at 0x7f99e0f9ba60> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+DEBUG    cuemsengine.ControllerEngine:ControllerEngine.py:1248 Sending error to editor: {'type': 'error', 'value': 'Project script error: failed validating <Element \'duration\' at 0x7f99e0f9ba60> with Xsd11Group(model=\'choice\', occurs=[0, 1]):\n\nReason: character data between child elements not allowed\n\nSchema component:\n\n  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">\n    \n    <xs:choice minOccurs="0">\n      <xs:element name="CTimecode" type="cms:TimecodeType" />\n    </xs:choice>\n  </xs:complexType>\n\nInstance type: <class \'xml.etree.ElementTree.Element\'>\n\nInstance:\n\n  <duration>00:00:00.000</duration>\n\nPath: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration\n', 'action_uuid': '', 'action': 'project_ready'}
+ERROR    cuemsengine.ControllerEngine:ControllerEngine.py:1248 <class 'AttributeError'> sending error to editor: 'ControllerEngine' object has no attribute 'communications_thread'
+=============================== warnings summary ===============================
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v1]
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v2]
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:489: DeprecationWarning: Call to deprecated class XmlReaderWriter. (use cuemsutils.cues.CuemsScript.CuemsScript instead; removed in v0.1.1)
+    reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
+
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v1]
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v2]
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:490: DeprecationWarning: Call to deprecated method read_to_objects. (use cuemsutils.cues.CuemsScript.CuemsScript.load instead; removed in v0.1.1)
+    self.script = reader.read_to_objects()
+
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v1]
+tests/test_project_load.py::test_complex_project_load_on_controller[script-v2]
+  /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/xml_reader_writer.py:128: DeprecationWarning: Call to deprecated method read. (use cuemsutils.cues.CuemsScript.CuemsScript.to_wire instead; removed in v0.1.1; note: the returned dict no longer contains the schemaLocation key)
+    return Mapper(self.schema_name).decode_document(self.read())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_project_load.py::test_complex_project_load_on_controller[script-v1]
+============ 1 failed, 1 passed, 19 deselected, 6 warnings in 2.81s ============

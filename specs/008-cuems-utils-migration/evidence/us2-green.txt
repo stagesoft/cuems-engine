@@ -1,0 +1,23 @@
+# T037 — US2 green (FR-007, FR-016-016c, SC-003, SC-007 in-suite, SC-010, SC-011)
+# 2026-09-29T16:36:27+02:00  engine fc068f1+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_project_load.py tests/test_read_script.py tests/test_default_mappings_valid.py tests/test_media_duration.py tests/test_loop_rebase.py tests/test_effective_duration.py tests/test_chain_anchoring.py tests/test_reveal_mechanism.py tests/test_dispatch_reorder.py tests/test_chain_epoch.py
+============================= 151 passed in 8.59s ==============================
+
+FR-016c: every timing suite (loop_rebase, effective_duration, chain_anchoring, reveal_mechanism, dispatch_reorder, chain_epoch) green after the wraps were replaced; the T032 characterization (20 cases) still green.
+
+$ grep -rn "CTimecode(cue.media.duration)" src/   # SC-011
+(no output)
+
+$ grep -rnE "cuemsutils\.(xml|config)" src/   # SC-003
+(no output)
+
+$ black --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/cues/helpers.py src/cuemsengine/cues/run_cue.py src/cuemsengine/cues/loop_cue.py src/cuemsengine/cues/CueHandler.py tests/test_project_load.py tests/test_read_script.py tests/test_default_mappings_valid.py tests/test_media_duration.py
+9 files would be left unchanged.
+$ isort --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/cues/helpers.py src/cuemsengine/cues/run_cue.py src/cuemsengine/cues/loop_cue.py src/cuemsengine/cues/CueHandler.py tests/test_project_load.py tests/test_read_script.py tests/test_default_mappings_valid.py tests/test_media_duration.py
+isort: clean
+$ flake8 src/cuemsengine/core/BaseEngine.py src/cuemsengine/cues/helpers.py src/cuemsengine/cues/run_cue.py src/cuemsengine/cues/loop_cue.py src/cuemsengine/cues/CueHandler.py
+flake8: clean
+
+## Full suite
+$ poetry run pytest -q -p no:cacheprovider
+======================== 921 passed in 91.09s (0:01:31) ========================

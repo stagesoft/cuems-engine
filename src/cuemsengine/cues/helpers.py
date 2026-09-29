@@ -3,9 +3,24 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 
 from cuemsutils.cues.Cue import Cue
+from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
+from ..tools.ids import id_str
 from ..tools.MtcListener import MtcListener
+
+
+def media_duration(cue: Cue) -> CTimecode:
+    """The cue's media duration as delivered, or zero (with a warning) if absent."""
+    duration = cue.media.duration
+    if duration is None:
+        # An empty <duration/> is schema-valid and decodes to None.
+        Logger.warning(
+            f"Cue {id_str(cue.id)} has no media duration (empty <duration/>); "
+            f"treating it as zero"
+        )
+        return CTimecode()
+    return duration
 
 
 def find_timing(

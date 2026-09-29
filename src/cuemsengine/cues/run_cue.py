@@ -11,6 +11,7 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+from .helpers import media_duration
 
 
 @singledispatch
@@ -173,9 +174,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         )
 
     # Convert duration to MTC framerate to prevent drift when looping
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
+    duration = media_duration(cue).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
 
     # Audio player formula: file_position = MTC + offset
@@ -427,9 +426,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
+    duration = media_duration(cue).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
 

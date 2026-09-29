@@ -1,0 +1,157 @@
+# T033 failing-first — FR-016b: media.duration None through all five paths, unchanged src/
+# 2026-09-29T14:48:02+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Expected: no exception and zero already (CTimecode(None) is a silent zero) — red ONLY on the missing warning naming the cue.
+$ poetry run pytest -q -p no:cacheprovider tests/test_media_duration.py -k no_duration -rA
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 26 items / 20 deselected / 6 selected
+
+tests/test_media_duration.py FFFFFF                                      [100%]
+
+=================================== FAILURES ===================================
+_____________ test_run_with_no_duration_is_zero_and_warned[audio] ______________
+
+make = <function _audio at 0x7f6001693c40>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f6000e34210>
+
+    @pytest.mark.parametrize("make", [_audio, _video], ids=["audio", "video"])
+    def test_run_with_no_duration_is_zero_and_warned(make, caplog):
+        cue = make(None)
+        mtc = _mtc("25")
+        with caplog.at_level(logging.WARNING):
+            _run(cue, mtc)
+        assert cue._end_mtc.frames == cue._start_mtc.frames
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f6000e34210>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:147: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.run_cue:test_media_duration.py:72 offset -3600000.0 to /offset:<MagicMock name='mock.get_node().parameter.value' id='140050194011152'>
+INFO     cuemsengine.cues.run_cue:test_media_duration.py:72 master_vol 100% -> 1.0 set on audio cue 0a9c4df2-80bc-49c7-a0dd-13b94952ddd4
+_____________ test_run_with_no_duration_is_zero_and_warned[video] ______________
+
+make = <function _video at 0x7f6000d99440>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5ffa168a90>
+
+    @pytest.mark.parametrize("make", [_audio, _video], ids=["audio", "video"])
+    def test_run_with_no_duration_is_zero_and_warned(make, caplog):
+        cue = make(None)
+        mtc = _mtc("25")
+        with caplog.at_level(logging.WARNING):
+            _run(cue, mtc)
+        assert cue._end_mtc.frames == cue._start_mtc.frames
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f5ffa168a90>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:147: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.run_cue:test_media_duration.py:72 Running video cue a8b64478-558a-4cdb-8c85-8739d25a12e7
+INFO     cuemsengine.cues.run_cue:test_media_duration.py:72 Video cue a8b64478-558a-4cdb-8c85-8739d25a12e7 set up (held invisible): 1 layer(s), offset=-90000
+_____________ test_loop_with_no_duration_is_zero_and_warned[audio] _____________
+
+make = <function _audio at 0x7f6001693c40>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5ffa1cb5d0>
+
+    @pytest.mark.parametrize("make", [_audio, _video], ids=["audio", "video"])
+    def test_loop_with_no_duration_is_zero_and_warned(make, caplog):
+        cue = make(None)
+        mtc = _mtc("25")
+        with caplog.at_level(logging.WARNING):
+            first_end = _loop_twice(cue, mtc)
+        assert cue._end_mtc.frames == first_end.frames
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f5ffa1cb5d0>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:157: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Running audio cue loop 9454cdd8-caf4-46fd-bfdf-1ba038b8b8eb, cue.loop=2(type=int)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio duration: 00:00:00:00, _end_mtc: 7960ms, current MTC: 3600000ms
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio loop iteration starting: loop_counter=0,cue.loop=2
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio iteration 1 finished (MTC=3600000ms reached _end_mtc=7960ms)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 After increment: loop_counter=1,will_loop_again=True
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Loop 1: setting offset=-7960.0 (MTC=3600000ms, _start_mtc=7960ms, _end_mtc=7960ms)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio offset sent: -7960.0
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio loop iteration starting: loop_counter=1,cue.loop=2
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio iteration 2 finished (MTC=3600000ms reached _end_mtc=7960ms)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 After increment: loop_counter=2,will_loop_again=False
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio loop FINISHED: loop_counter=2, cue.loop=2
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Audio mtcfollow disabled
+_____________ test_loop_with_no_duration_is_zero_and_warned[video] _____________
+
+make = <function _video at 0x7f6000d99440>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5ffa1e4ed0>
+
+    @pytest.mark.parametrize("make", [_audio, _video], ids=["audio", "video"])
+    def test_loop_with_no_duration_is_zero_and_warned(make, caplog):
+        cue = make(None)
+        mtc = _mtc("25")
+        with caplog.at_level(logging.WARNING):
+            first_end = _loop_twice(cue, mtc)
+        assert cue._end_mtc.frames == first_end.frames
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f5ffa1e4ed0>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:157: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Running video cue loop a423dccf-aa26-45d0-bb8d-938c4d533127, cue.loop=2(type=int)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Video duration: 00:00:00:00, duration in frames:0 25
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Initial _end_mtc: 7960ms,current MTC: 3600000ms
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Video iteration 1 finished (MTC=3600000ms reached _end_mtc=7960ms)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Loop 1: setting offset=-199
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Video iteration 2 finished (MTC=3600000ms reached _end_mtc=7960ms)
+INFO     cuemsengine.cues.loop_cue:test_media_duration.py:84 Loop FINISHED: loop_counter=2, cue.loop=2
+____ test_effective_duration_with_no_duration_is_zero_and_warned[AudioCue] _____
+
+cls = <class 'cuemsutils.cues.AudioCue.AudioCue'>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5ffa1d0910>
+
+    @pytest.mark.parametrize("cls", [AudioCue, VideoCue])
+    def test_effective_duration_with_no_duration_is_zero_and_warned(cls, caplog):
+        cue = _cue(cls, None)
+        with caplog.at_level(logging.WARNING):
+            assert CueHandler._effective_duration_ms(cue) == 0
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f5ffa1d0910>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:165: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    cuemsengine.cues.CueHandler:test_media_duration.py:164 AudioCue dd38fc6e-b681-4fc2-824b-25c58130df4f enabled but body==0 (media missing/unreadable?); chain anchor timing will be wrong on this node.
+____ test_effective_duration_with_no_duration_is_zero_and_warned[VideoCue] _____
+
+cls = <class 'cuemsutils.cues.VideoCue.VideoCue'>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5ffa1e6f90>
+
+    @pytest.mark.parametrize("cls", [AudioCue, VideoCue])
+    def test_effective_duration_with_no_duration_is_zero_and_warned(cls, caplog):
+        cue = _cue(cls, None)
+        with caplog.at_level(logging.WARNING):
+            assert CueHandler._effective_duration_ms(cue) == 0
+>       assert len(_none_warnings(caplog, cue)) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _none_warnings(<_pytest.logging.LogCaptureFixture object at 0x7f5ffa1e6f90>, {'Media': {'file_name': 'media.file', 'duration': None}, 'autoload': False, 'description': None, 'enabled': True, 'id'...: 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None})
+
+tests/test_media_duration.py:165: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    cuemsengine.cues.CueHandler:test_media_duration.py:164 VideoCue acd43aa4-cb35-4780-a382-c480c0166f50 enabled but body==0 (media missing/unreadable?); chain anchor timing will be wrong on this node.
+=========================== short test summary info ============================
+FAILED tests/test_media_duration.py::test_run_with_no_duration_is_zero_and_warned[audio]
+FAILED tests/test_media_duration.py::test_run_with_no_duration_is_zero_and_warned[video]
+FAILED tests/test_media_duration.py::test_loop_with_no_duration_is_zero_and_warned[audio]
+FAILED tests/test_media_duration.py::test_loop_with_no_duration_is_zero_and_warned[video]
+FAILED tests/test_media_duration.py::test_effective_duration_with_no_duration_is_zero_and_warned[AudioCue]
+FAILED tests/test_media_duration.py::test_effective_duration_with_no_duration_is_zero_and_warned[VideoCue]
+======================= 6 failed, 20 deselected in 1.12s =======================

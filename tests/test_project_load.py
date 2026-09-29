@@ -86,7 +86,13 @@ def test_project_load_on_controller(
     engine_cleanup(controller_engine)
 
 
+@pytest.mark.parametrize(
+    "project",
+    ["complex_test", "complex_test_v2"],
+    ids=["script-v1", "script-v2"],
+)
 def test_complex_project_load_on_controller(
+    project,
     mock_config_path,
     mock_avahi_resolve,
     mock_library_path,
@@ -94,19 +100,23 @@ def test_complex_project_load_on_controller(
     engine_cleanup,
     caplog,
 ):
-    """Test the project load on the controller"""
+    """A show loads whichever script.xml version it carries (FR-007).
+
+    complex_test_v2 is complex_test converted to version 2 by the library's
+    own converter.
+    """
     # ARRANGE
     controller_engine = ControllerEngine(with_mtc=False)
     controller_engine.set_oscquery_server(port=free_tcp_port())
     # ACT
-    controller_engine.load_project("complex_test")
+    controller_engine.load_project(project)
 
     # ASSERT
     assert controller_engine.script is not None
-    assert controller_engine.script.unix_name == "complex_test"
-    assert "Project complex_test loaded" in caplog.text
+    assert controller_engine.script.unix_name == project
+    assert f"Project {project} loaded" in caplog.text
     # assert 'Project complex_test already loaded' in caplog.text
-    assert controller_engine.get_status("load") == "complex_test"
+    assert controller_engine.get_status("load") == project
 
     # CLEANUP - now handled automatically by engine_cleanup fixture
     controller_engine.stop()

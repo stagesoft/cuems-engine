@@ -1,0 +1,243 @@
+# T030 failing-first — FR-007: read_script on v1 (file untouched), v3 (refused), missing (FileNotFoundError); unchanged src/
+# 2026-09-29T14:45:15+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_read_script.py -rA
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 3 items
+
+tests/test_read_script.py FF.                                            [100%]
+
+=================================== FAILURES ===================================
+___________ test_a_version_1_script_loads_and_its_file_is_untouched ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-126/test_a_version_1_script_loads_0')
+
+    def test_a_version_1_script_loads_and_its_file_is_untouched(tmp_path):
+        library, script = _library_with(tmp_path, "show", "complex_test")
+        before = _digest(script)
+    
+        engine = _engine(library)
+>       engine.read_script("show")
+
+tests/test_read_script.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../cuems-utils/src/cuemsutils/log.py:204: in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+src/cuemsengine/core/BaseEngine.py:490: in read_script
+    self.script = reader.read_to_objects()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/deprecated/classic.py:199: in wrapper_function
+    return wrapped_(*args_, **kwargs_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../cuems-utils/src/cuemsutils/xml/xml_reader_writer.py:128: in read_to_objects
+    return Mapper(self.schema_name).decode_document(self.read())
+                                                    ^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/deprecated/classic.py:199: in wrapper_function
+    return wrapped_(*args_, **kwargs_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../cuems-utils/src/cuemsutils/xml/xml_reader_writer.py:113: in read
+    return self.schema_object.to_dict(
+.venv/lib/python3.11/site-packages/xmlschema/validators/schemas.py:2112: in decode
+    for result in self.iter_decode(source, path, schema_path, validation, *args, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/schemas.py:2098: in iter_decode
+    yield from xsd_element.iter_decode(elem, validation, **kwargs)
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:1050: in iter_decode
+    for result in xsd_element.iter_decode(child, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/elements.py:739: in iter_decode
+    for result in content_decoder.iter_decode(obj, validation, **kwargs):
+.venv/lib/python3.11/site-packages/xmlschema/validators/groups.py:969: in iter_decode
+    yield self.validation_error(validation, reason, obj, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Xsd11Group(model='choice', occurs=[0, 1]), validation = 'strict'
+error = XMLSchemaValidationError(reason='character data between child elements not allowed')
+obj = <Element 'duration' at 0x7f3ba1d05c10>
+elem = <Element 'duration' at 0x7f3ba1d05c10>
+source = XMLResource(root=<Element '{https://stagelab.coop/cuems/}CuemsProject' at 0x7f3ba1e9b1a0>)
+namespaces = {}
+kwargs = {'converter': <cuemsutils.xml.converter.CuemsConverter object at 0x7f3ba1ecaa50>, 'id_map': Counter(), 'identities': {}, 'inherited': {}, ...}
+
+    def validation_error(self, validation: str,
+                         error: Union[str, Exception],
+                         obj: Any = None,
+                         elem: Optional[ElementType] = None,
+                         source: Optional[Any] = None,
+                         namespaces: Optional[NamespacesType] = None,
+                         **kwargs: Any) -> XMLSchemaValidationError:
+        """
+        Helper method for generating and updating validation errors. If validation
+        mode is 'lax' or 'skip' returns the error, otherwise raises the error.
+    
+        :param validation: an error-compatible validation mode: can be 'lax' or 'strict'.
+        :param error: an error instance or the detailed reason of failed validation.
+        :param obj: the instance related to the error.
+        :param elem: the element related to the error, can be `obj` for elements.
+        :param source: the XML resource or data related to the validation process.
+        :param namespaces: is an optional mapping from namespace prefix to URI.
+        :param kwargs: other keyword arguments of the validation process.
+        """
+        check_validation_mode(validation)
+        if elem is None and is_etree_element(obj):
+            elem = cast(ElementType, obj)
+    
+        if isinstance(error, XMLSchemaValidationError):
+            if error.namespaces is None and namespaces is not None:
+                error.namespaces = namespaces
+            if error.source is None and source is not None:
+                error.source = source
+            if error.obj is None and obj is not None:
+                error.obj = obj
+            elif is_etree_element(error.obj) and elem is not None:
+                if elem.tag == error.obj.tag and elem is not error.obj:
+                    error.obj = elem
+    
+        elif isinstance(error, Exception):
+            error = XMLSchemaValidationError(self, obj, str(error), source, namespaces)
+        else:
+            error = XMLSchemaValidationError(self, obj, error, source, namespaces)
+    
+        if error.elem is None and elem is not None:
+            error.elem = elem
+    
+        if validation == 'strict' and error.elem is not None:
+>           raise error
+E           xmlschema.validators.exceptions.XMLSchemaValidationError: failed validating <Element 'duration' at 0x7f3ba1d05c10> with Xsd11Group(model='choice', occurs=[0, 1]):
+E           
+E           Reason: character data between child elements not allowed
+E           
+E           Schema component:
+E           
+E             <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+E               
+E               <xs:choice minOccurs="0">
+E                 <xs:element name="CTimecode" type="cms:TimecodeType" />
+E               </xs:choice>
+E             </xs:complexType>
+E           
+E           Instance type: <class 'xml.etree.ElementTree.Element'>
+E           
+E           Instance:
+E           
+E             <duration>00:00:00.000</duration>
+E           
+E           Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+.venv/lib/python3.11/site-packages/xmlschema/validators/xsdbase.py:250: XMLSchemaValidationError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:72 Starting BaseEngine with PID 1210012
+INFO     cuemsengine.core.BaseEngine:test_read_script.py:25 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.core.BaseEngine.BaseEngine object at 0x7f3ba8708f10>, 'show') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /tmp/pytest-of-adria/pytest-126/test_a_version_1_script_loads_0/projects/show/script.xml
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: failed validating <Element 'duration' at 0x7f3ba1d05c10> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+_______________ test_a_script_newer_than_the_library_is_refused ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-126/test_a_script_newer_than_the_l0')
+
+    def test_a_script_newer_than_the_library_is_refused(tmp_path):
+        library, script = _library_with(tmp_path, "show", "complex_test_v2")
+        text = script.read_text()
+        assert 'doc_version="2"' in text
+        script.write_text(text.replace('doc_version="2"', 'doc_version="3"', 1))
+    
+>       with pytest.raises(Exception, match="newer than this library's current version"):
+E       Failed: DID NOT RAISE Exception
+
+tests/test_read_script.py:57: Failed
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:72 Starting BaseEngine with PID 1210012
+INFO     cuemsengine.core.BaseEngine:test_read_script.py:25 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.core.BaseEngine.BaseEngine object at 0x7f3ba1f2e150>, 'show') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /tmp/pytest-of-adria/pytest-126/test_a_script_newer_than_the_l0/projects/show/script.xml
+DEBUG    cuemsengine.core.BaseEngine:log.py:205 Finished with result: None
+=============================== warnings summary ===============================
+tests/test_read_script.py::test_a_version_1_script_loads_and_its_file_is_untouched
+tests/test_read_script.py::test_a_script_newer_than_the_library_is_refused
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:489: DeprecationWarning: Call to deprecated class XmlReaderWriter. (use cuemsutils.cues.CuemsScript.CuemsScript instead; removed in v0.1.1)
+    reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
+
+tests/test_read_script.py::test_a_version_1_script_loads_and_its_file_is_untouched
+tests/test_read_script.py::test_a_script_newer_than_the_library_is_refused
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:490: DeprecationWarning: Call to deprecated method read_to_objects. (use cuemsutils.cues.CuemsScript.CuemsScript.load instead; removed in v0.1.1)
+    self.script = reader.read_to_objects()
+
+tests/test_read_script.py::test_a_version_1_script_loads_and_its_file_is_untouched
+tests/test_read_script.py::test_a_script_newer_than_the_library_is_refused
+  /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/xml_reader_writer.py:128: DeprecationWarning: Call to deprecated method read. (use cuemsutils.cues.CuemsScript.CuemsScript.to_wire instead; removed in v0.1.1; note: the returned dict no longer contains the schemaLocation key)
+    return Mapper(self.schema_name).decode_document(self.read())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+_________________ test_a_missing_script_raises_file_not_found __________________
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:72 Starting BaseEngine with PID 1210012
+INFO     cuemsengine.core.BaseEngine:test_read_script.py:25 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.core.BaseEngine.BaseEngine object at 0x7f3ba1ea7590>, 'show') and kwargs: {}
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: Script file /tmp/pytest-of-adria/pytest-126/test_a_missing_script_raises_f0/projects/show/script.xml not found
+=========================== short test summary info ============================
+PASSED tests/test_read_script.py::test_a_missing_script_raises_file_not_found
+FAILED tests/test_read_script.py::test_a_version_1_script_loads_and_its_file_is_untouched
+FAILED tests/test_read_script.py::test_a_script_newer_than_the_library_is_refused
+=================== 2 failed, 1 passed, 6 warnings in 1.61s ====================

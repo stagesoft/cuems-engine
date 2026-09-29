@@ -1,0 +1,27 @@
+# T032 — FR-016a: duration characterization, green BEFORE any CTimecode(cue.media.duration) wrap is touched
+# 2026-09-29T14:48:00+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# run_audioCue / run_videoCue (_end_mtc = _start_mtc + converted duration; run_videoCue had no coverage), loop_audioCue / loop_videoCue
+# (second iteration end = first end + converted duration — test_loop_rebase.py mirrors the arithmetic but never calls the loops),
+# CueHandler._effective_duration_ms body = milliseconds_exact. 12.5 s and 60 s, at 25 and 30 fps.
+$ poetry run pytest -q -p no:cacheprovider tests/test_media_duration.py -k "not no_duration" -rA
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[audio-00:00:12.500-25]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[audio-00:00:12.500-30]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[audio-00:01:00.000-25]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[audio-00:01:00.000-30]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-25]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-30]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-25]
+PASSED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-30]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[audio-00:00:12.500-25]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[audio-00:00:12.500-30]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[audio-00:01:00.000-25]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[audio-00:01:00.000-30]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[video-00:00:12.500-25]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[video-00:00:12.500-30]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[video-00:01:00.000-25]
+PASSED tests/test_media_duration.py::test_loop_rebases_by_converted_duration[video-00:01:00.000-30]
+PASSED tests/test_media_duration.py::test_effective_duration_body_is_milliseconds_exact[AudioCue-00:00:12.500]
+PASSED tests/test_media_duration.py::test_effective_duration_body_is_milliseconds_exact[AudioCue-00:01:00.000]
+PASSED tests/test_media_duration.py::test_effective_duration_body_is_milliseconds_exact[VideoCue-00:00:12.500]
+PASSED tests/test_media_duration.py::test_effective_duration_body_is_milliseconds_exact[VideoCue-00:01:00.000]
+======================= 20 passed, 6 deselected in 1.12s =======================

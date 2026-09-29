@@ -15,7 +15,6 @@ from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.NodeList import NodeIndex
 from cuemsutils.tools.SignalEngine import SignalEngine
-from cuemsutils.xml import XmlReaderWriter
 
 from ..cues.CueHandler import CUE_HANDLER
 from ..osc import (
@@ -486,8 +485,9 @@ class BaseEngine(SignalEngine):
         )
         if not path.isfile(xml_file):
             raise FileNotFoundError(f"Script file {xml_file} not found")
-        reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
-        self.script = reader.read_to_objects()
+        # Older script versions convert in memory (the file is left alone); a
+        # version newer than the library raises from the library itself.
+        self.script = CuemsScript.load(xml_file)
 
     @logged
     def initial_cuelist_process(self, cuelist: CueList = None):

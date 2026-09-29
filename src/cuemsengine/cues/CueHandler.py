@@ -13,7 +13,6 @@ from typing import Callable
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger, logged
-from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
 from ..players import VideoPlayer
@@ -21,6 +20,7 @@ from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
+from .helpers import media_duration
 from .loop_cue import loop_cue
 from .run_cue import blank_cue, reveal_cue, run_cue
 
@@ -208,9 +208,7 @@ class CueHandler:
             body = 0
         elif isinstance(cue, (AudioCue, VideoCue)):
             try:
-                body = (
-                    CTimecode(cue.media.duration).milliseconds_exact if cue.media else 0
-                )
+                body = media_duration(cue).milliseconds_exact if cue.media else 0
             except Exception:
                 body = 0
             if (

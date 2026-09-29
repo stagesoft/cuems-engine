@@ -12,6 +12,7 @@ from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
 from ..tools.MtcListener import CTimecode, MtcListener
+from .helpers import media_duration
 
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).
@@ -109,9 +110,7 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
 
     try:
         loop_counter = 0
-        duration = CTimecode(cue.media.duration).return_in_other_framerate(
-            mtc.main_tc.framerate
-        )
+        duration = media_duration(cue).return_in_other_framerate(mtc.main_tc.framerate)
         Logger.info(
             f"Audio duration: {duration}, "
             f"_end_mtc: {cue._end_mtc.milliseconds_rounded}ms, "
@@ -273,9 +272,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
 
     try:
         loop_counter = 0
-        duration = CTimecode(cue.media.duration).return_in_other_framerate(
-            mtc.main_tc.framerate
-        )
+        duration = media_duration(cue).return_in_other_framerate(mtc.main_tc.framerate)
         Logger.info(
             f"Video duration: {duration}, duration in frames:"
             f"{duration.frame_number} {duration.framerate}"

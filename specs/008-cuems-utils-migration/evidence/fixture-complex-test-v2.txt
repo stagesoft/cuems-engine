@@ -1,0 +1,11 @@
+# T028 — fixture complex_test_v2 (script.xml converted to doc_version 2 with the owning tool)
+# 2026-09-29T14:44:21+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ cp -r dev/test_xml_files/projects/complex_test dev/test_xml_files/projects/complex_test_v2
+$ poetry run python -m cuemsutils.xml.convert_documents dev/test_xml_files/projects/complex_test_v2/script.xml
+dev/test_xml_files/projects/complex_test_v2/script.xml: converted
+(backup moved out of the tree)
+$ grep -o doc_version=\"[0-9]*\" complex_test_v2/script.xml ; complex_test/script.xml
+doc_version="2"
+0
+$ git status --short dev/test_xml_files/projects/complex_test   # v1 original untouched
+(empty: unchanged)

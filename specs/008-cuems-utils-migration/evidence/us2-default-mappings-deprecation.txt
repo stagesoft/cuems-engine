@@ -1,0 +1,23 @@
+# T031 — SC-010: test_default_mappings_valid.py off XmlReaderWriter; before/after with -W error::DeprecationWarning
+# 2026-09-29T14:46:21+02:00  engine fc068f1  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+
+## BEFORE — the file as committed at HEAD (XmlReaderWriter(...).validate()), run as a temporary copy
+$ poetry run pytest -q -p no:cacheprovider -W error::DeprecationWarning tests/_old_default_mappings_valid_tmp.py
+============================== 5 failed in 0.84s ===============================
+E           DeprecationWarning: Call to deprecated class XmlReaderWriter. (use cuemsutils.cues.CuemsScript.CuemsScript instead; removed in v0.1.1)
+FAILED tests/_old_default_mappings_valid_tmp.py::test_engine_xml_fixture_validates_against_schema[default_mappings.xml-project_mappings]
+FAILED tests/_old_default_mappings_valid_tmp.py::test_engine_xml_fixture_validates_against_schema[network_map.xml-network_map]
+FAILED tests/_old_default_mappings_valid_tmp.py::test_engine_xml_fixture_validates_against_schema[project_mappings.xml-project_mappings]
+FAILED tests/_old_default_mappings_valid_tmp.py::test_engine_xml_fixture_validates_against_schema[project_settings.xml-project_settings]
+FAILED tests/_old_default_mappings_valid_tmp.py::test_engine_xml_fixture_validates_against_schema[settings.xml-settings]
+
+## AFTER — ConfigManager loaders + CuemsScript.load(...).validate()
+$ poetry run pytest -q -p no:cacheprovider -W error::DeprecationWarning tests/test_default_mappings_valid.py -rA
+PASSED tests/test_default_mappings_valid.py::test_settings_xml_loads
+PASSED tests/test_default_mappings_valid.py::test_network_map_xml_loads
+PASSED tests/test_default_mappings_valid.py::test_default_mappings_xml_loads
+PASSED tests/test_default_mappings_valid.py::test_project_settings_xml_loads
+PASSED tests/test_default_mappings_valid.py::test_project_mappings_xml_loads
+PASSED tests/test_default_mappings_valid.py::test_script_fixture_loads_and_validates[complex_test]
+PASSED tests/test_default_mappings_valid.py::test_script_fixture_loads_and_validates[complex_test_v2]
+============================== 7 passed in 1.41s ===============================
