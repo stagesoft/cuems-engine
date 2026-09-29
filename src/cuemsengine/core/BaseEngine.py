@@ -13,6 +13,7 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from cuemsutils.log import Logger, logged
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.CTimecode import CTimecode
+from cuemsutils.tools.identity_check import SENTINEL
 from cuemsutils.tools.NodeList import NodeIndex
 from cuemsutils.tools.SignalEngine import SignalEngine
 
@@ -25,7 +26,7 @@ from ..osc import (
     ServerDevices,
 )
 from ..tools.config_ports import get_config_ports
-from ..tools.ids import id_str
+from ..tools.ids import as_id, id_str
 from ..tools.MtcListener import MtcListener
 from ..tools.PortHandler import PORT_HANDLER
 from .EngineStatus import EngineStatus
@@ -61,7 +62,6 @@ class BaseEngine(SignalEngine):
         self.script: CuemsScript = None
         self.stop_requested = False
         self.node_name = None
-        self.node_host = None
         self.mtc_port = MTC_PORT
         self.mtc_listener = None
         self.timecode = None
@@ -311,8 +311,16 @@ class BaseEngine(SignalEngine):
     def set_config_manager(self) -> None:
         """Set the ConfigManager"""
         try:
+            # Settings only: an unprovisioned node must be named as such before
+            # the full load fails on it with a generic "node not found".
+            if ConfigManager(load_all=False).node_uuid == SENTINEL:
+                Logger.error(
+                    f"NOT PROVISIONED: this node's settings.xml uuid is the "
+                    f"sentinel {SENTINEL}. Run cuems-init-node to provision it. "
+                    f"Exiting !!!!!"
+                )
+                exit(-1)
             self.cm = ConfigManager(load_all=True)
-            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
         except FileNotFoundError:
             Logger.error("Node config file could not be found. Exiting !!!!!")
             exit(-1)
@@ -322,7 +330,7 @@ class BaseEngine(SignalEngine):
         Logger.info(f"Node conf: {self.cm.node_conf}")
         # Get node name from config as a check step
         try:
-            self.node_name = str(self.cm.node_conf["uuid"])
+            self.node_name = id_str(as_id(self.cm.node_conf["uuid"]))
         except KeyError:
             Logger.error("Node name not found in config. Exiting !!!!!")
             exit(-1)

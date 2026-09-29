@@ -455,7 +455,7 @@ class ControllerEngine(BaseEngine):
           - broadcast
         """
         Logger.info(f"Cue operation received: {operation}")
-        cue_id = operation.data.get("id") if operation.data else None
+        cue_id = as_id(operation.data.get("id")) if operation.data else None
 
         # Drop operations for cues not belonging to the current project.
         # This prevents stale REMOVE/ADD notifications from the NodeEngine
@@ -592,7 +592,7 @@ class ControllerEngine(BaseEngine):
             self.set_status("nextcue", nextcue_id)
             Logger.info(f'Next cue updated: {nextcue_id or "(none)"}')
         elif operation.target == "cue_enabled":
-            cue_id = operation.data.get("cue_id") if operation.data else None
+            cue_id = as_id(operation.data.get("cue_id")) if operation.data else None
             enabled = operation.data.get("enabled", True) if operation.data else True
             if cue_id and cue_id in self.cue_enabled_status:
                 self.cue_enabled_status[cue_id] = enabled

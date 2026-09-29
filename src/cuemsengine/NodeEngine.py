@@ -20,6 +20,7 @@ from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
+from .tools.ids import id_str
 from .tools.PortHandler import PORT_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
@@ -440,7 +441,7 @@ class NodeEngine(BaseEngine):
         node = self.cm.node_network_map or {}
         node_name = node.get("hostname") or node.get("role_id")
         if not node_name:
-            node_name = self.cm.node_uuid
+            node_name = id_str(self.cm.node_uuid)
             Logger.warning(
                 "gradient_node_name: no role_id/hostname in network_map for "
                 f"node {self.cm.node_uuid}; falling back to node_uuid — "
@@ -629,7 +630,7 @@ class NodeEngine(BaseEngine):
     def set_dmx_players(self):
         """Set the DMX player for this node and register its endpoints."""
         # Get node UUID for player naming
-        node_uuid = self.cm.node_conf.get("uuid", "default_node")
+        node_uuid = id_str(self.cm.node_conf.get("uuid", "default_node"))
 
         # Start the DMX player. The port draw is inside the try: it can now
         # raise if the pool is exhausted, and losing DMX must not abort the

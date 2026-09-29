@@ -1,0 +1,45 @@
+# T056 — identity green (SC-012)
+# 2026-09-29T16:50:34+02:00  engine 9f83654+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_ids.py tests/test_identity_sweep.py tests/test_cluster_identity.py -rA
+PASSED tests/test_ids.py::test_a_uuid_passes_through_unchanged
+PASSED tests/test_ids.py::test_a_uuid4_string_becomes_a_uuid
+PASSED tests/test_ids.py::test_anything_else_non_empty_stays_the_raw_string[uuid1]
+PASSED tests/test_ids.py::test_anything_else_non_empty_stays_the_raw_string[nil]
+PASSED tests/test_ids.py::test_anything_else_non_empty_stays_the_raw_string[text]
+PASSED tests/test_ids.py::test_empty_and_none_become_none[]
+PASSED tests/test_ids.py::test_empty_and_none_become_none[None]
+PASSED tests/test_ids.py::test_other_types_go_through_str_first
+PASSED tests/test_ids.py::test_as_id_is_idempotent[3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f]
+PASSED tests/test_ids.py::test_as_id_is_idempotent[268a0b70-1dfb-11eb-bc5f-2b59ad58b106]
+PASSED tests/test_ids.py::test_as_id_is_idempotent[00000000-0000-0000-0000-000000000000]
+PASSED tests/test_ids.py::test_as_id_is_idempotent[]
+PASSED tests/test_ids.py::test_as_id_is_idempotent[None]
+PASSED tests/test_ids.py::test_as_id_is_idempotent[controller]
+PASSED tests/test_ids.py::test_a_uuid_and_its_string_are_one_set_member
+PASSED tests/test_ids.py::test_sorting_mixed_ids_by_id_str_never_raises
+PASSED tests/test_ids.py::test_id_str_renders_ids_and_none
+PASSED tests/test_identity_sweep.py::test_node_name_is_the_own_uuid_as_text
+PASSED tests/test_identity_sweep.py::test_dmx_player_is_named_after_the_own_uuid
+PASSED tests/test_identity_sweep.py::test_direct_player_route_forwards_a_str_uuid_address
+PASSED tests/test_identity_sweep.py::test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id
+PASSED tests/test_identity_sweep.py::test_a_cue_enabled_update_as_str_matches_the_scripts_uuid_cue_id
+PASSED tests/test_identity_sweep.py::test_an_unprovisioned_node_is_named_as_such_and_exits_before_loading
+PASSED tests/test_identity_sweep.py::test_gradient_node_name_fallback_is_text_even_for_a_typed_uuid
+PASSED tests/test_cluster_identity.py::test_required_holds_one_member_per_node
+PASSED tests/test_cluster_identity.py::test_missing_and_unreachable_are_str_and_exclude_the_controller
+PASSED tests/test_cluster_identity.py::test_a_stale_output_prefix_is_reported_missing
+PASSED tests/test_cluster_identity.py::test_armed_ready_from_str_senders_opens_the_gate
+PASSED tests/test_cluster_identity.py::test_script_finished_from_str_senders_closes_the_run
+PASSED tests/test_cluster_identity.py::test_repeated_pongs_count_once
+============================== 30 passed in 1.68s ==============================
+
+$ black --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/NodeEngine.py src/cuemsengine/ControllerEngine.py tests/test_identity_sweep.py tests/test_core_baseengine.py
+5 files would be left unchanged.
+$ isort --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/NodeEngine.py src/cuemsengine/ControllerEngine.py tests/test_identity_sweep.py tests/test_core_baseengine.py
+isort: clean
+$ flake8 src/cuemsengine/core/BaseEngine.py src/cuemsengine/NodeEngine.py src/cuemsengine/ControllerEngine.py
+flake8: clean
+
+## Full suite
+$ poetry run pytest -q -p no:cacheprovider
+======================== 926 passed in 92.10s (0:01:32) ========================

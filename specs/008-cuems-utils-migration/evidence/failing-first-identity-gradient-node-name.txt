@@ -1,0 +1,6 @@
+# T055 failing-first — gradient node_name fallback (NodeEngine._resolve_gradient_node_name, old :443) with a typed own uuid
+# 2026-09-29T16:48:11+02:00  engine 9f83654+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_identity_sweep.py -k gradient
+E       AssertionError: assert <class 'cuemsutils.tools.Uuid.Uuid'> is str
+E        +  where <class 'cuemsutils.tools.Uuid.Uuid'> = type(9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d)
+======================= 1 failed, 6 deselected in 0.78s ========================

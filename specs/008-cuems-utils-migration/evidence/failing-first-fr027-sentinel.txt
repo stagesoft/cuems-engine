@@ -1,0 +1,63 @@
+# T053 failing-first — FR-027 (G2): settings.xml own uuid = NOT PROVISIONED sentinel (nil uuid), unchanged BaseEngine
+# 2026-09-29T16:45:45+02:00  engine 9f83654  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Expected red: ConfigManager(load_all=True) IS constructed and fails with the generic
+# 'Exception while loading config: Node with uuid 00000000-… not found' — no NOT PROVISIONED, no cuems-init-node.
+$ poetry run pytest -q -p no:cacheprovider tests/test_identity_sweep.py -k unprovisioned
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 6 items / 5 deselected / 1 selected
+
+tests/test_identity_sweep.py F                                           [100%]
+
+=================================== FAILURES ===================================
+_____ test_an_unprovisioned_node_is_named_as_such_and_exits_before_loading _____
+
+unprovisioned = PosixPath('/tmp/pytest-of-adria/pytest-149/test_an_unprovisioned_node_is_0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f2b9648b350>
+
+    def test_an_unprovisioned_node_is_named_as_such_and_exits_before_loading(
+        unprovisioned, caplog
+    ):
+        constructed = []
+    
+        def spy(*args, **kwargs):
+            constructed.append(kwargs.get("load_all", args[1] if len(args) > 1 else True))
+            return ConfigManager(*args, **kwargs)
+    
+        engine = _bare_engine()
+        with (
+            patch("cuemsengine.core.BaseEngine.ConfigManager", Mock(side_effect=spy)),
+            caplog.at_level(logging.ERROR),
+            pytest.raises(SystemExit),
+        ):
+            engine.set_config_manager()
+    
+>       assert True not in constructed, constructed
+E       AssertionError: [True]
+E       assert True not in [True]
+
+tests/test_identity_sweep.py:182: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1217150
+INFO     cuemsengine.core.BaseEngine:test_identity_sweep.py:43 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f2b96a20810>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-149/test_an_unprovisioned_node_is_0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f2b96a20810>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-149/test_an_unprovisioned_node_is_0/network_map.xml
+ERROR    cuemsutils.tools.ConfigManager:log.py:210 Error occurred: Node with uuid 00000000-0000-0000-0000-000000000000 not found
+ERROR    cuemsengine.core.BaseEngine:test_identity_sweep.py:180 Exception while loading config: Node with uuid 00000000-0000-0000-0000-000000000000 not found
+=========================== short test summary info ============================
+FAILED tests/test_identity_sweep.py::test_an_unprovisioned_node_is_named_as_such_and_exits_before_loading
+======================= 1 failed, 5 deselected in 1.05s ========================

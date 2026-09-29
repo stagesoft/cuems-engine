@@ -27,7 +27,6 @@ class TestBaseEngine:
         assert engine.mtc_port == MTC_PORT
         assert engine._timecode is None
         assert engine.go_offset == None
-        assert engine.node_host == "http://000000000001.local"
         assert engine.script is None
         assert engine.stop_requested is False
         assert engine.ongoing_cue is None
