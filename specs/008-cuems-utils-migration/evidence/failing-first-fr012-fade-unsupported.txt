@@ -1,0 +1,73 @@
+# T047 failing-first — FR-012: an in-memory ActionCue with fade_in/fade_out is refused as unsupported; unchanged ActionHandler
+# 2026-09-29T16:38:35+02:00  engine d6ac254  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Status asserted is 'rejected' — what the unsupported branch at ActionHandler.py:247 returns (tasks.md said 'failed';
+# the branch it cites answers 'rejected', same as TestUnknownAction). Expected red: handler returns 'applied'.
+$ poetry run pytest -q -p no:cacheprovider tests/test_action_cue.py -k RetiredFade
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 78 items / 76 deselected / 2 selected
+
+tests/test_action_cue.py FF                                              [100%]
+
+=================================== FAILURES ===================================
+_______ TestRetiredFadeActions.test_is_rejected_as_unsupported[fade_in] ________
+
+self = <tests.test_action_cue.TestRetiredFadeActions object at 0x7f544f4201d0>
+handler = <cuemsengine.cues.CueHandler.CueHandler object at 0x7f544d4c4d50>
+mtc = <MagicMock id='140000045635536'>, action_type = 'fade_in'
+
+    @pytest.mark.parametrize("action_type", ["fade_in", "fade_out"])
+    def test_is_rejected_as_unsupported(self, handler, mtc, action_type):
+        target = _make_target()
+        cue = _make_action_cue(action_type, target)
+    
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
+            result = handler.execute_action(cue, mtc)
+    
+>       assert result["status"] == "rejected"
+E       AssertionError: assert 'applied' == 'rejected'
+E         
+E         - rejected
+E         + applied
+
+tests/test_action_cue.py:504: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.ActionHandler:ActionHandler.py:297 fade_in treated as play (fade envelope not yet implemented)
+INFO     cuemsengine.cues.ActionHandler:CueHandler.py:1485 Action fade_in on 8aec256b-58db-4fee-8bf7-f677fd4bd823: applied
+_______ TestRetiredFadeActions.test_is_rejected_as_unsupported[fade_out] _______
+
+self = <tests.test_action_cue.TestRetiredFadeActions object at 0x7f544f423450>
+handler = <cuemsengine.cues.CueHandler.CueHandler object at 0x7f544cc87f90>
+mtc = <MagicMock id='140000042272720'>, action_type = 'fade_out'
+
+    @pytest.mark.parametrize("action_type", ["fade_in", "fade_out"])
+    def test_is_rejected_as_unsupported(self, handler, mtc, action_type):
+        target = _make_target()
+        cue = _make_action_cue(action_type, target)
+    
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
+            result = handler.execute_action(cue, mtc)
+    
+>       assert result["status"] == "rejected"
+E       AssertionError: assert 'applied' == 'rejected'
+E         
+E         - rejected
+E         + applied
+
+tests/test_action_cue.py:504: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.ActionHandler:ActionHandler.py:297 fade_out treated as stop (fade envelope not yet implemented)
+INFO     cuemsengine.cues.ActionHandler:CueHandler.py:1485 Action fade_out on c0e2ce73-914a-4561-bf96-7c2edb9ea1f7: applied
+=========================== short test summary info ============================
+FAILED tests/test_action_cue.py::TestRetiredFadeActions::test_is_rejected_as_unsupported[fade_in]
+FAILED tests/test_action_cue.py::TestRetiredFadeActions::test_is_rejected_as_unsupported[fade_out]
+======================= 2 failed, 76 deselected in 1.26s =======================

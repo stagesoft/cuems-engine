@@ -240,7 +240,6 @@ class CueHandler:
             body = fadein + fadeout  # already ms
         elif isinstance(cue, ActionCue):
             # play/stop/enable/disable/go_to = instant
-            # TODO: use fade duration once fade_in/fade_out implemented
             body = 0
         else:
             body = 0

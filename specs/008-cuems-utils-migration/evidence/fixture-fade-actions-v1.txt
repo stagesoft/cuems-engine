@@ -1,0 +1,7 @@
+# T048 — fixture fade_actions_v1 (version-1 script carrying fade_in / fade_out / play ActionCues)
+# 2026-09-29T16:38:56+02:00
+# Source: ../cuems-utils/tests/data/corpus/pre-008/fade_actions.xml, copied unmodified to dev/test_xml_files/projects/fade_actions_v1/script.xml
+# cuems-utils HEAD: 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Last commit touching the source file: 217633c feat(008/item-d-retirement): retire create_script, descriptor-generated examples
+# sha256: 857fa5cfa44653af9e41b3ca69cf49b68d4f835d074e882ee4b50d52d3c78848
+# Ids are uuid4 already (b1c2d3e4-000N-4aaa-8aaa-…), no doc_version attribute (version 1): no conversion applied.

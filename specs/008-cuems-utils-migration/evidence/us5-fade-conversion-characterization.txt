@@ -1,0 +1,15 @@
+# T048 — FR-014 characterization of the fade conversion through read_script (fixture fade_actions_v1)
+
+## Before T049 (fade handlers still present)
+# 2026-09-29T16:39:10+02:00  engine d6ac254+T047/T048 tests  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_action_cue.py -k FadeActionsFromAVersion1Script -rA
+PASSED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_in_is_play_and_starts_its_target
+PASSED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_out_is_stop_and_disarms_its_target
+======================= 2 passed, 78 deselected in 1.36s =======================
+
+## After T049/T050 (fade handlers and their tests deleted)
+# 2026-09-29T16:39:56+02:00
+$ poetry run pytest -q -p no:cacheprovider tests/test_action_cue.py -k FadeActionsFromAVersion1Script -rA
+PASSED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_in_is_play_and_starts_its_target
+PASSED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_out_is_stop_and_disarms_its_target
+======================= 2 passed, 73 deselected in 1.26s =======================

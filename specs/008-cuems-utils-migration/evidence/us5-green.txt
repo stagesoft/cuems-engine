@@ -1,0 +1,25 @@
+# T051 — US5 green (FR-012-FR-014, SC-004)
+# 2026-09-29T16:41:39+02:00  engine d6ac254+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_action_cue.py
+============================== 75 passed in 4.25s ==============================
+
+$ grep -nw 'fade_in\|fade_out' src/cuemsengine/cues/ActionHandler.py   # only the T049 comment
+41:# fade_in / fade_out are not engine actions. The library's convert-on-read
+43:# cuems-utils (>= 0.1.0rc16) floor guarantees that conversion runs. fade_in was
+44:# already identical to play. A converted fade_out is now a real stop: it
+
+$ grep -rn 'get_nodes_by_adoption\|_adopted_uuids_from_network_map\|find_hosts' src/ tests/ | grep -v tests/test_public_surface.py   # SC-004
+(no output)
+
+$ black --check src/cuemsengine/cues/ActionHandler.py src/cuemsengine/cues/CueHandler.py tests/test_action_cue.py
+3 files would be left unchanged.
+$ isort --check src/cuemsengine/cues/ActionHandler.py src/cuemsengine/cues/CueHandler.py tests/test_action_cue.py
+isort: clean
+$ flake8 src/cuemsengine/cues/ActionHandler.py src/cuemsengine/cues/CueHandler.py
+flake8: clean
+
+## Full suite
+First run after T049/T050: 1 failed — tests/test_stop_propagation.py::TestActionHandlers::test_fade_out_cancels_descendants
+(called the deleted _handle_fade_out directly; retired, see test-retirements.md). Re-run:
+$ poetry run pytest -q -p no:cacheprovider
+======================== 919 passed in 90.94s (0:01:30) ========================

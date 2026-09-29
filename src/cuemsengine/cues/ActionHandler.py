@@ -35,11 +35,15 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "enable",
         "disable",
         "fade_action",
-        "fade_in",
-        "fade_out",
         "go_to",
     }
 )
+# fade_in / fade_out are not engine actions. The library's convert-on-read
+# rewrites them to play / stop before a script reaches the engine, and the
+# cuems-utils (>= 0.1.0rc16) floor guarantees that conversion runs. fade_in was
+# already identical to play. A converted fade_out is now a real stop: it
+# disarms its target, fixing the zombie player processes the old handler left
+# behind, and a repeat answers applied_no_change — a behaviour change (FR-014).
 
 HookPhase = Literal["before_dispatch", "after_dispatch", "wrap_dispatch"]
 RegistrationLayer = Literal["cue_layer", "node_layer"]
@@ -538,51 +542,6 @@ def _handle_disable(
     return ActionHandler._action_result("applied", "disable", target_id)
 
 
-def _handle_fade_in(
-    ch: CueOrchestrator,
-    _action_cue: Any,
-    target: Cue,
-    mtc: MtcListener,
-    frozen_mtc_ms: float | None = None,
-) -> dict:
-    # TODO: implement fade envelope; currently identical to play
-    Logger.info("fade_in treated as play (fade envelope not yet implemented)")
-    target_id = target.id
-    # Only gate on a local target (see _handle_play) — non-local targets are
-    # walked past by go_from.
-    if getattr(target, "_local", False):
-        fail = _ready_action_target("fade_in", target, ch)
-        if fail is not None:
-            return fail
-    target._stop_requested = False
-    try:
-        # go_from (not go): same cross-node walk as play — a plain go() would
-        # drop other nodes' cues on a chain owned by the target's node.
-        ch.go_from(target, mtc, frozen_mtc_ms)
-    except Exception as exc:
-        return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
-    return ActionHandler._action_result("applied", "fade_in", target_id)
-
-
-def _handle_fade_out(
-    ch: CueOrchestrator,
-    _action_cue: Any,
-    target: Cue,
-    mtc: MtcListener,
-    frozen_mtc_ms: float | None = None,
-) -> dict:
-    # TODO: implement fade envelope; currently identical to stop.
-    # Also has the same zombie-process bug as the old stop handler:
-    # bumps _go_generation but does not call disarm(), so player processes
-    # are not cleaned up. Fix when implementing real fade behavior.
-    Logger.info("fade_out treated as stop (fade envelope not yet implemented)")
-    target_id = target.id
-    target._stop_requested = True
-    target._go_generation = getattr(target, "_go_generation", 0) + 1
-    _cancel_chain_behind(ch, target, "fade_out")
-    return ActionHandler._action_result("applied", "fade_out", target_id)
-
-
 def _handle_go_to(
     ch: CueOrchestrator,
     _action_cue: Any,
@@ -807,8 +766,6 @@ _ACTION_HANDLERS: dict[
     "enable": _handle_enable,
     "disable": _handle_disable,
     "fade_action": _handle_fade_action,
-    "fade_in": _handle_fade_in,
-    "fade_out": _handle_fade_out,
     "go_to": _handle_go_to,
 }
 

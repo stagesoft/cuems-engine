@@ -252,81 +252,6 @@ class TestDisableAction:
 
 
 # ---------------------------------------------------------------------------
-# T011: fade_in — target ramps into active state
-# ---------------------------------------------------------------------------
-
-
-class TestFadeInAction:
-    def test_fade_in_starts_target(self, handler, mtc):
-        target = _make_target()
-        cue = _make_action_cue("fade_in", target)
-
-        with (
-            patch.object(handler, "go") as mock_go,
-            patch.object(handler, "arm"),
-        ):
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "applied"
-        assert result["action_type"] == "fade_in"
-        mock_go.assert_called_once()
-
-    def test_fade_in_disabled_target_fails(self, handler, mtc):
-        target = _make_target(enabled=False)
-        cue = _make_action_cue("fade_in", target)
-
-        with (
-            patch.object(handler, "go") as mock_go,
-            patch.object(handler, "arm"),
-        ):
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "failed"
-        assert "disabled" in result["reason"]
-        mock_go.assert_not_called()
-
-    def test_fade_in_arm_raises_returns_failed(self, handler, mtc):
-        target = _make_target(loaded=False)
-        cue = _make_action_cue("fade_in", target)
-
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "failed"
-        assert result["action_type"] == "fade_in"
-        assert "arm failed" in result["reason"]
-
-    def test_fade_in_go_raises_returns_failed(self, handler, mtc):
-        target = _make_target()
-        cue = _make_action_cue("fade_in", target)
-
-        with patch.object(handler, "go", side_effect=RuntimeError("not loaded to go")):
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "failed"
-        assert result["action_type"] == "fade_in"
-        assert "not loaded to go" in result["reason"]
-
-
-# ---------------------------------------------------------------------------
-# T012: fade_out — target ramps down and exits active state
-# ---------------------------------------------------------------------------
-
-
-class TestFadeOutAction:
-    def test_fade_out_stops_target(self, handler, mtc):
-        target = _make_target(_stop_requested=False, _go_generation=0)
-        cue = _make_action_cue("fade_out", target)
-
-        result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "applied"
-        assert result["action_type"] == "fade_out"
-        assert target._stop_requested is True
-        assert target._go_generation == 1
-
-
-# ---------------------------------------------------------------------------
 # T013: go_to — execution pointer navigates to target cue
 # ---------------------------------------------------------------------------
 
@@ -480,6 +405,87 @@ class TestRapidSuccession:
 # ===========================================================================
 # US2: Invalid / unsupported actions
 # ===========================================================================
+
+
+class TestRetiredFadeActions:
+    """fade_in/fade_out are no longer engine actions (FR-012).
+
+    The library's convert-on-read rewrites them to play/stop before a script
+    reaches the engine; an in-memory cue that still carries one is refused like
+    any other unsupported action.
+    """
+
+    @pytest.mark.parametrize("action_type", ["fade_in", "fade_out"])
+    def test_is_rejected_as_unsupported(self, handler, mtc, action_type):
+        target = _make_target()
+        cue = _make_action_cue(action_type, target)
+
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "rejected"
+        assert result["reason"] == f"Unsupported action_type: {action_type!r}"
+        mock_go.assert_not_called()
+
+
+class TestFadeActionsFromAVersion1Script:
+    """What a version-1 script's fade_in/fade_out become (FR-014, M17).
+
+    The library rewrites them on read: fade_in -> play (behaviour preserved),
+    fade_out -> stop, which now disarms the target and answers a repeat with
+    applied_no_change — a behaviour change from the old fade_out handler.
+    """
+
+    FADE_IN = "b1c2d3e4-0002-4aaa-8aaa-000000000002"
+    FADE_OUT = "b1c2d3e4-0003-4aaa-8aaa-000000000003"
+
+    @pytest.fixture
+    def actions(self):
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        engine = BaseEngine(with_cm=False, with_mtc=False, with_signals=False)
+        engine.cm = SimpleNamespace(
+            library_path=str(Path(__file__).parent / ".." / "dev" / "test_xml_files")
+        )
+        engine.read_script("fade_actions_v1")
+        return {str(c.id): c for c in engine.script.cuelist.contents}
+
+    def test_former_fade_in_is_play_and_starts_its_target(self, handler, mtc, actions):
+        cue = actions[self.FADE_IN]
+        assert cue.action_type == "play"
+        target = _make_target()
+        cue._action_target_object = target
+
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm"),
+        ):
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "applied"
+        mock_go.assert_called_once()
+
+    def test_former_fade_out_is_stop_and_disarms_its_target(
+        self, handler, mtc, actions
+    ):
+        cue = actions[self.FADE_OUT]
+        assert cue.action_type == "stop"
+        target = _make_target(_stop_requested=False)
+        cue._action_target_object = target
+
+        with patch.object(handler, "disarm") as mock_disarm:
+            first = handler.execute_action(cue, mtc)
+            repeat = handler.execute_action(cue, mtc)
+
+        assert first["status"] == "applied"
+        mock_disarm.assert_called_once_with(target)
+        assert repeat["status"] == "applied_no_change"
 
 
 class TestUnknownAction:

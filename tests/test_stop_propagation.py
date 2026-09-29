@@ -199,7 +199,11 @@ class TestEpochMarking:
 
 
 class TestActionHandlers:
-    """The three handlers that end a cue must all take its chain with them."""
+    """The handlers that end a cue must all take its chain with them.
+
+    (A version-1 fade_out reaches the engine as a stop — the library converts
+    it on read — so the stop case covers it.)
+    """
 
     def _target(self):
         t, nxt = _cue("T"), _cue("N")
@@ -211,12 +215,6 @@ class TestActionHandlers:
         ch = MagicMock()
         with patch("cuemsengine.cues.ActionHandler.time.sleep"):
             AH._handle_stop(ch, None, t, MagicMock())
-        ch.cancel_pending_descendants.assert_called_once_with(t)
-
-    def test_fade_out_cancels_descendants(self):
-        t, nxt = self._target()
-        ch = MagicMock()
-        AH._handle_fade_out(ch, None, t, MagicMock())
         ch.cancel_pending_descendants.assert_called_once_with(t)
 
     def test_pause_cancels_descendants_but_leaves_its_target_alone(self):
