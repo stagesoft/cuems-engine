@@ -166,19 +166,19 @@ class TestGetProjectStatus:
     def test_returns_running_with_uuid(self, controller):
         controller.set_status("running", "yes")
         mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        mock_script.id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
         controller.script = mock_script
         result = controller.get_project_status(None)
         assert result == {
             "status": "running",
-            "project_uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "project_uuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         }
 
     def test_loaded_but_not_playing_returns_none(self, controller):
         """A loaded but not playing project should report status 'none'."""
         controller.set_status("running", "no")
         mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        mock_script.id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
         controller.script = mock_script
         result = controller.get_project_status(None)
         assert result == {"status": "none", "project_uuid": ""}

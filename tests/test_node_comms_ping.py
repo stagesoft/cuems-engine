@@ -21,8 +21,8 @@ import pytest
 from cuemsengine.comms.NodeCommunications import NodeCommunications
 from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
-NODE_UUID = "aaaaaaaa-1111-2222-3333-444444444444"
-CONTROLLER_UUID = "bbbbbbbb-1111-2222-3333-444444444444"
+NODE_UUID = "aaaaaaaa-1111-4222-8333-444444444444"
+CONTROLLER_UUID = "bbbbbbbb-1111-4222-8333-444444444444"
 
 
 @pytest.fixture

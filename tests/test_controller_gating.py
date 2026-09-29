@@ -26,9 +26,9 @@ import pytest
 
 from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
-CONTROLLER_UUID = "aaaaaaaa-099f-11f0-a075-00e04c01b7e3"
-SLAVE_UUID = "bbbbbbbb-6c5c-5016-aac6-a039c6a7d18f"
-FOREIGN_UUID = "cccccccc-9999-9999-9999-999999999999"
+CONTROLLER_UUID = "aaaaaaaa-099f-41f0-a075-00e04c01b7e3"
+SLAVE_UUID = "bbbbbbbb-6c5c-4016-aac6-a039c6a7d18f"
+FOREIGN_UUID = "cccccccc-9999-4999-9999-999999999999"
 
 
 @pytest.fixture(autouse=True)

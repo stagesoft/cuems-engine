@@ -7,7 +7,7 @@
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
             <mac>2cf05d21cca3</mac>
             <name>2cf05d21cca3._cuems_nodeconf._tcp.local.</name>
-            <node_type>NodeType.master</node_type>
+            <node_role>controller</node_role>
             <ip>192.168.1.10</ip>
             <adopted>True</adopted>
             <online>True</online>
@@ -16,7 +16,7 @@
             <uuid>0367f391-ebf4-48b2-9f26-000000000003</uuid>
             <mac>0800276db133</mac>
             <name>0800276db133._cuems_nodeconf._tcp.local.</name>
-            <node_type>NodeType.slave</node_type>
+            <node_role>node</node_role>
             <ip>192.168.1.101</ip>
             <adopted>False</adopted>
             <online>False</online>

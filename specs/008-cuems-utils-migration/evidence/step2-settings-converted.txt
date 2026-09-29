@@ -1,0 +1,2068 @@
+# T006 — FR-002 step 2: settings fixture converted to version 2 with the owning tool
+# 2026-09-29T14:27:22+02:00  engine 9c1fdc7  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run python -m cuemsutils.xml.convert_documents dev/test_xml_files/settings.xml
+dev/test_xml_files/settings.xml: converted
+(backup moved out of the tree; the tool drops XML comments and writes the ns0 prefix — its output is kept unedited)
+$ grep -c "doc_version=\"2\"" / audio_cards / universes
+1
+0
+$ poetry run pytest -q -p no:cacheprovider
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+testpaths: tests
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 866 items
+
+tests/test_action_cue.py ............................................... [  5%]
+.............................                                            [  8%]
+tests/test_arm_resilience.py .....                                       [  9%]
+tests/test_arm_video_cue_opacity_deploy.py ...                           [  9%]
+tests/test_chain_anchoring.py .........................                  [ 12%]
+tests/test_chain_epoch.py .....................                          [ 15%]
+tests/test_cluster_warning.py .......................                    [ 17%]
+tests/test_comms_nodehub.py ..........                                   [ 18%]
+tests/test_config_ports.py .............                                 [ 20%]
+tests/test_controller_commands.py ...................................    [ 24%]
+tests/test_controller_gating.py ...........................              [ 27%]
+tests/test_core_baseengine.py FF.FF                                      [ 28%]
+tests/test_core_baseengine_controller_ip.py ...............              [ 29%]
+tests/test_core_baseengine_status.py FEEEEEEE...........                 [ 31%]
+tests/test_cpu_usage.py ......                                           [ 32%]
+tests/test_cuems_deploy.py ............................................. [ 37%]
+...................                                                      [ 40%]
+tests/test_cuems_deploy_integration.py .                                 [ 40%]
+tests/test_cues_dmx.py .....................                             [ 42%]
+tests/test_default_mappings_valid.py .....                               [ 43%]
+tests/test_dispatch_reorder.py ..................                        [ 45%]
+tests/test_display_conf.py ................                              [ 47%]
+tests/test_effective_duration.py ......                                  [ 47%]
+tests/test_enable_rejoin.py .................                            [ 49%]
+tests/test_fade_action_handler.py ...................................... [ 54%]
+....................                                                     [ 56%]
+tests/test_gradient_client.py ................                           [ 58%]
+tests/test_loop_fade_cue.py ......                                       [ 59%]
+tests/test_loop_rebase.py .....                                          [ 59%]
+tests/test_mtclistener.py ...........................                    [ 62%]
+tests/test_node_comms_mixer.py ..                                        [ 62%]
+tests/test_node_comms_ping.py ....                                       [ 63%]
+tests/test_node_engine.py ...................................            [ 67%]
+tests/test_node_engine_gradient.py ..........                            [ 68%]
+tests/test_nodeengine_helpers.py ...........                             [ 69%]
+tests/test_nodelist_modify.py .........................                  [ 72%]
+tests/test_ossia.py ...................                                  [ 74%]
+tests/test_ossia_bundle_support.py ....                                  [ 75%]
+tests/test_player_handler_gradient.py .....                              [ 75%]
+tests/test_player_handler_mixer_orphan.py ....                           [ 76%]
+tests/test_players_audiomixer.py ....................................... [ 80%]
+.............                                                            [ 82%]
+tests/test_players_dmxplayer.py ................                         [ 84%]
+tests/test_players_jackconnectionmanager.py ............................ [ 87%]
+..                                                                       [ 87%]
+tests/test_port_handler.py ...................                           [ 89%]
+tests/test_project_go.py F                                               [ 90%]
+tests/test_project_load.py ..F.F...............                          [ 92%]
+tests/test_pyossia_osc.py ............                                   [ 93%]
+tests/test_pythonosc.py .....                                            [ 94%]
+tests/test_reveal_mechanism.py ...................                       [ 96%]
+tests/test_stop_propagation.py .................                         [ 98%]
+tests/test_version.py ...                                                [ 98%]
+tests/test_video_routing.py ..........                                   [100%]
+
+==================================== ERRORS ====================================
+_________________ ERROR at setup of test_engine_initial_status _________________
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd928563d90>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd928563d90>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+with_signals = True
+
+    @pytest.fixture
+    def base_engine(with_signals: bool = True):
+        environ["CUEMS_CONF_PATH"] = str(
+            Path(__file__).parent / ".." / "dev" / "test_xml_files"
+        )
+>       return BaseEngine(with_signals=with_signals)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_status.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log setup ------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af81150>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af81150>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+______________________ ERROR at setup of test_set_status _______________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92a760f40>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_set_status>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+______________________ ERROR at setup of test_get_status _______________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92a7ab240>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_get_status>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+_____________________ ERROR at setup of test_recieved_test _____________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92bfff9c0>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_recieved_test>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+____________________ ERROR at setup of test_get_status_none ____________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92a7a9620>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_get_status_none>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+____________________ ERROR at setup of test_set_status_none ____________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92bfff9c0>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_set_status_none>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+_____________________ ERROR at setup of test_all_statuses ______________________
+
+cls = <class '_pytest.runner.CallInfo'>
+func = <function call_and_report.<locals>.<lambda> at 0x7fd92a7ab240>
+when = 'setup'
+reraise = (<class '_pytest.outcomes.Exit'>, <class 'KeyboardInterrupt'>)
+
+    @classmethod
+    def from_call(
+        cls,
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
+        reraise: type[BaseException] | tuple[type[BaseException], ...] | None = None,
+    ) -> CallInfo[TResult]:
+        """Call func, wrapping the result in a CallInfo.
+    
+        :param func:
+            The function to call. Called without arguments.
+        :type func: Callable[[], _pytest.runner.TResult]
+        :param when:
+            The phase in which the function is called.
+        :param reraise:
+            Exception or exceptions that shall propagate if raised by the
+            function, instead of being wrapped in the CallInfo.
+        """
+        excinfo = None
+        instant = timing.Instant()
+        try:
+>           result: TResult | None = func()
+                                     ^^^^^^
+
+.venv/lib/python3.11/site-packages/_pytest/runner.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.11/site-packages/_pytest/runner.py:250: in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_hooks.py:512: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pluggy/_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/logging.py:858: in pytest_runtest_setup
+    yield
+.venv/lib/python3.11/site-packages/_pytest/capture.py:895: in pytest_runtest_setup
+    return (yield)
+            ^^^^^
+.venv/lib/python3.11/site-packages/_pytest/runner.py:170: in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+.venv/lib/python3.11/site-packages/_pytest/runner.py:536: in setup
+    col.setup()
+.venv/lib/python3.11/site-packages/_pytest/python.py:1710: in setup
+    self._request._fillfixtures()
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:806: in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:630: in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:726: in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FixtureDef argname='base_engine' scope='function' baseid='tests/test_core_baseengine_status.py'>
+request = <SubRequest 'base_engine' for <Function test_all_statuses>>
+
+    def execute(self, request: SubRequest) -> FixtureValue:
+        """Return the value of this fixture, executing it if not cached."""
+        # Ensure that the dependent fixtures requested by this fixture are loaded.
+        # This needs to be done before checking if we have a cached value, since
+        # if a dependent fixture has their cache invalidated, e.g. due to
+        # parametrization, they finalize themselves and fixtures depending on it
+        # (which will likely include this fixture) setting `self.cached_result = None`.
+        # See #4871
+        requested_fixtures_that_should_finalize_us = []
+        for argname in self.argnames:
+            fixturedef = request._get_active_fixturedef(argname)
+            # Saves requested fixtures in a list so we later can add our finalizer
+            # to them, ensuring that if a requested fixture gets torn down we get torn
+            # down first. This is generally handled by SetupState, but still currently
+            # needed when this fixture is not parametrized but depends on a parametrized
+            # fixture.
+            requested_fixtures_that_should_finalize_us.append(fixturedef)
+    
+        # Check for (and return) cached value/exception.
+        if self.cached_result is not None:
+            request_cache_key = self.cache_key(request)
+            cache_key = self.cached_result[1]
+            try:
+                # Attempt to make a normal == check: this might fail for objects
+                # which do not implement the standard comparison (like numpy arrays -- #6497).
+                cache_hit = bool(request_cache_key == cache_key)
+            except (ValueError, RuntimeError):
+                # If the comparison raises, use 'is' as fallback.
+                cache_hit = request_cache_key is cache_key
+    
+            if cache_hit:
+                if self.cached_result[2] is not None:
+                    exc, exc_tb = self.cached_result[2]
+                    raise exc.with_traceback(exc_tb)
+                else:
+                    return self.cached_result[0]
+            # We have a previous but differently parametrized fixture instance
+            # so we need to tear it down before creating a new one.
+            self.finish(request)
+            assert self.cached_result is None
+    
+        # Add finalizer to requested fixtures we saved previously.
+        # We make sure to do this after checking for cached value to avoid
+        # adding our finalizer multiple times. (#12135)
+        finalizer = functools.partial(self.finish, request=request)
+        for parent_fixture in requested_fixtures_that_should_finalize_us:
+            parent_fixture.addfinalizer(finalizer)
+    
+        # Register the pytest_fixture_post_finalizer as the first finalizer,
+        # which is executed last.
+>       assert not self._finalizers
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1221: AssertionError
+=================================== FAILURES ===================================
+______ TestBaseEngine.test_base_engine_initialization_with_all_components ______
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92a752350>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92a752350>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_core_baseengine.TestBaseEngine object at 0x7fd9303846d0>
+env_config_path = None
+
+    def test_base_engine_initialization_with_all_components(self, env_config_path):
+        """
+        Test BaseEngine initialization with both ConfigManager and MTC listener
+        """
+>       engine = BaseEngine(with_cm=True, with_mtc=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine.py:23: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a848e10>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a848e10>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+__________ TestBaseEngine.test_base_engine_initialization_without_mtc __________
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92bdabd50>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92bdabd50>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_core_baseengine.TestBaseEngine object at 0x7fd930384cd0>
+env_config_path = None
+mock_config_manager = <MagicMock name='ConfigManager' id='140570705218896'>
+
+    def test_base_engine_initialization_without_mtc(
+        self, env_config_path, mock_config_manager
+    ):
+        """Test BaseEngine initialization without MTC listener"""
+>       engine = BaseEngine(with_cm=True, with_mtc=False)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a71d150>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a71d150>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+_________________________ TestBaseEngine.test_stop_all _________________________
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92b05ee50>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92b05ee50>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_core_baseengine.TestBaseEngine object at 0x7fd930374490>
+env_config_path = None
+mock_config_manager = <MagicMock name='ConfigManager' id='140570696733264'>
+
+    def test_stop_all(self, env_config_path, mock_config_manager):
+        """Test stop_all method"""
+>       engine = BaseEngine(with_cm=True, with_mtc=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine.py:79: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af82850>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af82850>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+__________________________ test_get_status_endpoints ___________________________
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92af34bd0>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd92af34bd0>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+env_config_path = None
+
+    def test_get_status_endpoints(env_config_path):
+        from cuemsengine.osc import ValueType
+    
+>       engine = BaseEngine(with_cm=True, with_mtc=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af82c50>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92af82c50>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+________________________ test_engine_can_start_and_stop ________________________
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd928561d10>
+
+    def set_config_manager(self) -> None:
+        """Set the ConfigManager"""
+        try:
+            self.cm = ConfigManager(load_all=True)
+            self.node_host = f"http://{self.cm.node_conf['uuid'][-12:]}.local"
+        except FileNotFoundError:
+            Logger.error("Node config file could not be found. Exiting !!!!!")
+            exit(-1)
+        except Exception as e:
+            Logger.error(f"Exception while loading config: {e}")
+            exit(-1)
+        Logger.info(f"Node conf: {self.cm.node_conf}")
+        # Get node name from config as a check step
+        try:
+            self.node_name = str(self.cm.node_conf["uuid"])
+        except KeyError:
+            Logger.error("Node name not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get tmp path from config as a check step
+        try:
+            self.tmp_path = str(self.cm.tmp_path)
+        except KeyError:
+            Logger.error("Tmp path not found in config. Exiting !!!!!")
+            exit(-1)
+    
+        # Get controller IP from network map
+        try:
+>           self.controller_ip = self.get_controller_ip()
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/cuemsengine/core/BaseEngine.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7fd928561d10>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+
+During handling of the above exception, another exception occurred:
+
+    def test_engine_can_start_and_stop():
+        from os import environ, path
+        from time import sleep
+    
+        from cuemsengine.core.BaseEngine import SHOW_LOCK_PATH
+    
+        environ["CUEMS_CONF_PATH"] = str(
+            Path(__file__).parent / ".." / "dev" / "test_xml_files"
+        )
+>       engine = BaseEngine(with_signals=False)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_status.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:74: in __init__
+    self.set_config_manager()
+src/cuemsengine/core/BaseEngine.py:343: in set_config_manager
+    exit(-1)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Use exit() or Ctrl-D (i.e. EOF) to exit, code = -1
+
+>   ???
+E   SystemExit: -1
+
+<frozen _sitebuiltins>:26: SystemExit
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a75dbd0>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a75dbd0>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 mDNS resolution of controller.local failed: mDNS disabled in tests
+ERROR    cuemsengine.core.BaseEngine:BaseEngine.py:74 <class 'ValueError'> while getting controller IP: No controller node found in network map
+_______________________ test_project_go_from_controller ________________________
+
+mock_config_path = None, mock_avahi_resolve = None
+mock_library_path = PosixPath('/disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files')
+mock_controller_ip = None, mock_deploy_success = None
+mock_display_conf = {'salida_001': {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}, 'salida_002': {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}}
+mock_player_clients = {'clients': [{'name': '0367f391-ebf4-48b2-9f26-000000000001_dmxplayer', 'port': 9776, 'endpoints': []}], 'commands': []}
+mock_player_subprocess = [{'player': 'DmxPlayer', 'args': ['/usr/bin/cuems-dmxplayer', '--output-latency-ms', '35', '--port', '9776', '--uuid', ...], 'pid': 140570662795472}]
+suppress_logging = None
+engine_cleanup = <function engine_cleanup.<locals>.register_engine at 0x7fd92ac08fe0>
+
+    @pytest.mark.slow
+    def test_project_go_from_controller(
+        mock_config_path,
+        mock_avahi_resolve,
+        mock_library_path,
+        mock_controller_ip,
+        mock_deploy_success,
+        mock_display_conf,
+        mock_player_clients,
+        mock_player_subprocess,
+        suppress_logging,
+        engine_cleanup,
+    ):
+        # ARRANGE
+        controller_engine = ControllerEngine(with_mtc=True)
+        engine_cleanup(controller_engine)
+        controller_engine.create_timecode()
+        controller_engine.set_comms()
+    
+        # NodeEngine.start() binds NNG + players (replaces set_communications),
+        # then falls into BaseEngine/SignalEngine's blocking run loop (the real
+        # systemd entrypoint never returns) - it must run off-thread here, same
+        # as the production process. engine_cleanup's teardown calls
+        # node_engine.stop() which flips SignalEngine.running=False and lets
+        # the loop exit on its own.
+        node_engine = NodeEngine(with_mtc=True)
+        engine_cleanup(node_engine)
+        node_thread = threading.Thread(target=node_engine.start, daemon=True)
+        node_thread.start()
+        sleep(1.5)
+    
+        # ACT - Load project (this will create player clients)
+        controller_engine.load_project("complex_test")
+        deadline = time() + 10.0
+        while node_engine.get_status("load") != "complex_test":
+            if time() > deadline:
+>               raise TimeoutError(
+                    f"node never reached load=complex_test "
+                    f"(got {node_engine.get_status('load')!r})"
+                )
+E               TimeoutError: node never reached load=complex_test (got '')
+
+tests/test_project_go.py:67: TimeoutError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.players.PlayerHandler:fixtures.py:313 Performing complete PlayerHandler reset
+DEBUG    cuemsengine.players.PlayerHandler:PlayerHandler.py:130 Resetting video layers
+DEBUG    cuemsengine.players.PlayerHandler:fixtures.py:269 Performing complete PlayerHandler reset
+DEBUG    cuemsengine.players.PlayerHandler:PlayerHandler.py:130 Resetting video layers
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting ControllerEngine with PID 1201564
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Controller IP: 127.0.0.1
+INFO     cuemsengine.tools.MtcListener:MtcListener.py:39 MIDI port "Midi Through Port-0" matched as "Midi Through:Midi Through Port-0 14:0"
+INFO     cuemsengine.tools.MtcListener:MtcListener.py:39 MtcListener will use MIDI port: Midi Through:Midi Through Port-0 14:0
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@0367f391-ebf4-48b2-9f26-000000000001 initialized, waitingstart signal
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 Setting up Communicators
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 NNG Hub address: tcp://0.0.0.0:5555
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 WebSocket OSC port: 9190
+INFO     cuemsengine.comms.AsyncCommsThread:ControllerCommunications.py:58 Initializing AsyncCommsThread: ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:ControllerEngine.py:191 Initializing NNG hub: tcp://0.0.0.0:5555 inlisten mode
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:255 Registered direct player OSC handler for /0367f391-ebf4-48b2-9f26-000000000001/*
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:199 OSC command handlers registered for WebSocket receiving
+INFO     cuemsengine.comms.AsyncCommsThread:threading.py:1045 Running AsyncComms-ControllerCommunications
+INFO     cuemsengine.comms.AsyncCommsThread:events.py:84 Starting asyncio communications in AsyncComms-ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:AsyncCommsThread.py:195 Starting all tasks in ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:events.py:84 Editor listener started
+INFO     cuemsutils.tools.HubServices:events.py:84 NNG listen tasks started: sender, receiver, ping
+INFO     cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:220 Starting WebSocket OSC listener on ws://0.0.0.0:9190
+INFO     cuemsutils.tools.HubServices:events.py:84 LISTENER mode: waiting for node connections before sending...
+INFO     cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:220 WebSocket OSC listener started on ws://0.0.0.0:9190
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 NNG communications thread ready after 0.1s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting NodeEngine with PID 1201564
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Controller IP: 127.0.0.1
+INFO     cuemsengine.tools.MtcListener:MtcListener.py:39 MIDI port "Midi Through Port-0" matched as "Midi Through:Midi Through Port-0 14:0"
+INFO     cuemsengine.tools.MtcListener:MtcListener.py:39 MtcListener will use MIDI port: Midi Through:Midi Through Port-0 14:0
+INFO     cuemsengine.core.BaseEngine:NodeEngine.py:80 NodeEngine@0367f391-ebf4-48b2-9f26-000000000001 initialized, waitingstart signal
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:103 Setting player endpoints generator to <bound method NodeEngine.add_player_endpoints of <cuemsengine.NodeEngine.NodeEngine object at 0x7fd92abb7850>>
+INFO     cuemsengine.cues.CueHandler:NodeEngine.py:113 Starting communications for Node 0367f391-ebf4-48b2-9f26-000000000001
+INFO     cuemsengine.cues.CueHandler:NodeEngine.py:113 NNG Hub address: tcp://127.0.0.1:5555
+INFO     cuemsengine.comms.AsyncCommsThread:NodeCommunications.py:36 Initializing AsyncCommsThread: NodeCommunications
+INFO     cuemsengine.comms.AsyncCommsThread:threading.py:1045 Running AsyncComms-NodeCommunications
+INFO     cuemsengine.comms.AsyncCommsThread:events.py:84 Starting asyncio communications in AsyncComms-NodeCommunications
+INFO     cuemsengine.comms.NodeCommunications:AsyncCommsThread.py:195 Starting all tasks in NodeCommunications
+INFO     cuemsengine.comms.NodeCommunications:AsyncCommsThread.py:195 NNG hub mode: Mode.DIALER
+INFO     cuemsengine.comms.NodeCommunications:AsyncCommsThread.py:195 NNG hub address: tcp://127.0.0.1:5555
+INFO     cuemsengine.comms.NodeCommunications:AsyncCommsThread.py:195 Command callbacks registered: [<OperationType.COMMAND: 'command'>]
+INFO     cuemsutils.tools.HubServices:events.py:84 NNG dial tasks started: sender, receiver, ping
+INFO     cuemsutils.tools.HubServices:nng.py:1328 Connection established (key=0), total=1
+INFO     cuemsutils.tools.HubServices:nng.py:1328 Connection established (key=0), total=1
+INFO     cuemsutils.tools.HubServices:events.py:84 Node connected, sender ready (1 connections)
+INFO     cuemsengine.cues.CueHandler:NodeEngine.py:113 NNG communications thread ready after 0.1s
+INFO     cuemsengine.NodeEngine:NodeEngine.py:417 Setting video players with: {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:579 Setting video client for node 0367f391-ebf4-48b2-9f26-000000000001
+INFO     cuemsengine.osc.OssiaClient:OssiaClient.py:34 Using remote device: <class 'pyossia.ossia_python.OSCDevice'>
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:624 Checking & starting video outputs for {'0': {'name': '0', 'mapped_to': 'salida_001', 'x': 0, 'y': 0, 'width': 1920, 'height': 1080, 'canvas_region': {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}}, '1': {'name': '1', 'mapped_to': 'salida_002', 'x': 0, 'y': 0, 'width': 1920, 'height': 1080, 'canvas_region': {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}}} 
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:624 Canvas: 1920x1080 (bbox=1920x1080)
+INFO     cuemsengine.players.VideoPlayer:PlayerHandler.py:679 VideoOutput salida_001: region (0,01920x1080)
+INFO     cuemsengine.players.VideoPlayer:PlayerHandler.py:679 VideoOutput salida_002: region (0,01920x1080)
+INFO     cuemsengine.NodeEngine:NodeEngine.py:418 Initializing audio mixer with 2 outputs
+ERROR    cuemsengine.NodeEngine:NodeEngine.py:418 Error starting audio mixer: 'audiomixer'. Audio on this node will be SILENT.
+ERROR    cuemsengine.NodeEngine:NodeEngine.py:418 'audiomixer'
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:532 Setting audio output generator to /usr/bin/cuems-audioplayer -w -1
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:647 Starting DMX player for node 0367f391-ebf4-48b2-9f26-000000000001
+INFO     cuemsengine.players.DmxPlayer:log.py:204 Starting dmxplayer with: ['/usr/bin/cuems-dmxplayer', '--output-latency-ms', '35', '--port', '9776', '--uuid', '0367f391-ebf4-48b2-9f26-000000000001']
+INFO     cuemsengine.players.DmxPlayer:log.py:204 DMX player started: 0367f391-ebf4-48b2-9f26-000000000001_dmxplayer on port 9776
+INFO     cuemsengine.NodeEngine:NodeEngine.py:419 DMX player started successfully for node 0367f391-ebf4-48b2-9f26-000000000001
+WARNING  cuemsengine.NodeEngine:NodeEngine.py:427 gradient_node_name: no role_id/hostname in network_map for node 0367f391-ebf4-48b2-9f26-000000000001; falling back to node_uuid — gradient-motiond's node_name filter will likely reject fades
+INFO     cuemsengine.players.PlayerHandler:NodeEngine.py:428 GradientClient: bound to 127.0.0.1:7100 node_name=0367f391-ebf4-48b2-9f26-000000000001
+INFO     cuemsengine.NodeEngine:NodeEngine.py:120 NNG command callback registered for NodeEngine
+INFO     cuemsengine.tools.MtcListener:threading.py:1045 Listening to MIDI messages on > Midi Through:Midi Through Port-0 14:0 <
+INFO     cuemsutils.tools.SignalEngine:log.py:204 NodeEngine started
+INFO     cuemsengine.ControllerEngine:NodesHub.py:170 Player operation received: NodeOperation by 0367f391-ebf4-48b2-9f26-000000000001: add on player dmxplayer_0367f391-ebf4-48b2-9f26-000000000001 (without data)
+INFO     cuemsengine.ControllerEngine:test_project_go.py:63 Loading project complex_test
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1206 Midi TimeCode stopped.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:418 Project complex_test settings not found. Keeping default settings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project mappings not found. Adopting default mappings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project complex_test mappings loaded
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/projects/complex_test/script.xml
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: failed validating <Element 'duration' at 0x7fd92ac22660> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+ERROR    cuemsengine.ControllerEngine:test_project_go.py:63 Error loading project script: failed validating <Element 'duration' at 0x7fd92ac22660> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+ERROR    cuemsutils.tools.CommunicatorServices:CommunicatorServices.py:148 Error occurred while sending response: 'NoneType' object has no attribute 'asend'
+ERROR    cuemsengine.ControllerEngine:ControllerEngine.py:1267 <class 'AttributeError'> sending error to editor: 'NoneType' object has no attribute 'close'
+---------------------------- Captured log teardown -----------------------------
+INFO     cuemsutils.tools.HubServices:nng.py:1328 Connection closed (key=0), duration=11.64s, remaining=0
+WARNING  cuemsutils.tools.HubServices:nng.py:1328 DIALER has no active connections - waiting for reconnection
+INFO     cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:220 WebSocket OSC listener stopped
+INFO     cuemsengine.comms.AsyncCommsThread:conftest.py:309 AsyncComms-ControllerCommunications stopped and joined
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:415 Midi TimeCode stopped.
+INFO     cuemsengine.comms.AsyncCommsThread:ControllerEngine.py:417 AsyncComms-ControllerCommunications stopped and joined
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:120 Show lock file /tmp/pytest-of-adria/pytest-94/cuems-run779/cuems.show.lock does not exist
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:120 Show lock file /tmp/pytest-of-adria/pytest-94/cuems-run779/cuems.show.lock does not exist
+INFO     cuemsengine.NodeEngine:NodeEngine.py:294 Videocomposer reset successfully
+INFO     cuemsengine.NodeEngine:NodeEngine.py:290 Video devs stopped
+INFO     cuemsengine.comms.AsyncCommsThread:NodeEngine.py:283 AsyncComms-NodeCommunications stopped and joined
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:120 Show lock file /tmp/pytest-of-adria/pytest-94/cuems-run779/cuems.show.lock does not exist
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:120 Show lock file /tmp/pytest-of-adria/pytest-94/cuems-run779/cuems.show.lock does not exist
+DEBUG    cuemsengine.players.PlayerHandler:fixtures.py:300 Performing complete PlayerHandler reset
+DEBUG    cuemsengine.players.PlayerHandler:PlayerHandler.py:130 Resetting video layers
+DEBUG    cuemsengine.players.PlayerHandler:fixtures.py:424 Performing complete PlayerHandler reset
+DEBUG    cuemsengine.players.PlayerHandler:PlayerHandler.py:130 Resetting video layers
+___________________ test_complex_project_load_on_controller ____________________
+
+mock_config_path = None, mock_avahi_resolve = None
+mock_library_path = PosixPath('/disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files')
+mock_controller_ip = None
+engine_cleanup = <function engine_cleanup.<locals>.register_engine at 0x7fd92b093740>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fd92ab1ca90>
+
+    def test_complex_project_load_on_controller(
+        mock_config_path,
+        mock_avahi_resolve,
+        mock_library_path,
+        mock_controller_ip,
+        engine_cleanup,
+        caplog,
+    ):
+        """Test the project load on the controller"""
+        # ARRANGE
+        controller_engine = ControllerEngine(with_mtc=False)
+        controller_engine.set_oscquery_server(port=free_tcp_port())
+        # ACT
+        controller_engine.load_project("complex_test")
+    
+        # ASSERT
+>       assert controller_engine.script is not None
+E       assert None is not None
+E        +  where None = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92ab1e210>.script
+
+tests/test_project_load.py:105: AssertionError
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:110 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting ControllerEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92abb56d0>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92abb56d0>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Controller IP: 127.0.0.1
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@0367f391-ebf4-48b2-9f26-000000000001 initialized, waitingstart signal
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 All used ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 Random ports: [9280, 9701, 9450, 9981, 9967, 9616, 9588, 9943, 9899, 9269]
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:274 Config ports: [5555, 7000, 7100, 9092, 9190, 9191, 9776, 9984]
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 All used ports: []
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 Random ports: [9280, 9701, 9450, 9981, 9967, 9616, 9588, 9943, 9899, 9269]
+DEBUG    cuemsengine.tools.PortHandler:PortHandler.py:284 Config ports: [5555, 7000, 7100, 9092, 9190, 9191, 9776, 9984]
+DEBUG    cuemsengine.osc.helpers:OssiaServer.py:49 creating oscquery server on 127.0.0.1:49911 ->9786
+INFO     cuemsengine.ControllerEngine:test_project_load.py:102 Loading project complex_test
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property armed to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property nextcue to 
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1206 Midi TimeCode requires with_mtc to be True.
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92abb56d0>, 'complex_test') and kwargs: {}
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:418 Project complex_test settings not found. Keeping default settings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project mappings not found. Adopting default mappings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project complex_test mappings loaded
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92ab1e210>, 'complex_test') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/projects/complex_test/script.xml
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: failed validating <Element 'duration' at 0x7fd92aa96480> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+ERROR    cuemsengine.ControllerEngine:test_project_load.py:102 Error loading project script: failed validating <Element 'duration' at 0x7fd92aa96480> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+DEBUG    cuemsengine.ControllerEngine:ControllerEngine.py:1267 Sending error to editor: {'type': 'error', 'value': 'Project script error: failed validating <Element \'duration\' at 0x7fd92aa96480> with Xsd11Group(model=\'choice\', occurs=[0, 1]):\n\nReason: character data between child elements not allowed\n\nSchema component:\n\n  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">\n    \n    <xs:choice minOccurs="0">\n      <xs:element name="CTimecode" type="cms:TimecodeType" />\n    </xs:choice>\n  </xs:complexType>\n\nInstance type: <class \'xml.etree.ElementTree.Element\'>\n\nInstance:\n\n  <duration>00:00:00.000</duration>\n\nPath: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration\n', 'action_uuid': '', 'action': 'project_ready'}
+ERROR    cuemsengine.ControllerEngine:ControllerEngine.py:1267 <class 'AttributeError'> sending error to editor: 'ControllerEngine' object has no attribute 'communications_thread'
+_____________________ test_two_projects_load_on_controller _____________________
+
+mock_config_path = None, mock_avahi_resolve = None
+mock_library_path = PosixPath('/disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files')
+mock_controller_ip = None
+engine_cleanup = <function engine_cleanup.<locals>.register_engine at 0x7fd92b1d3ce0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fd92a89ab90>
+
+    def test_two_projects_load_on_controller(
+        mock_config_path,
+        mock_avahi_resolve,
+        mock_library_path,
+        mock_controller_ip,
+        engine_cleanup,
+        caplog,
+    ):
+        """Test the project load on the controller"""
+        # ARRANGE
+        caplog.set_level(INFO)
+        controller_engine = ControllerEngine(with_mtc=False)
+        controller_engine.set_comms()
+        # ACT
+        controller_engine.load_project("empty_test")
+        sleep(1)
+        controller_engine.load_project("complex_test")
+        sleep(1)
+    
+        # ASSERT
+>       assert controller_engine.script is not None
+E       assert None is not None
+E        +  where None = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92a89a550>.script
+
+tests/test_project_load.py:169: AssertionError
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:110 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting ControllerEngine with PID 1201564
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a89b8d0>, '/etc/cuems/') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a89b8d0>,) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/network_map.xml
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('project_mappings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/project_mappings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/default_mappings.xml
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node uuid is: 0367f391-ebf4-48b2-9f26-000000000001
+DEBUG    cuemsutils.tools.ConfigManager:ConfigManager.py:294 Node hardware outputs are: {'audio_inputs': ['system:capture_1', 'system:capture_2'], 'audio_outputs': ['system:playback_1', 'system:playback_2'], 'video_inputs': [], 'video_outputs': ['salida_001', 'salida_002'], 'dmx_inputs': [], 'dmx_outputs': []}
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Node conf: {'uuid': '0367f391-ebf4-48b2-9f26-000000000001', 'mac': '2cf05d21cca3', 'osc_dest_host': 'localhost', 'oscquery_ws_port': 9190, 'oscquery_osc_port': 9191, 'websocket_port': 9092, 'load_timeout': 15000, 'nodeconf_timeout': 5000, 'discovery_timeout': 15000, 'mtc_port': 'Midi Through Port-0', 'osc_in_port_base': 7000, 'nng_hub_port': 5555, 'gradient_osc_port': 7100, 'videoplayer': {'path': '/usr/bin/videocomposer', 'args': None, 'outputs': 2, 'output_latency_ms': 'auto'}, 'audioplayer': {'path': '/usr/bin/cuems-audioplayer', 'args': '-w -1', 'output_latency_ms': 'auto'}, 'dmxplayer': {'path': '/usr/bin/cuems-dmxplayer', 'args': None, 'output_latency_ms': 35}}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:74 Controller IP: 127.0.0.1
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@0367f391-ebf4-48b2-9f26-000000000001 initialized, waitingstart signal
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92a89a550>,) and kwargs: {}
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 Setting up Communicators
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 NNG Hub address: tcp://0.0.0.0:5555
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 WebSocket OSC port: 9190
+INFO     cuemsengine.comms.AsyncCommsThread:ControllerCommunications.py:58 Initializing AsyncCommsThread: ControllerCommunications
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:191 Initializing ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:ControllerEngine.py:191 Initializing NNG hub: tcp://0.0.0.0:5555 inlisten mode
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:137 Registered OSC handler: /engine/command/go
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:230 Registered command handler for /engine/command/go (forward=False)
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:137 Registered OSC handler: /engine/command/load
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:233 Registered command handler for /engine/command/load (forward=False)
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:137 Registered OSC handler: /engine/command/stop
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:236 Registered command handler for /engine/command/stop (forward=False)
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:137 Registered OSC handler: /engine/command/setnextcue
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:239 Registered command handler for /engine/command/setnextcue (forward=False)
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:137 Registered OSC handler: /engine/command/cue_enabled
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:244 Registered command handler for /engine/command/cue_enabled (forward=False)
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:153 Registered wildcard OSC handler: /engine/players/*
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:251 Registered OSC handler for /engine/players/*
+DEBUG    cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:153 Registered wildcard OSC handler: /0367f391-ebf4-48b2-9f26-000000000001/*
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:296 Registered OSC handler for /0367f391-ebf4-48b2-9f26-000000000001/*
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:255 Registered direct player OSC handler for /0367f391-ebf4-48b2-9f26-000000000001/*
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:199 OSC command handlers registered for WebSocket receiving
+INFO     cuemsengine.comms.AsyncCommsThread:threading.py:1045 Running AsyncComms-ControllerCommunications
+INFO     cuemsengine.comms.AsyncCommsThread:events.py:84 Starting asyncio communications in AsyncComms-ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:AsyncCommsThread.py:195 Starting all tasks in ControllerCommunications
+INFO     cuemsengine.comms.ControllerCommunications:events.py:84 Editor listener started
+DEBUG    cuemsengine.comms.ControllerCommunications:events.py:84 Waiting for editor message
+DEBUG    cuemsutils.tools.HubServices:HubServices.py:194 Pipe callbacks registered for connection on tcp://0.0.0.0:5555
+DEBUG    cuemsutils.tools.HubServices:HubServices.py:105 LISTENER started on tcp://0.0.0.0:5555, tcp_keepalive=True
+INFO     cuemsutils.tools.HubServices:events.py:84 NNG listen tasks started: sender, receiver, ping
+INFO     cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:220 Starting WebSocket OSC listener on ws://0.0.0.0:9190
+INFO     cuemsutils.tools.HubServices:events.py:84 LISTENER mode: waiting for node connections before sending...
+INFO     websockets.server:server.py:338 server listening on 0.0.0.0:9190
+INFO     cuemsengine.osc.WebSocketOscHandler:ControllerCommunications.py:220 WebSocket OSC listener started on ws://0.0.0.0:9190
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:154 NNG communications thread ready after 0.1s
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+INFO     cuemsengine.ControllerEngine:test_project_load.py:163 Loading project empty_test
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property armed to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property nextcue to 
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1206 Midi TimeCode requires with_mtc to be True.
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a89b8d0>, 'empty_test') and kwargs: {}
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:418 Project empty_test settings not found. Keeping default settings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project mappings not found. Adopting default mappings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project empty_test mappings loaded
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92a89a550>, 'empty_test') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/projects/empty_test/script.xml
+DEBUG    cuemsengine.core.BaseEngine:log.py:205 Finished with result: None
+INFO     cuemsengine.ControllerEngine:test_project_load.py:163 Script from empty_test loaded
+INFO     cuemsengine.ControllerEngine:test_project_load.py:163 Cue status initialised for 0 cues
+INFO     cuemsengine.ControllerEngine:test_project_load.py:163 Cue enabled status initialised for 0 cues
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to empty_test
+DEBUG    cuemsengine.ControllerEngine:ControllerEngine.py:1585 Cluster probe: no remote nodes to ping
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1303 node 0367f391-ebf4-48b2-9f26-000000000001 online but unused by this project
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1303 Cluster state resolved: required=['0367f391-ebf4-48b2-9f26-000000000001'] alive=['0367f391-ebf4-48b2-9f26-000000000001'] adopted=[0367f391-ebf4-48b2-9f26-000000000001] project=[]
+DEBUG    cuemsengine.ControllerEngine:ControllerEngine.py:406 Forwarded command to nodes: load = 'empty_test'
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1309 Midi TimeCode requires with_mtc to be True.
+DEBUG    cuemsengine.comms.NodesHub:events.py:84 Queued update operation for command load
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:1318 /tmp/cuems.show.lock file written...
+INFO     cuemsengine.ControllerEngine:test_project_load.py:163 Project empty_test loaded
+INFO     cuemsengine.ControllerEngine:test_project_load.py:165 Loading project complex_test
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property armed to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property nextcue to 
+INFO     cuemsengine.ControllerEngine:ControllerEngine.py:1206 Midi TimeCode requires with_mtc to be True.
+DEBUG    cuemsutils.tools.ConfigManager:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigManager:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7fd92a89b8d0>, 'complex_test') and kwargs: {}
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:418 Project complex_test settings not found. Keeping default settings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project mappings not found. Adopting default mappings.
+INFO     cuemsutils.tools.ConfigManager:ConfigManager.py:419 Project complex_test mappings loaded
+DEBUG    cuemsutils.tools.ConfigManager:log.py:205 Finished with result: None
+DEBUG    cuemsengine.core.BaseEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.core.BaseEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7fd92a89a550>, 'complex_test') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('script',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/script.xsd
+INFO     cuemsutils.xml.xml_reader_writer:classic.py:199 Reading script document /disk/Projects/StageLab/cuems-engine/tests/../dev/test_xml_files/projects/complex_test/script.xml
+ERROR    cuemsengine.core.BaseEngine:log.py:210 Error occurred: failed validating <Element 'duration' at 0x7fd92a922f20> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+ERROR    cuemsengine.ControllerEngine:test_project_load.py:165 Error loading project script: failed validating <Element 'duration' at 0x7fd92a922f20> with Xsd11Group(model='choice', occurs=[0, 1]):
+
+Reason: character data between child elements not allowed
+
+Schema component:
+
+  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">
+    
+    <xs:choice minOccurs="0">
+      <xs:element name="CTimecode" type="cms:TimecodeType" />
+    </xs:choice>
+  </xs:complexType>
+
+Instance type: <class 'xml.etree.ElementTree.Element'>
+
+Instance:
+
+  <duration>00:00:00.000</duration>
+
+Path: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration
+
+DEBUG    cuemsengine.ControllerEngine:ControllerEngine.py:1267 Sending error to editor: {'type': 'error', 'value': 'Project script error: failed validating <Element \'duration\' at 0x7fd92a922f20> with Xsd11Group(model=\'choice\', occurs=[0, 1]):\n\nReason: character data between child elements not allowed\n\nSchema component:\n\n  <xs:complexType xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CTimecodeType">\n    \n    <xs:choice minOccurs="0">\n      <xs:element name="CTimecode" type="cms:TimecodeType" />\n    </xs:choice>\n  </xs:complexType>\n\nInstance type: <class \'xml.etree.ElementTree.Element\'>\n\nInstance:\n\n  <duration>00:00:00.000</duration>\n\nPath: /{https://stagelab.coop/cuems/}CuemsProject/CuemsScript/CueList/contents/CueList[1]/contents/AudioCue/Media/duration\n', 'action_uuid': '', 'action': 'project_ready'}
+ERROR    cuemsutils.tools.CommunicatorServices:CommunicatorServices.py:148 Error occurred while sending response: 'NoneType' object has no attribute 'asend'
+DEBUG    cuemsengine.comms.ControllerCommunications:ControllerEngine.py:757 The coroutine raised an exception: AttributeError("'NoneType' object has no attribute 'close'")
+ERROR    cuemsengine.ControllerEngine:ControllerEngine.py:1267 <class 'AttributeError'> sending error to editor: 'NoneType' object has no attribute 'close'
+=============================== warnings summary ===============================
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[settings.xml-settings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[network_map.xml-network_map]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[project_settings.xml-project_settings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[project_mappings.xml-project_mappings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[default_mappings.xml-project_mappings]
+  /disk/Projects/StageLab/cuems-engine/tests/test_default_mappings_valid.py:28: DeprecationWarning: Call to deprecated class XmlReaderWriter. (use cuemsutils.cues.CuemsScript.CuemsScript instead; removed in v0.1.1)
+    reader = XmlReaderWriter(
+
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[settings.xml-settings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[network_map.xml-network_map]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[project_settings.xml-project_settings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[project_mappings.xml-project_mappings]
+tests/test_default_mappings_valid.py::test_engine_xml_fixture_validates_against_schema[default_mappings.xml-project_mappings]
+  /disk/Projects/StageLab/cuems-engine/tests/test_default_mappings_valid.py:32: DeprecationWarning: Call to deprecated method validate. (use cuemsutils.cues.CuemsScript.CuemsScript.validate instead; removed in v0.1.1)
+    reader.validate()
+
+tests/test_project_go.py::test_project_go_from_controller
+tests/test_project_load.py::test_two_projects_load_on_controller
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/ControllerEngine.py:287: DeprecationWarning: Call to deprecated function (or staticmethod) get_nodes_by_adoption. (use cuemsutils.xml.settings.NetworkMap.partition_by_adoption instead; removed in v0.1.1; note: the replacement returns node objects, not {'node': ...}-wrapped dicts, and does not mutate its argument)
+    adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
+
+tests/test_project_go.py::test_project_go_from_controller
+tests/test_project_load.py::test_project_load_on_controller
+tests/test_project_load.py::test_complex_project_load_on_controller
+tests/test_project_load.py::test_project_load_on_node
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_project_deploy_failure_aborts_load_preserves_previous
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_load_project_delegates_to_shared_helpers
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_stop_playback_delegates_to_shared_helpers
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:509: DeprecationWarning: Call to deprecated class XmlReaderWriter. (use cuemsutils.cues.CuemsScript.CuemsScript instead; removed in v0.1.1)
+    reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
+
+tests/test_project_go.py::test_project_go_from_controller
+tests/test_project_load.py::test_project_load_on_controller
+tests/test_project_load.py::test_complex_project_load_on_controller
+tests/test_project_load.py::test_project_load_on_node
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_project_deploy_failure_aborts_load_preserves_previous
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_load_project_delegates_to_shared_helpers
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_stop_playback_delegates_to_shared_helpers
+  /disk/Projects/StageLab/cuems-engine/src/cuemsengine/core/BaseEngine.py:510: DeprecationWarning: Call to deprecated method read_to_objects. (use cuemsutils.cues.CuemsScript.CuemsScript.load instead; removed in v0.1.1)
+    self.script = reader.read_to_objects()
+
+tests/test_project_go.py::test_project_go_from_controller
+tests/test_project_load.py::test_project_load_on_controller
+tests/test_project_load.py::test_complex_project_load_on_controller
+tests/test_project_load.py::test_project_load_on_node
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_project_load.py::test_project_deploy_failure_aborts_load_preserves_previous
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_load_project_delegates_to_shared_helpers
+tests/test_project_load.py::TestSharedTeardownRearmHelpers::test_stop_playback_delegates_to_shared_helpers
+  /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/xml_reader_writer.py:128: DeprecationWarning: Call to deprecated method read. (use cuemsutils.cues.CuemsScript.CuemsScript.to_wire instead; removed in v0.1.1; note: the returned dict no longer contains the schemaLocation key)
+    return Mapper(self.schema_name).decode_document(self.read())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_core_baseengine_status.py::test_engine_initial_status - Syst...
+ERROR tests/test_core_baseengine_status.py::test_set_status - AssertionError
+ERROR tests/test_core_baseengine_status.py::test_get_status - AssertionError
+ERROR tests/test_core_baseengine_status.py::test_recieved_test - AssertionError
+ERROR tests/test_core_baseengine_status.py::test_get_status_none - AssertionE...
+ERROR tests/test_core_baseengine_status.py::test_set_status_none - AssertionE...
+ERROR tests/test_core_baseengine_status.py::test_all_statuses - AssertionError
+FAILED tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_with_all_components
+FAILED tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_without_mtc
+FAILED tests/test_core_baseengine.py::TestBaseEngine::test_stop_all - SystemE...
+FAILED tests/test_core_baseengine.py::test_get_status_endpoints - SystemExit: -1
+FAILED tests/test_core_baseengine_status.py::test_engine_can_start_and_stop
+FAILED tests/test_project_go.py::test_project_go_from_controller - TimeoutErr...
+FAILED tests/test_project_load.py::test_complex_project_load_on_controller - ...
+FAILED tests/test_project_load.py::test_two_projects_load_on_controller - ass...
+======= 8 failed, 851 passed, 39 warnings, 7 errors in 99.18s (0:01:39) ========

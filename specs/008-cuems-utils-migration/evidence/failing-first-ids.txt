@@ -1,0 +1,25 @@
+# T009 failing-first — id helpers, before src/cuemsengine/tools/ids.py exists
+# 2026-09-29T14:32:25+02:00  engine 9c1fdc7  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_ids.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+______________________ ERROR collecting tests/test_ids.py ______________________
+ImportError while importing test module '/disk/Projects/StageLab/cuems-engine/tests/test_ids.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/home/adria/.pyenv/versions/3.11.9/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_ids.py:14: in <module>
+    from cuemsengine.tools.ids import as_id, id_str
+E   ModuleNotFoundError: No module named 'cuemsengine.tools.ids'
+=========================== short test summary info ============================
+ERROR tests/test_ids.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.36s ===============================

@@ -1,0 +1,41 @@
+# T007 failing-first — public-surface guard, unchanged src/
+# 2026-09-29T14:29:38+02:00  engine 9c1fdc7  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_public_surface.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 4 items
+
+tests/test_public_surface.py .F.F                                        [100%]
+
+=================================== FAILURES ===================================
+______________________ test_no_internal_cuemsutils_import ______________________
+
+    def test_no_internal_cuemsutils_import():
+        offenders = _offenders(INTERNAL_IMPORT, _modules())
+>       assert not offenders, (
+            "imports from cuemsutils.xml / cuemsutils.config (internal): "
+            f"{offenders}. Use CuemsScript.load and ConfigManager instead."
+        )
+E       AssertionError: imports from cuemsutils.xml / cuemsutils.config (internal): ['cuemsengine/ControllerEngine.py:15', 'cuemsengine/core/BaseEngine.py:17']. Use CuemsScript.load and ConfigManager instead.
+E       assert not ['cuemsengine/ControllerEngine.py:15', 'cuemsengine/core/BaseEngine.py:17']
+
+tests/test_public_surface.py:78: AssertionError
+_________________ test_no_reference_to_removed_node_machinery __________________
+
+    def test_no_reference_to_removed_node_machinery():
+        offenders = []
+        for symbol in BANNED_SYMBOLS:
+            pattern = re.compile(re.escape(symbol))
+            offenders += [f"{where} {symbol}" for where in _offenders(pattern, _modules())]
+>       assert not offenders, f"references to removed node machinery: {offenders}"
+E       AssertionError: references to removed node machinery: ['cuemsengine/ControllerEngine.py:272 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:287 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:938 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:1447 get_nodes_by_adoption', 'cuemsengine/core/BaseEngine.py:433 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:940 _adopted_uuids_from_network_map', 'cuemsengine/ControllerEngine.py:1444 _adopted_uuids_from_network_map', 'cuemsengine/ControllerEngine.py:1515 _adopted_uuids_from_network_map', 'cuemsengine/ControllerEngine.py:1579 _adopted_uuids_from_network_map', 'cuemsengine/ControllerEngine.py:1764 _adopted_uuids_from_network_map', 'cuemsengine/core/BaseEngine.py:417 find_hosts', 'cuemsengine/core/BaseEngine.py:33 CONTROLLER_NETWORK_FLAG', 'cuemsengine/core/BaseEngine.py:410 CONTROLLER_NETWORK_FLAG', 'cuemsengine/core/BaseEngine.py:440 CONTROLLER_NETWORK_FLAG', 'cuemsengine/core/BaseEngine.py:33 NodeType.', 'cuemsengine/core/BaseEngine.py:354 NodeType.', 'cuemsengine/core/BaseEngine.py:402 NodeType.']
+E       assert not ['cuemsengine/ControllerEngine.py:272 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:287 get_nodes_by_adopti...e/BaseEngine.py:433 get_nodes_by_adoption', 'cuemsengine/ControllerEngine.py:940 _adopted_uuids_from_network_map', ...]
+
+tests/test_public_surface.py:98: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_public_surface.py::test_no_internal_cuemsutils_import - Ass...
+FAILED tests/test_public_surface.py::test_no_reference_to_removed_node_machinery
+========================= 2 failed, 2 passed in 0.84s ==========================

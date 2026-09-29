@@ -1,0 +1,29 @@
+# T008 — FR-028: test uuid literals are uuid4
+# 2026-09-29T14:32:03+02:00  engine 9c1fdc7  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+
+Scan: every 36-char uuid-shaped token (quoted or not) in tests/ and dev/test_xml_files/ (trash/ and binaries skipped).
+Result on 2026-09-29: 40 distinct, 15 non-uuid4 — 6 in tests/, 9 in unloaded fixtures.
+
+## Replaced (old -> new; prefix kept, version/variant nibbles set)
+aaaaaaaa-099f-11f0-a075-00e04c01b7e3 -> aaaaaaaa-099f-41f0-a075-00e04c01b7e3   (tests/test_controller_gating.py )
+bbbbbbbb-6c5c-5016-aac6-a039c6a7d18f -> bbbbbbbb-6c5c-4016-aac6-a039c6a7d18f   (tests/test_controller_gating.py )
+cccccccc-9999-9999-9999-999999999999 -> cccccccc-9999-4999-9999-999999999999   (tests/test_controller_gating.py )
+aaaaaaaa-1111-2222-3333-444444444444 -> aaaaaaaa-1111-4222-8333-444444444444   (tests/test_node_comms_mixer.py tests/test_node_comms_ping.py )
+aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee -> aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee   (tests/test_controller_commands.py )
+bbbbbbbb-1111-2222-3333-444444444444 -> bbbbbbbb-1111-4222-8333-444444444444   (tests/test_node_comms_ping.py )
+
+## Out of scope — not loaded by any test or by src/ (grep of each file name over tests/ and src/: 0 hits)
+dev/test_xml_files/test_jsons.txt
+dev/test_xml_files/sample_audiocue.xml
+dev/test_xml_files/sample_cue.xml
+dev/test_xml_files/sample_cuelist.xml
+dev/test_xml_files/sample_dmxcue.xml
+dev/test_xml_files/sample_videocue.xml
+dev/test_xml_files/script_one_cue_in_a_cuelist.xml
+dev/test_xml_files/script_one_simple_cue.xml
+Non-uuid4 literals left in them: 00000000-0000-0000-0000-000000000000, 12345678-aaaa-aaaa-aaaa-123456789012, and seven uuid1 values in test_jsons.txt.
+
+## Suite after replacement (tests/test_public_surface.py excluded — T007's own red)
+$ poetry run pytest -q -p no:cacheprovider --ignore=tests/test_public_surface.py
+======= 8 failed, 851 passed, 39 warnings, 7 errors in 99.09s (0:01:39) ========
+comm -3 of failing ids vs step2-settings-converted.txt: empty (identical failing set)
