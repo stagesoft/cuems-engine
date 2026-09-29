@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 #!/usr/bin/env python3
 
@@ -416,3 +417,51 @@ class TestMtcListener24hRollover:
         for ft in range(4, 8):
             l._MtcListener__handle_message(qf(ft, qf_vals[ft]))
         assert l._MtcListener__quarter_frames == qf_vals
+
+
+class TestMtcListenerLiveness:
+    """869f79ecc: ControllerEngine.go_script ships its own MTC reading as
+    every node's GO anchor. On test2, 2026-09-25, a controller whose
+    listener never opened a port (python-rtmidi missing from a bad build)
+    read 0.0 at GO, and every node accepted that as the anchor -- the whole
+    cluster fired 4.48s late. is_receiving() lets the controller tell a live
+    reading from a dead one before it ships it."""
+
+    @pytest.fixture
+    def listener(self):
+        with (
+            patch("mido.get_input_names", return_value=["MTC Port 1"]),
+            patch("mido.open_input"),
+        ):
+            yield MtcListener(port="MTC Port 1")
+
+    @staticmethod
+    def _qf(frame_type=0, value=0):
+        m = MagicMock()
+        m.type = "quarter_frame"
+        m.frame_type = frame_type
+        m.frame_value = value
+        return m
+
+    def test_not_receiving_before_any_message(self, listener):
+        assert listener.is_receiving() is False
+
+    def test_receiving_right_after_any_quarter_frame(self, listener):
+        # frame_type 4 does not advance main_tc -- it must still count
+        listener._MtcListener__handle_message(self._qf(frame_type=4))
+        assert listener.is_receiving() is True
+
+    def test_full_frame_sysex_counts_too(self, listener):
+        m = MagicMock()
+        m.type = "sysex"
+        m.data = (127, 127, 1, 1, 0, 0, 1, 0)
+        listener._MtcListener__handle_message(m)
+        assert listener.is_receiving() is True
+
+    def test_goes_stale_after_max_age(self, listener):
+        with patch("cuemsengine.tools.MtcListener.monotonic", return_value=100.0):
+            listener._MtcListener__handle_message(self._qf())
+        with patch("cuemsengine.tools.MtcListener.monotonic", return_value=100.4):
+            assert listener.is_receiving(max_age_s=0.5) is True
+        with patch("cuemsengine.tools.MtcListener.monotonic", return_value=100.6):
+            assert listener.is_receiving(max_age_s=0.5) is False

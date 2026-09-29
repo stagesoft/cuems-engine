@@ -66,12 +66,27 @@ class NodeEngine(BaseEngine):
 
     """
 
+    # GO anchor tolerance (Badajoz 2026-09-25 fix): how far the controller's
+    # shipped GO instant may disagree with this node's own MTC before
+    # _resolve_go_anchor distrusts it and falls back to a live local read.
+    # Positive: the controller may be slightly AHEAD of this node's own read
+    # (its go_script runs microseconds before this node computes the lag).
+    # Negative: this node may lag the controller by up to 10s before the
+    # value is treated as stale/misrouted rather than "node was just slow".
+    _GO_ANCHOR_FUTURE_TOL_MS = 200.0
+    _GO_ANCHOR_MAX_LAG_MS = 10_000.0
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
         self._loading_lock = threading.Lock()
         self._loading = False
         self._project_generation: int = 0
+        # Bumped on EVERY set_next_cue call, even reselecting the same cue.
+        # Lets a PreArm background thread's should_continue notice a later
+        # selection landed and stop advancing its own (now stale) walk —
+        # 869f79ecc.
+        self._selection_epoch: int = 0
         # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
         if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
             self.nng_hub_address = (
@@ -933,6 +948,12 @@ class NodeEngine(BaseEngine):
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
             CUE_HANDLER.disarm(cue)
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
+            return
+        # Armed and still enabled: if it belongs to a chain that is running
+        # right now, put it back at its own slot. Checked here rather than
+        # before the arm because arm() can take ~15 s — long enough for the
+        # slot to pass, which rejoin_chain re-tests against live MTC.
+        self._rejoin_running_chain(cue)
 
     def _action_result_sink(self, outcome: dict):
         """
@@ -1055,6 +1076,17 @@ class NodeEngine(BaseEngine):
     def set_next_cue(self, value):
         """
         Handle setnextcue command from the UI — override next_cue_pointer.
+
+        Arms the SELECTED cue synchronously (a GO right after this needs it
+        immediately), but extends the arm-ahead window in a background
+        PreArm:<id> thread. Badajoz, 2026-09-25 (869f79ecc): that extension
+        used to run here, synchronously, inside run_command's
+        _command_lock. A cold-boot pre-arm took ~500ms; a GO sent right
+        after (UI, power-bridge /gocue) waited for the lock, executed
+        late, and read its own MTC ~520ms later than the other nodes —
+        anchoring its whole Auto-continue chain late. See go_script /
+        _resolve_go_anchor for the anchor half of that fix; this is the
+        half that stops the delay from happening in the first place.
         """
         if not self.script:
             Logger.warning("No script loaded, cannot set next cue.")
@@ -1062,14 +1094,61 @@ class NodeEngine(BaseEngine):
         cue = self.script.find(value)
         if cue:
             self.next_cue_pointer = cue
+            self._selection_epoch += 1
+            selection_epoch = self._selection_epoch
+            project_gen = self._project_generation
+            script = self.script
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
-            CUE_HANDLER._arm_ahead(cue)  # extend window from selected cue
+            threading.Thread(
+                target=self._prearm_lookahead,
+                args=(cue, project_gen, selection_epoch, script),
+                daemon=True,
+                name=f"PreArm:{cue.id}",
+            ).start()
             self._broadcast_nextcue()
             Logger.info(f"Next cue overridden by UI: {value}")
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
+
+    def _prearm_lookahead(self, cue, project_gen, selection_epoch, script):
+        """Background half of set_next_cue — see its docstring.
+
+        should_continue re-checks BOTH the project generation (a STOP/load
+        bumps it, same guard as _arm_with_enabled_guard) and this
+        selection's own epoch (a later set_next_cue call bumps it even if
+        it reselects the same cue), so a stale walk stops advancing as
+        soon as either happens, without waiting for it to finish.
+
+        Audio is pre-armed here like any other local cue. It was excluded
+        at first (skip_arming_types=(AudioCue,)) for fear of a slow JACK
+        port wait racing a GO for the same cue; measured instead
+        (2026-09-25): the port appears 0-0.6 s after the engine starts
+        waiting (Badajoz, taller, test2 node01), and a fully concurrent
+        spawn of 16 audioplayers takes ~4.2 s -- while this walk adds at
+        most one extra concurrent arm. Excluding audio cost ~320 ms of late
+        audio on every run where audio follows local cues. If that ever has
+        to be revisited, skip_arming_types is still the lever.
+        """
+
+        def should_continue():
+            return (
+                self._project_generation == project_gen
+                and self._selection_epoch == selection_epoch
+            )
+
+        newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
+        if newly_armed and self.script is not script:
+            # A different project loaded while this walk was running — its
+            # own reset already handled everything else; undo exactly what
+            # THIS walk armed, not a concurrent call's.
+            for armed_cue in newly_armed:
+                CUE_HANDLER.disarm(armed_cue)
+            Logger.info(
+                f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
+                "— project changed underneath the walk"
+            )
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
@@ -1103,6 +1182,17 @@ class NodeEngine(BaseEngine):
         self._notify_cue_enabled(cue_id, enabled)
         Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
 
+    def _rejoin_running_chain(self, cue) -> None:
+        """Put a cue enabled mid-pass back into its chain, if there is a
+        timeline to anchor it on (an engine built without MTC has none)."""
+        mtc = getattr(self, "mtc_listener", None)
+        if mtc is None:
+            return
+        try:
+            CUE_HANDLER.rejoin_chain(cue, mtc)
+        except Exception as exc:
+            Logger.error(f"Could not rejoin cue {cue.id} to its chain: {exc}")
+
     def _apply_cue_enabled_side_effects(self, cue, enabled: bool):
         """React to a cue's enabled-flag change: async re-arm on enable,
         disarm (if idle) on disable.
@@ -1115,6 +1205,13 @@ class NodeEngine(BaseEngine):
         # containers): react on its first enabled child instead, mirroring
         # run_cueList/initial_cuelist_process's first-enabled-child walk.
         if isinstance(cue, CueList):
+            # The chain walk stamps the object it walked past, which for a
+            # chain-link CueList is the container itself — so its rejoin is
+            # decided here, before handing the arm/disarm work to the child.
+            if enabled:
+                self._rejoin_running_chain(cue)
+            else:
+                CUE_HANDLER.cancel_parked(cue)
             child = next(
                 (c for c in getattr(cue, "contents", None) or [] if c.enabled), None
             )
@@ -1123,12 +1220,27 @@ class NodeEngine(BaseEngine):
             return
 
         if not enabled:
+            # Auto continue dispatches the whole chain at the trigger, so a
+            # cue disabled mid-pass may already be dispatched and parked on
+            # its anchor — nothing downstream re-reads `enabled`, so it would
+            # otherwise still fire. Cancel it (a cue already playing is left
+            # alone) and remember its slot in case it is enabled again.
+            was_parked = CUE_HANDLER.cancel_parked(cue)
             # Disarm only if armed and NOT currently playing (never cut live
             # playback). _playing is the lifecycle flag set by go() and
             # cleared by disarm()/stop_all_cues() — unlike _go_generation,
             # it goes False again when playback ends, so a played-then-
             # re-armed cue can still be disarmed on disable.
-            if CUE_HANDLER.find_armed_cue(cue) and not getattr(cue, "_playing", False):
+            # A cue we just cancelled mid-pass is deliberately NOT disarmed:
+            # cancel_parked cleared _playing, which would make the guard below
+            # fire, and re-enabling it before its slot has to put it straight
+            # back — a disarm would cost an audio cue a ~15s re-arm and it
+            # would miss the slot it was supposed to keep.
+            if (
+                not was_parked
+                and CUE_HANDLER.find_armed_cue(cue)
+                and not getattr(cue, "_playing", False)
+            ):
                 CUE_HANDLER.disarm(cue)
                 Logger.info(f"Disarmed disabled cue {cue.id}")
             # Recalculate next_cue_pointer if the disabled cue was next
@@ -1149,6 +1261,12 @@ class NodeEngine(BaseEngine):
                     name=f"ReArm:{cue.id}",
                 ).start()
                 Logger.info(f"Re-arming enabled cue {cue.id} (async)")
+            else:
+                # Already armed: nothing to wait for, so try to put it back
+                # into a running chain right away. (When an arm IS needed the
+                # rejoin runs at the end of it — the slot must be re-checked
+                # against the time the arm actually took.)
+                self._rejoin_running_chain(cue)
 
     #########################
     # Script logic
@@ -1186,6 +1304,40 @@ class NodeEngine(BaseEngine):
 
         Logger.info(f"Script {self.script.name} loaded and ready to be played")
 
+    def _resolve_go_anchor(self, value):
+        """Resolve the GO_mtc anchor for this GO.
+
+        Prefers the controller's own GO instant, shipped as
+        value == {"go_mtc_ms": <float>} by ControllerEngine.go_script.
+        Falls back to this node's own live MTC read (today's behaviour,
+        and the only thing an older controller ever sends) whenever
+        `value` doesn't carry a usable one, or the controller's instant
+        looks implausible against this node's own MTC.
+
+        Badajoz, 2026-09-25: a node whose setnextcue pre-arm held
+        _command_lock for ~500ms read its own MTC ~520ms later than the
+        other two boxes at GO time and anchored its whole Auto-continue
+        chain late. MTC-following cannot correct a wrong anchor -- only
+        agreeing on one does.
+        """
+        local = self.mtc_listener.main_tc.milliseconds_exact
+        if isinstance(value, dict):
+            ctrl = value.get("go_mtc_ms")
+            if isinstance(ctrl, (int, float)) and not isinstance(ctrl, bool):
+                lag = local - ctrl
+                if -self._GO_ANCHOR_FUTURE_TOL_MS <= lag <= self._GO_ANCHOR_MAX_LAG_MS:
+                    Logger.info(
+                        f"GO anchored at controller instant {ctrl:.1f}ms "
+                        f"(node lag {lag:.1f}ms)"
+                    )
+                    return ctrl
+                Logger.warning(
+                    f"GO anchor from controller ({ctrl:.1f}ms) implausible "
+                    f"against local MTC ({local:.1f}ms, lag {lag:.1f}ms) -- "
+                    "using local MTC instead"
+                )
+        return local
+
     def go_script(self, value):
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
@@ -1215,25 +1367,28 @@ class NodeEngine(BaseEngine):
                 return
 
         # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
-        # timeline accumulator) AND as the drift baseline (go_offset). Every node
-        # captures its own GO_mtc off the shared MTC timeline, so the anchors it
-        # derives agree with every other node's.
-        GO_mtc = self.mtc_listener.main_tc.milliseconds_exact
+        # timeline accumulator) AND as the drift baseline (go_offset).
+        # Resolved from the controller's own instant when it shipped one
+        # (see _resolve_go_anchor) -- every node then derives its anchors
+        # from the SAME value, rather than each reading its own MTC
+        # whenever it happens to execute this command.
+        GO_mtc = self._resolve_go_anchor(value)
 
         # Walk the post_go='go' chain to the first LOCAL + ENABLED cue,
-        # accumulating the timeline offset Σ of the cues we skip. A non-local
-        # ENABLED cue advances the timeline (Σ += chain_advance = prewait+postwait,
-        # body EXCLUDED — Auto continue overlaps) so our first local cue lands at
-        # its true slot; a disabled cue is transparent (Σ += 0). A cue
-        # that breaks the chain (post_go != 'go') is a hand-off point — stop and
-        # wait for the next GO. This lets every node fire its own local cues from
-        # the same GO press, each at its correct MTC slot, and (Σ += 0 on
-        # disabled) fixes the old local-disabled early-return that made a
-        # post-disabled cue never play.
+        # accumulating the timeline offset Σ of the cues we skip. Under Auto
+        # continue that advance is zero — every cue in the chain arrives at
+        # the trigger — so the walk is really about finding where THIS node's
+        # own segment starts. A cue that breaks the chain (post_go != 'go') is
+        # a hand-off point: stop and wait for the next GO. Disabled cues are
+        # transparent, but they are remembered: enabling one before its slot
+        # rejoins this same pass.
         original = cue_to_go
         sigma_ms = 0.0
         walked = 0
+        skipped_disabled = []
         while cue_to_go is not None and not (cue_to_go._local and cue_to_go.enabled):
+            if not cue_to_go.enabled:
+                skipped_disabled.append(cue_to_go)
             if cue_to_go.post_go != "go":
                 cue_to_go = None
                 break
@@ -1253,6 +1408,11 @@ class NodeEngine(BaseEngine):
             # this node wedges on a cue it can never play and every subsequent GO
             # re-evaluates it. (next_cue_pointer is a global sequence property —
             # depends only on post_go/enabled, never on locality.)
+            # Nothing dispatches here, so nothing would mint a pass — stamp the
+            # disabled cues anyway, or enabling one mid-show could never put it
+            # back into this GO's chain.
+            if skipped_disabled:
+                CUE_HANDLER.stamp_pass(skipped_disabled, GO_mtc)
             self.next_cue_pointer = original.get_next_cue()
             self._broadcast_nextcue()
             Logger.info(
@@ -1281,7 +1441,21 @@ class NodeEngine(BaseEngine):
 
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
-        main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener, GO_mtc + sigma_ms)
+        main_thread = CUE_HANDLER.go(
+            cue_to_go,
+            self.mtc_listener,
+            GO_mtc + sigma_ms,
+            stamp_skipped=skipped_disabled,
+        )
+        if main_thread is None:
+            # Either a STOP landed while go() was re-arming this cue (the
+            # chain-epoch barrier then refuses the dispatch — that is the F4
+            # fix working), or the cue was disabled/became non-local between
+            # the walk and the dispatch. Say so instead of dereferencing None.
+            Logger.error(f"Cue {cue_to_go.id} was not started; aborting GO")
+            self.set_status("running", "no")
+            self.ongoing_cue = None
+            return
         Logger.info(f"Cue {cue_to_go.id} started on main thread: {main_thread.name}")
 
         # Update next cue pointer

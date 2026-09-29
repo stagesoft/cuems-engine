@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Unit tests for ActionCue execution through ActionHandler.
 
@@ -1168,3 +1169,294 @@ class TestArmAhead:
         handler._arm_ahead(start)
 
         assert getattr(cue, "loaded", False)
+
+
+class TestArmAheadNodeLocality:
+    """_arm_ahead must treat a cue belonging to ANOTHER node as transparent,
+    the way CueLists and disabled cues already are (Badajoz 2026-09-25,
+    869f79ecc). arm() was already a no-op for a non-local cue -- but the old
+    code counted it toward the 2-cue budget anyway, so a node whose own
+    cues come LATER in a mixed-node Auto-continue chain never got any
+    lookahead at all and fell back to arming at go() time on every run.
+    """
+
+    def _cue(self, duration_ms, local):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        cue = ActionCue()
+        cue.enabled = True
+        cue._local = local
+        cue.action_type = "enable"
+        cue._action_target_object = _make_target()
+        cue._target_object = None
+        cue.post_go = "go_at_end"
+        if duration_ms > 0:
+            cue.prewait = CTimecode(start_seconds=duration_ms / 1000.0)
+        return cue
+
+    def _chain(self, specs):
+        """specs: list of (duration_ms, local) tuples, wired in order."""
+        cues = [self._cue(d, loc) for d, loc in specs]
+        for i in range(len(cues) - 1):
+            cues[i]._target_object = cues[i + 1]
+        return cues
+
+    def test_skips_non_local_cues_without_arming_or_counting_them(self, handler, mtc):
+        # A-A-A-B-B-B, all real duration, walked from this node's (B's) own
+        # start cue.
+        cues = self._chain(
+            [
+                (2000, False),
+                (2000, False),
+                (2000, False),
+                (2000, True),
+                (2000, True),
+                (2000, True),
+            ]
+        )
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        newly_armed = handler._arm_ahead(start)
+
+        for c in cues[:3]:
+            assert not getattr(c, "loaded", False), "non-local cue must not arm"
+        assert getattr(cues[3], "loaded", False)
+        assert getattr(cues[4], "loaded", False)
+        assert not getattr(cues[5], "loaded", False)  # 2-cue budget already met
+        # identity checks, not `in`/`==` -- ActionCue()'s default id (and
+        # therefore its equality) collides across instances in this library
+        assert len(newly_armed) == 2
+        assert any(c is cues[3] for c in newly_armed)
+        assert any(c is cues[4] for c in newly_armed)
+        assert not any(c is cues[0] for c in newly_armed)
+
+    def test_leading_non_local_run_does_not_trip_the_depth_limit(
+        self, handler, mtc, caplog
+    ):
+        # 16 non-local cues ahead of 2 real local ones. The OLD code would
+        # exhaust _MAX_LOOKAHEAD_DEPTH (15) on the non-local run alone and
+        # never reach this node's own cues; skipping them must not consume
+        # that budget.
+        specs = [(0, False)] * 16 + [(2000, True), (2000, True)]
+        cues = self._chain(specs)
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        with caplog.at_level(logging.WARNING):
+            newly_armed = handler._arm_ahead(start)
+
+        assert getattr(cues[16], "loaded", False)
+        assert getattr(cues[17], "loaded", False)
+        assert not any("depth limit" in r.getMessage() for r in caplog.records)
+
+    def test_all_non_local_cycle_terminates(self, handler, mtc, caplog):
+        # A pathological all-remote chain must not spin forever. Bounded by
+        # the same 1024-step cycle guard _next_local_fire already uses.
+        cues = self._chain([(0, False)] * 1100)
+        start = _make_action_target()
+        start._target_object = cues[0]
+
+        with caplog.at_level(logging.ERROR):
+            newly_armed = handler._arm_ahead(start)
+
+        assert newly_armed == []
+        assert any("safety limit" in r.getMessage() for r in caplog.records)
+
+
+class TestArmAheadCooperativeAndTypeSkip:
+    """The two remaining pieces NodeEngine.set_next_cue's PreArm background
+    thread needs from _arm_ahead (869f79ecc, Fix 2): a way to abort mid-walk
+    when the selection or project changes underneath it, and a way to leave
+    a slow cue TYPE to whichever single-threaded path already arms it today
+    -- AudioMixer.connect_player_to_outputs' JACK-port wait has no measured
+    upper bound cheap enough to risk two threads racing to arm the same
+    slow audio cue (2026-07 isil multilingual: underestimating that exact
+    wait once already cost a real show)."""
+
+    def _action(self, duration_ms, local=True):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        cue = ActionCue()
+        cue.enabled = True
+        cue._local = local
+        cue.action_type = "enable"
+        cue._action_target_object = _make_target()
+        cue._target_object = None
+        cue.post_go = "go_at_end"
+        if duration_ms > 0:
+            cue.prewait = CTimecode(start_seconds=duration_ms / 1000.0)
+        return cue
+
+    def _audio(self, local=True):
+        cue = AudioCue()
+        cue.enabled = True
+        cue._local = local
+        cue._target_object = None
+        return cue
+
+    def test_should_continue_false_stops_before_the_first_cue(self, handler, mtc):
+        a = self._action(2000)
+        b = self._action(2000)
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        newly_armed = handler._arm_ahead(start, should_continue=lambda: False)
+
+        assert not getattr(a, "loaded", False)
+        assert not getattr(b, "loaded", False)
+        assert newly_armed == []
+
+    def test_should_continue_false_after_first_stops_before_second(self, handler, mtc):
+        a = self._action(2000)
+        b = self._action(2000)
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        # State-based, not call-counting: should_continue is also consulted
+        # inside arm() and its recursion now, so the number of calls is an
+        # implementation detail. Flip to False once `a` has been armed.
+        state = {"ok": True}
+
+        def fake_arm_cue(cue):
+            if cue is a:
+                state["ok"] = False
+
+        with patch("cuemsengine.cues.CueHandler.arm_cue", side_effect=fake_arm_cue):
+            newly_armed = handler._arm_ahead(start, should_continue=lambda: state["ok"])
+
+        assert getattr(a, "loaded", False)
+        assert not getattr(b, "loaded", False)
+        assert len(newly_armed) == 1
+        assert newly_armed[0] is a
+
+    def test_skip_arming_types_leaves_that_cue_unarmed(self, handler, mtc):
+        audio = self._audio()
+        b = self._action(2000)
+        c = self._action(2000)
+        audio._target_object = b
+        b._target_object = c
+        start = _make_action_target()
+        start._target_object = audio
+
+        newly_armed = handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        assert not getattr(audio, "loaded", False)
+        assert getattr(b, "loaded", False)
+        assert getattr(c, "loaded", False)
+        assert len(newly_armed) == 2
+
+    def test_skip_arming_types_still_consumes_the_depth_limit(
+        self, handler, mtc, caplog
+    ):
+        # Unlike the non-local skip (which must NOT spend the depth budget
+        # -- another node's segment can be longer than it), a same-node
+        # type-skip DOES: it's still this node's own chain, just a type
+        # this call chooses not to arm.
+        audios = [self._audio() for _ in range(16)]
+        for i in range(len(audios) - 1):
+            audios[i]._target_object = audios[i + 1]
+        tail_a = self._action(2000)
+        tail_b = self._action(2000)
+        audios[-1]._target_object = tail_a
+        tail_a._target_object = tail_b
+        start = _make_action_target()
+        start._target_object = audios[0]
+
+        with caplog.at_level(logging.WARNING):
+            newly_armed = handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        assert not getattr(tail_a, "loaded", False)
+        assert not getattr(tail_b, "loaded", False)
+        assert newly_armed == []
+        assert any("depth limit" in r.getMessage() for r in caplog.records)
+
+
+class TestArmAheadTypeSkipReachesRecursion:
+    """test2, 2026-09-25 (869f79ecc): skip_arming_types filtered _arm_ahead's
+    own arm() calls, but arm() recurses into a post_go=="go" target (and an
+    ActionCue play target) by itself -- so the PreArm thread still armed an
+    AudioCue that followed a local video in the chain. The carve-out must
+    reach that recursion too, or it does not keep audio off the PreArm
+    thread at all."""
+
+    def test_recursion_does_not_arm_a_skipped_type(self, handler, mtc):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        a = ActionCue()
+        a.enabled = True
+        a._local = True
+        a.action_type = "enable"
+        a._action_target_object = _make_target()
+        a.post_go = "go"  # arm(a) recurses into its target
+        a.prewait = CTimecode(start_seconds=2.0)
+        b = AudioCue()
+        b.enabled = True
+        b._local = True
+        b._target_object = None
+        a._target_object = b
+        start = _make_action_target()
+        start._target_object = a
+
+        with patch("cuemsengine.cues.CueHandler.arm_cue") as mock_arm_cue:
+            handler._arm_ahead(start, skip_arming_types=(AudioCue,))
+
+        armed = [c.args[0] for c in mock_arm_cue.call_args_list]
+        assert any(x is a for x in armed)
+        assert not any(x is b for x in armed), "recursion armed a skipped type"
+        assert not getattr(b, "loaded", False)
+
+
+class TestPreArmWalkThroughRecursion:
+    """test2, 2026-09-25, race B (869f79ecc): a project reload landed while
+    the PreArm walk's arm(A) was in flight; arm()'s own post_go=="go"
+    recursion then armed B from the OLD project after the reset -- past the
+    should_continue checkpoint, and outside newly_armed, so the cleanup that
+    disarms "what this walk armed" could not see it. It only failed to leak
+    because B's outputs no longer resolved under the new mappings."""
+
+    def _chain(self):
+        from cuemsutils.tools.CTimecode import CTimecode
+
+        def action():
+            c = ActionCue()
+            c.enabled = True
+            c._local = True
+            c.action_type = "enable"
+            c._action_target_object = _make_target()
+            c.post_go = "go"
+            c.prewait = CTimecode(start_seconds=2.0)
+            return c
+
+        a, b = action(), action()
+        a._target_object = b
+        b._target_object = None
+        start = _make_action_target()
+        start._target_object = a
+        return start, a, b
+
+    def test_recursion_armed_cues_are_reported_as_newly_armed(self, handler, mtc):
+        start, a, b = self._chain()
+        with patch("cuemsengine.cues.CueHandler.arm_cue"):
+            newly = handler._arm_ahead(start, should_continue=lambda: True)
+        assert any(x is a for x in newly)
+        assert any(x is b for x in newly), "recursion-armed cue not reported"
+
+    def test_recursion_stops_at_the_checkpoint(self, handler, mtc):
+        start, a, b = self._chain()
+        state = {"ok": True}
+
+        def fake_arm_cue(cue):
+            if cue is a:
+                state["ok"] = False  # a reload lands while arm(a) is in flight
+
+        with patch(
+            "cuemsengine.cues.CueHandler.arm_cue", side_effect=fake_arm_cue
+        ) as m:
+            newly = handler._arm_ahead(start, should_continue=lambda: state["ok"])
+        armed = [c.args[0] for c in m.call_args_list]
+        assert any(x is a for x in armed)
+        assert not any(x is b for x in armed), "recursion ran past the checkpoint"
+        assert any(x is a for x in newly)

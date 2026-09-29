@@ -1335,10 +1335,36 @@ class ControllerEngine(BaseEngine):
 
         self.set_status("running", "yes")
 
+        # Ship OUR GO instant to every node instead of letting each one read
+        # its own MTC whenever it happens to execute the command. Badajoz,
+        # 2026-09-25: a node whose setnextcue pre-arm held _command_lock for
+        # ~500ms read its own MTC ~520ms later than the other two boxes and
+        # anchored its whole Auto-continue chain late -- MTC-following cannot
+        # correct a wrong anchor, only agreeing on one avoids it. Nodes older
+        # than this fix never read `value` on "go" (NodeEngine.go_script), so
+        # this is safe to send unconditionally; a node running this fix falls
+        # back to its own local MTC (NodeEngine._resolve_go_anchor) whenever
+        # this dict is absent, malformed, or the lag looks wrong.
+        # Only a LIVE reading may become the cluster's anchor: a listener that
+        # never opened its port reads 0.0 forever, and shipping that made
+        # every node fire 4.48s late on test2 (2026-09-25). Without a live
+        # reading, send the GO without an anchor -- each node falls back to
+        # its own MTC, exactly as before this fix.
+        go_value = value
+        if self.mtc_listener is not None:
+            if self.mtc_listener.is_receiving():
+                go_value = {"go_mtc_ms": self.mtc_listener.main_tc.milliseconds_exact}
+            else:
+                Logger.error(
+                    "GO: controller MTC listener is not receiving -- sending GO "
+                    "without a shared anchor; each node will anchor on its own "
+                    "MTC. Check the controller's MIDI/MTC setup."
+                )
+
         # Forward GO to NodeEngine via NNG (needed when called from editor;
         # when called from WebSocket the comms layer also forwards, but the
         # NodeEngine's run_command is idempotent so a double-call is harmless)
-        self._forward_command_to_nodes("/engine/command/go", value)
+        self._forward_command_to_nodes("/engine/command/go", go_value)
 
         Logger.info("GO command processed")
         return True
