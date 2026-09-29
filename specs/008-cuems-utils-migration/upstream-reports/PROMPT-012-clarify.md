@@ -10,6 +10,16 @@ FR-029, M19–M21), 2026-09-29. **Measured against** `cuems-utils` `feat/xml-ref
 and `cuems-engine` `feat/xml-refactor` @ `27b27f5` (+ docs). Re-measure before relying on a line
 number — both trees move.
 
+**Status — verified before hand-over (2026-09-29, T058)**: cuems-utils now carries a draft
+`specs/012-uuid4-convergence/spec.md` (untracked at `2a88a7c`) that has **already absorbed this
+prompt** (its M-j): our Q1 is its Q2 (still open for its clarify pass); our Q2, Q3, Q4 are its
+assumptions 6, 5, 7 (FR-030 published coercion rule, FR-029 sortable identity, FR-031 sentinel
+published), "to be confirmed rather than reopened"; the migration-guide statement is its FR-035 and
+the `cluster_warning` detector its FR-036. What remains for the hand-over is only its Q2's answer.
+Engine coordinates cited below moved with rc7: the gradient `node_name` fallback is now
+`NodeEngine.py:444` (and goes through `id_str`), the hardcoded `"script.xml"` is `BaseEngine.py:492`;
+the engine's egress conversion is `id_str`, not bare `str()`.
+
 **Use**: paste the block below into a fresh agent session in `../cuems-utils`, at the point where
 feature 012 (uuid4 convergence) runs `/speckit.specify` or `/speckit.clarify`. It adds four
 questions to 012's clarification pass and one statement to its migration guide. It does **not**

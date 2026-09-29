@@ -1,0 +1,105 @@
+# T061 — final suite (SC-006)
+# 2026-09-29T16:59:05+02:00  engine 56dbf9b+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+
+# Before / after (SC-006)
+#
+# |                     | Baseline (baseline-suite-postmerge.txt, 9c1fdc7) | Final (this run) |
+# |---------------------|--------------------------------------------------|------------------|
+# | collected           | 866                                              | 939              |
+# | passed              | 831                                              | 939              |
+# | failed              | 28                                               | 0                |
+# | errors              | 7                                                | 0                |
+# | warnings            | 10 (incl. the library reader's deprecation)       | 0                |
+#
+# Test ids (pytest --collect-only, 9c1fdc7 vs now): 866 - 15 + 88 = 939.
+#   15 ids gone, every one in test-retirements.md:
+#     retired  (6): TestFadeInAction x4, TestFadeOutAction x1, test_stop_propagation::test_fade_out_cancels_descendants
+#     rewritten(1): test_controller_gating::test_adopted_uuids_reader_handles_python_bool -> FR-009 route test
+#     replaced (5): test_default_mappings_valid::test_engine_xml_fixture_validates_against_schema[*] -> per-loader tests
+#     renamed  (2): controller_ip test_returns_master_ip / test_no_master_raises -> *_controller_*
+#     re-param (1): test_project_load::test_complex_project_load_on_controller -> [script-v1], [script-v2]
+#   88 ids added: test_ids 17, test_media_duration 26, test_identity_sweep 7, test_cluster_identity 6,
+#     test_cluster_status_contract 5, test_public_surface 4, test_read_script 3, test_version_single_source 2,
+#     test_default_mappings_valid 7, test_action_cue 4, test_core_baseengine_controller_ip 4,
+#     test_project_load 2, test_controller_gating 1.
+#   Also retired without an id change: test_core_baseengine's node_host assertion line (M21).
+#   The 35 baseline failures: all green — attributed in step1-attribution.md to the node_type fixture,
+#   the v2 settings fixture and the version-1 script load, each fixed by FR-002/US1/US2.
+#
+# Note: an intermediate state of this branch (commits fc068f1..before the polish commit) had
+# accidentally dropped 11 unrelated tests from tests/test_controller_gating.py (TestArmWatchdog,
+# TestMixerStatusCallback, two state-clearing tests) while rewriting T015's test; found by this
+# id diff and restored in the polish commit. They pass.
+$ poetry run pytest -q -rw -p no:cacheprovider
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+testpaths: tests
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 939 items
+
+tests/test_action_cue.py ............................................... [  5%]
+............................                                             [  7%]
+tests/test_arm_resilience.py .....                                       [  8%]
+tests/test_arm_video_cue_opacity_deploy.py ...                           [  8%]
+tests/test_chain_anchoring.py .........................                  [ 11%]
+tests/test_chain_epoch.py .....................                          [ 13%]
+tests/test_cluster_identity.py ......                                    [ 14%]
+tests/test_cluster_status_contract.py .....                              [ 14%]
+tests/test_cluster_warning.py .......................                    [ 17%]
+tests/test_comms_nodehub.py ..........                                   [ 18%]
+tests/test_config_ports.py .............                                 [ 19%]
+tests/test_controller_commands.py ...................................    [ 23%]
+tests/test_controller_gating.py ...........................              [ 26%]
+tests/test_core_baseengine.py .....                                      [ 26%]
+tests/test_core_baseengine_controller_ip.py .................            [ 28%]
+tests/test_core_baseengine_status.py ...................                 [ 30%]
+tests/test_cpu_usage.py ......                                           [ 31%]
+tests/test_cuems_deploy.py ............................................. [ 36%]
+...................                                                      [ 38%]
+tests/test_cuems_deploy_integration.py .                                 [ 38%]
+tests/test_cues_dmx.py .....................                             [ 40%]
+tests/test_default_mappings_valid.py .......                             [ 41%]
+tests/test_dispatch_reorder.py ..................                        [ 43%]
+tests/test_display_conf.py ................                              [ 44%]
+tests/test_effective_duration.py ......                                  [ 45%]
+tests/test_enable_rejoin.py .................                            [ 47%]
+tests/test_fade_action_handler.py ...................................... [ 51%]
+....................                                                     [ 53%]
+tests/test_gradient_client.py ................                           [ 55%]
+tests/test_identity_sweep.py .......                                     [ 56%]
+tests/test_ids.py .................                                      [ 57%]
+tests/test_loop_fade_cue.py ......                                       [ 58%]
+tests/test_loop_rebase.py .....                                          [ 58%]
+tests/test_media_duration.py ..........................                  [ 61%]
+tests/test_mtclistener.py ...........................                    [ 64%]
+tests/test_node_comms_mixer.py ..                                        [ 64%]
+tests/test_node_comms_ping.py ....                                       [ 65%]
+tests/test_node_engine.py ...................................            [ 69%]
+tests/test_node_engine_gradient.py ..........                            [ 70%]
+tests/test_nodeengine_helpers.py ...........                             [ 71%]
+tests/test_nodelist_modify.py .........................                  [ 73%]
+tests/test_ossia.py ...................                                  [ 75%]
+tests/test_ossia_bundle_support.py ....                                  [ 76%]
+tests/test_player_handler_gradient.py .....                              [ 76%]
+tests/test_player_handler_mixer_orphan.py ....                           [ 77%]
+tests/test_players_audiomixer.py ....................................... [ 81%]
+.............                                                            [ 82%]
+tests/test_players_dmxplayer.py ................                         [ 84%]
+tests/test_players_jackconnectionmanager.py ............................ [ 87%]
+..                                                                       [ 87%]
+tests/test_port_handler.py ...................                           [ 89%]
+tests/test_project_go.py .                                               [ 89%]
+tests/test_project_load.py .....................                         [ 92%]
+tests/test_public_surface.py ....                                        [ 92%]
+tests/test_pyossia_osc.py ............                                   [ 93%]
+tests/test_pythonosc.py .....                                            [ 94%]
+tests/test_read_script.py ...                                            [ 94%]
+tests/test_reveal_mechanism.py ...................                       [ 96%]
+tests/test_stop_propagation.py ................                          [ 98%]
+tests/test_version.py ...                                                [ 98%]
+tests/test_version_single_source.py ..                                   [ 98%]
+tests/test_video_routing.py ..........                                   [100%]
+
+======================== 939 passed in 92.68s (0:01:32) ========================
