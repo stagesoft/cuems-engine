@@ -190,7 +190,7 @@ implementation task starts, with the run captured under `evidence/`.
 - [X] T061 Full suite into `$E/final-suite.txt`; before/after table against `baseline-suite-postmerge.txt` (28 F / 7 E / 831 P) with every retirement accounted for (SC-006)
 - [X] T062 Run quickstart.md §2 (SC-001…SC-012); record pass/fail per criterion in `$E/exit-criteria.md`; SC-001's exempt set by name, reason "not shipped" (FR-021): `dev/network_map.xml`, `dev/CuemsEngine_old.py`; SC-002 = the `failing-first-*` files for sites 1–4 (T011, T018)
 - [X] T063 Complete `$E/not-performed.md`: SC-007 on a rig (load + GO of v1 and v2), US3/US4 packaging and cluster items, the re-lock — each performed with output or listed with its reason (SC-009)
-- [ ] T064 Run `/speckit.analyze` and resolve any CRITICAL finding. `xml-refactor-merge-candidate` is then cut — signed, annotated — on the T043+T044 commit, once every consumer flow has landed (D27); cutting it is out of this list
+- [X] T064 Run `/speckit.analyze` and resolve any CRITICAL finding. `xml-refactor-merge-candidate` is then cut — signed, annotated — on the T043+T044 commit, once every consumer flow has landed (D27); cutting it is out of this list
 
 ---
 
