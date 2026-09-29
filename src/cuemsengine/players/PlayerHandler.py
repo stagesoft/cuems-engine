@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
 import shutil
@@ -745,6 +746,15 @@ class PlayerHandler:
         """Track a layer as active in the videocomposer."""
         with self._lock:
             self._loaded_layer_ids.add(layer_id)
+
+    def is_layer_registered(self, layer_id: str) -> bool:
+        """True while the layer is tracked as loaded in the videocomposer.
+
+        reset_videocomposer / reset_video_layers / quit_videocomposer clear
+        the tracking together with the layers' endpoints.
+        """
+        with self._lock:
+            return layer_id in self._loaded_layer_ids
 
     def deregister_layer(self, layer_id: str) -> None:
         """Remove a layer from active tracking."""

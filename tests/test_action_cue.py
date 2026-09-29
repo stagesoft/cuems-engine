@@ -205,7 +205,7 @@ class TestStopAction:
         assert result["action_type"] == "stop"
         assert target._stop_requested is True
         assert target._go_generation == 2
-        mock_disarm.assert_called_once_with(target)
+        mock_disarm.assert_called_once_with(target, reason="stop_action")
 
     def test_stop_disarm_raises_returns_failed(self, handler, mtc):
         target = _make_target(_stop_requested=False)

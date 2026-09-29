@@ -488,7 +488,7 @@ class CueHandler:
 
         # Disarm disabled-but-loaded cues outside lock (disarm acquires lock)
         if needs_disarm:
-            self.disarm(cue)
+            self.disarm(cue, reason="disabled")
             return False
 
         if not do_arm:
@@ -551,8 +551,14 @@ class CueHandler:
 
         return True
 
-    def disarm(self, cue: Cue) -> bool:
-        """Disarms a cue by removing it from the armed_cues list."""
+    def disarm(self, cue: Cue, reason: str = "unspecified") -> bool:
+        """Disarms a cue by removing it from the armed_cues list.
+
+        ``reason`` names why (``cue_end``, ``stop_action``, ``disabled``,
+        ``project_changed``, ``load``, ``ready_script``, ``shutdown``) and is
+        logged: a disarm, the automatic one at cue end included, must never
+        be silent.
+        """
         cue._playing = False
         if hasattr(cue, "loaded") and cue.loaded:
             self.remove_armed_cue(cue)
@@ -569,18 +575,45 @@ class CueHandler:
             if isinstance(cue, VideoCue):
                 layer_ids = getattr(cue, "_layer_ids", [])
                 client = getattr(cue, "_osc", None)
+                unloaded, skipped = [], []
                 if client and layer_ids:
                     for layer_id in layer_ids:
+                        # /videocomposer/reset (STOP, load, ready_script) runs
+                        # before disarm_all on purpose (instant blackout) and
+                        # already removed this layer and its endpoints.
+                        if not PLAYER_HANDLER.is_layer_registered(layer_id):
+                            skipped.append(layer_id)
+                            continue
+                        # Hiding is cosmetic (unload removes the layer anyway):
+                        # a failure here must not skip the unload.
                         try:
                             client.set_value(
                                 f"/videocomposer/layer/{layer_id}/visible", 0
                             )
+                        except Exception as e:
+                            Logger.warning(
+                                f"Could not hide video layer {layer_id} (visible 0)"
+                                f" of cue {cue.id} ({reason}): {e}"
+                            )
+                        try:
                             client.set_value("/videocomposer/layer/unload", layer_id)
                             client.remove_layer_endpoints(layer_id)
                             PLAYER_HANDLER.deregister_layer(layer_id)
+                            unloaded.append(layer_id)
                         except Exception as e:
-                            Logger.debug(f"Error disarming video layer {layer_id}: {e}")
+                            # Left registered: the next /reset still cleans it up.
+                            Logger.warning(
+                                f"Could not unload video layer {layer_id} of cue"
+                                f" {cue.id} ({reason}): {e}"
+                            )
                 cue._layer_ids = []
+                Logger.debug(
+                    f"Disarmed video cue {cue.id} ({reason}): unloaded {unloaded};"
+                    f" skipped {skipped} (no longer tracked: removed by reset or quit)"
+                    + ("" if client else "; no video client")
+                )
+            else:
+                Logger.debug(f"Disarmed {type(cue).__name__} {cue.id} ({reason})")
 
             PLAYER_HANDLER.remove_cue_player(cue)
             return True
@@ -780,13 +813,13 @@ class CueHandler:
             is not None
         )
 
-    def disarm_all(self) -> None:
+    def disarm_all(self, reason: str = "unspecified") -> None:
         """Disarms all cues."""
         self.stop_all_cues()
         with self._lock:
             cues_snapshot = list(self._armed_cues)
         for cue in cues_snapshot:
-            self.disarm(cue)
+            self.disarm(cue, reason=reason)
         self.reset_armed_cues()
 
     def get_next_cue(self, cue: Cue) -> Cue | None:
@@ -1451,7 +1484,7 @@ class CueHandler:
                 "target already started by a newer GO"
             )
 
-        self.disarm(cue)
+        self.disarm(cue, reason="cue_end")
 
         if cue.post_go == "go_at_end" and go_at_end_thread:
             self.wait_for_cue(go_at_end_thread)
