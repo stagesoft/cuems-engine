@@ -1,0 +1,50 @@
+# T012 failing-first — FR-005a: >1 controller must log one ERROR listing every controller
+# 2026-09-29T14:34:35+02:00  engine 984ac2b + T020 step 1 (NodeIndex lookup, no >1 handling)  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Against unchanged src/ the case is masked by 'No controller node found' (see failing-first-site1-2-controller-lookup.txt).
+# With the lookup fixed but no >1 handling: first ip returned (green), zero ERROR records (red) — the value FR-005a targets.
+$ poetry run pytest -q -p no:cacheprovider tests/test_core_baseengine_controller_ip.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 17 items
+
+tests/test_core_baseengine_controller_ip.py .............F...            [100%]
+
+=================================== FAILURES ===================================
+________ TestMultipleControllers.test_one_error_lists_every_controller _________
+
+self = <tests.test_core_baseengine_controller_ip.TestMultipleControllers object at 0x7f8740e70f50>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-103/test_one_error_lists_every_con0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f8740d8d6d0>
+
+    def test_one_error_lists_every_controller(self, env_config_path, tmp_path, caplog):
+        engine = self._engine(tmp_path)
+        with caplog.at_level(logging.ERROR):
+            engine._controller_ip_from_map()
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+>       assert len(errors) == 1, [r.getMessage() for r in errors]
+E       AssertionError: []
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_core_baseengine_controller_ip.py:167: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting BaseEngine with PID 1205593
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f8740c09210>, '/tmp/pytest-of-adria/pytest-103/test_one_error_lists_every_con0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-103/test_one_error_lists_every_con0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-103/test_one_error_lists_every_con0/network_map.xml
+=========================== short test summary info ============================
+FAILED tests/test_core_baseengine_controller_ip.py::TestMultipleControllers::test_one_error_lists_every_controller
+========================= 1 failed, 16 passed in 1.33s =========================

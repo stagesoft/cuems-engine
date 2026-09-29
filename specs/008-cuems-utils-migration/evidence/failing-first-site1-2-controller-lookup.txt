@@ -1,0 +1,340 @@
+# T011 failing-first — FR-003 sites 1-2: controller lookup on a typed (node_role) map, unchanged src/
+# 2026-09-29T14:34:23+02:00  engine 984ac2b  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Expected: every positive case red with 'No controller node found in network map' (the lookup compares node_type to 'NodeType.master').
+$ poetry run pytest -q -p no:cacheprovider tests/test_core_baseengine_controller_ip.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 17 items
+
+tests/test_core_baseengine_controller_ip.py ......FFF...FF.FF            [100%]
+
+=================================== FAILURES ===================================
+______________ TestControllerIpFromMap.test_returns_controller_ip ______________
+
+self = <tests.test_core_baseengine_controller_ip.TestControllerIpFromMap object at 0x7f0645355d10>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_returns_controller_ip0')
+
+    def test_returns_controller_ip(self, env_config_path, tmp_path):
+        engine = _engine_with_map(
+            tmp_path, [_node("169.254.0.5"), _controller("169.254.12.139")]
+        )
+>       assert engine._controller_ip_from_map() == "169.254.12.139"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_controller_ip.py:103: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f064536aed0>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f064536c050>, '/tmp/pytest-of-adria/pytest-101/test_returns_controller_ip0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_returns_controller_ip0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_returns_controller_ip0/network_map.xml
+_________________ TestControllerIpFromMap.test_empty_ip_raises _________________
+
+self = <tests.test_core_baseengine_controller_ip.TestControllerIpFromMap object at 0x7f0645356410>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_empty_ip_raises0')
+
+    def test_empty_ip_raises(self, env_config_path, tmp_path):
+        # The schema forbids an empty <ip> on disk; the guard covers a map
+        # edited in memory after load.
+        engine = _engine_with_map(tmp_path, [_controller("169.254.12.139")])
+        _first_node(engine)["ip"] = ""
+>       with pytest.raises(ValueError, match="no <ip>"):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'no <ip>'
+E         Actual message: 'No controller node found in network map'
+
+tests/test_core_baseengine_controller_ip.py:110: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f06451230d0>, '/tmp/pytest-of-adria/pytest-101/test_empty_ip_raises0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_empty_ip_raises0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_empty_ip_raises0/network_map.xml
+______________ TestControllerIpFromMap.test_missing_ip_key_raises ______________
+
+self = <tests.test_core_baseengine_controller_ip.TestControllerIpFromMap object at 0x7f0645356b10>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_missing_ip_key_raises0')
+
+    def test_missing_ip_key_raises(self, env_config_path, tmp_path):
+        engine = _engine_with_map(tmp_path, [_controller("169.254.12.139")])
+        del _first_node(engine)["ip"]
+>       with pytest.raises(ValueError, match="no <ip>"):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'no <ip>'
+E         Actual message: 'No controller node found in network map'
+
+tests/test_core_baseengine_controller_ip.py:116: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f06452bf590>, '/tmp/pytest-of-adria/pytest-101/test_missing_ip_key_raises0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_missing_ip_key_raises0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_missing_ip_key_raises0/network_map.xml
+_______ TestMultipleControllers.test_first_controller_in_map_order_wins ________
+
+self = <tests.test_core_baseengine_controller_ip.TestMultipleControllers object at 0x7f0645360790>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_first_controller_in_map_o0')
+
+    def test_first_controller_in_map_order_wins(self, env_config_path, tmp_path):
+        engine = self._engine(tmp_path)
+>       assert engine._controller_ip_from_map() == "169.254.12.139"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_controller_ip.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f06452d3090>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f06452d0a50>, '/tmp/pytest-of-adria/pytest-101/test_first_controller_in_map_o0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_first_controller_in_map_o0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_first_controller_in_map_o0/network_map.xml
+________ TestMultipleControllers.test_one_error_lists_every_controller _________
+
+self = <tests.test_core_baseengine_controller_ip.TestMultipleControllers object at 0x7f0645360ed0>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_one_error_lists_every_con0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f0645377950>
+
+    def test_one_error_lists_every_controller(self, env_config_path, tmp_path, caplog):
+        engine = self._engine(tmp_path)
+        with caplog.at_level(logging.ERROR):
+>           engine._controller_ip_from_map()
+
+tests/test_core_baseengine_controller_ip.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f0645377e90>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f0645377a10>, '/tmp/pytest-of-adria/pytest-101/test_one_error_lists_every_con0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_one_error_lists_every_con0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_one_error_lists_every_con0/network_map.xml
+____ TestGetControllerIpCascade.test_falls_back_to_map_when_resolution_none ____
+
+self = <tests.test_core_baseengine_controller_ip.TestGetControllerIpCascade object at 0x7f0645361c50>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_falls_back_to_map_when_re0')
+
+    def test_falls_back_to_map_when_resolution_none(self, env_config_path, tmp_path):
+        engine = _engine_with_map(tmp_path, [_controller("169.254.12.139")])
+        with patch.object(engine, "_resolve_controller_host", return_value=None):
+>           assert engine.get_controller_ip() == "169.254.12.139"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_controller_ip.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f0645191010>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f0645126e50>, '/tmp/pytest-of-adria/pytest-101/test_falls_back_to_map_when_re0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_falls_back_to_map_when_re0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_falls_back_to_map_when_re0/network_map.xml
+____ TestGetControllerIpCascade.test_loopback_resolution_falls_back_to_map _____
+
+self = <tests.test_core_baseengine_controller_ip.TestGetControllerIpCascade object at 0x7f0645362350>
+env_config_path = None
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-101/test_loopback_resolution_falls0')
+
+    def test_loopback_resolution_falls_back_to_map(self, env_config_path, tmp_path):
+        """End-to-end: controller-host loopback short-circuit → map <ip>."""
+        engine = _engine_with_map(tmp_path, [_controller("169.254.12.139")])
+        with patch(
+            "cuemsengine.core.BaseEngine.socket.gethostbyname", return_value="127.0.0.1"
+        ):
+>           assert engine.get_controller_ip() == "169.254.12.139"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_core_baseengine_controller_ip.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/cuemsengine/core/BaseEngine.py:368: in get_controller_ip
+    mapped = self._controller_ip_from_map()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f064518c150>
+
+    def _controller_ip_from_map(self) -> str:
+        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        if not hasattr(self, "cm") or not self.cm.network_map:
+            raise AttributeError("No network map found")
+        nodes = self.cm.network_map["node_list"]
+        if not nodes:
+            raise ValueError("No nodes found in network map")
+        for node_item in nodes:
+            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
+            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
+                ip = node.get("ip")
+                if not ip:
+                    raise ValueError("Controller node in network map has no <ip>")
+                return ip
+>       raise ValueError("No controller node found in network map")
+E       ValueError: No controller node found in network map
+
+src/cuemsengine/core/BaseEngine.py:415: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:71 Starting BaseEngine with PID 1205497
+INFO     cuemsengine.core.BaseEngine:test_core_baseengine_controller_ip.py:27 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f06452af0d0>, '/tmp/pytest-of-adria/pytest-101/test_loopback_resolution_falls0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_loopback_resolution_falls0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-101/test_loopback_resolution_falls0/network_map.xml
+DEBUG    cuemsengine.core.BaseEngine:BaseEngine.py:362 controller.local resolved to 127.0.0.1 (loopback/self); using network_map instead
+=========================== short test summary info ============================
+FAILED tests/test_core_baseengine_controller_ip.py::TestControllerIpFromMap::test_returns_controller_ip
+FAILED tests/test_core_baseengine_controller_ip.py::TestControllerIpFromMap::test_empty_ip_raises
+FAILED tests/test_core_baseengine_controller_ip.py::TestControllerIpFromMap::test_missing_ip_key_raises
+FAILED tests/test_core_baseengine_controller_ip.py::TestMultipleControllers::test_first_controller_in_map_order_wins
+FAILED tests/test_core_baseengine_controller_ip.py::TestMultipleControllers::test_one_error_lists_every_controller
+FAILED tests/test_core_baseengine_controller_ip.py::TestGetControllerIpCascade::test_falls_back_to_map_when_resolution_none
+FAILED tests/test_core_baseengine_controller_ip.py::TestGetControllerIpCascade::test_loopback_resolution_falls_back_to_map
+========================= 7 failed, 10 passed in 1.40s =========================

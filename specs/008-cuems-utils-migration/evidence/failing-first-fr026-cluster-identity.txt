@@ -1,0 +1,747 @@
+# T014 failing-first — FR-026: one identity per node across the controller's cluster sets (typed map Uuid, own uuid str, NNG senders str)
+# 2026-09-29T14:38:08+02:00  engine 984ac2b + T020 (BaseEngine only; ControllerEngine unchanged)  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+# Observed: TypeError '<' not supported between instances of 'Uuid' — first raised at ControllerEngine.py:1556,
+# _probe_cluster_liveness's debug line sorted(expected) (called from _resolve_cluster_state :1585), one step BEFORE the
+# sorted(adopted) loop at :1588 that tasks.md predicted. Same class (M12), earlier site; both are egress sorts T026 covers.
+$ poetry run pytest -q -p no:cacheprovider tests/test_cluster_identity.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 6 items
+
+tests/test_cluster_identity.py FFFFFF                                    [100%]
+
+=================================== FAILURES ===================================
+___________________ test_required_holds_one_member_per_node ____________________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff499af3150>
+
+    def test_required_holds_one_member_per_node(controller):
+>       _resolve(controller)
+
+tests/test_cluster_identity.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff499af3150>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff499b017d0>, '/tmp/pytest-of-adria/pytest-109/test_required_holds_one_member0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_required_holds_one_member0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_required_holds_one_member0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff499af3150>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff499af3150>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run0/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_______ test_missing_and_unreachable_are_str_and_exclude_the_controller ________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ad950>
+
+    def test_missing_and_unreachable_are_str_and_exclude_the_controller(controller):
+>       diagnosis = _resolve(controller)
+                    ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cluster_identity.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ad950>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff493778d90>, '/tmp/pytest-of-adria/pytest-109/test_missing_and_unreachable_a0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_missing_and_unreachable_a0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_missing_and_unreachable_a0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ad950>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ad950>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run1/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+________________ test_a_stale_output_prefix_is_reported_missing ________________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937a9490>
+
+    def test_a_stale_output_prefix_is_reported_missing(controller):
+        """G5: a project naming a uuid4 no longer in the map is flagged, as ``str``."""
+>       diagnosis = _resolve(controller)
+                    ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cluster_identity.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937a9490>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff4938db090>, '/tmp/pytest-of-adria/pytest-109/test_a_stale_output_prefix_is_0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_a_stale_output_prefix_is_0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_a_stale_output_prefix_is_0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937a9490>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937a9490>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run2/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_______________ test_armed_ready_from_str_senders_opens_the_gate _______________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ca690>
+
+    def test_armed_ready_from_str_senders_opens_the_gate(controller):
+>       _resolve(controller)
+
+tests/test_cluster_identity.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ca690>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff49abd2d50>, '/tmp/pytest-of-adria/pytest-109/test_armed_ready_from_str_send0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_armed_ready_from_str_send0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_armed_ready_from_str_send0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ca690>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff49a0ca690>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run3/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_____________ test_script_finished_from_str_senders_closes_the_run _____________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bdf90>
+
+    def test_script_finished_from_str_senders_closes_the_run(controller):
+>       _resolve(controller)
+
+tests/test_cluster_identity.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bdf90>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff4937bfb50>, '/tmp/pytest-of-adria/pytest-109/test_script_finished_from_str_0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_script_finished_from_str_0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_script_finished_from_str_0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bdf90>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bdf90>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run4/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+________________________ test_repeated_pongs_count_once ________________________
+
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bd910>
+
+    def test_repeated_pongs_count_once(controller):
+>       _resolve(controller)
+
+tests/test_cluster_identity.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_identity.py:106: in _resolve
+    controller._resolve_cluster_state()
+src/cuemsengine/ControllerEngine.py:1585: in _resolve_cluster_state
+    alive = self._probe_cluster_liveness()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bd910>
+timeout = 1.5
+
+    def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
+        """Broadcast a ping to all nodes and collect pong replies.
+    
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
+    
+        The set of senders that respond within `timeout` is the authoritative
+        "alive right now" view of the cluster. The controller's own UUID is
+        always included (it never needs to ping itself).
+    
+        Returns the set of UUIDs that are alive.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted_uuids = self._adopted_uuids_from_network_map()
+    
+        expected = adopted_uuids - {controller_uuid}
+    
+        with self._cluster_lock:
+            self._pong_responses.clear()
+            self._pong_expected = set(expected)
+        self._pong_event.clear()
+    
+        if not expected:
+            Logger.debug("Cluster probe: no remote nodes to ping")
+            return {controller_uuid}
+    
+        if not hasattr(self, "communications_thread") or not self.communications_thread:
+            Logger.warning("Cluster probe skipped: communications thread not available")
+            return {controller_uuid}
+    
+        ping_op = NodeOperation(
+            type=OperationType.COMMAND,
+            action=ActionType.UPDATE,
+            sender=controller_uuid,
+            target="ping",
+            data={"value": None, "address": "/engine/cluster/ping"},
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return {controller_uuid}
+    
+        # Early-exit wait. The comms thread sets the event when all expected
+        # pongs have arrived; otherwise we wake on timeout with whatever did.
+        self._pong_event.wait(timeout=timeout)
+    
+        with self._cluster_lock:
+            alive = set(self._pong_responses)
+        alive.add(controller_uuid)
+        Logger.debug(
+>           f"Cluster probe: expected={sorted(expected)} "
+                                       ^^^^^^^^^^^^^^^^
+            f"alive_remote={sorted(alive - {controller_uuid})}"
+        )
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1556: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7ff4936fb9d0>, '/tmp/pytest-of-adria/pytest-109/test_repeated_pongs_count_once0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_repeated_pongs_count_once0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-109/test_repeated_pongs_count_once0/network_map.xml
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1206715
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': '3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+INFO     cuemsengine.ControllerEngine:test_cluster_identity.py:95 Status operation received: NodeOperation by 6d6d6d6d-0000-4000-8000-000000000006: update on status pong (without data)
+DEBUG    cuemsengine.ControllerEngine:test_cluster_identity.py:95 Pong from 6d6d6d6d-0000-4000-8000-000000000006
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bd910>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7ff4937bd910>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-109/cuems-run5/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+=========================== short test summary info ============================
+FAILED tests/test_cluster_identity.py::test_required_holds_one_member_per_node
+FAILED tests/test_cluster_identity.py::test_missing_and_unreachable_are_str_and_exclude_the_controller
+FAILED tests/test_cluster_identity.py::test_a_stale_output_prefix_is_reported_missing
+FAILED tests/test_cluster_identity.py::test_armed_ready_from_str_senders_opens_the_gate
+FAILED tests/test_cluster_identity.py::test_script_finished_from_str_senders_closes_the_run
+FAILED tests/test_cluster_identity.py::test_repeated_pongs_count_once - TypeE...
+============================== 6 failed in 1.59s ===============================

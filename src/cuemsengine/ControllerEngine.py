@@ -12,12 +12,12 @@ import time
 from functools import partial
 
 from cuemsutils.log import Logger, logged
-from cuemsutils.xml.Settings import NetworkMap
 
 from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
+from .tools.ids import as_id, id_str
 
 # Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
 # disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
@@ -27,6 +27,11 @@ NODECONF_TIMEOUT_S = 5.0
 # Shortest gap between two real cluster probes served to the UI. Each probe
 # pings every adopted node, and the settings panel polls while it is open.
 CLUSTER_STATUS_CLAMP_S = 2.0
+
+
+def _sorted_ids(ids) -> list[str]:
+    """Ids as sorted text — for payloads and log lines (``Uuid`` cannot be ordered)."""
+    return sorted(id_str(u) for u in ids)
 
 
 class ControllerEngine(BaseEngine):
@@ -164,7 +169,7 @@ class ControllerEngine(BaseEngine):
             # This allows UI to send commands via Apache's /realtime proxy to
             # ws://127.0.0.1:9190
             websocket_osc_port = self.cm.node_conf.get("oscquery_ws_port", 9190)
-            node_id = self.cm.node_conf.get("uuid", "controller")
+            node_id = id_str(self._controller_uuid())
         else:
             nng_hub_port = 9093
             websocket_osc_port = 9190  # Take port 9190 for WebSocket OSC
@@ -269,34 +274,23 @@ class ControllerEngine(BaseEngine):
         from the UI gets its route without an engine restart. Re-registering is
         safe: register_osc_handler is dict-keyed, so a repeat overwrites.
 
-        ⚠ get_nodes_by_adoption() mutates online/adopted from str to bool IN
-        PLACE, so it only survives one pass over a given dict. Call this either
-        at startup or immediately after ConfigManager.load_network_map() has
-        installed a fresh dict — see _reload_network_map(). A REMOVE leaves the
-        old route registered on purpose: traffic from a non-adopted node is
-        already filtered by _adopted_nodes at the callbacks.
+        Reads the map only. A REMOVE leaves the old
+        route registered on purpose: traffic from a non-adopted node is already
+        filtered by _adopted_nodes at the callbacks.
         """
-        node_uuids: set[str] = set()
-        own_uuid = (
+        node_uuids = set(self._adopted_node_uuids())
+        own_uuid = as_id(
             self.cm.node_conf.get("uuid", "") if hasattr(self, "cm") and self.cm else ""
         )
         if own_uuid:
             node_uuids.add(own_uuid)
-        try:
-            if self.cm and self.cm.network_map:
-                adopted, _new = NetworkMap.get_nodes_by_adoption(self.cm.network_map)
-                for entry in adopted:
-                    nuuid = (entry.get("node") or {}).get("uuid")
-                    if nuuid:
-                        node_uuids.add(nuuid)
-        except Exception as e:
-            Logger.warning(f"Could not enumerate node UUIDs from network_map: {e}")
 
         for nuuid in node_uuids:
+            route = f"/{id_str(nuuid)}/*"
             self.communications_thread.register_osc_handler(
-                f"/{nuuid}/*", self._handle_direct_player_osc_message
+                route, self._handle_direct_player_osc_message
             )
-            Logger.info(f"Registered direct player OSC handler for /{nuuid}/*")
+            Logger.info(f"Registered direct player OSC handler for {route}")
 
     def _handle_direct_player_osc_message(self, address: str, args: list):
         """Handle direct player OSC messages from UI (/<node_uuid>/<type>/...).
@@ -346,11 +340,7 @@ class ControllerEngine(BaseEngine):
         operation = NodeOperation(
             type=OperationType.COMMAND,
             action=ActionType.UPDATE,
-            sender=(
-                self.cm.node_conf.get("uuid", "controller")
-                if hasattr(self, "cm") and self.cm
-                else "controller"
-            ),
+            sender=id_str(self._controller_uuid()),
             target="player_control",
             data={"address": address, "value": value},
         )
@@ -381,11 +371,7 @@ class ControllerEngine(BaseEngine):
         operation = NodeOperation(
             type=OperationType.COMMAND,
             action=ActionType.UPDATE,
-            sender=(
-                self.cm.node_conf.get("uuid", "controller")
-                if hasattr(self, "cm") and self.cm
-                else "controller"
-            ),
+            sender=id_str(self._controller_uuid()),
             target="player_control",
             data={"address": address, "value": value},
         )
@@ -548,7 +534,7 @@ class ControllerEngine(BaseEngine):
             # loop; _probe_cluster_liveness on the main thread waits on the
             # event.
             with self._cluster_lock:
-                self._pong_responses.add(operation.sender)
+                self._pong_responses.add(as_id(operation.sender))
                 if self._pong_responses >= self._pong_expected:
                     self._pong_event.set()
             Logger.debug(f"Pong from {operation.sender}")
@@ -558,7 +544,7 @@ class ControllerEngine(BaseEngine):
                 # Aggregate per-node: only flip running=no when all required
                 # nodes have reported. Filter foreign senders to keep the
                 # tracker bounded.
-                sender = operation.sender
+                sender = as_id(operation.sender)
                 if sender not in self._adopted_nodes:
                     Logger.debug(
                         f"Ignoring script_finished from non-adopted node {sender}"
@@ -580,7 +566,7 @@ class ControllerEngine(BaseEngine):
                 # Aggregate per-node: only flip armed=yes when all required
                 # nodes have reported. Filter foreign senders to keep the
                 # tracker bounded.
-                sender = operation.sender
+                sender = as_id(operation.sender)
                 if sender not in self._adopted_nodes:
                     Logger.debug(f"Ignoring armed_ready from non-adopted node {sender}")
                     return
@@ -934,12 +920,8 @@ class ControllerEngine(BaseEngine):
         ConfigManager(load_all=True) would also re-read settings and mappings —
         that is the "restart both daemons" trap, not what we want here.
 
-        ORDER MATTERS: _register_node_osc_handlers() calls
-        NetworkMap.get_nodes_by_adoption(), which mutates online/adopted from
-        str to bool IN PLACE and therefore survives only one pass over a given
-        dict (same hazard _adopted_uuids_from_network_map documents). It is safe
-        only on the freshly reloaded dict — never call it as a standalone
-        "shortcut" refresh.
+        Re-registration after the reload is not order-sensitive: it only reads
+        the map.
         """
         self.cm.load_network_map()
         Logger.info("network_map reloaded after a node list change")
@@ -958,7 +940,7 @@ class ControllerEngine(BaseEngine):
         for key, value in values.items():
             Logger.debug(f"Status update (no-op): {key} = {repr(value)}")
 
-    def _collect_project_nodes(self, cuelist) -> set[str]:
+    def _collect_project_nodes(self, cuelist) -> set:
         """Walk a cuelist and return the set of node UUIDs referenced by any
         cue's output_name.
 
@@ -968,11 +950,12 @@ class ControllerEngine(BaseEngine):
           - DMX:           "<UUID>" (no suffix)
         In both cases, output_name[:36] is the node UUID. We validate with a
         cheap UUID-shape check (hyphens at positions 8/13/18/23) so garbage
-        output names don't leak non-UUID strings into the set.
+        output names don't leak non-UUID strings into the set. Ids go through
+        as_id so they match the map's (a uuid4 is a Uuid there).
         """
         from cuemsutils.cues import CueList
 
-        nodes: set[str] = set()
+        nodes: set = set()
         if not (hasattr(cuelist, "contents") and cuelist.contents):
             return nodes
         for item in cuelist.contents:
@@ -991,7 +974,7 @@ class ControllerEngine(BaseEngine):
                         and head[18] == "-"
                         and head[23] == "-"
                     ):
-                        nodes.add(head)
+                        nodes.add(as_id(head))
             if isinstance(item, CueList):
                 nodes.update(self._collect_project_nodes(item))
         return nodes
@@ -1138,9 +1121,7 @@ class ControllerEngine(BaseEngine):
         # auto-load the browser is normally opened well after the load, so the
         # push in _resolve_cluster_state has nobody listening.
         with self._cluster_lock:
-            diagnosis = (
-                dict(self._load_diagnosis) if self._load_diagnosis else None
-            )
+            diagnosis = dict(self._load_diagnosis) if self._load_diagnosis else None
         data = build_osc_message(
             "/engine/status/cluster_warning",
             self._cluster_warning_payload(diagnosis),
@@ -1418,11 +1399,7 @@ class ControllerEngine(BaseEngine):
         operation = NodeOperation(
             type=OperationType.COMMAND,
             action=ActionType.UPDATE,
-            sender=(
-                self.cm.node_conf.get("uuid", "controller")
-                if hasattr(self, "cm") and self.cm
-                else "controller"
-            ),
+            sender=id_str(self._controller_uuid()),
             target=command_name,
             data={"value": value, "address": address},
         )
@@ -1436,34 +1413,34 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"Error forwarding command to nodes: {e}")
 
-    def _controller_uuid(self) -> str:
+    def _controller_uuid(self):
+        """This engine's own id (``as_id``): render with ``id_str`` on the wire."""
         if hasattr(self, "cm") and self.cm:
-            return self.cm.node_conf.get("uuid", "controller")
+            return as_id(self.cm.node_conf.get("uuid", "controller"))
         return "controller"
 
-    def _adopted_uuids_from_network_map(self) -> set[str]:
-        """Read adopted node UUIDs from the in-memory network_map.
+    def _adopted_node_uuids(self) -> frozenset:
+        """Ids of the nodes network_map.xml marks adopted.
 
-        We avoid NetworkMap.get_nodes_by_adoption() because it mutates the dict
-        via strtobool — only works on the first pass; subsequent calls raise
-        because `adopted`/`online` are no longer string-typed.
+        cuemsutils offers no public adoption partition (UR-1), so this reads the
+        typed map: ``adopted`` arrives as a ``bool`` and is used as-is — no
+        string parsing. Ids go through as_id; they cannot be ordered (UR-4), so
+        consumers sort with id_str. Reads only; never mutates the map.
         """
-        out: set[str] = set()
+        out = set()
         try:
             node_list = (self.cm.network_map or {}).get("node_list", [])
             for entry in node_list:
                 if not isinstance(entry, dict):
                     continue
                 node = entry.get("node") or {}
-                uuid = node.get("uuid")
-                adopted = node.get("adopted", False)
-                if isinstance(adopted, str):
-                    adopted = adopted.strip().lower() in ("true", "1", "yes")
-                if adopted and uuid:
+                uuid = as_id(node.get("uuid"))
+                if uuid and node.get("adopted") is True:
                     out.add(uuid)
         except Exception as e:
-            Logger.warning(f"Could not read network_map: {e}")
-        return out
+            Logger.warning(f"Could not read adopted nodes from network_map: {e}")
+            return frozenset()
+        return frozenset(out)
 
     def _node_label(self, uuid: str) -> str:
         """Human-readable name for a node, for LOG LINES ONLY.
@@ -1480,16 +1457,16 @@ class ControllerEngine(BaseEngine):
                 if not isinstance(entry, dict):
                     continue
                 node = entry.get("node") or {}
-                if node.get("uuid") != uuid:
+                if as_id(node.get("uuid")) != as_id(uuid):
                     continue
                 for field in ("alias", "role_id", "hostname"):
                     name = node.get(field)
                     if name:
-                        return f"{name} ({uuid[:8]}…)"
+                        return f"{name} ({id_str(uuid)[:8]}…)"
                 break
         except Exception:
             pass
-        return uuid
+        return id_str(uuid)
 
     def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
         """Broadcast a ping to all nodes and collect pong replies.
@@ -1512,7 +1489,7 @@ class ControllerEngine(BaseEngine):
         Returns the set of UUIDs that are alive.
         """
         controller_uuid = self._controller_uuid()
-        adopted_uuids = self._adopted_uuids_from_network_map()
+        adopted_uuids = self._adopted_node_uuids()
 
         expected = adopted_uuids - {controller_uuid}
 
@@ -1553,8 +1530,8 @@ class ControllerEngine(BaseEngine):
             alive = set(self._pong_responses)
         alive.add(controller_uuid)
         Logger.debug(
-            f"Cluster probe: expected={sorted(expected)} "
-            f"alive_remote={sorted(alive - {controller_uuid})}"
+            f"Cluster probe: expected={_sorted_ids(expected)} "
+            f"alive_remote={_sorted_ids(alive - {controller_uuid})}"
         )
         return alive
 
@@ -1576,7 +1553,7 @@ class ControllerEngine(BaseEngine):
         Resets _armed_nodes / _finished_nodes for the new project.
         """
         controller_uuid = self._controller_uuid()
-        adopted = self._adopted_uuids_from_network_map()
+        adopted = set(self._adopted_node_uuids())
         try:
             project = self._collect_project_nodes(self.script.cuelist)
         except Exception as e:
@@ -1585,7 +1562,7 @@ class ControllerEngine(BaseEngine):
         alive = self._probe_cluster_liveness()
 
         # Categorize for operator visibility.
-        for uuid in sorted(adopted):
+        for uuid in sorted(adopted, key=id_str):
             in_alive = uuid in alive
             in_project = uuid in project
             if in_alive and in_project:
@@ -1623,8 +1600,8 @@ class ControllerEngine(BaseEngine):
         # without this it would be reported as "not in the cluster" on a
         # perfectly healthy load. A false alarm here is worse than no alarm:
         # it teaches operators to ignore the real one.
-        missing = sorted(project - adopted - {controller_uuid})
-        unreachable = sorted((project & adopted) - alive - {controller_uuid})
+        missing = _sorted_ids(project - adopted - {controller_uuid})
+        unreachable = _sorted_ids((project & adopted) - alive - {controller_uuid})
 
         # Project nodes that are NOT adopted at all — script is broken for
         # this cluster.
@@ -1651,9 +1628,9 @@ class ControllerEngine(BaseEngine):
             diagnosis = dict(self._load_diagnosis)
 
         Logger.info(
-            f"Cluster state resolved: required={sorted(required)} "
-            f"alive={sorted(alive)} adopted={sorted(adopted)} "
-            f"project={sorted(project)}"
+            f"Cluster state resolved: required={_sorted_ids(required)} "
+            f"alive={_sorted_ids(alive)} adopted={_sorted_ids(adopted)} "
+            f"project={_sorted_ids(project)}"
         )
 
         # Tell the UI, even when both lists are empty — see
@@ -1700,7 +1677,7 @@ class ControllerEngine(BaseEngine):
             return
         Logger.error(
             f"Load stalled: nodes still pending armed_ready after "
-            f"{self._ARM_WATCHDOG_S:.0f}s: {sorted(pending)}"
+            f"{self._ARM_WATCHDOG_S:.0f}s: {_sorted_ids(pending)}"
         )
 
     def stop_script(self, value):
@@ -1761,11 +1738,11 @@ class ControllerEngine(BaseEngine):
             probed_at, payload = cached
         else:
             alive = self._probe_cluster_liveness()
-            adopted = self._adopted_uuids_from_network_map()
+            adopted = self._adopted_node_uuids()
             payload = {
-                "alive": sorted(alive),
-                "adopted": sorted(adopted),
-                "controller": self._controller_uuid(),
+                "alive": _sorted_ids(alive),
+                "adopted": _sorted_ids(adopted),
+                "controller": id_str(self._controller_uuid()),
             }
             probed_at = time.monotonic()
             self._cluster_status_cache = (probed_at, payload)

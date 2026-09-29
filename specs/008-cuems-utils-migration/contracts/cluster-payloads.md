@@ -11,9 +11,12 @@ is the case that fails today (M12).
 
 ```json
 {
-  "alive":      ["<uuid str>", "..."],
-  "adopted":    ["<uuid str>", "..."],
-  "controller": "<uuid str>"
+  "alive":       ["<uuid str>", "..."],
+  "adopted":     ["<uuid str>", "..."],
+  "controller":  "<uuid str>",
+  "age_s":       0.0,
+  "missing":     ["<uuid str>", "..."],
+  "unreachable": ["<uuid str>", "..."]
 }
 ```
 
@@ -21,7 +24,7 @@ is the case that fails today (M12).
 |---|---|
 | `alive` and `adopted` are **sorted lists of `str`** — sorted with `key=str`, rendered with `id_str` (FR-025) | typed-map fixture (uuid4 → `Uuid`); controller's own uuid `str`; `all(isinstance(u, str) …)` and `== sorted(…)` |
 | `adopted` equals exactly the nodes with `adopted is True` in the map | two adopted + one not → two entries |
-| keys are exactly `{"alive", "adopted", "controller"}` | set equality |
+| keys are exactly `{"alive", "adopted", "controller", "age_s", "missing", "unreachable"}` — `age_s`, `missing`, `unreachable` ride on the reply since the load-diagnosis work (corrected 2026-09-29 during implement: the earlier three-key line did not match the code or `tests/test_nodelist_modify.py`) | set equality |
 | cached for `CLUSTER_STATUS_CLAMP_S` (unchanged) | existing tests |
 
 Pre-migration against a typed map: `sorted()` over `Uuid` raises `TypeError` — the failing-first case.

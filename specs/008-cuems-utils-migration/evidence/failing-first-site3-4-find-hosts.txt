@@ -1,0 +1,86 @@
+# T018 failing-first — FR-003 sites 3-4: BaseEngine.find_hosts on a valid typed map (one adopted, online controller)
+# 2026-09-29T14:39:27+02:00  engine 984ac2b + T020 (controller lookup; find_hosts unchanged)  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+#
+# Which prediction held: **M8** — AttributeError: 'CuemsNetworkMapType' object has no attribute 'get_nodes_by_adoption'
+# (BaseEngine.py:448, self.cm.network_map.get_nodes_by_adoption(...)). The method dies before anything else runs.
+# F1 (the wrapper bug) is NOT reached, so it is not observed here; by reading the code it sits right behind M8:
+# the comprehension reads node.get('ip'/'uuid'/'online') on {'node': ...} wrapper entries (never unwrapped),
+# and compares online to the string 'True' where the typed map delivers bool — every host would be filtered out.
+# Resolution: method deleted (clarify Q2, T021); this file deleted with it (T022).
+$ poetry run pytest -q -p no:cacheprovider tests/test_find_hosts_characterization.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 1 item
+
+tests/test_find_hosts_characterization.py F                              [100%]
+
+=================================== FAILURES ===================================
+_____________________ test_find_hosts_on_a_valid_typed_map _____________________
+
+tmp_path = PosixPath('/tmp/pytest-of-adria/pytest-114/test_find_hosts_on_a_valid_typ0')
+
+    def test_find_hosts_on_a_valid_typed_map(tmp_path):
+        engine = BaseEngine(with_cm=False, with_mtc=False, with_signals=False)
+        engine.cm = SimpleNamespace(
+            network_map=typed_network_map(
+                tmp_path,
+                [
+                    {
+                        "uuid": CONTROLLER,
+                        "node_role": "controller",
+                        "adopted": True,
+                        "online": True,
+                    }
+                ],
+            )
+        )
+>       hosts = engine.find_hosts()
+                ^^^^^^^^^^^^^^^^^^^
+
+tests/test_find_hosts_characterization.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.core.BaseEngine.BaseEngine object at 0x7f14819d2e10>
+
+    def find_hosts(self) -> list[dict[str, str | bool]]:
+        """
+        Extract the list of adopted online hosts in the network map
+    
+        Returns:
+        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and
+          - controller flag
+    
+        Exceptions:
+        - ValueError: No nodes found in network map
+        - AttributeError: No controller found in network map
+        """
+        Logger.info("Looking for hosts in network map")
+        network_dict = self.cm.network_map
+        if not network_dict:
+            raise ValueError("No network map not found")
+>       nodes, _ = self.cm.network_map.get_nodes_by_adoption(network_dict)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'CuemsNetworkMapType' object has no attribute 'get_nodes_by_adoption'
+
+src/cuemsengine/core/BaseEngine.py:448: AttributeError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting BaseEngine with PID 1207304
+INFO     cuemsengine.core.BaseEngine:test_find_hosts_characterization.py:20 BaseEngine@None initialized, waitingstart signal
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f1481b81390>, '/tmp/pytest-of-adria/pytest-114/test_find_hosts_on_a_valid_typ0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-114/test_find_hosts_on_a_valid_typ0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/pytest-of-adria/pytest-114/test_find_hosts_on_a_valid_typ0/network_map.xml
+INFO     cuemsengine.core.BaseEngine:test_find_hosts_characterization.py:34 Looking for hosts in network map
+=========================== short test summary info ============================
+FAILED tests/test_find_hosts_characterization.py::test_find_hosts_on_a_valid_typed_map
+============================== 1 failed in 1.02s ===============================

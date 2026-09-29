@@ -1,0 +1,25 @@
+# T027 — US1 green
+# 2026-09-29T14:43:41+02:00  engine 984ac2b+worktree  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+$ poetry run pytest -q -p no:cacheprovider tests/test_core_baseengine_controller_ip.py tests/test_cluster_status_contract.py tests/test_cluster_identity.py tests/test_controller_gating.py tests/test_cluster_warning.py tests/test_nodelist_modify.py
+============================== 92 passed in 4.91s ==============================
+
+$ poetry run pytest -q -p no:cacheprovider tests/test_public_surface.py   # still red only for BaseEngine.py XmlReaderWriter import (removed in US2)
+========================= 1 failed, 3 passed in 0.83s ==========================
+AssertionError: imports from cuemsutils.xml / cuemsutils.config (internal): ['cuemsengine/core/BaseEngine.py:18']. Use CuemsScript.load and ConfigManager instead.
+
+$ black --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/ControllerEngine.py src/cuemsengine/tools/ids.py tests/network_map_helpers.py tests/test_cluster_identity.py tests/test_cluster_status_contract.py tests/test_cluster_warning.py tests/test_controller_gating.py tests/test_core_baseengine_controller_ip.py tests/test_nodelist_modify.py tests/test_public_surface.py tests/test_ids.py
+12 files would be left unchanged.
+$ isort --check src/cuemsengine/core/BaseEngine.py src/cuemsengine/ControllerEngine.py src/cuemsengine/tools/ids.py tests/network_map_helpers.py tests/test_cluster_identity.py tests/test_cluster_status_contract.py tests/test_cluster_warning.py tests/test_controller_gating.py tests/test_core_baseengine_controller_ip.py tests/test_nodelist_modify.py tests/test_public_surface.py tests/test_ids.py
+isort: clean
+$ flake8 src/cuemsengine/core/BaseEngine.py src/cuemsengine/ControllerEngine.py src/cuemsengine/tools/ids.py
+flake8: clean
+
+## Full suite at this point
+$ poetry run pytest -q -p no:cacheprovider
+============ 4 failed, 885 passed, 37 warnings in 99.75s (0:01:39) =============
+Failing ids:
+tests/test_project_go.py::test_project_go_from_controller
+tests/test_project_load.py::test_complex_project_load_on_controller
+tests/test_project_load.py::test_two_projects_load_on_controller
+tests/test_public_surface.py::test_no_internal_cuemsutils_import
+(three are category (b), FR-007 — US2; the fourth is the surface rule US2 discharges. Every (a) failure from step1-attribution.md is green.)

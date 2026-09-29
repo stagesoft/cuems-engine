@@ -23,6 +23,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from .network_map_helpers import adopted_network_map
+
+CONTROLLER = "c0c0c0c0-0000-4000-8000-00000000c0c0"
+
 
 @pytest.fixture(autouse=True)
 def set_config_path():
@@ -54,7 +58,7 @@ def controller():
     ):
         mock_cm_instance = MockCM.return_value
         mock_cm_instance.node_conf = {
-            "uuid": "test-controller-uuid",
+            "uuid": CONTROLLER,
             "mtc_port": "MTC_MIDI_PORT",
         }
         mock_cm_instance.library_path = str(
@@ -81,6 +85,10 @@ def controller():
 
 
 NODE = "4b9b5a1e-0000-4000-8000-0123456789ab"
+# cluster_status ids, chosen so that their sort order reads c < n1 < n2
+C = "0c0c0c0c-0000-4000-8000-00000000000c"
+N1 = "1a1a1a1a-0000-4000-8000-000000000001"
+N2 = "2b2b2b2b-0000-4000-8000-000000000002"
 
 
 def _ok_reply():
@@ -406,16 +414,14 @@ class TestClusterStatus:
     def _probe(self, controller, alive, adopted):
         return (
             patch.object(controller, "_probe_cluster_liveness", return_value=alive),
-            patch.object(
-                controller, "_adopted_uuids_from_network_map", return_value=adopted
-            ),
+            patch.object(controller.cm, "network_map", adopted_network_map(adopted)),
         )
 
     def test_returns_the_expected_keys(self, controller):
         """`missing`/`unreachable` were added later by the load-diagnosis work
         (see test_cluster_warning.py); they ride on this same reply.
         """
-        p1, p2 = self._probe(controller, {"c", "n1"}, {"c", "n1", "n2"})
+        p1, p2 = self._probe(controller, {C, N1}, {C, N1, N2})
         with p1, p2:
             out = controller.get_cluster_status(None)
 
@@ -427,8 +433,8 @@ class TestClusterStatus:
             "missing",
             "unreachable",
         }
-        assert out["alive"] == ["c", "n1"]
-        assert out["adopted"] == ["c", "n1", "n2"]
+        assert out["alive"] == [C, N1]
+        assert out["adopted"] == [C, N1, N2]
         assert isinstance(out["age_s"], float)
 
     def test_never_returns_empty(self, controller):
@@ -445,7 +451,7 @@ class TestClusterStatus:
 
     def test_repeat_calls_are_clamped(self, controller):
         """A polling settings panel must not become a ping flood."""
-        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        p1, p2 = self._probe(controller, {C}, {C})
         with p1 as mock_probe, p2:
             controller.get_cluster_status(None)
             controller.get_cluster_status(None)
@@ -454,7 +460,7 @@ class TestClusterStatus:
         assert mock_probe.call_count == 1
 
     def test_age_grows_between_clamped_calls(self, controller):
-        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        p1, p2 = self._probe(controller, {C}, {C})
         with p1, p2:
             first = controller.get_cluster_status(None)
             second = controller.get_cluster_status(None)
@@ -462,7 +468,7 @@ class TestClusterStatus:
         assert second["age_s"] >= first["age_s"]
 
     def test_reachable_through_the_dispatch_table(self, controller):
-        p1, p2 = self._probe(controller, {"c"}, {"c"})
+        p1, p2 = self._probe(controller, {C}, {C})
         with (
             p1,
             p2,
@@ -481,8 +487,9 @@ class TestClusterStatus:
         """
         controller.communications_thread.nng_hub = Mock()
         with patch.object(
-            controller, "_adopted_uuids_from_network_map",
-            return_value={controller._controller_uuid()},
+            controller.cm,
+            "network_map",
+            adopted_network_map([CONTROLLER], controller=CONTROLLER),
         ):
             alive = controller._probe_cluster_liveness(timeout=0.1)
 

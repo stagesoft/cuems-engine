@@ -13,6 +13,7 @@ from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from cuemsutils.log import Logger, logged
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.CTimecode import CTimecode
+from cuemsutils.tools.NodeList import NodeIndex
 from cuemsutils.tools.SignalEngine import SignalEngine
 from cuemsutils.xml import XmlReaderWriter
 
@@ -25,12 +26,12 @@ from ..osc import (
     ServerDevices,
 )
 from ..tools.config_ports import get_config_ports
+from ..tools.ids import id_str
 from ..tools.MtcListener import MtcListener
 from ..tools.PortHandler import PORT_HANDLER
 from .EngineStatus import EngineStatus
 
 MTC_PORT = "Midi Through Port-0"
-CONTROLLER_NETWORK_FLAG = "NodeType.master"
 SHOW_LOCK_PATH = "/tmp/cuems.show.lock"
 CONTROLLER_HOST = "controller.local"
 
@@ -351,7 +352,7 @@ class BaseEngine(SignalEngine):
              name, so a node always discovers the *live* IP — no correct
              <ip> needed in network_map.xml, and IPv4LL renegotiation
              self-heals on the next engine start.
-          2. Fallback: the network_map.xml <ip> of the NodeType.master node
+          2. Fallback: the network_map.xml <ip> of the node_role=controller node
              (operator/nodeconf-maintained), used when mDNS is unusable.
 
         A loopback result from (1) is rejected on purpose: it means "this host
@@ -399,54 +400,33 @@ class BaseEngine(SignalEngine):
         return ip
 
     def _controller_ip_from_map(self) -> str:
-        """Return the <ip> of the NodeType.master node in network_map.xml."""
+        """Return the <ip> of the ``node_role=controller`` node in network_map.xml."""
         if not hasattr(self, "cm") or not self.cm.network_map:
             raise AttributeError("No network map found")
-        nodes = self.cm.network_map["node_list"]
-        if not nodes:
+        items = self.cm.network_map["node_list"]
+        if not items:
             raise ValueError("No nodes found in network map")
-        for node_item in nodes:
-            node = node_item.get("node", {}) if isinstance(node_item, dict) else {}
-            if node.get("node_type") == CONTROLLER_NETWORK_FLAG:
-                ip = node.get("ip")
-                if not ip:
-                    raise ValueError("Controller node in network map has no <ip>")
-                return ip
-        raise ValueError("No controller node found in network map")
-
-    def find_hosts(self) -> list[dict[str, str | bool]]:
-        """
-        Extract the list of adopted online hosts in the network map
-
-        Returns:
-        - list[dict[str, str | bool]]: List of hosts with their IP, uuid and
-          - controller flag
-
-        Exceptions:
-        - ValueError: No nodes found in network map
-        - AttributeError: No controller found in network map
-        """
-        Logger.info("Looking for hosts in network map")
-        network_dict = self.cm.network_map
-        if not network_dict:
-            raise ValueError("No network map not found")
-        nodes, _ = self.cm.network_map.get_nodes_by_adoption(network_dict)
-        if not nodes:
-            raise ValueError("No adopted nodes found in network map")
-        hosts = [
-            {
-                "ip": node.get("ip"),
-                "uuid": node.get("uuid"),
-                "controller": node.get("node_type") == CONTROLLER_NETWORK_FLAG,
-            }
-            for node in nodes
-            if node.get("online") == "True"
+        nodes = [
+            item["node"]
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get("node"), dict)
         ]
-        if not any(host.get("controller") for host in hosts):
-            raise AttributeError("No controller found in network map")
-        if len([host for host in hosts if host.get("controller")]) > 1:
-            raise AttributeError("Multiple controllers found in network map")
-        return hosts
+        index = NodeIndex.from_nodes(nodes, key=lambda n: id_str(n.get("uuid")))
+        controllers = index.controllers
+        if not controllers:
+            raise ValueError("No controller node found in network map")
+        if len(controllers) > 1:
+            listing = ", ".join(
+                f"uuid={id_str(n.get('uuid'))} ip={n.get('ip')}" for n in controllers
+            )
+            Logger.error(
+                f"network_map has {len(controllers)} controller nodes; "
+                f"using the first: {listing}"
+            )
+        ip = controllers[0].get("ip")
+        if not ip:
+            raise ValueError("Controller node in network map has no <ip>")
+        return ip
 
     def print_all_status(self) -> None:
         Logger.info("STATUS REQUEST BY SIGUSR2 SIGNAL")

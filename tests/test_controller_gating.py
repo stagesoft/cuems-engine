@@ -15,6 +15,7 @@ Covers:
   - arm watchdog (fire + cancel)
 """
 
+import copy
 import threading
 import time
 from os import environ
@@ -26,9 +27,12 @@ import pytest
 
 from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
 
+from .network_map_helpers import typed_network_map
+
 CONTROLLER_UUID = "aaaaaaaa-099f-41f0-a075-00e04c01b7e3"
 SLAVE_UUID = "bbbbbbbb-6c5c-4016-aac6-a039c6a7d18f"
 FOREIGN_UUID = "cccccccc-9999-4999-9999-999999999999"
+SECOND_SLAVE_UUID = "dddddddd-6c5c-4016-aac6-a039c6a7d18f"
 
 
 @pytest.fixture(autouse=True)
@@ -279,189 +283,33 @@ def test_probe_returns_only_controller_when_no_remote_nodes(controller):
     assert controller.communications_thread.nng_hub.send_operation.call_count == 0
 
 
-# ─── Adopted-uuids reader handles bool-typed values ─────────────────────
+# ─── OSC route registration from a typed map (FR-009) ───────────────────
 
 
-def test_adopted_uuids_reader_handles_python_bool(controller):
-    """NetworkMap.get_nodes_by_adoption mutates `adopted` to bool. Our
-    reader must still return the right set on subsequent reads (it bypasses
-    strtobool intentionally)."""
-    controller.cm.network_map = {
-        "node_list": [
-            {"node": {"uuid": CONTROLLER_UUID, "adopted": True}},
-            {"node": {"uuid": SLAVE_UUID, "adopted": False}},
-            {"node": {"uuid": FOREIGN_UUID, "adopted": "True"}},  # string form
+def test_registers_one_route_per_adopted_node_and_leaves_the_map_alone(
+    controller, tmp_path
+):
+    """Every adopted node gets ``/<uuid>/*``, the controller's own included
+    once although it arrives as ``str`` (settings) and ``Uuid`` (map); an
+    unadopted node gets none; the map is read, never mutated."""
+    controller.cm.network_map = typed_network_map(
+        tmp_path,
+        [
+            {"uuid": CONTROLLER_UUID, "node_role": "controller", "adopted": True},
+            {"uuid": SLAVE_UUID, "adopted": True},
+            {"uuid": SECOND_SLAVE_UUID, "adopted": True},
+            {"uuid": FOREIGN_UUID, "adopted": False},
         ],
-    }
-    assert controller._adopted_uuids_from_network_map() == {
-        CONTROLLER_UUID,
-        FOREIGN_UUID,
-    }
-
-
-# ─── State clearing ─────────────────────────────────────────────────────
-
-
-def test_clear_playback_state_resets_armed_and_finished_sets(controller):
-    controller._armed_nodes = {CONTROLLER_UUID, SLAVE_UUID}
-    controller._finished_nodes = {CONTROLLER_UUID}
-    controller._clear_playback_state()
-    assert controller._armed_nodes == set()
-    assert controller._finished_nodes == set()
-    # Required / adopted stay — they belong to the loaded project.
-    assert controller._required_nodes == {CONTROLLER_UUID, SLAVE_UUID}
-    assert controller._adopted_nodes == {CONTROLLER_UUID, SLAVE_UUID}
-
-
-def test_unload_project_clears_required_and_adopted(controller):
-    controller.set_status("running", "no")  # so unload doesn't reject
-    controller._armed_nodes = {CONTROLLER_UUID}
-
-    controller.unload_project(None)
-
-    assert controller._required_nodes == set()
-    assert controller._adopted_nodes == set()
-    assert controller._armed_nodes == set()
-
-
-# ─── Arm watchdog ───────────────────────────────────────────────────────
-
-
-class TestArmWatchdog:
-    def test_fires_when_required_not_met(self, controller, monkeypatch):
-        monkeypatch.setattr(controller, "_ARM_WATCHDOG_S", 0.05)
-        fired = threading.Event()
-
-        def fake_logger_error(msg):
-            if "Load stalled" in msg:
-                fired.set()
-
-        with patch(
-            "cuemsengine.ControllerEngine.Logger.error",
-            side_effect=fake_logger_error,
-        ):
-            controller._armed_nodes = {CONTROLLER_UUID}  # missing SLAVE
-            controller._arm_arm_watchdog()
-            assert fired.wait(timeout=1.0), "watchdog did not fire"
-
-    def test_cancelled_does_not_fire(self, controller, monkeypatch):
-        monkeypatch.setattr(controller, "_ARM_WATCHDOG_S", 0.05)
-        fired = threading.Event()
-
-        def fake_logger_error(msg):
-            if "Load stalled" in msg:
-                fired.set()
-
-        with patch(
-            "cuemsengine.ControllerEngine.Logger.error",
-            side_effect=fake_logger_error,
-        ):
-            controller._arm_arm_watchdog()
-            controller._cancel_arm_watchdog()
-            # Wait past the would-have-fired window.
-            time.sleep(0.15)
-            assert not fired.is_set()
-
-    def test_no_fire_when_required_met(self, controller, monkeypatch):
-        monkeypatch.setattr(controller, "_ARM_WATCHDOG_S", 0.05)
-        fired = threading.Event()
-
-        def fake_logger_error(msg):
-            if "Load stalled" in msg:
-                fired.set()
-
-        with patch(
-            "cuemsengine.ControllerEngine.Logger.error",
-            side_effect=fake_logger_error,
-        ):
-            controller._armed_nodes = {CONTROLLER_UUID, SLAVE_UUID}
-            controller._arm_arm_watchdog()
-            time.sleep(0.15)
-            assert not fired.is_set()
-
-    def test_armed_flip_cancels_watchdog(self, controller, monkeypatch):
-        monkeypatch.setattr(controller, "_ARM_WATCHDOG_S", 0.2)
-        fired = threading.Event()
-
-        def fake_logger_error(msg):
-            if "Load stalled" in msg:
-                fired.set()
-
-        with patch(
-            "cuemsengine.ControllerEngine.Logger.error",
-            side_effect=fake_logger_error,
-        ):
-            controller.set_status("armed", "no")
-            controller._arm_arm_watchdog()
-            # Simulate both required nodes coming armed before timeout.
-            controller.status_operation_callback(_armed_ready_op(CONTROLLER_UUID))
-            controller.status_operation_callback(_armed_ready_op(SLAVE_UUID))
-            time.sleep(0.3)
-            assert controller.get_status("armed") == "yes"
-            assert not fired.is_set()
-
-
-# ─── status_operation_callback: audiomixer_status (869cwpkz4) ────────────
-
-
-def _mixer_status_op(sender: str, entries: dict, output_index: str = "0"):
-    return NodeOperation(
-        type=OperationType.STATUS,
-        action=ActionType.UPDATE,
-        sender=sender,
-        target="audiomixer_status",
-        data={"output_index": output_index, "entries": entries},
     )
+    before = copy.deepcopy(controller.cm.network_map)
+    register = controller.communications_thread.register_osc_handler
+    register.reset_mock()
 
+    controller._register_node_osc_handlers()
 
-class TestMixerStatusCallback:
-    """The node-sourced mixer snapshot must populate mixer_status (keyed
-    {uuid}/{output}/{channel}) and broadcast each entry to the UI."""
-
-    def test_updates_shadow_and_broadcasts(self, controller):
-        controller.status_operation_callback(
-            _mixer_status_op(SLAVE_UUID, {"master": 1.0, "0": 0.5})
-        )
-        assert controller.mixer_status[f"{SLAVE_UUID}/0/master"] == 1.0
-        assert controller.mixer_status[f"{SLAVE_UUID}/0/0"] == 0.5
-        controller.communications_thread.broadcast_osc.assert_any_call(
-            f"/engine/status/audio/mixer/{SLAVE_UUID}/0/master/volume", 1.0
-        )
-        controller.communications_thread.broadcast_osc.assert_any_call(
-            f"/engine/status/audio/mixer/{SLAVE_UUID}/0/0/volume", 0.5
-        )
-
-    def test_reset_snapshot_overwrites_stale_ui_write(self, controller):
-        # The exact reported defect: a UI write left 0.5, a load reset makes the
-        # real gain unity; the node's post-reset snapshot must overwrite it.
-        controller.mixer_status[f"{SLAVE_UUID}/0/0"] = 0.5
-        controller.status_operation_callback(_mixer_status_op(SLAVE_UUID, {"0": 1.0}))
-        assert controller.mixer_status[f"{SLAVE_UUID}/0/0"] == 1.0
-
-    def test_non_finite_and_non_numeric_entries_skipped(self, controller):
-        controller.status_operation_callback(
-            _mixer_status_op(SLAVE_UUID, {"master": float("inf"), "0": "x"})
-        )
-        assert f"{SLAVE_UUID}/0/master" not in controller.mixer_status
-        assert f"{SLAVE_UUID}/0/0" not in controller.mixer_status
-
-    def test_foreign_sender_ignored(self, controller):
-        # Mirrors armed_ready/script_finished: an unadopted node must not grow
-        # the shadow.
-        controller.status_operation_callback(
-            _mixer_status_op(FOREIGN_UUID, {"master": 0.5})
-        )
-        assert controller.mixer_status == {}
-
-    def test_non_dict_entries_do_not_crash(self, controller):
-        # A malformed op with entries as a list must not raise (would otherwise
-        # kill the NNG status thread on entries.items()).
-        op = NodeOperation(
-            type=OperationType.STATUS,
-            action=ActionType.UPDATE,
-            sender=SLAVE_UUID,
-            target="audiomixer_status",
-            data={"output_index": "0", "entries": ["master", 1.0]},
-        )
-        controller.status_operation_callback(op)
-        assert controller.mixer_status == {}
+    routes = [call.args[0] for call in register.call_args_list]
+    assert sorted(routes) == sorted(
+        f"/{u}/*" for u in (CONTROLLER_UUID, SLAVE_UUID, SECOND_SLAVE_UUID)
+    )
+    assert all(type(r) is str and "None" not in r for r in routes)
+    assert controller.cm.network_map == before

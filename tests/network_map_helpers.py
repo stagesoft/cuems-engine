@@ -11,11 +11,18 @@ every field arrives in the type the library delivers (``node_role`` a
 text). Decoding is the library's business — nothing here asserts on it.
 """
 
+from contextlib import contextmanager
+from os import environ
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from cuemsutils.tools.ConfigManager import ConfigManager
 
 FIXTURES = Path(__file__).parent / ".." / "dev" / "test_xml_files"
+# The loader resolves this host's own entry, so a map needs one node even when
+# a test wants nothing adopted: this one, never adopted.
+UNADOPTED_SELF = "e0e0e0e0-0000-4000-8000-00000000e0e0"
 
 _MAP_HEAD = """<?xml version='1.0' encoding='utf-8'?>
 <cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/"
@@ -69,13 +76,81 @@ def write_config_dir(tmp_path, nodes):
 
 
 def typed_network_map(tmp_path, nodes):
-    """Return ``ConfigManager.network_map`` for ``nodes``, loaded from XML."""
+    """Return ``ConfigManager.network_map`` for ``nodes``, loaded from XML.
+
+    ``CUEMS_CONF_PATH`` outranks ``config_dir`` in ConfigManager, and many
+    tests set it to the shared fixtures, so it is pointed at ``tmp_path`` for
+    the load and restored afterwards.
+    """
     write_config_dir(tmp_path, nodes)
-    cm = ConfigManager(config_dir=str(tmp_path), load_all=False)
-    cm.load_network_map()
+    saved = environ.get("CUEMS_CONF_PATH")
+    environ["CUEMS_CONF_PATH"] = str(tmp_path)
+    try:
+        cm = ConfigManager(config_dir=str(tmp_path), load_all=False)
+        cm.load_network_map()
+    finally:
+        if saved is None:
+            del environ["CUEMS_CONF_PATH"]
+        else:
+            environ["CUEMS_CONF_PATH"] = saved
     return cm.network_map
+
+
+def adopted_network_map(uuids, controller=None):
+    """A typed map in which every uuid in ``uuids`` is an adopted node.
+
+    ``controller`` (if among them) gets ``node_role=controller``. An empty
+    ``uuids`` yields a map holding only ``UNADOPTED_SELF``. Built in a
+    throw-away directory, for tests that have no ``tmp_path`` at hand.
+    """
+    nodes = [
+        {
+            "uuid": u,
+            "node_role": "controller" if u == controller else "node",
+            "adopted": True,
+        }
+        for u in sorted(str(u) for u in uuids)
+    ] or [{"uuid": UNADOPTED_SELF, "adopted": False}]
+    with TemporaryDirectory() as tmp:
+        return typed_network_map(tmp, nodes)
 
 
 def _fixture_own_uuid(settings_xml):
     start = settings_xml.index("<uuid>") + len("<uuid>")
     return settings_xml[start : settings_xml.index("</uuid>", start)]
+
+
+@contextmanager
+def controller_with_map(own_uuid, network_map):
+    """A minimal ControllerEngine whose ``cm.network_map`` is ``network_map``.
+
+    Heavy dependencies mocked as in ``tests/test_controller_gating.py``; the
+    engine's own uuid (``node_conf``) is ``own_uuid``, a ``str`` as the
+    settings loader delivers it.
+    """
+    with (
+        patch("cuemsengine.core.BaseEngine.ConfigManager") as MockCM,
+        patch(
+            "cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip",
+            return_value="localhost",
+        ),
+    ):
+        cm = MockCM.return_value
+        cm.node_conf = {"uuid": own_uuid, "mtc_port": "MTC_MIDI_PORT"}
+        cm.library_path = str(FIXTURES)
+        cm.tmp_path = "/tmp"
+        cm.network_map = network_map
+
+        from cuemsengine.ControllerEngine import ControllerEngine
+
+        engine = ControllerEngine(with_mtc=False)
+        engine.communications_thread = Mock()
+        engine.communications_thread.broadcast_osc = Mock()
+        engine.communications_thread.nng_hub = Mock()
+        engine.set_status("running", "no")
+        engine.set_status("load", "")
+        try:
+            yield engine
+        finally:
+            engine._cancel_arm_watchdog()
+            engine.stop()

@@ -1,0 +1,881 @@
+# T019 — T016/T017's moved tests against unchanged ControllerEngine (typed maps instead of a stubbed reader)
+# 2026-09-29T14:39:49+02:00  engine 984ac2b + T020 (BaseEngine only)  cuems-utils 2a88a7c373d76de9c7d2d6786d93db7b9b109dae
+#
+# Verdict: RED on M12 (not characterization) — extra failing-first evidence for T026.
+#   test_cluster_warning.py: 9 failed / 14 passed — TypeError at ControllerEngine.py:1588  'for uuid in sorted(adopted):'  (_resolve_cluster_state)
+#   test_nodelist_modify.py: 1 failed / 24 passed — TypeError at ControllerEngine.py:1767  '"adopted": sorted(adopted),'  (get_cluster_status)
+# The passing ones have at most one adopted node, so sorted() never compares two Uuids.
+$ poetry run pytest -q -p no:cacheprovider tests/test_cluster_warning.py tests/test_nodelist_modify.py
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, xdist-3.8.0, anyio-4.11.0
+collected 48 items
+
+tests/test_cluster_warning.py F.FFF..F.FF.F.F........                    [ 47%]
+tests/test_nodelist_modify.py ...................F.....                  [100%]
+
+=================================== FAILURES ===================================
+__________ TestDiagnosisShapes.test_clean_load_says_nothing_is_wrong ___________
+
+self = <tests.test_cluster_warning.TestDiagnosisShapes object at 0x7f72b6aca210>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b4c8cd50>
+
+    def test_clean_load_says_nothing_is_wrong(self, controller):
+>       d = resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER, NODE1},
+            project={CONTROLLER, NODE1},
+        )
+
+tests/test_cluster_warning.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b4c8cd50>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72b46bcfd0>, '/tmp/tmpjcebnkb8') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpjcebnkb8/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpjcebnkb8/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b4c8cd50>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b4c8cd50>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run0/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+___ TestDiagnosisShapes.test_adopted_but_silent_project_node_is_unreachable ____
+
+self = <tests.test_cluster_warning.TestDiagnosisShapes object at 0x7f72b49da850>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae63c990>
+
+    def test_adopted_but_silent_project_node_is_unreachable(self, controller):
+        """It is in the map and the project uses it — it just did not answer."""
+>       d = resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER},
+            project={CONTROLLER, NODE1},
+        )
+
+tests/test_cluster_warning.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae63c990>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae63b710>, '/tmp/tmpbfxh0v4k') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpbfxh0v4k/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpbfxh0v4k/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae63c990>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae63c990>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run2/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+________ TestDiagnosisShapes.test_both_at_once_are_reported_separately _________
+
+self = <tests.test_cluster_warning.TestDiagnosisShapes object at 0x7f72b49dabd0>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae529010>
+
+    def test_both_at_once_are_reported_separately(self, controller):
+        """Two different fixes — adopt one, go switch the other on."""
+>       d = resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER},
+            project={CONTROLLER, NODE1, NODE2},
+        )
+
+tests/test_cluster_warning.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae529010>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae699d90>, '/tmp/tmpajdbbba0') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpajdbbba0/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpajdbbba0/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae529010>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae529010>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run3/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_ TestDiagnosisShapes.test_adopted_node_the_project_does_not_use_is_not_reported _
+
+self = <tests.test_cluster_warning.TestDiagnosisShapes object at 0x7f72b49daf90>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae528850>
+
+    def test_adopted_node_the_project_does_not_use_is_not_reported(self, controller):
+        """A spare node being off is not this project's problem."""
+>       d = resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER},
+            project={CONTROLLER},
+        )
+
+tests/test_cluster_warning.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae528850>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae521a10>, '/tmp/tmpziwloo9s') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpziwloo9s/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpziwloo9s/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae528850>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae528850>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run4/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_ TestRequiredIsUnchanged.test_required_matches_the_original_formula[adopted0-alive0-project0] _
+
+self = <tests.test_cluster_warning.TestRequiredIsUnchanged object at 0x7f72b49f6e50>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b46b2a50>
+adopted = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+alive = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+project = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+
+    @pytest.mark.parametrize(
+        "adopted,alive,project",
+        [
+            ({CONTROLLER, NODE1}, {CONTROLLER, NODE1}, {CONTROLLER, NODE1}),
+            ({CONTROLLER}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1, NODE2}),
+            (set(), set(), set()),
+        ],
+    )
+    def test_required_matches_the_original_formula(
+        self, controller, adopted, alive, project
+    ):
+>       resolve(controller, adopted=adopted, alive=alive, project=project)
+
+tests/test_cluster_warning.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b46b2a50>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae4cd750>, '/tmp/tmpn3vkq3x1') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpn3vkq3x1/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpn3vkq3x1/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b46b2a50>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b46b2a50>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run7/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_ TestRequiredIsUnchanged.test_required_matches_the_original_formula[adopted2-alive2-project2] _
+
+self = <tests.test_cluster_warning.TestRequiredIsUnchanged object at 0x7f72b49f7110>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae5b7d90>
+adopted = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+alive = {'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+project = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+
+    @pytest.mark.parametrize(
+        "adopted,alive,project",
+        [
+            ({CONTROLLER, NODE1}, {CONTROLLER, NODE1}, {CONTROLLER, NODE1}),
+            ({CONTROLLER}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1, NODE2}),
+            (set(), set(), set()),
+        ],
+    )
+    def test_required_matches_the_original_formula(
+        self, controller, adopted, alive, project
+    ):
+>       resolve(controller, adopted=adopted, alive=alive, project=project)
+
+tests/test_cluster_warning.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae5b7d90>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72b4131090>, '/tmp/tmp6i2ie4ds') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmp6i2ie4ds/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmp6i2ie4ds/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae5b7d90>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae5b7d90>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run9/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_ TestRequiredIsUnchanged.test_required_matches_the_original_formula[adopted3-alive3-project3] _
+
+self = <tests.test_cluster_warning.TestRequiredIsUnchanged object at 0x7f72b49f7350>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae668650>
+adopted = {'4b9b5a1e-0000-4000-8000-000000000001', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+alive = {'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+project = {'4b9b5a1e-0000-4000-8000-000000000001', '4b9b5a1e-0000-4000-8000-000000000002', 'c0c0c0c0-0000-4000-8000-00000000c0c0'}
+
+    @pytest.mark.parametrize(
+        "adopted,alive,project",
+        [
+            ({CONTROLLER, NODE1}, {CONTROLLER, NODE1}, {CONTROLLER, NODE1}),
+            ({CONTROLLER}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1}),
+            ({CONTROLLER, NODE1}, {CONTROLLER}, {CONTROLLER, NODE1, NODE2}),
+            (set(), set(), set()),
+        ],
+    )
+    def test_required_matches_the_original_formula(
+        self, controller, adopted, alive, project
+    ):
+>       resolve(controller, adopted=adopted, alive=alive, project=project)
+
+tests/test_cluster_warning.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae668650>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae44bdd0>, '/tmp/tmpmphmxskb') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpmphmxskb/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpmphmxskb/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae668650>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae668650>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run10/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_ TestRequiredIsUnchanged.test_an_unreachable_project_node_is_excluded_from_the_gate _
+
+self = <tests.test_cluster_warning.TestRequiredIsUnchanged object at 0x7f72b49f7a90>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae6b2ed0>
+
+    def test_an_unreachable_project_node_is_excluded_from_the_gate(self, controller):
+        """The old log line claimed "GO blocked" here. It was false: the node
+        is dropped from required and GO is enabled without it.
+        """
+>       resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER},
+            project={CONTROLLER, NODE1},
+        )
+
+tests/test_cluster_warning.py:209: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae6b2ed0>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae5a94d0>, '/tmp/tmpedkc01gm') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpedkc01gm/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpedkc01gm/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae6b2ed0>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae6b2ed0>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run12/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_________________ TestPush.test_the_payload_carries_the_lists __________________
+
+self = <tests.test_cluster_warning.TestPush object at 0x7f72b4a0c910>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b49f6490>
+
+    def test_the_payload_carries_the_lists(self, controller):
+>       resolve(
+            controller,
+            adopted={CONTROLLER, NODE1},
+            alive={CONTROLLER},
+            project={CONTROLLER, NODE1, NODE2},
+        )
+
+tests/test_cluster_warning.py:238: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cluster_warning.py:87: in resolve
+    controller._resolve_cluster_state()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b49f6490>
+
+    def _resolve_cluster_state(self) -> None:
+        """Probe the cluster and decide which nodes the GO gate must wait for.
+    
+        Snapshots three sets at load time:
+          - adopted: UUIDs from network_map.xml
+          - alive:   UUIDs that ponged within the probe window
+          - project: UUIDs referenced by any cue's output_name in self.script
+    
+        Computes self._required_nodes = adopted & alive & project, then
+        always adds the controller's own UUID (its node-engine always
+        processes the load and sends armed_ready, so this is reachable —
+        and prevents the degenerate set() >= set() = True case from
+        flipping armed=yes before any node has loaded).
+    
+        Categorizes each adopted node and logs info / warning / error.
+        Resets _armed_nodes / _finished_nodes for the new project.
+        """
+        controller_uuid = self._controller_uuid()
+        adopted = self._adopted_uuids_from_network_map()
+        try:
+            project = self._collect_project_nodes(self.script.cuelist)
+        except Exception as e:
+            Logger.warning(f"Could not collect project nodes: {e}")
+            project = set()
+        alive = self._probe_cluster_liveness()
+    
+        # Categorize for operator visibility.
+>       for uuid in sorted(adopted):
+                    ^^^^^^^^^^^^^^^
+E       TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1588: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72b4119250>, '/tmp/tmpa4ra27df') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpa4ra27df/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmpa4ra27df/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b49f6490>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72b49f6490>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run14/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+_______________ TestClusterStatus.test_returns_the_expected_keys _______________
+
+self = <tests.test_nodelist_modify.TestClusterStatus object at 0x7f72b4a2bc90>
+controller = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae34a350>
+
+    def test_returns_the_expected_keys(self, controller):
+        """`missing`/`unreachable` were added later by the load-diagnosis work
+        (see test_cluster_warning.py); they ride on this same reply.
+        """
+        p1, p2 = self._probe(controller, {C, N1}, {C, N1, N2})
+        with p1, p2:
+>           out = controller.get_cluster_status(None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_nodelist_modify.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae34a350>
+value = None, context = None
+
+    def get_cluster_status(self, value, context=None) -> dict:
+        """Return who is adopted and who answers right now.
+    
+        Two different signals, deliberately kept apart (the UI must never merge
+        them):
+    
+        * `adopted` — from network_map.xml, i.e. what cuems-nodeconf knows.
+        * `alive`   — this engine's sub-second ping/pong, the only thing the GO
+          gate trusts. `<online>` in the XML is nodeconf's discovery view and
+          is NOT this.
+    
+        `age_s` is how old the probe behind this answer is, computed here: the
+        browser cannot interpret our monotonic clock.
+    
+        Read-only — it never loads, unloads, arms or stops anything, so it is
+        safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are
+        served from cache so a polling panel cannot turn into a ping flood.
+        Always returns a populated dict: the dispatch path confirms only on a
+        truthy result, and an empty one would leave the editor waiting out its
+        25 s timeout.
+        """
+        now = time.monotonic()
+        cached = getattr(self, "_cluster_status_cache", None)
+        if cached is not None and (now - cached[0]) < CLUSTER_STATUS_CLAMP_S:
+            probed_at, payload = cached
+        else:
+            alive = self._probe_cluster_liveness()
+            adopted = self._adopted_uuids_from_network_map()
+            payload = {
+                "alive": sorted(alive),
+>               "adopted": sorted(adopted),
+                           ^^^^^^^^^^^^^^^
+                "controller": self._controller_uuid(),
+            }
+E           TypeError: '<' not supported between instances of 'Uuid' and 'Uuid'
+
+src/cuemsengine/ControllerEngine.py:1767: TypeError
+------------------------------ Captured log setup ------------------------------
+DEBUG    cuemsengine.ControllerEngine:BaseEngine.py:112 Timecode broadcast 0s
+INFO     cuemsutils.tools.SignalEngine:BaseEngine.py:73 Starting ControllerEngine with PID 1207392
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Node conf: {'uuid': 'c0c0c0c0-0000-4000-8000-00000000c0c0', 'mtc_port': 'MTC_MIDI_PORT'}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:76 Controller IP: localhost
+INFO     cuemsengine.core.BaseEngine:ControllerEngine.py:125 ControllerEngine@c0c0c0c0-0000-4000-8000-00000000c0c0 initialized, waitingstart signal
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property running to no
+DEBUG    cuemsengine.core.BaseEngine:ControllerEngine.py:147 Setting property load to
+------------------------------ Captured log call -------------------------------
+DEBUG    cuemsutils.tools.ConfigBase:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.ConfigBase:log.py:202 Using args: (<cuemsutils.tools.ConfigManager.ConfigManager object at 0x7f72ae34bad0>, '/tmp/tmp7axqrw_f') and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('settings',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/settings.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmp7axqrw_f/settings.xml
+DEBUG    cuemsutils.tools.ConfigBase:log.py:205 Finished with result: None
+DEBUG    cuemsutils.xml.documents:log.py:201 Call recieved
+DEBUG    cuemsutils.xml.documents:log.py:202 Using args: ('network_map',) and kwargs: {}
+DEBUG    cuemsutils.xml.documents:log.py:205 Finished with result: /disk/Projects/StageLab/cuems-utils/src/cuemsutils/xml/schemas/network_map.xsd
+INFO     cuemsutils.xml.mapper:settings.py:107 Reading configuration document /tmp/tmp7axqrw_f/network_map.xml
+---------------------------- Captured log teardown -----------------------------
+DEBUG    cuemsengine.ControllerEngine:log.py:201 Call recieved
+DEBUG    cuemsengine.ControllerEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae34a350>,) and kwargs: {}
+DEBUG    cuemsengine.ControllerEngine:log.py:205 Finished with result: None
+DEBUG    cuemsutils.tools.SignalEngine:log.py:201 Call recieved
+DEBUG    cuemsutils.tools.SignalEngine:log.py:202 Using args: (<cuemsengine.ControllerEngine.ControllerEngine object at 0x7f72ae34a350>,) and kwargs: {}
+INFO     cuemsengine.core.BaseEngine:BaseEngine.py:122 Show lock file /tmp/pytest-of-adria/pytest-115/cuems-run42/cuems.show.lock does not exist
+DEBUG    cuemsutils.tools.SignalEngine:log.py:205 Finished with result: None
+=========================== short test summary info ============================
+FAILED tests/test_cluster_warning.py::TestDiagnosisShapes::test_clean_load_says_nothing_is_wrong
+FAILED tests/test_cluster_warning.py::TestDiagnosisShapes::test_adopted_but_silent_project_node_is_unreachable
+FAILED tests/test_cluster_warning.py::TestDiagnosisShapes::test_both_at_once_are_reported_separately
+FAILED tests/test_cluster_warning.py::TestDiagnosisShapes::test_adopted_node_the_project_does_not_use_is_not_reported
+FAILED tests/test_cluster_warning.py::TestRequiredIsUnchanged::test_required_matches_the_original_formula[adopted0-alive0-project0]
+FAILED tests/test_cluster_warning.py::TestRequiredIsUnchanged::test_required_matches_the_original_formula[adopted2-alive2-project2]
+FAILED tests/test_cluster_warning.py::TestRequiredIsUnchanged::test_required_matches_the_original_formula[adopted3-alive3-project3]
+FAILED tests/test_cluster_warning.py::TestRequiredIsUnchanged::test_an_unreachable_project_node_is_excluded_from_the_gate
+FAILED tests/test_cluster_warning.py::TestPush::test_the_payload_carries_the_lists
+FAILED tests/test_nodelist_modify.py::TestClusterStatus::test_returns_the_expected_keys
+======================== 10 failed, 38 passed in 3.63s =========================

@@ -24,6 +24,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from .network_map_helpers import adopted_network_map
+
 
 @pytest.fixture(autouse=True)
 def set_config_path():
@@ -68,7 +70,7 @@ def controller():
         engine.stop()
 
 
-CONTROLLER = "test-controller-uuid"
+CONTROLLER = "c0c0c0c0-0000-4000-8000-00000000c0c0"
 NODE1 = "4b9b5a1e-0000-4000-8000-000000000001"
 NODE2 = "4b9b5a1e-0000-4000-8000-000000000002"
 
@@ -76,18 +78,17 @@ NODE2 = "4b9b5a1e-0000-4000-8000-000000000002"
 def resolve(controller, *, adopted, alive, project):
     """Run _resolve_cluster_state over a made-up cluster shape."""
     controller.script = Mock()
+    controller.cm.network_map = adopted_network_map(adopted, controller=CONTROLLER)
     with (
-        patch.object(
-            controller, "_adopted_uuids_from_network_map", return_value=set(adopted)
-        ),
         patch.object(controller, "_probe_cluster_liveness", return_value=set(alive)),
-        patch.object(
-            controller, "_collect_project_nodes", return_value=set(project)
-        ),
+        patch.object(controller, "_collect_project_nodes", return_value=set(project)),
         patch.object(controller, "_arm_arm_watchdog"),
     ):
         controller._resolve_cluster_state()
-    return controller._load_diagnosis
+    diagnosis = controller._load_diagnosis
+    for key in ("missing", "unreachable"):
+        assert all(type(u) is str for u in diagnosis[key]), (key, diagnosis[key])
+    return diagnosis
 
 
 def broadcast_warnings(controller):
@@ -161,9 +162,7 @@ class TestDiagnosisShapes:
         """Its own UUID is in project and always in required; if it failed to
         answer its own probe there are much larger problems than this alert.
         """
-        d = resolve(
-            controller, adopted=set(), alive=set(), project={CONTROLLER, NODE1}
-        )
+        d = resolve(controller, adopted=set(), alive=set(), project={CONTROLLER, NODE1})
         assert CONTROLLER not in d["missing"]
         assert CONTROLLER not in d["unreachable"]
 
@@ -334,7 +333,9 @@ class TestClusterStatusCarriesIt:
         return (
             patch.object(controller, "_probe_cluster_liveness", return_value=alive),
             patch.object(
-                controller, "_adopted_uuids_from_network_map", return_value=adopted
+                controller.cm,
+                "network_map",
+                adopted_network_map(adopted, controller=CONTROLLER),
             ),
         )
 
