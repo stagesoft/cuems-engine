@@ -61,8 +61,6 @@ def handler():
     h = object.__new__(CueHandler)
     h._armed_cues = []
     h._armed_cues_set = set()
-    h._video_players = {}
-    h._front_video_player = None
     h._lock = __import__("threading").Lock()
     h.communications_thread = MagicMock()
     ACTION_HANDLER.bind_cue_handler(h)
