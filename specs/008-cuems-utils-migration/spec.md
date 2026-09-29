@@ -3,11 +3,13 @@
 **Feature Branch**: `feat/xml-refactor` (spec directory `008-cuems-utils-migration`; spec-kit's
 branch hook deliberately **not** run — this repository's share of the ecosystem-wide xml-refactor
 lives on the shared branch name, see `specs/planning/xml-refactor/00-runnable-flow.md` §1)
-**Base**: `feat/nodelist-modify-dispatch` @ `dbc9e6d` (decision 2026-09-25, not `rc_1`)
+**Base**: `feat/nodelist-modify-dispatch` @ `dbc9e6d` (decision 2026-09-25), then `rc_1` @ `956a0f3`
+merged in at `27b27f5` (2026-09-29) — see M14
 **Created**: 2026-09-28
-**Status**: Planned and tasked 2026-09-28; `/speckit.analyze` findings applied — ready for `/speckit.implement`
+**Status**: Re-analysed 2026-09-29 after merging `rc_1`; identity policy, versioning and FR-014 revised
 **Input**: `specs/planning/xml-refactor/` bundle (00–04), `00-runnable-flow.md` §3 context block,
-and thirteen measurements taken 2026-09-28 at `afbd5cf` that the bundle does not carry (M1–M13).
+and measurements the bundle does not carry: M1–M13 (2026-09-28, pre-merge) and M14–M18 (2026-09-29,
+after merging `rc_1`).
 
 ## Context
 
@@ -46,10 +48,23 @@ are two of them.
 | **M12** | Node `uuid` decodes to `cuemsutils`' `Uuid`: equal and hash-equal to its string, but **not orderable** — `sorted()` raises `TypeError`. `get_cluster_status` returns `sorted(adopted)`, so the `cluster_status` contract breaks on any map the current library loads | FR-009a; upstream report UR-4 |
 | **M13** | `CTimecodeType` is `<xs:choice minOccurs="0">`: an empty `<duration/>` is valid, and `CuemsScript.load` returns `media.duration is None` for it in a version-2 document | A `None` duration comes from **real documents**, not only in-memory construction; FR-016b covers it |
 
+**Measured 2026-09-29, after merging `rc_1` (`956a0f3`) at `27b27f5`**:
+
+| # | Finding | Consequence |
+|---|---|---|
+| **M14** | `debian/bookworm`'s `7f6e475` is exactly `rc_1` @ `956a0f3` plus packaging (released `0.1.0rc6-1` changelog, version bump, mock renames); `rc_1` was merged, not the packaging branch. Merge clean; the merged suite fails **the same 35 test ids** as the pre-merge baseline: 28 F / 7 E / **831 P** (was 720), 49 test files. `rc_1` brings `pyproject.toml:48` `>=0.1.0rc13` and a lock at **rc14** (on PyPI) — but `debian/control:18` is still `>= 0.1.0rc4`, and rc14 predates `NodeRole`, `CuemsScript.load` and the versioned schemas | FR-001 re-baselined (`evidence/baseline-suite-postmerge.txt`); FR-017 floors move from rc13/rc4; CI stays red by construction |
+| **M15** | Versions are bumped **on `debian/bookworm`** when `rc_1` is merged in: `rc_1` still says `0.1.0rc2`, `debian/bookworm` is at `0.1.0rc6-1`. `CHANGELOG.md` stops at `v0.1.0rc2 — 2026-05-19` on every branch. rc3 was bumped on the packaging line on 2026-04-16 (`30af517`), from a line that predates the `v0.1.0rc2` tag; rc4 `15d50b6` 2026-08-03 (`rc_1` side `2abf26d`), rc5 `8b57710` 2026-08-14 (`fc8d2bb`), rc6 `7f6e475` 2026-09-28 (`956a0f3`) | FR-019 family rewritten: rc3–rc6 backfilled, this release is **rc7**, `debian/changelog` untouched here |
+| **M16** | `cuemsutils`' `Uuid` (`cuemsutils/tools/Uuid.py`) is a plain object: `==`/`hash` match its `str`, formatting and `__json__` work; `<`, slicing, `len`, `+`, `.split`, `isinstance(…, str)` do not; the constructor **refuses anything not uuid4**. The library's uuid decoder is **lenient**: a uuid4 decodes to `Uuid`, anything else (uuid1, the nil uuid carried by real editor payloads) stays the raw `str` — the same map field is `Uuid` or `str` depending on the value (measured: a uuid1 map loads, uuid `str`). `settings.xsd`'s `uuid` is `NonEmptyString`, so `node_conf["uuid"]` is always `str`. 6 of the 11 uuid literals in `tests/` are not uuid4 | FR-024–FR-029, the identity policy |
+| **M17** | `fade_out` is **not** equivalent to `stop` (`ActionHandler.py:567-583` vs `_handle_stop`): `stop` answers a repeat with `applied_no_change` and **disarms** the target; `fade_out` does neither — its own TODO names *"the same zombie-process bug as the old stop handler"*. `fade_in` is code-identical to `play`. True before the merge too; `rc_1` adds `_cancel_chain_behind` to both, keeping the difference | FR-014 corrected: the `fade_out` → `stop` conversion is a behaviour **change** (a fix), not preservation |
+| **M18** | `rc_1`'s `6068dd8` hit the M12 class on the rig: `Cue.id` is a `Uuid`, and `', '.join` over ids crashed the stop-cancel summary | Confirms the class is wider than node uuids; FR-026 |
+
 All other coordinates in `03-migration-inventory.md` were re-verified unchanged at `afbd5cf`:
 `BaseEngine.py` :17/:33/:410/:433/:440/:443/:505; `ControllerEngine.py` :15/:287/:937-943/:1418
 (dual read :1434; callers :1489/:1553/:1738); `ActionHandler.py` :38-39/:516/:542/:784-785; the
 five `CTimecode(cue.media.duration)` wraps; `pyproject.toml:41`; `debian/control:18`.
+
+**Post-merge coordinates (`27b27f5`)** — these supersede the ones above and are what `tasks.md` uses:
+`BaseEngine.py` unchanged; `ControllerEngine.py` :15/:272-277/:287/:937-943 unchanged, `_adopted_uuids_from_network_map` **:1444** (callers **:1515/:1579/:1764**), `_node_label` **:1468**; `ActionHandler.py` :38-39, **:541**, **:567**, **:810-811**; `CueHandler.py:212` (was :166); `pyproject.toml` version **:11**, pin **:48**; `debian/control:18-19`.
 
 ## Clarifications
 
@@ -79,7 +94,8 @@ five `CTimecode(cue.media.duration)` wraps; `pyproject.toml:41`; `debian/control
 ### Session 2026-09-28 — `/speckit.clarify`
 
 - Q: Where does the nodes-before-controller ordering (C11) live? → A: **Both** a
-  `## v0.1.0rc3 — UNRELEASED` entry in this repository's `CHANGELOG.md` **and** a
+  `## v0.1.0rc3 — UNRELEASED` *(superseded 2026-09-29: the release is **rc7**, and rc3–rc6 are
+  backfilled — see that session and FR-019a/c)* entry in this repository's `CHANGELOG.md` **and** a
   release-procedure section in `cuems-relations` (the ecosystem index, checked out locally at
   `../cuems-relations`, `master` @ `c9f1cd9`; no such section exists there today), **plus** an exit
   criterion. The `cuems-relations` text is drafted in this feature's directory and handed off; it is
@@ -132,6 +148,29 @@ five `CTimecode(cue.media.duration)` wraps; `pyproject.toml:41`; `debian/control
   Consequence (FR-016): the wraps go; the `None` case is kept as zero but made **explicit and
   logged**, since the constitution forbids silent failures.
 
+### Session 2026-09-29 — after merging `rc_1`, answered by the maintainer
+
+- Q: Which direction is "the library's behaviour as the primary fix" for `Uuid` vs `str`? → A:
+  **`Uuid` canonical.** Ids are held as the library delivers them; `str` ids are converted at
+  ingress (`node_conf`, `output_name[:36]`, OSC/NNG/editor payloads); `str()` only at egress (OSC
+  addresses, JSON, logs, slugs, sort keys). Replaces the earlier FR-009a (`str` at read).
+  **Applied as the library behaves (M16):** the ingress conversion mirrors the library's own
+  decoder — `Uuid` for a uuid4, the raw `str` otherwise, `None` for empty — because the library
+  itself keeps non-uuid4 values (nil uuid, uuid1) as `str` and forbids the engine rejecting what
+  the parser accepts (its FR-015). "Everything is uuid4" is the expected state, observed and
+  warned about, not enforced by crashing.
+- Q: How far are non-uuid4 test literals converted? → A: **All**, in `tests/` and
+  `dev/test_xml_files/`, to fixed uuid4 values — one mechanical, recorded task.
+- Q: What does the rc7 release touch on this branch? → A: `__version__` and `pyproject.toml` at
+  `0.1.0rc7`, and `CHANGELOG.md` (rc3–rc6 backfilled, `v0.1.0rc7 — UNRELEASED` on top).
+  **`debian/changelog` is not touched here** — versions are cut on `debian/bookworm` when `rc_1`
+  is merged in, as for rc3–rc6. The drift test checks `__init__`, `pyproject.toml` and
+  `CHANGELOG.md` only.
+- Q: How is the rc3–rc6 backfill dated, given rc3 predates the `v0.1.0rc2` tag? → A: **By the
+  `debian/bookworm` release commits** (rc3 2026-04-16, rc4 2026-08-03, rc5 2026-08-14, rc6
+  2026-09-28), each entry covering what that release shipped; rc3 carries one line recording that it
+  was cut from a line predating the `v0.1.0rc2` tag. The rc2 entry is left untouched.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The actors are the **show operator** (loads a project, presses GO, reads the cluster warning), the
@@ -166,6 +205,10 @@ pre-migration code before it passes.
 4. **Given** an operator adopts a node through `nodelist_modify`, **When** the map is re-read in
    place, **Then** the new node reaches the GO gate, with no ordering constraint between re-reading
    the map and registering handlers.
+5. **Given** a map whose node uuids decode to `Uuid` and a controller whose own uuid is a `str`,
+   **When** `cluster_status` is requested and a project is loaded, **Then** the reply and the
+   `cluster_warning` payload carry sorted string uuids, and the controller is recognized as itself —
+   never listed as missing or unreachable because one side was a `Uuid` and the other a `str`.
 
 ---
 
@@ -188,7 +231,9 @@ with a legacy fade action, and record both.
 2. **Given** a version-2 `script.xml`, **When** the project loads, **Then** it loads and dispatches
    identically.
 3. **Given** a version-1 document with an action of type `fade_in`, **When** it is revealed, **Then**
-   it behaves as `play` — delivered by the library's conversion, not by an engine handler.
+   it behaves as `play` — delivered by the library's conversion, not by an engine handler. A
+   `fade_out` behaves as `stop`, which now **disarms** its target — a recorded behaviour change
+   (FR-014, M17), not a preservation.
 4. **Given** a loaded show, **When** audio, video and DMX cues play, loop and reach their end,
    **Then** their durations, framerate conversions and follow/postwait timing are identical to
    before the duration-wrap cleanup.
@@ -285,6 +330,10 @@ green against the replacement contract.
   before it can serve an adopt. This feature must not deepen that dependency; the fix is nodeconf's.
 - **Empty `node_list`** (fresh node boot): the controller-IP fallback raises its existing
   "No nodes found" error, unchanged.
+- **A non-uuid4 id** (uuid1 fleet id, the nil uuid from an editor payload): kept as `str`, exactly
+  as the library keeps it; compared, hashed and emitted like any other id. The engine's **own**
+  uuid or any map uuid that is not uuid4 is logged once at startup/map load as a warning naming the
+  re-mint (`cuems-utils` feature 012) — observable, never fatal.
 
 ## Requirements *(mandatory)*
 
@@ -294,7 +343,9 @@ green against the replacement contract.
 
 - **FR-001**: The pre-change suite result MUST be captured as evidence before any source or fixture
   change, with the commit, the library version and the library's source (editable path or wheel)
-  recorded alongside. *(Done 2026-09-28: `evidence/baseline-suite.txt`.)*
+  recorded alongside. *(Done 2026-09-28: `evidence/baseline-suite.txt`; re-captured after the
+  `rc_1` merge 2026-09-29: `evidence/baseline-suite-postmerge.txt`, 28 F / 7 E / 831 P — the
+  post-merge file is the baseline every later comparison uses.)*
 - **FR-002**: `/speckit.implement` MUST NOT start on an **unexplained** red suite. Per Q3, fixture
   work runs first and in order, with no engine change: (1) convert
   `dev/test_xml_files/network_map.xml` to `node_role` and capture the run; (2) convert
@@ -342,10 +393,11 @@ green against the replacement contract.
   `{"node": …}` wrapper (M10), the read unwraps it exactly once. A test MUST show that registering
   handlers for N adopted nodes registers N handlers with non-`None` uuids, and that the map is
   field-for-field unchanged after the read.
-- **FR-009a**: Node uuids MUST leave that read as `str` (M12), so `cluster_status`'s sorted lists,
-  OSC addresses and `set[str]` comparisons keep working. A test MUST call `get_cluster_status` with
-  a map loaded through the public surface and assert sorted string lists; it fails against the
-  pre-migration code with `TypeError`.
+- **FR-009a**: The reader returns ids under the identity policy (FR-024): `Uuid` where the library
+  delivers one. `cluster_status`, `cluster_warning` and every log that lists ids sort with
+  `key=str` and emit `str` (FR-025). A test MUST call `get_cluster_status` with a map loaded
+  through the public surface and assert sorted string lists; it fails against the pre-migration
+  code with `TypeError` (M12).
 - **FR-010**: `_adopted_uuids_from_network_map` MUST be deleted, not ported; its three callers read
   the same non-mutating source. The one-pass hazard docstring (`ControllerEngine.py:272-277`) and
   the "ORDER MATTERS" convention (`:937-943`) are removed as obsolete, and the spec records this as a
@@ -367,9 +419,14 @@ green against the replacement contract.
   script 1→2 conversion — enforced by FR-017's floor, so the commit raising the `debian/control`
   and `pyproject.toml` floor precedes the commit deleting the handlers.
 - **FR-014**: The spec states the ordering the deletion depends on: *the library's convert-on-read
-  rewrites `fade_in`/`fade_out` to `play`/`stop` before the engine ever sees the document; that is
-  behaviour-preserving because these two handlers already did exactly that; therefore the handlers
-  are unreachable on any library at or above the floor.*
+  rewrites `fade_in`/`fade_out` to `play`/`stop` before the engine ever sees the document, so the
+  handlers are unreachable on any library at or above the floor.* **Corrected 2026-09-29 (M17):**
+  for `fade_in` → `play` this preserves behaviour (the handlers are code-identical). For
+  `fade_out` → `stop` it does **not**: a converted `fade_out` now disarms its target (player
+  processes are cleaned up) and a repeat answers `applied_no_change`. That is a fix of the
+  zombie-process bug `fade_out` carried, and it MUST be stated as a behaviour change — in the
+  rc7 `CHANGELOG.md` entry and in an upstream note (UR-7), since `cuems-utils` justified the
+  conversion as behaviour-preserving on the strength of this repository.
 
 **Out-of-scope items that must still be recorded**
 
@@ -379,7 +436,7 @@ green against the replacement contract.
 **Group 6 — the duration wraps (in scope by decision, 2026-09-28)**
 
 - **FR-016**: The five `CTimecode(cue.media.duration)` re-wraps MUST be removed —
-  `run_cue.py:176`, `:430`; `loop_cue.py:112`, `:276`; `CueHandler.py:166` — consuming the
+  `run_cue.py:176`, `:430`; `loop_cue.py:112`, `:276`; `CueHandler.py:212` (`:166` before the `rc_1` merge) — consuming the
   `CTimecode` the library's `Media.duration` already returns (D17/D18b).
 - **FR-016a**: Before removal, each site MUST be covered by a characterization test pinning its
   result for a `CTimecode` duration (including the framerate conversion at the four
@@ -395,16 +452,17 @@ green against the replacement contract.
 
 **Group 5 — release gate**
 
-- **FR-017**: `pyproject.toml` and `debian/control` MUST declare the same `cuems-utils` range,
+- **FR-017**: `pyproject.toml` (`:48`, `>=0.1.0rc13` after the merge) and `debian/control` (`:18`,
+  `>= 0.1.0rc4`) MUST declare the same `cuems-utils` range,
   `>= 0.1.0rc16` and `< 0.1.1` (`<< 0.1.1~` in Debian syntax), modelled on `cuems-nodeconf`'s
   `debian/control:18-19`. The lock file is **not** regenerated on this branch while rc16 is
-  unpublished; regenerating it so a fresh install cannot resolve rc11 (M7) is an exit step taken
-  once `cuems-utils` publishes rc16.
+  unpublished; regenerating it so a fresh install cannot resolve an older release candidate (the lock
+  is at rc14 after the merge, M14) is an exit step taken once `cuems-utils` publishes rc16.
 - **FR-017a**: Until that re-lock, CI on this branch is red by construction. That state MUST be
   recorded in `evidence/` with its cause, and every suite result claimed by this feature MUST be a
   local run with its environment recorded (FR-001's format). No `poetry install` or `poetry lock` is
   run in the development environment during this feature: it would replace the editable sibling
-  with rc11, or fail. **No pull request is opened from `feat/xml-refactor` until the re-lock has
+  with the locked rc14, or fail. **No pull request is opened from `feat/xml-refactor` until the re-lock has
   turned CI green** — constitution Workflow §4 ("each PR MUST include test evidence (CI pass)") is
   followed, not excepted. This costs nothing D27 did not already impose: nothing merges before the
   coordinated release.
@@ -415,30 +473,65 @@ green against the replacement contract.
 
 **C11 — ordering**
 
-- **FR-019**: "Nodes upgrade before the controller" MUST appear in (a) a new
-  `## v0.1.0rc3 — UNRELEASED` entry at the top of `CHANGELOG.md`, in an upgrade-notes section of
-  that entry, (b) a release-procedure section drafted for `cuems-relations` and handed off as
+- **FR-019**: "Nodes upgrade before the controller" MUST appear in (a) an `### Upgrade notes`
+  section of a new `## v0.1.0rc7 — UNRELEASED` entry at the top of `CHANGELOG.md`, (b) a
+  release-procedure section drafted for `cuems-relations` and handed off as
   `specs/008-cuems-utils-migration/handoff-relations-release-order.md`, and (c) the exit criteria
   (SC-008). No `debian/NEWS` file is created.
-- **FR-019a**: The version moves `0.1.0rc2` → `0.1.0rc3` in this feature. The edited source is
-  `__version__` in `src/cuemsengine/__init__.py`; the copies follow it — the `CHANGELOG.md` entry
-  header, `pyproject.toml`'s `version`, and a matching `UNRELEASED` `debian/changelog` entry
-  (`0.1.0rc3-1`). The entry stays `UNRELEASED` on this branch.
-  **The bump is the coordination point for `xml-refactor-merge-candidate`**: the tag is cut on the
-  commit that carries it, once every consumer flow lands (D27); only the release itself replaces
-  `UNRELEASED` with a date and distribution. The rc3 entry also records this feature's changes
-  (Groups 1–6), in the file's existing Added/Changed/Removed style.
+- **FR-019a**: This release is **`0.1.0rc7`**. The edited source is `__version__` in
+  `src/cuemsengine/__init__.py`; `pyproject.toml:11` and the top `CHANGELOG.md` header follow it.
+  The entry stays `UNRELEASED` on this branch. **`debian/changelog` is not touched** (M15: versions
+  are cut on `debian/bookworm` when `rc_1` is merged in). **The bump is the coordination point for
+  `xml-refactor-merge-candidate`**: the tag is cut on the commit carrying it, once every consumer
+  flow lands (D27); only the release replaces `UNRELEASED`. The rc7 entry records this feature's
+  changes (Groups 1–7) in the file's Added/Changed/Removed style, including FR-014's `fade_out`
+  behaviour change under `### Changed`.
 - **FR-019b**: `cuemsengine.__version__` MUST be the single source of the version, enforced by a
-  test that fails when `pyproject.toml`'s `version`, the first `CHANGELOG.md` `## v…` header, or the
-  upstream part of `debian/changelog`'s first entry differs from it. `pyproject.toml` keeps a
-  literal because Poetry requires one: measured 2026-09-28, Poetry 2.4 `check`/`build` refuse
-  `dynamic = ["version"]` in package mode (*"Either [project.version] or [tool.poetry.version] is
-  required"*). Maintainer decision the same day: keep `poetry-core` and the literal, guarded by the
-  test — rejected a hatchling backend with `package-mode = false`, the `poetry-dynamic-versioning`
-  plugin, and deferring to a separate feature.
+  test that fails when `pyproject.toml`'s `version` or the first `CHANGELOG.md` `## v…` header
+  differs from it. `pyproject.toml` keeps a literal because Poetry requires one: measured
+  2026-09-28, Poetry 2.4 `check`/`build` refuse `dynamic = ["version"]` in package mode.
+  `debian/changelog` is deliberately **not** checked (FR-019a).
+- **FR-019c**: `CHANGELOG.md` MUST gain `v0.1.0rc3` … `v0.1.0rc6` entries between rc7 and the
+  untouched rc2 entry, rewritten from the commit history and dated by the `debian/bookworm` release
+  commits: rc3 2026-04-16 (`30af517`; content: the packaging-line work of `0.1.0rc3-1`/`-2`, with one
+  line recording that it was cut from a line predating the `v0.1.0rc2` tag); rc4 2026-08-03
+  (`15d50b6`, `rc_1` range `v0.1.0rc2..2abf26d`, 100 commits); rc5 2026-08-14 (`8b57710`,
+  `2abf26d..fc8d2bb`, 5 commits); rc6 2026-09-28 (`7f6e475`, `fc8d2bb..956a0f3`, 31 commits).
+  Sources: `git log --no-merges` over each range and `debian/bookworm`'s own `debian/changelog`
+  entries (`git show 7f6e475:debian/changelog`). Same style as the rc2 entry; ClickUp ids kept where
+  the commits carry them.
 - **FR-020**: Both texts MUST list the documents the deploy path ships (`script.xml`, project
   `mappings.xml`, project `settings.xml`) with their current schema versions, so that a future bump
   of `project_mappings` or `project_settings` is visibly a C11 change (M5).
+
+**Group 7 — identity: `Uuid` canonical, as the library delivers it (clarified 2026-09-29)**
+
+- **FR-024**: One engine helper converts an id at **ingress**, mirroring the library's own uuid
+  decoder (M16): a `Uuid` passes through; a uuid4 `str` becomes `Uuid`; any other non-empty `str`
+  stays `str`; empty/`None` becomes `None`. It never raises. Ingress sites: `node_conf["uuid"]`
+  (`BaseEngine.py:315`, `:325`; `ControllerEngine.py:167`, `:281`, `:350`, `:385`, `:1422`, `:1441`;
+  `NodeEngine.py:632`), `output_name[:36]` (`ControllerEngine.py:987`), NNG `operation.sender`
+  (`:551`, `:568`, `:588`), the direct-player OSC address (`:310`), editor cue ids (`:472`, `:609`),
+  and map uuids in the adoption reader and `_node_label` (`:1458`, `:1483`).
+- **FR-025**: One engine helper renders an id at **egress** as `str`. Every operation `Uuid` does not
+  support goes through it: sorting (`key=str`; `ControllerEngine.py:1557`, `:1588`, `:1626-1627`,
+  `:1654-1655`, `:1703`, `:1766-1767`), slicing (`_node_label`'s `uuid[:8]` `:1488`,
+  `BaseEngine.py:315`'s `[-12:]`), `.split`/`join` slugs, JSON and OSC arguments, string
+  concatenation.
+- **FR-026**: Every id set the controller keeps (`_armed_nodes`, `_finished_nodes`,
+  `_pong_responses`, adopted, alive, project, required) holds ingress-converted ids, so a `Uuid`
+  and its `str` never coexist as two members. A test MUST show a controller whose own uuid is `str`
+  and whose map uuids are `Uuid` resolving `required`, `missing` and `unreachable` correctly; it
+  fails against the pre-migration code.
+- **FR-027**: A non-uuid4 own uuid or map uuid is logged **once** as a warning at startup / map
+  load, naming the value and the re-mint (`cuems-utils` feature 012). Never fatal.
+- **FR-028**: Every uuid literal in `tests/` and `dev/test_xml_files/` MUST be uuid4 (6 of 11 are
+  not, M16), replaced with fixed uuid4 values — except literals whose purpose is a non-uuid4 input,
+  which are kept, named and justified in the test that uses them (FR-027's test).
+- **FR-029**: The helpers live in one engine module; `cuemsutils.tools.Uuid` is imported only there
+  and in tests. No engine code constructs `Uuid` elsewhere. Upstream report **UR-6**: the library
+  has no public id-coercion helper — its decoder is internal (`cuemsutils.xml.adapters`) — so the
+  engine mirrors it; replace the mirror when one is published.
 
 **Exemptions and upstream reports**
 
@@ -451,10 +544,11 @@ green against the replacement contract.
   comment in `versioning.py` (M4); **UR-3** the stale editable-install metadata (rc12 vs rc16) that
   makes the environment misreport its own version (M7), if it is the library's to fix; **UR-4**
   `Uuid` is equal and hash-equal to `str` but not orderable, so `sorted()` over node uuids raises
-  (M12); **UR-5** `XmlReaderWriter.validate`'s deprecation message recommends
+  (M12) — the engine now adapts to it (Group 7), the report stands; **UR-5** `XmlReaderWriter.validate`'s deprecation message recommends
   `CuemsScript.validate` for every schema, but that validates only a loaded show script — the public
   surface has no stand-alone validator for `settings`/`network_map`/`project_*` documents, only the
-  `ConfigManager` loaders (measured 2026-09-28).
+  `ConfigManager` loaders (measured 2026-09-28); **UR-6** no public id-coercion helper (FR-029);
+  **UR-7** the `fade_out` → `stop` conversion is not behaviour-preserving in this engine (M17).
 - **FR-023**: The F2a interaction (socket existence used as nodeconf readiness) is recorded for
   whoever fixes `cuems-nodeconf`; this feature does not add another caller of that probe.
 - **FR-023a**: The deletion of `find_hosts` MUST be recorded against
@@ -475,6 +569,8 @@ green against the replacement contract.
   ships it to nodes.
 - **Deployed project documents**: `script.xml`, `mappings.xml`, `settings.xml` — the set C11 applies to.
 - **Release gate**: the pair of dependency declarations plus the upgrade-order statement.
+- **Id**: a cue, node or project identity. Held as `cuemsutils`' `Uuid` when it is a uuid4, as the
+  raw `str` otherwise — exactly as the library decodes it (FR-024); rendered as `str` at every egress.
 - **Upstream report**: a dated, reproducible defect note for `cuems-utils`, never a patch.
 
 ## Success Criteria *(mandatory)*
@@ -492,19 +588,23 @@ Exit criteria from `00-runnable-flow.md` §6, adjusted by M2/M3:
 - **SC-005**: The two dependency declarations agree and are bounded above. The lock resolves rc16 —
   or, while rc16 is unpublished, is recorded **not performed** with CI's red-by-construction state
   (FR-017a), and carried as an open release step.
-- **SC-006**: The suite is green, with pass/fail/error counts recorded before (28/7 red, 720 passed)
-  and after; count growth is not a regression.
+- **SC-006**: The suite is green, with pass/fail/error counts recorded before (post-merge
+  baseline 28 F / 7 E / 831 P) and after; count growth is not a regression.
 - **SC-007**: A show loads and dispatches against a version-1 and a version-2 `script.xml`, both
   recorded.
 - **SC-008**: The nodes-before-controller ordering exists in `CHANGELOG.md`'s
-  `v0.1.0rc3 — UNRELEASED` entry and in the handed-off `cuems-relations` draft, and is checked off as
-  an exit criterion; `__version__` is `0.1.0rc3` and the version drift test (FR-019b) is green.
+  `v0.1.0rc7 — UNRELEASED` entry and in the handed-off `cuems-relations` draft; `CHANGELOG.md` holds
+  rc3–rc6 entries (FR-019c); `__version__` is `0.1.0rc7`, the version drift test (FR-019b) is green,
+  and `debian/changelog` is unchanged from the merge.
 - **SC-009**: Every hardware/cluster item not performed is recorded **not performed**, per entry.
 - **SC-010**: Zero `cuemsutils` deprecation warnings are emitted during a full suite run —
   including `tests/test_default_mappings_valid.py`, which moves off `XmlReaderWriter`: script
   fixtures via `CuemsScript.validate`, config fixtures via the public `ConfigManager` loaders.
 - **SC-011**: A search of `src/` for `CTimecode(cue.media.duration)` returns **zero**, and every
   duration characterization test (FR-016a) is green before and after the removal.
+- **SC-012**: Every uuid literal under `tests/` and `dev/test_xml_files/` is uuid4 except the named
+  FR-027 cases; the identity tests (FR-024–FR-026) are green; no `sorted(`, slice, `.split` or
+  `join` over an id in `src/` operates on a raw id without the egress helper.
 
 Then, and only then, the signed annotated tag `xml-refactor-merge-candidate` on `feat/xml-refactor`,
 on the commit carrying the rc3 version bump (FR-019a).
@@ -512,7 +612,7 @@ Nothing releases from this branch alone (D27).
 
 ## Assumptions
 
-- **A1**: The M1 red baseline's *visible* failures are environmental (library ahead of fixtures):
+- **A1**: The M1 red baseline (unchanged in kind after the merge, M14)'s *visible* failures are environmental (library ahead of fixtures):
   each traces to one of two fixture files, and converting them is test work, not a change to engine
   behaviour. Behind them sits a third cause that **is** an engine defect — M9, the version-1 script
   load — which surfaces only once the `network_map` fixture is converted, and is FR-007's to fix.
@@ -522,6 +622,9 @@ Nothing releases from this branch alone (D27).
   2026-09-28), so the settings 1→2 conversion needs no engine change.
 - **A4**: cuemsutils features 011–014 do not block this feature (verified by the bundle in both
   directions); feature 013's edits to `NodeEngine.py` `node_hw_outputs` are out of scope here.
+  Feature 012's uuid re-mint is not a prerequisite either: the identity policy tolerates non-uuid4
+  ids exactly as the library does (FR-024), and warns (FR-027).
+- **A7**: Versions are cut on `debian/bookworm` (M15); this branch never edits `debian/changelog`.
 - **A5**: The constitution (v1.1.0) needs no amendment. Principle II is satisfied by FR-003;
   Principle I is served by deleting rather than rewriting (`find_hosts`, Q2). YAGNI supports
   deleting code with no caller.

@@ -9,7 +9,7 @@ regression.
 
 | Field | Type as delivered (R1) | Engine reads it for | Engine rule |
 |---|---|---|---|
-| `uuid` | `Uuid` | OSC handler routes, adopted/alive sets, `cluster_status`, `cluster_warning` | converted with `str()` **once**, at the adoption reader and the controller lookup (FR-009a) |
+| `uuid` | `Uuid` if uuid4, else raw `str` (library's lenient decoder, M16) | OSC handler routes, adopted/alive sets, `cluster_status`, `cluster_warning` | passed through `as_id` at the reader (FR-024); `id_str` at every egress — routes, sorts, JSON (FR-025) |
 | `node_role` | `NodeRole` | controller identification | compared to `NodeRole.controller` only; never to a string (FR-005, M11) |
 | `ip` | `str` | controller-IP fallback | a controller without `ip` keeps raising `ValueError("Controller node in network map has no <ip>")` |
 | `adopted` | `bool` | adoption set | used as-is; the engine parses no strings (FR-030a-i) |
@@ -21,7 +21,7 @@ missing `"node"` key is skipped (today's behaviour, kept).
 
 ### Derived views (engine-internal)
 
-- **Adopted uuids** — `frozenset[str]` of `uuid` for nodes with `adopted is True`. One reader
+- **Adopted uuids** — `frozenset` of ids (`as_id(uuid)`) for nodes with `adopted is True`. One reader
   (`_adopted_node_uuids`, research R10) serves OSC registration, the liveness probe, cluster-state
   resolution and `cluster_status`. Never mutates the map.
 - **Controller** — `NodeIndex.from_nodes(nodes, key=uuid).controllers`:
@@ -35,6 +35,18 @@ missing `"node"` key is skipped (today's behaviour, kept).
 - **Alive uuids** — the engine's own ping/pong set. **Unchanged by this feature**; never derived
   from `online`.
 
+## Id (engine-side policy — Group 7, `contracts/ids.md`)
+
+| Input | `as_id` returns |
+|---|---|
+| a `Uuid` | it, unchanged |
+| a uuid4 `str` | `Uuid(s)` |
+| any other non-empty `str` (uuid1, nil uuid, `"controller"` fallback) | the `str`, unchanged |
+| `""` / `None` | `None` |
+
+`id_str(x)` → `str(x)`; `None` → `""`. Ordering is always `sorted(ids, key=str)`. Sources and types:
+`research.md` R14.
+
 ## Show script (read via `CuemsScript.load(path)`)
 
 | Aspect | Rule |
@@ -43,7 +55,8 @@ missing `"node"` key is skipped (today's behaviour, kept).
 | Version 2 | loaded as-is |
 | Newer than the library | the library raises (`versioning.py:50-63`, *"newer than this library's current version"*); the engine lets it propagate to the load error path |
 | `media.duration` | `CTimecode`, **or `None`** for an empty `<duration/>` (R4) |
-| `ActionCue.action_type` | never `fade_in`/`fade_out` after conversion (script v2 forbids them) |
+| `ActionCue.action_type` | never `fade_in`/`fade_out` after conversion (script v2 forbids them); a converted `fade_out` is a `stop`, which disarms (M17) |
+| `cue.id` | `Uuid` (uuid4) or raw `str` — same policy as node ids |
 
 ### Media duration rule (FR-016)
 
@@ -65,6 +78,6 @@ extends C11 and must update the `CHANGELOG.md` upgrade notes and the hand-off (F
 
 | Relation | Before | After |
 |---|---|---|
-| `cuems-utils` / `cuemsutils` | `>= 0.1.0rc4` / `>=0.1.0rc10` (disagree) | `>= 0.1.0rc16`, `<< 0.1.1~` / `>=0.1.0rc16,<0.1.1` |
+| `cuems-utils` / `cuemsutils` | `>= 0.1.0rc4` (`debian/control:18`) / `>=0.1.0rc13` (`pyproject.toml:48`, from `rc_1`) — disagree | `>= 0.1.0rc16`, `<< 0.1.1~` / `>=0.1.0rc16,<0.1.1` |
 | `cuems-common` | `>= 1.0.0` | `>= 1.3.0-23~` (inherits `Breaks: cuems-nodeconf (<< 0.1.0-8)`) |
 | own `Breaks:` | none | none (clarify) |

@@ -21,6 +21,7 @@ Guarded by a test (`tests/test_public_surface.py`), modelled on `cuems-nodeconf`
 | `cuemsutils.tools.ConfigManager.ConfigManager` (`.network_map`, `.load_network_map`) | node map (FR-008) |
 | `cuemsutils.tools.NodeList.NodeRole`, `NodeIndex` | controller lookup (FR-005) |
 | `cuemsutils.tools.CTimecode.CTimecode` | duration helper (FR-016b) — already imported |
+| `cuemsutils.tools.Uuid.Uuid` | **only** in `src/cuemsengine/tools/ids.py` (FR-029); the guard fails on any other `src/` import of it |
 
 ## Anti-vacuity guard
 

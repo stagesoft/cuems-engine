@@ -1,56 +1,70 @@
 # Implementation Plan: Migrate onto cuemsutils' post-008 public API
 
 **Branch**: `feat/xml-refactor` (spec dir `008-cuems-utils-migration`; spec-kit scripts run with
-`SPECIFY_FEATURE=008-cuems-utils-migration`) | **Date**: 2026-09-28 | **Spec**: [spec.md](spec.md)
-**Input**: [spec.md](spec.md) (clarified), the `specs/planning/xml-refactor/` bundle, and
-[research.md](research.md)
+`SPECIFY_FEATURE=008-cuems-utils-migration`) | **Date**: 2026-09-28, re-planned 2026-09-29 after
+merging `rc_1` (`956a0f3`) at `27b27f5` | **Spec**: [spec.md](spec.md)
+**Input**: [spec.md](spec.md), the `specs/planning/xml-refactor/` bundle, [research.md](research.md)
+(R1–R15)
 
 ## Summary
 
 Move the engine off the `cuemsutils` surface that upstream US10 deletes, and fix what that surface
-now gets silently wrong. Six groups: node vocabulary (onto `NodeRole`/`NodeIndex`), deprecated
-imports (onto `CuemsScript.load` and `ConfigManager`), the mutating adoption API (one
-non-mutating `str`-typed reader; delete the workaround and `find_hosts`), the dead fade handlers,
-the release gate (bounded pins, `cuems-common` floor, the rc2 → rc3 version bump with an
-`UNRELEASED` `CHANGELOG.md` entry carrying the upgrade order — the bump is the coordination point
-for `xml-refactor-merge-candidate`), and the duration-wrap cleanup
-(explicit, logged `None` → zero).
+now gets silently wrong. Seven groups:
+
+1. **Node vocabulary** onto `NodeRole`/`NodeIndex`; `find_hosts` deleted.
+2. **Deprecated imports** onto `CuemsScript.load` and `ConfigManager` — which also fixes the engine's
+   inability to load any version-1 show (M9).
+3. **The mutating adoption API**: one non-mutating reader; the workaround, the one-pass hazard and
+   the ORDER-MATTERS convention deleted.
+4. **Dead fade handlers** deleted — with FR-014 corrected: `fade_out` → `stop` is a behaviour change
+   (a fix), not preservation (M17).
+5. **The release gate**: bounded pins, `cuems-common` floor, CI red by construction until rc16
+   publishes, no PR before the re-lock.
+6. **Duration wraps** removed, `None` → zero made explicit and logged.
+7. **Identity**: `Uuid` canonical **as the library delivers it** — `as_id` at ingress (uuid4 →
+   `Uuid`, anything else stays `str`, mirroring the library's own lenient decoder), `id_str` at
+   egress (sorts, slices, JSON, OSC). Test ids all uuid4.
+
+Plus the release: `CHANGELOG.md` rc3–rc6 backfilled from history, **rc7 `UNRELEASED`** on top,
+`__version__` the single source, `debian/changelog` left to the packaging branch; the rc7 commit is
+the `xml-refactor-merge-candidate` coordination point.
 
 **Where this plan departs from the pasted §3 context block**, by recorded decision — the spec wins:
 
 | §3 says | Plan does | Why |
 |---|---|---|
-| `dev/test_xml_files/network_map.xml` exempt, "not shipped" | converted; in scope | the suite loads it (spec M2) |
-| `get_nodes_by_adoption` → `partition_by_adoption` | public map read + UR-1 | no public path (M3, clarify Q1 → A) |
-| "the shape inverts: bare nodes" | **keep** the single unwrap | the public map still wraps (M10); applying the inversion is the silent failure |
-| `find_hosts`: decide | deleted | clarify Q2 → A |
-| `CTimecode` wraps: optional | in scope, `None` handled | maintainer decision; M13 |
-
-**What research added that no earlier document knew**: the engine cannot load a version-1 show
-against the current library at all (M9 — the deprecated reader does no conversion);
-`cluster_status` raises `TypeError` on any typed map (M12 — `Uuid` is unorderable); an empty
-`<duration/>` loads as `None` from a valid document (M13).
+| `dev/test_xml_files/network_map.xml` exempt, "not shipped" | converted; in scope | the suite loads it (M2) |
+| `get_nodes_by_adoption` → `partition_by_adoption` | public map read + UR-1 | no public path (M3, clarify Q1) |
+| "the shape inverts: bare nodes" | **keep** the single unwrap | the public map still wraps (M10) |
+| `find_hosts`: decide | deleted | clarify Q2 |
+| fade conversion "behaviour-preserving" | preserving for `fade_in`, a **change** for `fade_out` | M17 |
+| version bump: not in §3 | rc3–rc6 backfill + rc7, no `debian/changelog` | M15, clarified 2026-09-29 |
+| ids: not in §3 | `Uuid` canonical, library-lenient | M12, M16, M18, clarified 2026-09-29 |
 
 ## Technical Context
 
 **Language/Version**: Python 3.11.9 (pyenv; Poetry venv at `.venv`)
 **Primary Dependencies**: `cuemsutils` 0.1.0rc16 (editable `../cuems-utils` @ `0ba239b`; unpublished,
-PyPI latest rc14); `cuems-common` ≥ 1.3.0-23~ (packaging only). **No new dependency.**
-**Storage**: XML files — `/etc/cuems/network_map.xml`, `<library>/projects/<p>/script.xml` (read only)
-**Testing**: pytest, `poetry run pytest` (`testpaths = ["tests"]`, 45 files); baseline red —
-28 F / 7 E / 720 P (`evidence/baseline-suite.txt`)
+PyPI latest rc14 — the lock after the merge); `cuems-common` ≥ 1.3.0-23~ (packaging). **No new
+dependency.**
+**Storage**: XML — `/etc/cuems/network_map.xml`, `settings.xml`, `<library>/projects/<p>/script.xml` (read only)
+**Testing**: pytest, `poetry run pytest` (`testpaths = ["tests"]`, 49 files after the merge);
+baseline red — **28 F / 7 E / 831 P** (`evidence/baseline-suite-postmerge.txt`; same 35 failing ids
+as the pre-merge record)
 **Target Platform**: Debian (bookworm) controller and node hosts; two systemd services from one source
 **Project Type**: single Python package (`src/cuemsengine/`), shipped as a `.deb`
-**Performance Goals**: none new. The duration change must not alter dispatch timing (FR-016c);
-the adoption reader is O(nodes) as today
-**Constraints**: no edits to `../cuems-utils` (upstream reports only); no `poetry install`/`lock`
-during the feature; CI red by construction until rc16 publishes; commits GPG-signed; never
-auto-stop a running project
-**Scale/Scope**: ~7 source files touched (`BaseEngine.py`, `ControllerEngine.py`,
-`ActionHandler.py`, `run_cue.py`, `loop_cue.py`, `CueHandler.py`, plus packaging); ~8 test files
-changed or added; 3 fixtures converted, 1 fixture added
+**Performance Goals**: none new. Duration and identity changes must not alter dispatch timing
+(FR-016c; `rc_1`'s dispatch-reorder and chain-epoch suites stay green)
+**Constraints**: no edits to `../cuems-utils`; no `poetry install`/`lock`; CI red by construction
+until rc16 publishes and no PR until then; commits GPG-signed; never auto-stop a running project;
+`debian/changelog` untouched on this branch
+**Scale/Scope**: source — `BaseEngine.py`, `ControllerEngine.py`, `NodeEngine.py`,
+`ActionHandler.py`, `run_cue.py`, `loop_cue.py`, `CueHandler.py`, new `tools/ids.py`, `__init__.py`;
+packaging — `pyproject.toml`, `debian/control`, `CHANGELOG.md`; ~14 test files changed or added;
+3 fixtures converted, 2 added
 
-No NEEDS CLARIFICATION remains; research R1–R11 resolved every unknown by measurement.
+No NEEDS CLARIFICATION remains: R1–R15 measured; the four 2026-09-29 decisions are in spec
+§Clarifications.
 
 ## Constitution Check
 
@@ -60,26 +74,17 @@ Constitution v1.1.0. Checked, **not amended**.
 
 | Principle | Status | How |
 |---|---|---|
-| **I. SOLID** | ✅ | One adoption reader replaces two divergent ones (single responsibility); controller role interpretation stays in the library (`NodeIndex.controllers`); `find_hosts` deleted rather than rewritten. Not a licence to restructure `BaseEngine` — none is planned |
-| **II. TDD (non-negotiable)** | ✅ | Every behaviour change has a failing-first test with captured evidence: FR-003 sites 1–2 (fixture step 1), FR-007 (M9), FR-009/009a (M12), FR-005a, FR-016b. Removals (`find_hosts`, fade handlers, wraps) are refactors under characterization tests (FR-016a) or discharged by captured pre-deletion runs. The fixture-first sequence (FR-002) is what keeps each red test observable |
-| **III. Integration & contract** | ✅ | Contract tests for `cluster_status`/`cluster_warning` and the public surface are written first; moved tests feed a **real typed map** instead of stubbing the reader (clarify Q4) — the constitution's own "not mocks" rule |
-| **IV. Simplicity / YAGNI** | ✅ | Deletes: `find_hosts`, the mutation workaround, the ORDER-MATTERS convention, two fade handlers, five wraps. Adds: one reader, one duration helper — each justified by a current defect. No shim: the `None` → zero rule preserves existing behaviour made explicit, not a compatibility path |
-| **V. Observability** | ✅ | Two silent paths become logged: >1 controller (error) and `None` duration (warning naming the cue) |
-| Workflow §4 — *"Each PR MUST … include test evidence (CI pass)"* | ✅ | **Followed, not excepted**: CI is red by construction until rc16 publishes (clarify Q3), so **no PR is opened from this branch until the re-lock turns CI green** (FR-017a). D27 already forbids merging before the coordinated release, so the rule costs nothing |
-| Workflow §5 — atomic commits | ✅ | One commit per story checkpoint; the rc3 bump (T038) is its own commit, because the tag is cut on it |
-| Tech standards — SPDX header on every new source file | ✅ | Standing rule in tasks.md; covers every new test file and the duration helper |
-| Workflow §6 — `scripts/link-dev.sh` supported | ✅ | untouched |
-| Workflow §7 — layout | ✅ | all artefacts in `specs/008-*/`; the relations text is a hand-off file here, not `docs/` |
-| Tech standards — CI blocks on lint | ✅ | black/isort/flake8 run locally on every changed file, since CI can't |
+| **I. SOLID** | ✅ | One adoption reader replaces two; role interpretation stays in the library; id conversion has one home (`tools/ids.py`) instead of ad-hoc `str()` at call sites; `find_hosts` deleted |
+| **II. TDD (non-negotiable)** | ✅ | Failing-first with captured evidence for every behaviour change: FR-003 sites 1–2, FR-005a, FR-007, FR-009a, FR-016b, FR-019b, FR-024–FR-027 (`test_ids`, `test_cluster_identity`, the non-uuid4 warning). Removals are refactors under characterization (FR-016a, T048, T052) or discharged by captured pre-deletion runs |
+| **III. Integration & contract** | ✅ | Contract tests first (`cluster_status`, public surface, ids); moved tests feed **real typed maps**, never a stubbed reader |
+| **IV. Simplicity / YAGNI** | ✅ | Deletes more than it adds. Adds: one reader, one duration helper, one ids module — each tied to a measured defect. No shim: `None` → zero and non-uuid4-as-`str` both preserve existing behaviour, made explicit |
+| **V. Observability** | ✅ | Silent paths become logged: >1 controller (error), `None` duration (warning), non-uuid4 own/map uuid (one warning, FR-027) |
+| Workflow §4 — PR CI pass | ✅ | Followed: no PR from this branch until the re-lock turns CI green (FR-017a) |
+| Workflow §5 — atomic commits | ✅ | One commit per checkpoint; backfill + rc7 bump (T043+T044) one commit, the tag's target |
+| Workflow §6, §7; SPDX; lint | ✅ | `link-dev.sh` untouched; artefacts in `specs/008-*/`; SPDX on every new file; lint locally |
 
-**Post-`/speckit.analyze` re-check**: the earlier Workflow §4 *exception* was replaced by the
-no-PR-before-re-lock rule (analyze C1) — the constitution is followed, not excepted. CI is still red
-by construction on this branch, as recorded in `evidence/ci-red-by-construction.md`; every suite
-claim is a local run with its environment recorded, and lint runs locally.
-
-**Post-design re-check (after Phase 1)**: unchanged. The contracts add one test file
-(`test_public_surface.py`) and no production abstraction. The R10 reading of exit criterion 4
-("deleted, not renamed") is recorded, not silently assumed.
+**Post-design re-check (2026-09-29)**: unchanged verdict. The ids module mirrors ~6 lines of the
+library's internal decoder — recorded under Complexity Tracking, not a constitution issue.
 
 ## Project Structure
 
@@ -87,87 +92,70 @@ claim is a local run with its environment recorded, and lint runs locally.
 
 ```text
 specs/008-cuems-utils-migration/
-├── spec.md                 # clarified
-├── plan.md                 # this file
-├── research.md             # R1–R11, all measured
-├── data-model.md           # the engine-side view of library models
-├── quickstart.md           # verification per exit criterion
+├── spec.md, plan.md, research.md (R1–R15), data-model.md, quickstart.md, tasks.md
 ├── contracts/
-│   ├── cluster-payloads.md     # cluster_status / cluster_warning — UNCHANGED shape
-│   ├── public-surface.md       # allowed cuemsutils imports + guard test
-│   ├── controller-lookup.md    # _controller_ip_from_map table, incl. >1 controller
-│   └── package-relations.md    # debian/control, pyproject, rc3 bump + CHANGELOG, hand-off
+│   ├── cluster-payloads.md     # cluster_status / cluster_warning — shape unchanged, str at egress
+│   ├── public-surface.md       # allowed cuemsutils imports + guard; Uuid only in tools/ids.py
+│   ├── controller-lookup.md    # _controller_ip_from_map, incl. >1 controller
+│   ├── ids.md                  # as_id / id_str / is_uuid4 — Group 7
+│   └── package-relations.md    # pins, cuems-common floor, rc7 + rc3–rc6 backfill, hand-off
 ├── checklists/requirements.md
-├── evidence/               # baseline-*, step1/step2 runs, failing-first per site,
-│                           # test-retirements.md, not-performed.md, ci-red-by-construction.md
-├── upstream-reports/       # UR-1 … UR-4 (Phase 2+)
-├── handoff-relations-release-order.md   # for ../cuems-relations (Phase 2+)
-└── tasks.md                # /speckit.tasks
+├── evidence/                   # baseline-suite.txt (pre-merge), baseline-suite-postmerge.txt, …
+├── upstream-reports/           # UR-1, 2, 4, 5, 6, 7 (+ UR-3 if not environmental), NOTE-012
+└── handoff-relations-release-order.md
 ```
 
-### Source Code (repository root)
+### Source Code (repository root) — post-merge coordinates
 
 ```text
 src/cuemsengine/
-├── core/BaseEngine.py        # :17 import; :33 constant removed; :401-415 controller lookup on
-│                             #   NodeIndex (+ >1 error); :417-449 find_hosts DELETED;
-│                             #   :503-510 read_script -> CuemsScript.load (:505 name kept, FR-015)
-├── ControllerEngine.py       # :15 import removed; :259-298 _register_node_osc_handlers uses
-│                             #   _adopted_node_uuids; :272-277 and :937-943 hazard docstrings
-│                             #   removed; :1418-1440 _adopted_uuids_from_network_map DELETED;
-│                             #   callers :1489 :1553 :1738 -> _adopted_node_uuids
-├── cues/ActionHandler.py     # :38-39, :516-557, :784-785 fade handlers DELETED
-├── cues/run_cue.py           # :176, :430 wraps -> duration helper
-├── cues/loop_cue.py          # :112, :276 wraps -> duration helper
-└── cues/CueHandler.py        # :166 wrap -> duration helper (helper's home: decided in tasks,
-                              #   next to its five callers under cues/)
+├── tools/ids.py              # NEW — as_id, id_str, is_uuid4 (T010)
+├── core/BaseEngine.py        # :17 import; :33 constant; :315/:325 own uuid; :401-415 controller
+│                             #   lookup; :417-449 find_hosts DELETED; :503-510 read_script
+├── ControllerEngine.py       # :15 import; :259-298 registration; :272-277, :937-943 docstrings;
+│                             #   :551/:568/:588 senders; :987 output_name; :1444-1466 reader
+│                             #   DELETED (callers :1515/:1579/:1764); :1468-1488 _node_label;
+│                             #   sorts :1557-:1767; :310, :472, :609 ingress
+├── NodeEngine.py             # :632 own uuid
+├── cues/ActionHandler.py     # :38-39, :541-564, :567-583, :810-811 fade handlers DELETED
+├── cues/run_cue.py           # :176, :430 wraps
+├── cues/loop_cue.py          # :112, :276 wraps
+├── cues/CueHandler.py        # :212 wrap
+└── __init__.py               # :5 __version__ 0.1.0rc7 — the single source
 
-tests/
-├── test_core_baseengine_controller_ip.py   # fixtures :34 :38 :101 -> node_role; >1 controller
-├── test_controller_gating.py               # :283 rewritten (FR-009); string case retired
-├── test_cluster_warning.py                 # :81 :337 typed map
-├── test_nodelist_modify.py                 # :410 :484 typed map
-├── test_action_cue.py                      # :254-330 fade classes retired
-├── test_cluster_status_contract.py         # NEW — FR-009a / contracts/cluster-payloads.md
-├── test_public_surface.py                  # NEW — contracts/public-surface.md
-├── test_media_duration.py                  # NEW — FR-016a characterization + FR-016b
-├── test_version_single_source.py           # NEW — FR-019b: __version__ vs its three copies
-├── test_default_mappings_valid.py          # off XmlReaderWriter: CuemsScript.validate + ConfigManager loaders (SC-010)
-└── test_project_load.py                    # parametrized over v1 and v2 script (SC-007)
+tests/  NEW: network_map_helpers.py, test_public_surface.py, test_ids.py, test_cluster_status_contract.py,
+        test_cluster_identity.py, test_read_script.py, test_media_duration.py, test_identity_sweep.py,
+        test_version_single_source.py
+        CHANGED: test_core_baseengine_controller_ip.py, test_controller_gating.py, test_cluster_warning.py,
+        test_nodelist_modify.py, test_project_load.py, test_default_mappings_valid.py, test_action_cue.py,
+        + every file with a non-uuid4 literal (T008)
 
-dev/test_xml_files/
-├── network_map.xml             # converted (cuems-migrate-network-map)
-├── settings.xml                # converted to v2 (convert_documents)
-└── projects/complex_test_v2/   # NEW — v2 copy of complex_test
+dev/test_xml_files/  network_map.xml, settings.xml converted; projects/complex_test_v2/, projects/fade_actions_v1/ added
 
-src/cuemsengine/__init__.py:5 (__version__ rc3 — the single source) · copies kept equal by
-tests/test_version_single_source.py: pyproject.toml:7, CHANGELOG.md (## v0.1.0rc3 — UNRELEASED),
-debian/changelog (0.1.0rc3-1 UNRELEASED) · pyproject.toml:41 (pin) · debian/control:18-19
+pyproject.toml :11 version, :48 pin · debian/control :18-19 · CHANGELOG.md (rc7 UNRELEASED + rc6–rc3) · debian/changelog UNCHANGED
 ```
 
-**Structure Decision**: single existing package; no new modules except possibly the duration helper
-(placed beside its callers in `cues/`, decided in tasks). No directory is added under `src/`.
+**Structure Decision**: single existing package. One new module, `src/cuemsengine/tools/ids.py`, in
+the engine's existing utilities package — ids cross `core/`, the engines and `cues/`, so they belong
+to none of them.
 
 ## Phasing (input to `/speckit.tasks`)
 
-Order is load-bearing; each phase ends on a recorded suite run. These are the plan's work phases;
-`tasks.md` numbers its phases differently — mapping: plan 0 → tasks Phase 2; plan 1 → the *Tests*
-subsections of tasks Phases 3–4; plan 2 → US1 T016–T017 and US2 T029; plan 3 → US1 T019–T021;
-plan 4 → US2 T030–T031 and US5; plan 5 → US3, US4 and Phase 8.
+Order is load-bearing; each phase ends on a recorded suite run. `tasks.md` phase ↔ plan phase:
 
-| Phase | Content | Exit |
+| Plan phase | Content | Tasks |
 |---|---|---|
-| **0 — evidence** | FR-002 steps 1–2 (fixtures via owning tools); attribute every failure | only named failing-first tests red; `step1/2` files + attribution |
-| **1 — contracts first** | `test_public_surface.py`, `test_cluster_status_contract.py`, controller-lookup tests (incl. >1), duration characterization + `None` warning test | each new test red for its stated reason, captured |
-| **2 — loader & vocabulary** | FR-007 `CuemsScript.load`; FR-005/005a controller lookup; delete `CONTROLLER_NETWORK_FLAG` | project-load + controller tests green |
-| **3 — adoption** | `_adopted_node_uuids` (str, frozenset); rewire four sites; delete workaround + docstrings; move/rewrite tests (Q4); capture `find_hosts` failure, delete it | contract + gating + nodelist + warning tests green |
-| **4 — dead code** | fade handlers + their tests (retirement recorded); duration wraps → helper | suite green; SC-004, SC-011 greps empty |
-| **5 — release** | pins, `cuems-common` floor, rc3 version bump + `CHANGELOG.md` entry (last source change — the tag's coordination point), hand-off, UR-1…4, `ci-red-by-construction.md`, `not-performed.md` | SC-001…011 per quickstart |
-
-Upstream reports (UR-1…4) and the relations hand-off can be written in parallel with any phase.
+| **0 — evidence & base** | fixtures via owning tools; failure attribution; uuid4 test literals; surface guard; ids helpers | Phase 2, T004–T010 |
+| **1 — contracts first** | controller lookup, `cluster_status`, cluster identity, moved adoption tests, script load, default-mappings, durations | *Tests* subsections of US1 (T011–T019) and US2 (T028–T033) |
+| **2 — loader & vocabulary** | `CuemsScript.load`; `NodeIndex` lookup; delete `find_hosts`, the constant | T020–T022, T034 |
+| **3 — adoption & controller ids** | `_adopted_node_uuids`; rewire; delete workaround; `as_id`/`id_str` in cluster paths | T023–T027 |
+| **4 — dead code & durations** | duration helper + wraps; fade handlers (after the floor) | T035–T037, US5 T047–T051 |
+| **5 — identity sweep** | remaining ingress/egress; non-uuid4 warning; audit | Phase 8, T052–T056 |
+| **6 — release** | pins, floor, CI record; drift test; **backfill + rc7 as one commit, last**; hand-off; reports | US3 T038–T041, US4 T042–T046, Phase 9 |
 
 ## Complexity Tracking
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
-| Exit criterion 4 read as "no workaround survives" rather than literally "no adoption reader exists" (research R10) | With no public partition (UR-1), some reader of `adopted` must exist | Importing internal `partition_by_adoption` (clarify Q1 rejected it); leaving two readers (keeps the divergence F3 describes) |
+| Exit criterion 4 read as "no workaround survives" rather than "no adoption reader exists" (research R10) | With no public partition (UR-1), some reader of `adopted` must exist | Importing internal `partition_by_adoption` (clarify Q1 rejected it); two readers (F3's divergence) |
+| `as_id` mirrors ~6 lines of the library's internal uuid decoder (uuid4 → `Uuid`, else `str`) | "`Uuid` canonical, as the library behaves" (clarified); the decoder is internal (Q14 forbids importing it) | Enforcing `Uuid(x)` at ingress (crashes on the nil uuid and uuid1 values the library accepts); `str` canonical (rejected in clarify). Replace the mirror when UR-6 yields a public helper |

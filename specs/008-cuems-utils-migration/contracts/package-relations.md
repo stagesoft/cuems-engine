@@ -3,7 +3,7 @@
 ## `debian/control` — `Package: cuems-engine`, `Depends:`
 
 ```
-         cuems-utils (>= 0.1.0rc16),
+         cuems-utils (>= 0.1.0rc16),        # was (>= 0.1.0rc4) at :18
          cuems-utils (<< 0.1.1~),
          cuems-common (>= 1.3.0-23~),
 ```
@@ -13,36 +13,47 @@ the `cuems-common` floor exists to inherit its `Breaks: cuems-nodeconf (<< 0.1.0
 reads `node_role` and a pre-`0.1.0-8` nodeconf writes `<node_type>`. No `Breaks:` of the engine's
 own (clarify).
 
-## `pyproject.toml:41`
+## `pyproject.toml:48` (`>=0.1.0rc13` after the `rc_1` merge)
 
 ```
 cuemsutils = ">=0.1.0rc16,<0.1.1"
 ```
 
-`poetry.lock` is **not** regenerated on this branch (clarify Q3, R7).
+`poetry.lock` (at rc14 after the merge) is **not** regenerated on this branch (clarify Q3, R7).
 
-## Version bump — the tag's coordination point (FR-019a)
+## Version — rc7, and the tag's coordination point (FR-019a/b/c)
 
-**Single source: `src/cuemsengine/__init__.py` `__version__`** — the value a human edits. The
-other three are copies, kept equal by `tests/test_version_single_source.py` (FR-019b).
+**Single source: `src/cuemsengine/__init__.py` `__version__`.** Copies kept equal by
+`tests/test_version_single_source.py`: `pyproject.toml:11` and the top `CHANGELOG.md` header.
 `pyproject.toml` keeps a literal only because Poetry 2.4 refuses a dynamic version in package mode.
 
-| File | Before | After |
+| File | After `rc_1` merge | After this feature |
 |---|---|---|
-| `src/cuemsengine/__init__.py:5` `__version__` — **source** | `0.1.0rc2` | `0.1.0rc3` |
-| `pyproject.toml` `version` (`:7`) — copy | `0.1.0rc2` | `0.1.0rc3` |
-| `CHANGELOG.md` | top entry `## v0.1.0rc2 — 2026-05-19` | new top entry `## v0.1.0rc3 — UNRELEASED` |
-| `debian/changelog` | top `0.1.0rc2-3` (bookworm) | new top `cuems-engine (0.1.0rc3-1) UNRELEASED; urgency=medium` |
+| `src/cuemsengine/__init__.py:5` — **source** | `0.1.0rc2` | `0.1.0rc7` |
+| `pyproject.toml:11` — copy | `0.1.0rc2` | `0.1.0rc7` |
+| `CHANGELOG.md` top | `## v0.1.0rc2 — 2026-05-19` | `## v0.1.0rc7 — UNRELEASED`, then rc6 … rc3 (backfilled), then rc2 untouched |
+| `debian/changelog` | `0.1.0rc2-3` (bookworm) | **unchanged** — versions are cut on `debian/bookworm` when `rc_1` is merged in (M15) |
 
-`xml-refactor-merge-candidate` is cut on the commit that carries this bump, once every consumer flow
-has landed (D27). `UNRELEASED` is replaced by a date and distribution only at release. No
-`debian/NEWS` file.
+`xml-refactor-merge-candidate` is cut on the commit that carries the rc7 bump, once every consumer
+flow has landed (D27). `UNRELEASED` is replaced by a date only at release. No `debian/NEWS`.
 
-## `CHANGELOG.md` — the `v0.1.0rc3 — UNRELEASED` entry
+## `CHANGELOG.md` — rc3–rc6 backfill (FR-019c)
 
-Opening summary paragraph, then the file's existing `### Added` / `### Changed` / `### Removed`
-sections for Groups 1–6, plus an **`### Upgrade notes`** section that states, in this order:
+| Entry | Header date | Content from |
+|---|---|---|
+| `## v0.1.0rc6 — 2026-09-28` | `7f6e475` | `git log --no-merges fc8d2bb..956a0f3` (31) + bookworm `0.1.0rc6-1` changelog entry |
+| `## v0.1.0rc5 — 2026-08-14` | `8b57710` | `2abf26d..fc8d2bb` (5) + `0.1.0rc5-1` |
+| `## v0.1.0rc4 — 2026-08-03` | `15d50b6` | `v0.1.0rc2..2abf26d` (100) + `0.1.0rc4-1` |
+| `## v0.1.0rc3 — 2026-04-16` | `30af517` | bookworm's `0.1.0rc3-1`/`-2` changelog entries (`git show 7f6e475:debian/changelog`, lines 105–132) and the first-parent packaging commits up to `30af517` — content derived there, not assumed; one line: *cut from the packaging line before the `v0.1.0rc2` tag (2026-05-19)* |
 
+Style: the rc2 entry's — summary paragraph, `### Added` / `### Changed` / `### Fixed` (or
+`Removed`) with `####` topic groups, ClickUp ids kept where the commits carry them.
+
+## `CHANGELOG.md` — the `v0.1.0rc7 — UNRELEASED` entry
+
+Opening summary paragraph, then `### Added` / `### Changed` / `### Removed` sections for Groups 1–7
+— `### Changed` MUST include FR-014's `fade_out` → `stop` behaviour change — plus an
+**`### Upgrade notes`** section that states, in this order:
 1. **Upgrade every node host before the controller.**
 2. Why: the controller's library converts show scripts to version 2 and deploys them to nodes
    **at show load**; a node on an older library cannot read them. Nodes upgraded first read

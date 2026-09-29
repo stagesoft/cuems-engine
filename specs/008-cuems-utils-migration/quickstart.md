@@ -1,7 +1,7 @@
 # Quickstart — verifying 008-cuems-utils-migration
 
 Run from the repository root. **Do not run `poetry install` or `poetry lock`** during this feature:
-the lock pins rc11 and would replace the editable `../cuems-utils` (FR-017a). Record the
+the lock pins rc14 (after the `rc_1` merge) and would replace the editable `../cuems-utils` (FR-017a). Record the
 environment (`evidence/baseline-environment.md`'s table) with every captured run.
 
 ```bash
@@ -45,12 +45,13 @@ Record each tool's exact invocation and output in the step file.
 | 003 | `grep -rnE 'cuemsutils\.(xml\|config)' src/` and `poetry run pytest tests/test_public_surface.py` | no output; green |
 | 004 | `grep -rn 'get_nodes_by_adoption\|_adopted_uuids_from_network_map\|find_hosts' src/ tests/ \| grep -v tests/test_public_surface.py` | no output (the guard's ban list names them by design) |
 | 005 | `sed -n 41p pyproject.toml; grep -n 'cuems-utils\|cuems-common' debian/control` | ranges as in `contracts/package-relations.md`; lock re-lock recorded **not performed** until rc16 publishes |
-| 006 | `poetry run pytest -q -p no:cacheprovider > $E/final-suite.txt` | green; counts recorded beside the baseline (28 F / 7 E / 720 P) with retirements from `$E/test-retirements.md` |
+| 006 | `poetry run pytest -q -p no:cacheprovider > $E/final-suite.txt` | green; counts recorded beside the post-merge baseline (28 F / 7 E / 831 P) with retirements from `$E/test-retirements.md` |
 | 007 | load + GO a v1 and a v2 `script.xml` (below) | both recorded |
-| 008 | `sed -n '1,/^## v0.1.0rc2/p' CHANGELOG.md`; `poetry run pytest tests/test_version_single_source.py`; `ls specs/008-cuems-utils-migration/handoff-relations-release-order.md` | rc3 `UNRELEASED` entry with upgrade notes stating the ordering; `__version__` is `0.1.0rc3` and the drift test is green; hand-off exists |
+| 008 | `sed -n '1,/^## v0.1.0rc2/p' CHANGELOG.md`; `poetry run pytest tests/test_version_single_source.py`; `ls specs/008-cuems-utils-migration/handoff-relations-release-order.md` | `v0.1.0rc7 — UNRELEASED` on top with upgrade notes, then rc6…rc3, then rc2 untouched; `__version__` `0.1.0rc7`; drift test green; `git diff 27b27f5 -- debian/changelog` empty; hand-off exists |
 | 009 | `$E/not-performed.md` | every hardware/cluster item listed, performed or **not performed** |
 | 010 | `poetry run pytest -q -rw -p no:cacheprovider 2>&1 \| grep -iE 'deprecat.*cuemsutils\|cuemsutils.*deprecat'` | no output (other libraries' deprecations are out of scope) |
 | 011 | `grep -rn 'CTimecode(cue.media.duration)' src/` | no output |
+| 012 | `poetry run pytest tests/test_ids.py tests/test_cluster_identity.py tests/test_identity_sweep.py`; `$E/identity-audit.md`; research R14's uuid-literal scan | green; every audit hit resolved or justified; all literals uuid4 except FR-027's named cases |
 
 ## 3. SC-007 — v1 and v2 show load
 

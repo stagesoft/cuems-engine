@@ -33,3 +33,4 @@
 
 - `/speckit.clarify` 2026-09-28: five questions answered (C11 artefact → both; `Breaks:` → none, raise `cuems-common` floor; lock/CI → pin now, re-lock at publish; adoption tests → move/rewrite/retire one case; >1 controller → log error, first match). CTimecode wraps brought **into scope** by the maintainer (Group 6, FR-016–FR-016c, SC-011), after measuring that the wrap also coalesces `None` to zero.
 - Ready for `/speckit.plan`.
+- Re-analysed 2026-09-29 after merging `rc_1` at `27b27f5`: four clarifications (identity policy, test uuids, rc7 files, backfill dating) answered and applied; M14–M18 added; Group 7 (FR-024–FR-029), FR-019c and SC-012 added; FR-014 corrected; tasks regenerated (64).
