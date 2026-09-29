@@ -6543,7 +6543,11 @@ nodes.</p>
 <span class="normal">1516</span>
 <span class="normal">1517</span>
 <span class="normal">1518</span>
-<span class="normal">1519</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
+<span class="normal">1519</span>
+<span class="normal">1520</span>
+<span class="normal">1521</span>
+<span class="normal">1522</span>
+<span class="normal">1523</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    This engine manages players for each node</span>
 
@@ -6782,7 +6786,7 @@ nodes.</p>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">stop_node_engine</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Stop the NodeEngine elements"""</span>
-        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">()</span>
+        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"shutdown"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop_video_devs</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">stop_video_devs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -7278,7 +7282,7 @@ nodes.</p>
         <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">cleanup_zombie_jack_clients</span><span class="p">()</span>
 
         <span class="c1"># Disarm all cues from the previous project.</span>
-        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">()</span>
+        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"load"</span><span class="p">)</span>
 
         <span class="c1"># Clear the engine's 24h MTC wrap accumulator on this project transition,</span>
         <span class="c1"># co-orchestrated with the DMX blackout + videocomposer reset above (which</span>
@@ -7293,7 +7297,7 @@ nodes.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">ready_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 
         <span class="c1"># Prepare the script to be played (arms new cues)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"load"</span><span class="p">)</span>
 
         <span class="c1"># Start cue dependencies</span>
         <span class="c1"># self.set_players()</span>
@@ -7437,12 +7441,12 @@ nodes.</p>
         <span class="c1"># If project changed during arm, disarm the stale cue.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project_generation</span> <span class="o">!=</span> <span class="n">project_gen</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">find_armed_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">):</span>
-                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
+                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"project_changed"</span><span class="p">)</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Disarmed cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> — project changed during async arm"</span><span class="p">)</span>
             <span class="k">return</span>
         <span class="c1"># If cue was disabled while we were arming, disarm now.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">cue</span><span class="o">.</span><span class="n">enabled</span> <span class="ow">and</span> <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">find_armed_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">):</span>
-            <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
+            <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"disabled"</span><span class="p">)</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Disarmed cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> — disabled during async arm"</span><span class="p">)</span>
             <span class="k">return</span>
         <span class="c1"># Armed and still enabled: if it belongs to a chain that is running</span>
@@ -7640,7 +7644,7 @@ nodes.</p>
             <span class="c1"># own reset already handled everything else; undo exactly what</span>
             <span class="c1"># THIS walk armed, not a concurrent call's.</span>
             <span class="k">for</span> <span class="n">armed_cue</span> <span class="ow">in</span> <span class="n">newly_armed</span><span class="p">:</span>
-                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">armed_cue</span><span class="p">)</span>
+                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">armed_cue</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"project_changed"</span><span class="p">)</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"PreArm from </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">: disarmed </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">newly_armed</span><span class="p">)</span><span class="si">}</span><span class="s2"> cue(s) "</span>
                 <span class="s2">"— project changed underneath the walk"</span>
@@ -7737,7 +7741,7 @@ nodes.</p>
                 <span class="ow">and</span> <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">find_armed_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
                 <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_playing"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
             <span class="p">):</span>
-                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
+                <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">"disabled"</span><span class="p">)</span>
                 <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Disarmed disabled cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
             <span class="c1"># Recalculate next_cue_pointer if the disabled cue was next</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_cue_pointer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_cue_pointer</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="p">:</span>
@@ -7767,8 +7771,12 @@ nodes.</p>
     <span class="c1">#########################</span>
     <span class="c1"># Script logic</span>
     <span class="c1">#########################</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Check if the script is ready to be played"""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Check if the script is ready to be played.</span>
+
+<span class="sd">        ``reason`` is passed to disarm_all so its log names the caller</span>
+<span class="sd">        (``load``, ``stop``).</span>
+<span class="sd">        """</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"No script loaded, cannot process GO command."</span><span class="p">)</span>
             <span class="k">return</span>
@@ -7778,7 +7786,7 @@ nodes.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">go_offset</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_project_generation</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># Abort in-flight daemon arm threads</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">unload_video_devs</span><span class="p">()</span>
-        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">()</span>
+        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span>
 
         <span class="c1"># Reset mixer volumes to default when preparing script</span>
         <span class="n">mixer_client</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_audio_mixer_client</span><span class="p">()</span>
@@ -8000,7 +8008,7 @@ nodes.</p>
 
         <span class="c1"># Reset state + disarm + volume reset + re-arm cues</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"stop"</span><span class="p">)</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> reset and ready for GO."</span><span class="p">)</span>
 
             <span class="c1"># Notify Controller that re-arm is complete (GO button can go</span>
@@ -8627,14 +8635,16 @@ logs but does not abort (cached media may already be on disk).</p>
 
 
 <h3 id="cuemsengine.NodeEngine.NodeEngine.ready_script" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">ready_script</span><span class="p">()</span></code>
+            <code class="highlight language-python"><span class="n">ready_script</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s1">'ready_script'</span><span class="p">)</span></code>
 
 </h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Check if the script is ready to be played</p>
+        <p>Check if the script is ready to be played.</p>
+<p><code>reason</code> is passed to disarm_all so its log names the caller
+(<code>load</code>, <code>stop</code>).</p>
 
 
             <details class="mkdocstrings-source">
@@ -8670,8 +8680,16 @@ logs but does not abort (cached media may already be on disk).</p>
 <span class="normal">1302</span>
 <span class="normal">1303</span>
 <span class="normal">1304</span>
-<span class="normal">1305</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Check if the script is ready to be played"""</span>
+<span class="normal">1305</span>
+<span class="normal">1306</span>
+<span class="normal">1307</span>
+<span class="normal">1308</span>
+<span class="normal">1309</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Check if the script is ready to be played.</span>
+
+<span class="sd">    ``reason`` is passed to disarm_all so its log names the caller</span>
+<span class="sd">    (``load``, ``stop``).</span>
+<span class="sd">    """</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
         <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"No script loaded, cannot process GO command."</span><span class="p">)</span>
         <span class="k">return</span>
@@ -8681,7 +8699,7 @@ logs but does not abort (cached media may already be on disk).</p>
     <span class="bp">self</span><span class="o">.</span><span class="n">go_offset</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_project_generation</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># Abort in-flight daemon arm threads</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">unload_video_devs</span><span class="p">()</span>
-    <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">()</span>
+    <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span>
 
     <span class="c1"># Reset mixer volumes to default when preparing script</span>
     <span class="n">mixer_client</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_audio_mixer_client</span><span class="p">()</span>
@@ -9435,7 +9453,7 @@ this, only the node engine core-dumped on every restart.</p>
 <span class="normal">289</span>
 <span class="normal">290</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_node_engine</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stop the NodeEngine elements"""</span>
-    <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">()</span>
+    <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"shutdown"</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">stop_video_devs</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
@@ -9462,11 +9480,7 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1475</span>
-<span class="normal">1476</span>
-<span class="normal">1477</span>
-<span class="normal">1478</span>
-<span class="normal">1479</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1479</span>
 <span class="normal">1480</span>
 <span class="normal">1481</span>
 <span class="normal">1482</span>
@@ -9506,7 +9520,11 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 <span class="normal">1516</span>
 <span class="normal">1517</span>
 <span class="normal">1518</span>
-<span class="normal">1519</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">1519</span>
+<span class="normal">1520</span>
+<span class="normal">1521</span>
+<span class="normal">1522</span>
+<span class="normal">1523</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stop playback, full cleanup, then re-arm so GO is available again.</span>
 
 <span class="sd">    Does the cleanup that ready_script() doesn't handle (DMX blackout,</span>
@@ -9538,7 +9556,7 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 
     <span class="c1"># Reset state + disarm + volume reset + re-arm cues</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"stop"</span><span class="p">)</span>
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> reset and ready for GO."</span><span class="p">)</span>
 
         <span class="c1"># Notify Controller that re-arm is complete (GO button can go</span>
@@ -9582,15 +9600,15 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1530</span>
-<span class="normal">1531</span>
-<span class="normal">1532</span>
-<span class="normal">1533</span>
-<span class="normal">1534</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1534</span>
 <span class="normal">1535</span>
 <span class="normal">1536</span>
 <span class="normal">1537</span>
-<span class="normal">1538</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">1538</span>
+<span class="normal">1539</span>
+<span class="normal">1540</span>
+<span class="normal">1541</span>
+<span class="normal">1542</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio command to the audio player"""</span>
     <span class="k">if</span> <span class="n">path_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"mixer"</span><span class="p">:</span>
         <span class="n">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">value</span><span class="p">)</span>
@@ -9629,11 +9647,7 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1541</span>
-<span class="normal">1542</span>
-<span class="normal">1543</span>
-<span class="normal">1544</span>
-<span class="normal">1545</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1545</span>
 <span class="normal">1546</span>
 <span class="normal">1547</span>
 <span class="normal">1548</span>
@@ -9642,7 +9656,11 @@ Args:
 <span class="normal">1551</span>
 <span class="normal">1552</span>
 <span class="normal">1553</span>
-<span class="normal">1554</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">1554</span>
+<span class="normal">1555</span>
+<span class="normal">1556</span>
+<span class="normal">1557</span>
+<span class="normal">1558</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;output_index&gt;/master/volume -&gt; /audiomixer/0_mixer/master</span>
@@ -9730,11 +9748,7 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1557</span>
-<span class="normal">1558</span>
-<span class="normal">1559</span>
-<span class="normal">1560</span>
-<span class="normal">1561</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1561</span>
 <span class="normal">1562</span>
 <span class="normal">1563</span>
 <span class="normal">1564</span>
@@ -9749,7 +9763,11 @@ Args:
 <span class="normal">1573</span>
 <span class="normal">1574</span>
 <span class="normal">1575</span>
-<span class="normal">1576</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">1576</span>
+<span class="normal">1577</span>
+<span class="normal">1578</span>
+<span class="normal">1579</span>
+<span class="normal">1580</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;cue_uuid&gt;/master/volume -&gt; /volmaster</span>
@@ -9791,12 +9809,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1579</span>
-<span class="normal">1580</span>
-<span class="normal">1581</span>
-<span class="normal">1582</span>
-<span class="normal">1583</span>
-<span class="normal">1584</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1583</span>
+<span class="normal">1584</span>
+<span class="normal">1585</span>
+<span class="normal">1586</span>
+<span class="normal">1587</span>
+<span class="normal">1588</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the DMX command to the DMX player"""</span>
     <span class="n">dmx_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"mixer"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 to skip the 'mixer' keyword</span>
     <span class="n">dmx_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">dmx_index</span><span class="p">:])</span>
@@ -9824,12 +9842,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1587</span>
-<span class="normal">1588</span>
-<span class="normal">1589</span>
-<span class="normal">1590</span>
-<span class="normal">1591</span>
-<span class="normal">1592</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1591</span>
+<span class="normal">1592</span>
+<span class="normal">1593</span>
+<span class="normal">1594</span>
+<span class="normal">1595</span>
+<span class="normal">1596</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the video command to the video client"""</span>
     <span class="n">videocomposer_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"videocomposer"</span><span class="p">)</span>
     <span class="n">videocomposer_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">videocomposer_index</span><span class="p">:])</span>

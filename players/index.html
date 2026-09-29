@@ -1264,6 +1264,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cuemsengine.players.PlayerHandler.PlayerHandler.is_layer_registered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_layer_registered
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cuemsengine.players.PlayerHandler.PlayerHandler.kill_all_audio_players" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2580,6 +2591,17 @@
     <span class="md-ellipsis">
       
         get_video_output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuemsengine.players.PlayerHandler.PlayerHandler.is_layer_registered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_layer_registered
       
     </span>
   </a>
@@ -10664,8 +10686,7 @@ only be instantiated once.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 28</span>
-<span class="normal"> 29</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 29</span>
 <span class="normal"> 30</span>
 <span class="normal"> 31</span>
 <span class="normal"> 32</span>
@@ -11585,7 +11606,17 @@ only be instantiated once.</p>
 <span class="normal">946</span>
 <span class="normal">947</span>
 <span class="normal">948</span>
-<span class="normal">949</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">PlayerHandler</span><span class="p">:</span>
+<span class="normal">949</span>
+<span class="normal">950</span>
+<span class="normal">951</span>
+<span class="normal">952</span>
+<span class="normal">953</span>
+<span class="normal">954</span>
+<span class="normal">955</span>
+<span class="normal">956</span>
+<span class="normal">957</span>
+<span class="normal">958</span>
+<span class="normal">959</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">PlayerHandler</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    This class is responsible for handling and generating player objects.</span>
 
@@ -12306,6 +12337,15 @@ only be instantiated once.</p>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_layer_ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layer_id</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_layer_registered</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True while the layer is tracked as loaded in the videocomposer.</span>
+
+<span class="sd">        reset_videocomposer / reset_video_layers / quit_videocomposer clear</span>
+<span class="sd">        the tracking together with the layers' endpoints.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_layer_ids</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">deregister_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Remove a layer from active tracking."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
@@ -12561,8 +12601,7 @@ only be instantiated once.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">60</span>
-<span class="normal">61</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">61</span>
 <span class="normal">62</span>
 <span class="normal">63</span>
 <span class="normal">64</span>
@@ -12584,7 +12623,8 @@ only be instantiated once.</p>
 <span class="normal">80</span>
 <span class="normal">81</span>
 <span class="normal">82</span>
-<span class="normal">83</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="normal">83</span>
+<span class="normal">84</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Singleton pattern: Ensure only one instance is created"""</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span><span class="p">:</span>
         <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">PlayerHandler</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
@@ -12630,14 +12670,14 @@ only be instantiated once.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">874</span>
-<span class="normal">875</span>
-<span class="normal">876</span>
-<span class="normal">877</span>
-<span class="normal">878</span>
-<span class="normal">879</span>
-<span class="normal">880</span>
-<span class="normal">881</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">add_media_folder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">884</span>
+<span class="normal">885</span>
+<span class="normal">886</span>
+<span class="normal">887</span>
+<span class="normal">888</span>
+<span class="normal">889</span>
+<span class="normal">890</span>
+<span class="normal">891</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">add_media_folder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Adds a media folder to the player handler"""</span>
     <span class="n">path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">"media"</span><span class="p">:</span>
@@ -12667,9 +12707,9 @@ only be instantiated once.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">942</span>
-<span class="normal">943</span>
-<span class="normal">944</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">add_node_uuid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">952</span>
+<span class="normal">953</span>
+<span class="normal">954</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">add_node_uuid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Adds a node uuid to the player handler"""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_node_uuid</span> <span class="o">=</span> <span class="n">uuid</span>
 </code></pre></div></td></tr></table></div>
@@ -12721,8 +12761,7 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">310</span>
-<span class="normal">311</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">311</span>
 <span class="normal">312</span>
 <span class="normal">313</span>
 <span class="normal">314</span>
@@ -12768,7 +12807,8 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 <span class="normal">354</span>
 <span class="normal">355</span>
 <span class="normal">356</span>
-<span class="normal">357</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cleanup_zombie_jack_clients</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="normal">357</span>
+<span class="normal">358</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cleanup_zombie_jack_clients</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Scan for JACK Audio_Player clients whose processes have died.</span>
 
 <span class="sd">    Enumerates all JACK ports matching Audio_Player-* and cross-references</span>
@@ -12838,10 +12878,10 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">749</span>
-<span class="normal">750</span>
-<span class="normal">751</span>
-<span class="normal">752</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deregister_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">759</span>
+<span class="normal">760</span>
+<span class="normal">761</span>
+<span class="normal">762</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deregister_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Remove a layer from active tracking."""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_layer_ids</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">layer_id</span><span class="p">)</span>
@@ -12944,17 +12984,7 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">852</span>
-<span class="normal">853</span>
-<span class="normal">854</span>
-<span class="normal">855</span>
-<span class="normal">856</span>
-<span class="normal">857</span>
-<span class="normal">858</span>
-<span class="normal">859</span>
-<span class="normal">860</span>
-<span class="normal">861</span>
-<span class="normal">862</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">862</span>
 <span class="normal">863</span>
 <span class="normal">864</span>
 <span class="normal">865</span>
@@ -12964,7 +12994,17 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 <span class="normal">869</span>
 <span class="normal">870</span>
 <span class="normal">871</span>
-<span class="normal">872</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_all_cue_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="normal">872</span>
+<span class="normal">873</span>
+<span class="normal">874</span>
+<span class="normal">875</span>
+<span class="normal">876</span>
+<span class="normal">877</span>
+<span class="normal">878</span>
+<span class="normal">879</span>
+<span class="normal">880</span>
+<span class="normal">881</span>
+<span class="normal">882</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_all_cue_output_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Get all output names for a given cue from the outputs map.</span>
 
 <span class="sd">    Args:</span>
@@ -13007,9 +13047,9 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">193</span>
-<span class="normal">194</span>
-<span class="normal">195</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_audio_mixer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AudioMixer</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_audio_mixer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AudioMixer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the audio mixer instance."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_audio_mixer</span>
 </code></pre></div></td></tr></table></div>
@@ -13034,9 +13074,9 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">197</span>
-<span class="normal">198</span>
-<span class="normal">199</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_audio_mixer_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MixerClient</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_audio_mixer_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MixerClient</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the audio mixer client instance."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_audio_mixer_client</span>
 </code></pre></div></td></tr></table></div>
@@ -13148,17 +13188,7 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">830</span>
-<span class="normal">831</span>
-<span class="normal">832</span>
-<span class="normal">833</span>
-<span class="normal">834</span>
-<span class="normal">835</span>
-<span class="normal">836</span>
-<span class="normal">837</span>
-<span class="normal">838</span>
-<span class="normal">839</span>
-<span class="normal">840</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">840</span>
 <span class="normal">841</span>
 <span class="normal">842</span>
 <span class="normal">843</span>
@@ -13168,7 +13198,17 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 <span class="normal">847</span>
 <span class="normal">848</span>
 <span class="normal">849</span>
-<span class="normal">850</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cue_output_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">850</span>
+<span class="normal">851</span>
+<span class="normal">852</span>
+<span class="normal">853</span>
+<span class="normal">854</span>
+<span class="normal">855</span>
+<span class="normal">856</span>
+<span class="normal">857</span>
+<span class="normal">858</span>
+<span class="normal">859</span>
+<span class="normal">860</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cue_output_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Get the output name for a given cue from the outputs map.</span>
 
 <span class="sd">    Args:</span>
@@ -13211,10 +13251,10 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">94</span>
-<span class="normal">95</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">95</span>
 <span class="normal">96</span>
-<span class="normal">97</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Player</span><span class="p">:</span>
+<span class="normal">97</span>
+<span class="normal">98</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Player</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Gets a cue player"""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cue_players</span><span class="p">[</span><span class="n">cue</span><span class="p">]</span>
@@ -13240,9 +13280,9 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">568</span>
-<span class="normal">569</span>
-<span class="normal">570</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_dmx_player</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DmxPlayer</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">569</span>
+<span class="normal">570</span>
+<span class="normal">571</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_dmx_player</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DmxPlayer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the DMX player instance."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dmx_player</span>
 </code></pre></div></td></tr></table></div>
@@ -13267,9 +13307,9 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">572</span>
-<span class="normal">573</span>
-<span class="normal">574</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_dmx_player_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DmxClient</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">573</span>
+<span class="normal">574</span>
+<span class="normal">575</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_dmx_player_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DmxClient</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the DMX player client instance."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dmx_player_client</span>
 </code></pre></div></td></tr></table></div>
@@ -13294,11 +13334,11 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">615</span>
-<span class="normal">616</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">616</span>
 <span class="normal">617</span>
 <span class="normal">618</span>
-<span class="normal">619</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_gradient_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GradientClient</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">619</span>
+<span class="normal">620</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_gradient_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GradientClient</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Returns the GradientClient instance, or None if not yet initialised.</span>
 <span class="sd">    """</span>
@@ -13325,9 +13365,9 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">606</span>
-<span class="normal">607</span>
-<span class="normal">608</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_video_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoClient</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">607</span>
+<span class="normal">608</span>
+<span class="normal">609</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_video_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoClient</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the video client instance."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_video_client</span>
 </code></pre></div></td></tr></table></div>
@@ -13352,11 +13392,50 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">682</span>
-<span class="normal">683</span>
-<span class="normal">684</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_video_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">683</span>
+<span class="normal">684</span>
+<span class="normal">685</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_video_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the VideoOutput object for a given output name."""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_video_outputs</span><span class="p">[</span><span class="n">output_name</span><span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.players.PlayerHandler.PlayerHandler.is_layer_registered" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">is_layer_registered</span><span class="p">(</span><span class="n">layer_id</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>True while the layer is tracked as loaded in the videocomposer.</p>
+<p>reset_videocomposer / reset_video_layers / quit_videocomposer clear
+the tracking together with the layers' endpoints.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">750</span>
+<span class="normal">751</span>
+<span class="normal">752</span>
+<span class="normal">753</span>
+<span class="normal">754</span>
+<span class="normal">755</span>
+<span class="normal">756</span>
+<span class="normal">757</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">is_layer_registered</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""True while the layer is tracked as loaded in the videocomposer.</span>
+
+<span class="sd">    reset_videocomposer / reset_video_layers / quit_videocomposer clear</span>
+<span class="sd">    the tracking together with the layers' endpoints.</span>
+<span class="sd">    """</span>
+    <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_layer_ids</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -13379,8 +13458,7 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">283</span>
-<span class="normal">284</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">284</span>
 <span class="normal">285</span>
 <span class="normal">286</span>
 <span class="normal">287</span>
@@ -13404,7 +13482,8 @@ zombies left by crashed processes — disconnect them from the mixer.</p>
 <span class="normal">305</span>
 <span class="normal">306</span>
 <span class="normal">307</span>
-<span class="normal">308</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_all_audio_players</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">308</span>
+<span class="normal">309</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_all_audio_players</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Kill ALL tracked audio players - used during project cleanup"""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="n">players_to_kill</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_audio_players_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
@@ -13455,8 +13534,7 @@ reference to them, so they steal JACK client names and cause silence.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">359</span>
-<span class="normal">360</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">360</span>
 <span class="normal">361</span>
 <span class="normal">362</span>
 <span class="normal">363</span>
@@ -13488,7 +13566,8 @@ reference to them, so they steal JACK client names and cause silence.</p>
 <span class="normal">389</span>
 <span class="normal">390</span>
 <span class="normal">391</span>
-<span class="normal">392</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_orphaned_audio_processes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">392</span>
+<span class="normal">393</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_orphaned_audio_processes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Kill cuems-audioplayer OS processes not tracked by this engine.</span>
 
 <span class="sd">    On engine restart, previously spawned audioplayer processes survive</span>
@@ -13555,8 +13634,7 @@ or a grep isn't caught and killed. Covers both the plain and
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">394</span>
-<span class="normal">395</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">395</span>
 <span class="normal">396</span>
 <span class="normal">397</span>
 <span class="normal">398</span>
@@ -13595,7 +13673,8 @@ or a grep isn't caught and killed. Covers both the plain and
 <span class="normal">431</span>
 <span class="normal">432</span>
 <span class="normal">433</span>
-<span class="normal">434</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_orphaned_mixer_processes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">434</span>
+<span class="normal">435</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">kill_orphaned_mixer_processes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Kill jack-volume mixer processes not tracked by this engine.</span>
 
 <span class="sd">    Mirrors kill_orphaned_audio_processes for the mixer. On a node-engine</span>
@@ -13662,8 +13741,7 @@ same way they do for alias outputs.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">701</span>
-<span class="normal">702</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">702</span>
 <span class="normal">703</span>
 <span class="normal">704</span>
 <span class="normal">705</span>
@@ -13685,7 +13763,8 @@ same way they do for alias outputs.</p>
 <span class="normal">721</span>
 <span class="normal">722</span>
 <span class="normal">723</span>
-<span class="normal">724</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">make_custom_video_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
+<span class="normal">724</span>
+<span class="normal">725</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">make_custom_video_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Build a VideoOutput for a per-cue custom region.</span>
 
 <span class="sd">    cue_output is a dict-like VideoCueOutput with a canvas_region</span>
@@ -13734,17 +13813,7 @@ in which case callers fall back to the legacy region-ratio scale.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">887</span>
-<span class="normal">888</span>
-<span class="normal">889</span>
-<span class="normal">890</span>
-<span class="normal">891</span>
-<span class="normal">892</span>
-<span class="normal">893</span>
-<span class="normal">894</span>
-<span class="normal">895</span>
-<span class="normal">896</span>
-<span class="normal">897</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">897</span>
 <span class="normal">898</span>
 <span class="normal">899</span>
 <span class="normal">900</span>
@@ -13787,7 +13856,17 @@ in which case callers fall back to the legacy region-ratio scale.</p>
 <span class="normal">937</span>
 <span class="normal">938</span>
 <span class="normal">939</span>
-<span class="normal">940</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">media_dimensions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="normal">940</span>
+<span class="normal">941</span>
+<span class="normal">942</span>
+<span class="normal">943</span>
+<span class="normal">944</span>
+<span class="normal">945</span>
+<span class="normal">946</span>
+<span class="normal">947</span>
+<span class="normal">948</span>
+<span class="normal">949</span>
+<span class="normal">950</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">media_dimensions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return (width, height) px of the media's first video stream via</span>
 <span class="sd">    ffprobe, cached by (path, st_mtime). Returns (None, None) on any</span>
 <span class="sd">    failure (ffprobe missing/error/timeout, non-video media, file gone),</span>
@@ -13863,9 +13942,9 @@ in which case callers fall back to the legacy region-ratio scale.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">883</span>
-<span class="normal">884</span>
-<span class="normal">885</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">media_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">893</span>
+<span class="normal">894</span>
+<span class="normal">895</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">media_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the media path for a given file name"""</span>
     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_media_folder</span> <span class="o">+</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="n">file_name</span>
 </code></pre></div></td></tr></table></div>
@@ -13948,8 +14027,7 @@ audio mixer if one exists.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">440</span>
-<span class="normal">441</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">441</span>
 <span class="normal">442</span>
 <span class="normal">443</span>
 <span class="normal">444</span>
@@ -14051,7 +14129,8 @@ audio mixer if one exists.</p>
 <span class="normal">540</span>
 <span class="normal">541</span>
 <span class="normal">542</span>
-<span class="normal">543</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">new_audio_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">AudioCue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">543</span>
+<span class="normal">544</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">new_audio_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">AudioCue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Creates a new audio output for the given cue</span>
 
 <span class="sd">    The player is stored in the player handler and the osc client is</span>
@@ -14177,18 +14256,18 @@ audio mixer if one exists.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">795</span>
-<span class="normal">796</span>
-<span class="normal">797</span>
-<span class="normal">798</span>
-<span class="normal">799</span>
-<span class="normal">800</span>
-<span class="normal">801</span>
-<span class="normal">802</span>
-<span class="normal">803</span>
-<span class="normal">804</span>
-<span class="normal">805</span>
-<span class="normal">806</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">quit_videocomposer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">805</span>
+<span class="normal">806</span>
+<span class="normal">807</span>
+<span class="normal">808</span>
+<span class="normal">809</span>
+<span class="normal">810</span>
+<span class="normal">811</span>
+<span class="normal">812</span>
+<span class="normal">813</span>
+<span class="normal">814</span>
+<span class="normal">815</span>
+<span class="normal">816</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">quit_videocomposer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Quits the videocomposer process."""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Quitting videocomposer"</span><span class="p">)</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_video_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -14222,10 +14301,10 @@ audio mixer if one exists.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">744</span>
-<span class="normal">745</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">745</span>
 <span class="normal">746</span>
-<span class="normal">747</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">747</span>
+<span class="normal">748</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Track a layer as active in the videocomposer."""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_layer_ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">layer_id</span><span class="p">)</span>
@@ -14251,8 +14330,7 @@ audio mixer if one exists.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 99</span>
-<span class="normal">100</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">100</span>
 <span class="normal">101</span>
 <span class="normal">102</span>
 <span class="normal">103</span>
@@ -14277,7 +14355,8 @@ audio mixer if one exists.</p>
 <span class="normal">122</span>
 <span class="normal">123</span>
 <span class="normal">124</span>
-<span class="normal">125</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">remove_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">):</span>
+<span class="normal">125</span>
+<span class="normal">126</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">remove_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Removes a cue player"""</span>
     <span class="n">osc_client</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">cue_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
@@ -14326,8 +14405,7 @@ audio mixer if one exists.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">127</span>
-<span class="normal">128</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">128</span>
 <span class="normal">129</span>
 <span class="normal">130</span>
 <span class="normal">131</span>
@@ -14335,7 +14413,8 @@ audio mixer if one exists.</p>
 <span class="normal">133</span>
 <span class="normal">134</span>
 <span class="normal">135</span>
-<span class="normal">136</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">136</span>
+<span class="normal">137</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Complete reset of PlayerHandler for testing"""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Performing complete PlayerHandler reset"</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">reset_video_layers</span><span class="p">()</span>
@@ -14368,17 +14447,7 @@ method.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">775</span>
-<span class="normal">776</span>
-<span class="normal">777</span>
-<span class="normal">778</span>
-<span class="normal">779</span>
-<span class="normal">780</span>
-<span class="normal">781</span>
-<span class="normal">782</span>
-<span class="normal">783</span>
-<span class="normal">784</span>
-<span class="normal">785</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">785</span>
 <span class="normal">786</span>
 <span class="normal">787</span>
 <span class="normal">788</span>
@@ -14386,7 +14455,17 @@ method.</p>
 <span class="normal">790</span>
 <span class="normal">791</span>
 <span class="normal">792</span>
-<span class="normal">793</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_video_layers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">793</span>
+<span class="normal">794</span>
+<span class="normal">795</span>
+<span class="normal">796</span>
+<span class="normal">797</span>
+<span class="normal">798</span>
+<span class="normal">799</span>
+<span class="normal">800</span>
+<span class="normal">801</span>
+<span class="normal">802</span>
+<span class="normal">803</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_video_layers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Unload all tracked video layers (video blackout). Legacy per-layer</span>
 <span class="sd">    method.</span>
@@ -14428,17 +14507,7 @@ master).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">754</span>
-<span class="normal">755</span>
-<span class="normal">756</span>
-<span class="normal">757</span>
-<span class="normal">758</span>
-<span class="normal">759</span>
-<span class="normal">760</span>
-<span class="normal">761</span>
-<span class="normal">762</span>
-<span class="normal">763</span>
-<span class="normal">764</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">764</span>
 <span class="normal">765</span>
 <span class="normal">766</span>
 <span class="normal">767</span>
@@ -14447,7 +14516,17 @@ master).</p>
 <span class="normal">770</span>
 <span class="normal">771</span>
 <span class="normal">772</span>
-<span class="normal">773</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_videocomposer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">773</span>
+<span class="normal">774</span>
+<span class="normal">775</span>
+<span class="normal">776</span>
+<span class="normal">777</span>
+<span class="normal">778</span>
+<span class="normal">779</span>
+<span class="normal">780</span>
+<span class="normal">781</span>
+<span class="normal">782</span>
+<span class="normal">783</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset_videocomposer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Send atomic reset to videocomposer (removes all layers + resets</span>
 <span class="sd">    master).</span>
@@ -14489,12 +14568,12 @@ master).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">153</span>
-<span class="normal">154</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">154</span>
 <span class="normal">155</span>
 <span class="normal">156</span>
 <span class="normal">157</span>
-<span class="normal">158</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">resolve_audio_port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">158</span>
+<span class="normal">159</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">resolve_audio_port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Resolve an output &lt;id&gt; to its JACK port name (mapped_to)."""</span>
     <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_audio_outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">output_id</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
@@ -14525,8 +14604,7 @@ the matching VideoCueOutput's inline canvas_region.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">726</span>
-<span class="normal">727</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">727</span>
 <span class="normal">728</span>
 <span class="normal">729</span>
 <span class="normal">730</span>
@@ -14541,7 +14619,8 @@ the matching VideoCueOutput's inline canvas_region.</p>
 <span class="normal">739</span>
 <span class="normal">740</span>
 <span class="normal">741</span>
-<span class="normal">742</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">resolve_video_output_for_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">,</span> <span class="n">output_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
+<span class="normal">742</span>
+<span class="normal">743</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">resolve_video_output_for_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">,</span> <span class="n">output_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VideoOutput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Resolve an output_name suffix to a VideoOutput.</span>
 
 <span class="sd">    For alias suffixes (&lt;int&gt;) looks up the cached VideoOutput.</span>
@@ -14580,12 +14659,12 @@ the matching VideoCueOutput's inline canvas_region.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">142</span>
-<span class="normal">143</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">143</span>
 <span class="normal">144</span>
 <span class="normal">145</span>
 <span class="normal">146</span>
-<span class="normal">147</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio_output_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="normal">147</span>
+<span class="normal">148</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio_output_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Sets the audio player generator"""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Setting audio output generator to </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">args</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_audio_output_generator</span> <span class="o">=</span> <span class="n">partial</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">AudioPlayer</span><span class="p">,</span> <span class="n">AudioClient</span><span class="p">]](</span>
@@ -14613,9 +14692,9 @@ the matching VideoCueOutput's inline canvas_region.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">149</span>
-<span class="normal">150</span>
-<span class="normal">151</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio_outputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio_outputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Store audio output configs keyed by &lt;id&gt;."""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_audio_outputs</span> <span class="o">=</span> <span class="n">audio_outputs</span>
 </code></pre></div></td></tr></table></div>
@@ -14647,8 +14726,7 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">621</span>
-<span class="normal">622</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">622</span>
 <span class="normal">623</span>
 <span class="normal">624</span>
 <span class="normal">625</span>
@@ -14664,7 +14742,8 @@ teardown of the prior client is needed.</p>
 <span class="normal">635</span>
 <span class="normal">636</span>
 <span class="normal">637</span>
-<span class="normal">638</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_gradient_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">node_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">638</span>
+<span class="normal">639</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_gradient_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">node_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Construct (or replace) the GradientClient for this node.</span>
 
 <span class="sd">    node_name must match gradient-motiond's own --node-name (defaults to</span>
@@ -14704,9 +14783,9 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">826</span>
-<span class="normal">827</span>
-<span class="normal">828</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_outputs_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">836</span>
+<span class="normal">837</span>
+<span class="normal">838</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_outputs_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Set the outputs map for the player handler"""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_outputs_map</span> <span class="o">=</span> <span class="n">outputs_map</span>
 </code></pre></div></td></tr></table></div>
@@ -14731,14 +14810,14 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">817</span>
-<span class="normal">818</span>
-<span class="normal">819</span>
-<span class="normal">820</span>
-<span class="normal">821</span>
-<span class="normal">822</span>
-<span class="normal">823</span>
-<span class="normal">824</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_player_endpoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">827</span>
+<span class="normal">828</span>
+<span class="normal">829</span>
+<span class="normal">830</span>
+<span class="normal">831</span>
+<span class="normal">832</span>
+<span class="normal">833</span>
+<span class="normal">834</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_player_endpoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Sets the player endpoints for a given cue"""</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_player_endpoints_generator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Player endpoints generator not set"</span><span class="p">)</span>
@@ -14768,10 +14847,10 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">812</span>
-<span class="normal">813</span>
-<span class="normal">814</span>
-<span class="normal">815</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_player_endpoints_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">822</span>
+<span class="normal">823</span>
+<span class="normal">824</span>
+<span class="normal">825</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_player_endpoints_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Sets the player endpoints generator"""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Setting player endpoints generator to </span><span class="si">{</span><span class="n">func</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_player_endpoints_generator</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -14797,10 +14876,10 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">610</span>
-<span class="normal">611</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">611</span>
 <span class="normal">612</span>
-<span class="normal">613</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_video_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">613</span>
+<span class="normal">614</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_video_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Sets the video client for this node."""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Setting video client for node </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node_uuid</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_video_client</span> <span class="o">=</span> <span class="n">VideoClient</span><span class="p">(</span><span class="n">player_port</span><span class="o">=</span><span class="n">port</span><span class="p">)</span>
@@ -14927,8 +15006,7 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">160</span>
-<span class="normal">161</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">161</span>
 <span class="normal">162</span>
 <span class="normal">163</span>
 <span class="normal">164</span>
@@ -14958,7 +15036,8 @@ teardown of the prior client is needed.</p>
 <span class="normal">188</span>
 <span class="normal">189</span>
 <span class="normal">190</span>
-<span class="normal">191</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_audio_mixer</span><span class="p">(</span>
+<span class="normal">191</span>
+<span class="normal">192</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_audio_mixer</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">audio_outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
     <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -15098,8 +15177,7 @@ teardown of the prior client is needed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">549</span>
-<span class="normal">550</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">550</span>
 <span class="normal">551</span>
 <span class="normal">552</span>
 <span class="normal">553</span>
@@ -15115,7 +15193,8 @@ teardown of the prior client is needed.</p>
 <span class="normal">563</span>
 <span class="normal">564</span>
 <span class="normal">565</span>
-<span class="normal">566</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_dmx_player</span><span class="p">(</span>
+<span class="normal">566</span>
+<span class="normal">567</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_dmx_player</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">node_uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DmxPlayer</span><span class="p">,</span> <span class="n">DmxClient</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Starts the DMX player for this node.</span>
@@ -15161,8 +15240,7 @@ When <code>None</code>, fall back to bbox computed from the output regions.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">640</span>
-<span class="normal">641</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">641</span>
 <span class="normal">642</span>
 <span class="normal">643</span>
 <span class="normal">644</span>
@@ -15201,7 +15279,8 @@ When <code>None</code>, fall back to bbox computed from the output regions.</p>
 <span class="normal">677</span>
 <span class="normal">678</span>
 <span class="normal">679</span>
-<span class="normal">680</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_video_outputs</span><span class="p">(</span>
+<span class="normal">680</span>
+<span class="normal">681</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">start_video_outputs</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">output_names</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">any</span><span class="p">]],</span>
     <span class="n">canvas_override</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -15264,10 +15343,10 @@ When <code>None</code>, fall back to bbox computed from the output regions.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/players/PlayerHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">89</span>
-<span class="normal">90</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">90</span>
 <span class="normal">91</span>
-<span class="normal">92</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">store_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span> <span class="n">player</span><span class="p">:</span> <span class="n">Player</span><span class="p">):</span>
+<span class="normal">92</span>
+<span class="normal">93</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">store_cue_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span> <span class="n">player</span><span class="p">:</span> <span class="n">Player</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stores a cue player"""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cue_players</span><span class="p">[</span><span class="n">cue</span><span class="p">]</span> <span class="o">=</span> <span class="n">player</span>
