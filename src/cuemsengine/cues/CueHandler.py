@@ -16,7 +16,6 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
-from ..players import VideoPlayer
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools import MtcListener
 from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
@@ -54,8 +53,6 @@ class CueHandler:
     # Instance attributes (declared for IDE/type checker support)
     _armed_cues: list[Cue]
     _armed_cues_set: set[str]
-    _video_players: dict
-    _front_video_player: VideoPlayer | None
     _lock: Lock
     communications_thread: NodeCommunications
 
@@ -65,8 +62,6 @@ class CueHandler:
             # Initialize instance attributes
             cls._instance._armed_cues = []
             cls._instance._armed_cues_set = set()
-            cls._instance._video_players = {}
-            cls._instance._front_video_player = None
             cls._instance._lock = Lock()
         return cls._instance
 
