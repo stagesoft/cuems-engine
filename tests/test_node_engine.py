@@ -1087,6 +1087,27 @@ class TestGoThatCannotArmItsCueSkipsIt:
         assert armed == [n1, n2]
         assert ch.arm.call_args.kwargs["walk"] is not None  # on the PreArm thread
 
+    def test_an_arm_that_finished_just_too_late_is_not_reported_as_failed(self):
+        """The holder can finish between arm() giving up and the log line."""
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            # in flight before the arm, gone right after it
+            ch.describe_arm_in_flight.side_effect = ["held by PreArm:n1 for 0.1s", None]
+            with patch("cuemsengine.NodeEngine.Logger") as log:
+                node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n2.id)
+
+        (line,) = [
+            str(c.args[0])
+            for c in log.error.call_args_list
+            if "SKIPPED on this node" in str(c.args[0])
+        ]
+        assert "its arm failed" not in line
+        assert "did not deliver" in line
+
     def test_a_skipped_last_segment_does_not_restart_the_node_from_the_top(self):
         """The pointer becomes None. Without an ongoing cue the next GO would
         read that as 'first GO' and start again from contents[0], while every
