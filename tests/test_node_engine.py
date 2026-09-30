@@ -882,3 +882,21 @@ class TestAdvancePreArmRunsOffTheCommandLock:
             )
 
         ch.disarm.assert_called_once_with(extra)
+
+
+class TestGoScriptToleratesARefusedDispatch:
+    """CUE_HANDLER.go() returns None when a STOP/load arrived while the cue
+    was being started (869f9wqpn). go_script used to dereference the result
+    unconditionally."""
+
+    def test_none_from_go_clears_running_and_does_not_raise(self):
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch.go.return_value = None
+            node.go_script({"go_mtc_ms": 1000.0})
+
+        assert node.ongoing_cue is None
+        node.set_status.assert_called_with("running", "no")
+        assert node.next_cue_pointer is n1
