@@ -1150,6 +1150,40 @@ class NodeEngine(BaseEngine):
                 "— project changed underneath the walk"
             )
 
+    def _prearm_after_advance(self):
+        """Pre-arm this node's next segment after a GO advanced the pointer
+        with nothing local to play.
+
+        Target = what the NEXT GO will dispatch on this node:
+        `_first_local_enabled_in_go_chain(next_cue_pointer)` -- None when
+        that GO is another node's too, in which case nothing is armed yet
+        (the next advance re-checks), so this never preloads a cue that is
+        many GOs away. The target is armed synchronously -- this GO has no
+        local work, so nothing here waits on it -- and the lookahead runs
+        on the same PreArm:<id> background thread set_next_cue uses, with
+        the same project-generation / selection-epoch abort guards (a
+        STOP, a load or a later selection abandons it).
+        """
+        target = self._first_local_enabled_in_go_chain(self.next_cue_pointer)
+        if target is None:
+            return
+        self._selection_epoch += 1
+        selection_epoch = self._selection_epoch
+        project_gen = self._project_generation
+        script = self.script
+        Logger.info(
+            "Pointer advanced with no local cue; pre-arming next local cue "
+            f"{target.id} ({type(target).__name__}) + lookahead"
+        )
+        if not CUE_HANDLER.find_armed_cue(target):
+            CUE_HANDLER.arm(target, init=True)
+        threading.Thread(
+            target=self._prearm_lookahead,
+            args=(target, project_gen, selection_epoch, script),
+            daemon=True,
+            name=f"PreArm:{target.id}",
+        ).start()
+
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
 
@@ -1424,6 +1458,12 @@ class NodeEngine(BaseEngine):
                 f"nothing to play on this node. Advanced next cue to "
                 f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
             )
+            # ...and arm what the NEXT GO will dispatch here, now: nothing
+            # else would (load/STOP pre-arm stops at another node's pause,
+            # the controller never forwards setnextcue on an advance, and
+            # the UI / power-bridge GO is a bare GO). Medina sala1,
+            # 2026-09-30: the node's first cue fired 240 ms late otherwise.
+            self._prearm_after_advance()
             return
 
         if walked:
