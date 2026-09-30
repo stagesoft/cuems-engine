@@ -199,11 +199,7 @@ class TestEpochMarking:
 
 
 class TestActionHandlers:
-    """The handlers that end a cue must all take its chain with them.
-
-    (A version-1 fade_out reaches the engine as a stop — the library converts
-    it on read — so the stop case covers it.)
-    """
+    """The handlers that end a cue must all take its chain with them."""
 
     def _target(self):
         t, nxt = _cue("T"), _cue("N")

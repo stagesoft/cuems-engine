@@ -407,30 +407,6 @@ class TestRapidSuccession:
 # ===========================================================================
 
 
-class TestRetiredFadeActions:
-    """fade_in/fade_out are no longer engine actions (FR-012).
-
-    The library's convert-on-read rewrites them to play/stop before a script
-    reaches the engine; an in-memory cue that still carries one is refused like
-    any other unsupported action.
-    """
-
-    @pytest.mark.parametrize("action_type", ["fade_in", "fade_out"])
-    def test_is_rejected_as_unsupported(self, handler, mtc, action_type):
-        target = _make_target()
-        cue = _make_action_cue(action_type, target)
-
-        with (
-            patch.object(handler, "go") as mock_go,
-            patch.object(handler, "arm"),
-        ):
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "rejected"
-        assert result["reason"] == f"Unsupported action_type: {action_type!r}"
-        mock_go.assert_not_called()
-
-
 class TestFadeActionsFromAVersion1Script:
     """What a version-1 script's fade_in/fade_out become (FR-014, M17).
 

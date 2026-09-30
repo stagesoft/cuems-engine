@@ -38,12 +38,6 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "go_to",
     }
 )
-# fade_in / fade_out are not engine actions. The library's convert-on-read
-# rewrites them to play / stop before a script reaches the engine, and the
-# cuems-utils (>= 0.1.0rc16) floor guarantees that conversion runs. fade_in was
-# already identical to play. A converted fade_out is now a real stop: it
-# disarms its target, fixing the zombie player processes the old handler left
-# behind, and a repeat answers applied_no_change — a behaviour change (FR-014).
 
 HookPhase = Literal["before_dispatch", "after_dispatch", "wrap_dispatch"]
 RegistrationLayer = Literal["cue_layer", "node_layer"]
