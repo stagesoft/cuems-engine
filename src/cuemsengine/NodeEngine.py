@@ -1467,9 +1467,13 @@ class NodeEngine(BaseEngine):
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
+            # Asked before the arm: by the time arm() gives up, the arm it
+            # waited on may have finished, and the skip line must not then
+            # call a slow arm a failed one.
+            was_in_flight = CUE_HANDLER.describe_arm_in_flight(cue_to_go)
             CUE_HANDLER.arm(cue_to_go, init=True)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
-                self._skip_unarmed_cue(cue_to_go)
+                self._skip_unarmed_cue(cue_to_go, was_in_flight)
                 return
 
         # Update state
@@ -1504,7 +1508,7 @@ class NodeEngine(BaseEngine):
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
 
-    def _skip_unarmed_cue(self, cue):
+    def _skip_unarmed_cue(self, cue, was_in_flight):
         """A GO found its cue unarmed and could not get it armed: skip the
         cue on this node, keep the pointer in lockstep, and say so.
 
@@ -1520,11 +1524,12 @@ class NodeEngine(BaseEngine):
         would restart this node from the top of the script).
         """
         in_flight = CUE_HANDLER.describe_arm_in_flight(cue)
-        why = (
-            f"its arm is still in flight, {in_flight}"
-            if in_flight
-            else "its arm failed"
-        )
+        if in_flight:
+            why = f"its arm is still in flight, {in_flight}"
+        elif was_in_flight:
+            why = "the arm it waited on did not deliver the cue in time"
+        else:
+            why = "its arm failed"
         self.ongoing_cue = cue
         self.next_cue_pointer = cue.get_next_cue()
         self._broadcast_nextcue()

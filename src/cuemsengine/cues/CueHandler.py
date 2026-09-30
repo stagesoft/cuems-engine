@@ -156,12 +156,6 @@ class CueHandler:
                 return True
         return False
 
-    def reset_armed_cues(self) -> None:
-        """Resets the list of armed cues."""
-        with self._lock:
-            self._armed_cues = []
-            self._armed_cues_set.clear()
-
     # ---------------------------
     # Cue Management
     # ---------------------------
