@@ -14,7 +14,7 @@ from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
-from .cues.CueHandler import CUE_HANDLER
+from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
@@ -1133,16 +1133,30 @@ class NodeEngine(BaseEngine):
             )
 
         newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
-        if newly_armed and self.script is not script:
-            # A different project loaded while this walk was running — its
-            # own reset already handled everything else; undo exactly what
-            # THIS walk armed, not a concurrent call's.
-            for armed_cue in newly_armed:
-                CUE_HANDLER.disarm(armed_cue)
-            Logger.info(
-                f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
-                "— project changed underneath the walk"
-            )
+        self._undo_stale_prearm(newly_armed, cue, project_gen, script)
+
+    def _undo_stale_prearm(self, armed, origin, project_gen, script):
+        """Disarm what a PreArm thread armed if a STOP or a load happened
+        underneath it; returns True when it did.
+
+        A different project loading is the obvious case. A STOP is the other
+        one: it keeps the same script but bumps the generation, kills every
+        audio player and disarms all -- so a cue this thread finished arming
+        afterwards may hold a player that STOP just killed. Undo exactly what
+        THIS thread armed, not a concurrent call's: the next GO's safety-net
+        re-arm is late, a dead player would be silent.
+        """
+        if not armed:
+            return False
+        if self.script is script and self._project_generation == project_gen:
+            return False
+        for armed_cue in armed:
+            CUE_HANDLER.disarm(armed_cue)
+        Logger.info(
+            f"PreArm from {origin.id}: disarmed {len(armed)} cue(s) — a STOP "
+            "or a load happened underneath it"
+        )
+        return True
 
     def _prearm_after_advance(self):
         """Pre-arm this node's next segment after a GO advanced the pointer
@@ -1181,24 +1195,25 @@ class NodeEngine(BaseEngine):
 
     def _prearm_segment(self, target, project_gen, selection_epoch, script):
         """PreArm:<id> body for _prearm_after_advance: arm the segment's
-        first cue, then the lookahead from it. An arm that finished after a
-        different project loaded is undone, as _prearm_lookahead undoes its
-        own walk's."""
-        if (
-            self._project_generation != project_gen
-            or self._selection_epoch != selection_epoch
-        ):
+        first cue, then the lookahead from it. What either step armed is
+        undone if a STOP or a load happened underneath (_undo_stale_prearm).
+        """
+
+        def should_continue():
+            return (
+                self._project_generation == project_gen
+                and self._selection_epoch == selection_epoch
+            )
+
+        if not should_continue():
             return
         if not CUE_HANDLER.find_armed_cue(target):
-            was_loaded = getattr(target, "loaded", False)
-            if CUE_HANDLER.arm(target, init=True) and not was_loaded:
-                if self.script is not script:
-                    CUE_HANDLER.disarm(target)
-                    Logger.info(
-                        f"PreArm from {target.id}: disarmed it — project "
-                        "changed underneath the arm"
-                    )
-                    return
+            # A walk, so arm()'s own post_go / action-target recursion obeys
+            # the same guards and records everything it arms (869f79ecc).
+            walk = _ArmWalk(should_continue=should_continue)
+            CUE_HANDLER.arm(target, init=True, walk=walk)
+            if self._undo_stale_prearm(walk.armed, target, project_gen, script):
+                return
         self._prearm_lookahead(target, project_gen, selection_epoch, script)
 
     def _handle_cue_enabled(self, value):
