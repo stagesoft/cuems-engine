@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from threading import Event, Lock, Thread
-from time import sleep
+from threading import Event, Lock, Thread, current_thread
+from time import monotonic, sleep
 from typing import Callable
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
@@ -38,6 +38,21 @@ class _ArmWalk:
     skip_types: tuple[type, ...] = ()
     should_continue: Callable[[], bool] | None = None
     armed: list = field(default_factory=list)
+
+
+@dataclass
+class _ArmClaim:
+    """One arm in flight for a cue id (CueHandler._arming).
+
+    `event` wakes the threads waiting for it; `holder` / `started` exist so a
+    timed-out wait can say who held the cue and for how long; `waiters`
+    counts the threads parked on it.
+    """
+
+    event: Event = field(default_factory=Event)
+    holder: str = ""
+    started: float = 0.0
+    waiters: int = 0
 
 
 class CueHandler:
@@ -149,6 +164,11 @@ class CueHandler:
 
     # Maximum cues to walk ahead. Prevents runaway on pathological chains.
     _MAX_LOOKAHEAD_DEPTH = 15
+
+    # Total time one arm() call may spend waiting for an arm of the same cue
+    # that another thread holds. A ceiling on the WAIT only: a waiter that
+    # wakes inside it and finds the cue still unarmed arms it itself.
+    _ARM_WAIT_TIMEOUT_S = 5.0
 
     # Slack before a cue reached after its own anchor is reported as late.
     # One frame at 25 fps — below that it is dispatch jitter, not a mistimed
@@ -425,6 +445,21 @@ class CueHandler:
 
         return newly_armed
 
+    def _arming_registry(self) -> dict:
+        """Arms in flight, keyed by cue id. Call with self._lock held.
+
+        Keyed by ID, not held on the cue object: what an arm creates is keyed
+        by id (the tracked player, the JACK client name Audio_Player-<uuid>,
+        the video layer ids) and Cue.__eq__/__hash__ are by id, so the old and
+        the new object of one cue -- a project loaded twice -- must exclude
+        each other. Created lazily: handlers built with object.__new__ (tests)
+        never ran __new__.
+        """
+        registry = self.__dict__.get("_arming")
+        if registry is None:
+            registry = self.__dict__.setdefault("_arming", {})
+        return registry
+
     def arm(self, cue: Cue, init=False, walk: _ArmWalk | None = None) -> bool:
         """Arms a cue by appending it to the armed_cues list.
 
@@ -432,6 +467,11 @@ class CueHandler:
         Its excluded types and should_continue checkpoint also govern this
         call's own post_go / ActionCue-target recursion, and every cue this
         call chain actually arms is recorded in walk.armed (869f79ecc).
+
+        One arm is in flight per cue id (_arming_registry). An init caller
+        that finds one waits for it, up to _ARM_WAIT_TIMEOUT_S in total, and
+        then re-evaluates: if the cue is still unarmed (the arm it waited on
+        failed) it arms the cue itself instead of giving up.
         """
         if cue is None:
             return False
@@ -441,52 +481,63 @@ class CueHandler:
             if walk.should_continue is not None and not walk.should_continue():
                 return False
 
-        needs_disarm = False
-        do_arm = False
-        pending_event = None
+        wait_deadline = None
+        while True:
+            needs_disarm = False
+            claim = None
+            pending = None
 
-        with self._lock:
-            found = cue.id in self._armed_cues_set  # O(1) set lookup
-            if hasattr(cue, "loaded") and cue.loaded:
-                if not cue.enabled:
-                    needs_disarm = True
-            elif isinstance(getattr(cue, "_loading", None), Event):
-                if init:
+            with self._lock:
+                registry = self._arming_registry()
+                in_flight = registry.get(cue.id)
+                if hasattr(cue, "loaded") and cue.loaded:
+                    if not cue.enabled:
+                        needs_disarm = True
+                elif in_flight is not None:
+                    if not init:
+                        # Non-init callers just register; no need to wait
+                        return False
                     # Another thread is arming — wait for it outside the lock
-                    pending_event = cue._loading
-                else:
-                    # Non-init callers just register; no need to wait
-                    return False
-            elif not init:
-                if not found:
-                    self._armed_cues.append(cue)
-                    self._armed_cues_set.add(cue.id)
-            elif cue._local and cue.enabled:
-                # Mark as loading inside the lock to block concurrent arm
-                # attempts. Cleared in finally below (outside lock —
-                # intentional: avoids holding lock during arm_cue(). The
-                # Event is set atomically here, so no other thread can
-                # enter this branch for the same cue until _loading is
-                # cleared. Waiting threads block on the Event.)
-                cue._loading = Event()
-                do_arm = True
+                    pending = in_flight
+                    pending.waiters += 1
+                elif not init:
+                    if cue.id not in self._armed_cues_set:
+                        self._armed_cues.append(cue)
+                        self._armed_cues_set.add(cue.id)
+                elif cue._local and cue.enabled:
+                    # Claim the cue inside the lock to block concurrent arm
+                    # attempts; released in the finally below (outside the
+                    # lock — intentional: avoids holding it during arm_cue()).
+                    claim = _ArmClaim(holder=current_thread().name, started=monotonic())
+                    registry[cue.id] = claim
 
-        # Another thread is arming this cue — wait for it to finish
-        if pending_event is not None:
+            if pending is None:
+                break
+
+            if wait_deadline is None:
+                wait_deadline = monotonic() + self._ARM_WAIT_TIMEOUT_S
+            remaining = wait_deadline - monotonic()
             Logger.debug(
                 f"Waiting for in-progress arm of {type(cue).__name__} {cue.id}"
             )
-            armed = pending_event.wait(timeout=5.0)
-            if not armed:
-                Logger.warning(f"Timed out waiting for arm of {cue.id}")
-            return getattr(cue, "loaded", False)
+            woke = remaining > 0 and pending.event.wait(timeout=remaining)
+            with self._lock:
+                pending.waiters -= 1
+            if not woke:
+                Logger.warning(
+                    f"Timed out waiting for arm of {cue.id} (held by "
+                    f"{pending.holder} for {monotonic() - pending.started:.1f}s)"
+                )
+                return getattr(cue, "loaded", False)
+            # Woken: loop and look again. Loaded -> done; still unarmed -> this
+            # thread claims it and arms it itself.
 
         # Disarm disabled-but-loaded cues outside lock (disarm acquires lock)
         if needs_disarm:
             self.disarm(cue, reason="disabled")
             return False
 
-        if not do_arm:
+        if claim is None:
             return not needs_disarm
 
         try:
@@ -494,7 +545,7 @@ class CueHandler:
             arm_cue(cue)
             with self._lock:
                 cue.loaded = True
-                if not found:
+                if cue.id not in self._armed_cues_set:
                     self._armed_cues.append(cue)
                     self._armed_cues_set.add(cue.id)
             if walk is not None:
@@ -518,13 +569,17 @@ class CueHandler:
             cue.loaded = False
             return False
         finally:
-            loading_event = cue._loading
-            cue._loading = None
-            if isinstance(loading_event, Event):
-                loading_event.set()
+            # Always, and before the recursion below: a leaked claim would
+            # block every later arm of this cue id, across reloads too, and a
+            # claim held through the recursion would deadlock a go-chain cycle.
+            with self._lock:
+                registry = self._arming_registry()
+                if registry.get(cue.id) is claim:
+                    del registry[cue.id]
+            claim.event.set()
 
         # Recursive arms — only reached if cue was actually armed.
-        # _loading sentinel prevents cycles; loaded guard prevents re-arm.
+        # The claim is released by now; the loaded guard prevents re-arm.
         if cue.post_go == "go" and cue._target_object:
             if cue._target_object.enabled:
                 if walk is not None:
