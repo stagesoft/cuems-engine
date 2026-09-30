@@ -20,8 +20,11 @@ cuems-engine (0.1.0rc5-2) bookworm; urgency=medium
     cue. The segment's first cue and its lookahead are both armed on the
     PreArm background thread, never under _command_lock, so a STOP or the
     next GO is not held up by an audio player's spawn + JACK port wait.
+    Whatever a PreArm thread armed (including arm()'s own recursion) is
+    undone if a STOP or a load happened underneath it, so no cue is left
+    marked armed with a player STOP just killed.
 
- -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 17:20:42 +0200
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 17:27:59 +0200
 
 cuems-engine (0.1.0rc5-1) bookworm; urgency=medium
 
