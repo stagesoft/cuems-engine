@@ -1011,3 +1011,84 @@ class TestAdvancePreArmRunsOffTheCommandLock:
             )
 
         ch.disarm.assert_not_called()
+
+
+class TestGoThatCannotArmItsCueSkipsIt:
+    """A GO whose cue cannot be armed in time used to return without touching
+    the pointer: the node then played that cue on the NEXT GO and stayed one
+    GO behind the controller until STOP. Decided 2026-09-30 (Ion): skip the
+    cue, advance the pointer in lockstep, and say so loudly. 5 s is plenty
+    for a slow load; an arm still in flight after it counts as failed for
+    this GO."""
+
+    def _skip(self, node, ch, in_flight="held by PreArm:n1 for 5.0s"):
+        ch.find_armed_cue.return_value = False  # arm() never gets it armed
+        ch._arm_ahead.return_value = []
+        ch.describe_arm_in_flight.return_value = in_flight
+        with patch("cuemsengine.NodeEngine.Logger") as log:
+            node.go_script({"go_mtc_ms": 1000.0})
+        return [str(c.args[0]) for c in log.error.call_args_list]
+
+    def test_the_pointer_advances_in_lockstep_and_nothing_is_dispatched(self):
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            self._skip(node, ch)
+            _join_prearm(n2.id)
+
+        assert node.next_cue_pointer is n2
+        node._broadcast_nextcue.assert_called_once()
+        ch.go.assert_not_called()
+        node.set_status.assert_not_called()  # nothing runs, nothing is stopped
+
+    def test_the_skip_is_annotated(self):
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            errors = self._skip(node, ch)
+            _join_prearm(n2.id)
+
+        (line,) = [e for e in errors if "SKIPPED on this node" in e]
+        assert "n1" in line and "_ChainCue" in line
+        assert "held by PreArm:n1 for 5.0s" in line
+        assert "Pointer advanced to n2" in line
+
+    def test_a_plain_arm_failure_says_so(self):
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            errors = self._skip(node, ch, in_flight=None)
+            _join_prearm(n2.id)
+
+        (line,) = [e for e in errors if "SKIPPED on this node" in e]
+        assert "its arm failed" in line
+
+    def test_the_next_segment_is_pre_armed(self):
+        """The skip path never reaches go()'s own lookahead, so without this
+        the next GO would arm at GO time and start late -- the very symptom
+        869f9wqpn is about."""
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            self._skip(node, ch)
+            _join_prearm(n2.id)
+
+        armed = [c.args[0] for c in ch.arm.call_args_list]
+        assert armed == [n1, n2]
+        assert ch.arm.call_args.kwargs["walk"] is not None  # on the PreArm thread
+
+    def test_a_skipped_last_segment_does_not_restart_the_node_from_the_top(self):
+        """The pointer becomes None. Without an ongoing cue the next GO would
+        read that as 'first GO' and start again from contents[0], while every
+        other node says 'No more cues'."""
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=n1)
+        node.script.cuelist.contents = [n1]
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            self._skip(node, ch)
+            assert node.next_cue_pointer is None
+            arms_after_the_skip = ch.arm.call_count
+            node.go_script({"go_mtc_ms": 2000.0})
+
+            assert ch.arm.call_count == arms_after_the_skip
+            ch.go.assert_not_called()
