@@ -580,3 +580,185 @@ class TestSetNextCuePreArm:
             node.set_next_cue("cue-1")
             _join_prearm(cue.id)
             ch.disarm.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# A node pre-arms its next local segment when a GO advances its pointer with
+# nothing local to play (Medina sala1, 2026-09-30). Shape: ctrl go -> ctrl
+# PAUSE -> node go -> node pause. The load-time walk stops at the ctrl pause,
+# so the node armed nothing; GO 1 only advanced the pointer; GO 2 found the
+# node's first cue unarmed and fired it late (240 ms at sala1, 120 ms on
+# test2 with the full 869f79ecc build). Fix: on that advance, arm what the
+# NEXT GO will dispatch on this node -- the same go-chain walk go_script uses
+# -- synchronously, plus the PreArm lookahead thread, like set_next_cue.
+# ---------------------------------------------------------------------------
+
+
+class _ChainCue(_FakeCue):
+    """_FakeCue plus the chain fields go_script / the pre-arm walk read."""
+
+    def __init__(self, cue_id, local, post_go, enabled=True):
+        super().__init__(cue_id=cue_id, enabled=enabled, local=local)
+        self.post_go = post_go
+        self._target_object = None
+
+
+def _chain(*cues):
+    """Link cues in order: _target_object = next sibling, and get_next_cue()
+    = the cue after the chain's hand-off (first cue after a non-'go' one),
+    which is what Cue.get_next_cue returns for a flat list."""
+    for a, b in zip(cues, cues[1:]):
+        a._target_object = b
+    for i, c in enumerate(cues):
+        nxt = None
+        j = i
+        while j < len(cues):
+            if cues[j].post_go != "go":
+                nxt = cues[j + 1] if j + 1 < len(cues) else None
+                break
+            j += 1
+        c._next = nxt
+    return cues
+
+
+def _go_node(pointer, ongoing=None):
+    node = _make_node()
+    node.with_mtc = True
+    node.mtc_listener = _MM()
+    node.ongoing_cue = ongoing
+    node.next_cue_pointer = pointer
+    node.set_status = _MM()
+    node._selection_epoch = 0
+    node._resolve_go_anchor = _MM(return_value=1000.0)
+    return node
+
+
+class TestFirstLocalEnabledInGoChain:
+
+    def test_returns_start_when_it_is_local_and_enabled(self):
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        assert BaseEngine._first_local_enabled_in_go_chain(n1) is n1
+
+    def test_walks_other_nodes_go_cues_to_the_local_one(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "go"), _ChainCue("n1", True, "pause"))
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        assert BaseEngine._first_local_enabled_in_go_chain(c1) is n1
+
+    def test_stops_at_another_nodes_hand_off(self):
+        c1, c2, n1 = _chain(
+            _ChainCue("c1", False, "go"),
+            _ChainCue("c2", False, "pause"),
+            _ChainCue("n1", True, "go"),
+        )
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        assert BaseEngine._first_local_enabled_in_go_chain(c1) is None
+
+    def test_skips_a_local_disabled_cue_in_the_chain(self):
+        """The load walk used to stop at a local-but-DISABLED cue (non-None,
+        so no fallback) and arm() then refused it: nothing pre-armed. Same
+        predicate as go_script now: _local AND enabled."""
+        d1, n1 = _chain(
+            _ChainCue("d1", True, "go", enabled=False), _ChainCue("n1", True, "pause")
+        )
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        assert BaseEngine._first_local_enabled_in_go_chain(d1) is n1
+
+    def test_none_start_is_none(self):
+        from cuemsengine.core.BaseEngine import BaseEngine
+
+        assert BaseEngine._first_local_enabled_in_go_chain(None) is None
+
+
+class TestAdvanceWithNoLocalCuePreArms:
+
+    def test_sala1_shape_first_go_arms_the_nodes_first_segment(self):
+        c1, c2, n1, n2 = _chain(
+            _ChainCue("c1", False, "go"),
+            _ChainCue("c2", False, "pause"),
+            _ChainCue("n1", True, "go"),
+            _ChainCue("n2", True, "pause"),
+        )
+        node = _go_node(pointer=c1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n1.id)
+
+        assert node.next_cue_pointer is n1
+        ch.go.assert_not_called()
+        ch.arm.assert_called_once_with(n1, init=True)
+        assert ch._arm_ahead.call_args.args[0] is n1
+        assert callable(ch._arm_ahead.call_args.kwargs["should_continue"])
+
+    def test_later_segment_behind_another_nodes_pause(self):
+        """After the node already played (ongoing_cue set), a GO whose chain
+        is all other-node cues still arms the node's NEXT segment."""
+        played, c3, n3 = _chain(
+            _ChainCue("played", True, "pause"),
+            _ChainCue("c3", False, "pause"),
+            _ChainCue("n3", True, "pause"),
+        )
+        node = _go_node(pointer=c3, ongoing=played)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n3.id)
+
+        assert node.next_cue_pointer is n3
+        ch.arm.assert_called_once_with(n3, init=True)
+
+    def test_nothing_armed_when_the_next_go_is_another_nodes_too(self):
+        c1, c2, c3, n1 = _chain(
+            _ChainCue("c1", False, "pause"),
+            _ChainCue("c2", False, "pause"),
+            _ChainCue("c3", False, "go"),
+            _ChainCue("n1", True, "pause"),
+        )
+        node = _go_node(pointer=c1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            node.go_script({"go_mtc_ms": 1000.0})
+
+        # Pointer is c2 (another node's hand-off): nothing for us next GO,
+        # so nothing is armed yet -- no whole-show preload.
+        assert node.next_cue_pointer is c2
+        ch.arm.assert_not_called()
+        ch._arm_ahead.assert_not_called()
+
+    def test_already_armed_target_is_not_re_armed_but_lookahead_runs(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch._arm_ahead.return_value = []
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n1.id)
+
+        ch.arm.assert_not_called()
+        assert ch._arm_ahead.call_args.args[0] is n1
+
+    def test_advance_prearm_is_abandoned_by_a_stop_or_new_selection(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        captured = {}
+
+        def capture(target, should_continue=None, skip_arming_types=()):
+            captured["should_continue"] = should_continue
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.side_effect = capture
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n1.id)
+
+        assert captured["should_continue"]() is True
+        node._project_generation += 1  # STOP / load
+        assert captured["should_continue"]() is False
