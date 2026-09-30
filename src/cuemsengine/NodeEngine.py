@@ -1469,6 +1469,15 @@ class NodeEngine(BaseEngine):
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
         main_thread = CUE_HANDLER.go(cue_to_go, self.mtc_listener, GO_mtc + sigma_ms)
+        if main_thread is None:
+            # go() refuses the dispatch when a STOP or a load arrived while
+            # the cue was being started, or when the cue was disabled /
+            # became non-local between the walk and the dispatch. Say so
+            # instead of dereferencing None.
+            Logger.error(f"Cue {cue_to_go.id} was not started; aborting GO")
+            self.set_status("running", "no")
+            self.ongoing_cue = None
+            return
         Logger.info(f"Cue {cue_to_go.id} started on main thread: {main_thread.name}")
 
         # Update next cue pointer
