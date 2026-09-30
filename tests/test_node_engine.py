@@ -590,7 +590,7 @@ class TestSetNextCuePreArm:
 # node's first cue unarmed and fired it late (240 ms at sala1, 120 ms on
 # test2 with the full 869f79ecc build). Fix: on that advance, arm what the
 # NEXT GO will dispatch on this node -- the same go-chain walk go_script uses
-# -- synchronously, plus the PreArm lookahead thread, like set_next_cue.
+# -- on a PreArm background thread (target + lookahead), off _command_lock.
 # ---------------------------------------------------------------------------
 
 
@@ -692,7 +692,9 @@ class TestAdvanceWithNoLocalCuePreArms:
 
         assert node.next_cue_pointer is n1
         ch.go.assert_not_called()
-        ch.arm.assert_called_once_with(n1, init=True)
+        ch.arm.assert_called_once()
+        assert ch.arm.call_args.args == (n1,)
+        assert ch.arm.call_args.kwargs["init"] is True
         assert ch._arm_ahead.call_args.args[0] is n1
         assert callable(ch._arm_ahead.call_args.kwargs["should_continue"])
 
@@ -712,7 +714,9 @@ class TestAdvanceWithNoLocalCuePreArms:
             _join_prearm(n3.id)
 
         assert node.next_cue_pointer is n3
-        ch.arm.assert_called_once_with(n3, init=True)
+        ch.arm.assert_called_once()
+        assert ch.arm.call_args.args == (n3,)
+        assert ch.arm.call_args.kwargs["init"] is True
 
     def test_nothing_armed_when_the_next_go_is_another_nodes_too(self):
         c1, c2, c3, n1 = _chain(
@@ -806,9 +810,10 @@ class TestAdvancePreArmRunsOffTheCommandLock:
         node = _go_node(pointer=c1)
         old_script = node.script
 
-        def arm_while_a_new_project_loads(cue, init=False):
+        def arm_while_a_new_project_loads(cue, init=False, walk=None):
             node.script = _MM()
             cue.loaded = True
+            walk.armed.append(cue)
             return True
 
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
@@ -820,3 +825,68 @@ class TestAdvancePreArmRunsOffTheCommandLock:
             )
 
         ch.disarm.assert_called_once_with(n1)
+
+    def test_the_target_arm_carries_the_walk_guards(self):
+        """arm()'s own post_go / action-target recursion must honour the
+        same abort guards and be recorded, or a STOP mid-arm leaks it."""
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        walks = []
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            ch.arm.side_effect = lambda cue, init=False, walk=None: walks.append(walk)
+            node._prearm_segment(
+                n1, node._project_generation, node._selection_epoch, node.script
+            )
+
+        (walk,) = walks
+        assert walk.should_continue() is True
+        node._project_generation += 1
+        assert walk.should_continue() is False
+
+    def test_a_stop_during_the_target_arm_undoes_everything_it_armed(self):
+        """STOP keeps the same script but bumps the generation, kills every
+        audio player and disarms all: a cue this thread finishes arming
+        afterwards may hold a dead player, so it is undone -- the GO's
+        safety-net re-arm is late, a dead player is silent."""
+        c1, n1, n2 = _chain(
+            _ChainCue("c1", False, "pause"),
+            _ChainCue("n1", True, "go"),
+            _ChainCue("n2", True, "pause"),
+        )
+        node = _go_node(pointer=c1)
+
+        def arm_across_a_stop(cue, init=False, walk=None):
+            node._project_generation += 1  # STOP -> ready_script
+            for armed in (n1, n2):  # the target + its post_go recursion
+                armed.loaded = True
+                walk.armed.append(armed)
+            return True
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch.arm.side_effect = arm_across_a_stop
+            node._prearm_segment(
+                n1, node._project_generation, node._selection_epoch, node.script
+            )
+
+        assert [c.args[0] for c in ch.disarm.call_args_list] == [n1, n2]
+        ch._arm_ahead.assert_not_called()
+
+    def test_the_lookahead_undoes_its_walk_after_a_stop_too(self):
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=None)
+        extra = _ChainCue("x", True, "pause")
+
+        def walk_across_a_stop(cue, should_continue=None, skip_arming_types=()):
+            node._project_generation += 1
+            return [extra]
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch._arm_ahead.side_effect = walk_across_a_stop
+            node._prearm_lookahead(
+                n1, node._project_generation, node._selection_epoch, node.script
+            )
+
+        ch.disarm.assert_called_once_with(extra)
