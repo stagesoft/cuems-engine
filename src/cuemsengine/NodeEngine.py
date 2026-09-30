@@ -1524,7 +1524,7 @@ class NodeEngine(BaseEngine):
             Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
             CUE_HANDLER.arm(cue_to_go, init=True)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
-                Logger.error(f"Failed to re-arm cue {cue_to_go.id}, cannot GO")
+                self._skip_unarmed_cue(cue_to_go)
                 return
 
         # Update state
@@ -1563,6 +1563,41 @@ class NodeEngine(BaseEngine):
             f"Cue {cue_to_go.id} started. Next cue:"
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
+
+    def _skip_unarmed_cue(self, cue):
+        """A GO found its cue unarmed and could not get it armed: skip the
+        cue on this node, keep the pointer in lockstep, and say so.
+
+        Decided 2026-09-30 (Ion, 869f9wqpn): arm() waits up to 5 s for an arm
+        another thread holds, and 5 s is plenty for a slow load -- one still
+        in flight after that counts as failed for this GO. Returning here
+        without moving the pointer, as this used to, made the node dispatch
+        this cue on the NEXT GO and run one GO behind the controller until a
+        STOP. Nothing is stopped and the running status is not touched.
+
+        ongoing_cue is set as on the success path: if the pointer becomes
+        None, the next GO must read "No more cues", not "first GO" (which
+        would restart this node from the top of the script).
+        """
+        in_flight = CUE_HANDLER.describe_arm_in_flight(cue)
+        why = (
+            f"its arm is still in flight, {in_flight}"
+            if in_flight
+            else "its arm failed"
+        )
+        self.ongoing_cue = cue
+        self.next_cue_pointer = cue.get_next_cue()
+        self._broadcast_nextcue()
+        next_id = self.next_cue_pointer.id if self.next_cue_pointer else "none"
+        Logger.error(
+            f"Cue {cue.id} ({type(cue).__name__}, "
+            f'"{getattr(cue, "name", "")}") SKIPPED on this node: it could '
+            f"not be armed in time for this GO ({why}). "
+            f"Pointer advanced to {next_id}."
+        )
+        # The skip never reaches go()'s own lookahead: arm what the next GO
+        # will dispatch here, or it would arm at GO time and start late.
+        self._prearm_after_advance()
 
     def stop_playback(self, value=None):
         """Stop playback, full cleanup, then re-arm so GO is available again.

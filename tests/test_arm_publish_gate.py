@@ -707,3 +707,14 @@ class TestGoCarriesTheEpoch:
             ch.go_threaded(first, _mtc(), 0.0, 1, 1, True, arm_epoch=7)
 
         assert ch.go.call_args.kwargs["arm_epoch"] == 7
+
+
+def test_describe_arm_in_flight_names_the_holder():
+    from cuemsengine.cues.CueHandler import _ArmClaim
+
+    ch = _handler()
+    cue = _cue()
+    assert ch.describe_arm_in_flight(cue) is None
+    ch._arming = {cue.id: _ArmClaim(holder="PreArm:x", started=time.monotonic() - 2)}
+    text = ch.describe_arm_in_flight(cue)
+    assert text.startswith("held by PreArm:x for 2.")
