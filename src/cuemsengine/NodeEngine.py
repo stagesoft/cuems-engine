@@ -1158,31 +1158,54 @@ class NodeEngine(BaseEngine):
         `_first_local_enabled_in_go_chain(next_cue_pointer)` -- None when
         that GO is another node's too, in which case nothing is armed yet
         (the next advance re-checks), so this never preloads a cue that is
-        many GOs away. The target is armed synchronously -- this GO has no
-        local work, so nothing here waits on it -- and the lookahead runs
-        on the same PreArm:<id> background thread set_next_cue uses, with
-        the same project-generation / selection-epoch abort guards (a
-        STOP, a load or a later selection abandons it).
+        many GOs away. The target AND its lookahead are armed on the same
+        PreArm:<id> background thread set_next_cue uses, with the same
+        project-generation / selection-epoch abort guards (a STOP, a load or
+        a later selection abandons it).
+
+        Nothing is armed here, synchronously: this runs inside run_command's
+        _command_lock, and an audio target spawns a player and waits for its
+        JACK ports -- a STOP or the next GO sent meanwhile would wait for the
+        whole arm (869f79ecc removed exactly that from set_next_cue). A GO
+        that lands mid-arm is safe: arm() makes it wait on the in-progress
+        arm's _loading event instead of arming the cue twice.
         """
         target = self._first_local_enabled_in_go_chain(self.next_cue_pointer)
         if target is None:
             return
         self._selection_epoch += 1
-        selection_epoch = self._selection_epoch
-        project_gen = self._project_generation
-        script = self.script
         Logger.info(
             "Pointer advanced with no local cue; pre-arming next local cue "
             f"{target.id} ({type(target).__name__}) + lookahead"
         )
-        if not CUE_HANDLER.find_armed_cue(target):
-            CUE_HANDLER.arm(target, init=True)
         threading.Thread(
-            target=self._prearm_lookahead,
-            args=(target, project_gen, selection_epoch, script),
+            target=self._prearm_segment,
+            args=(target, self._project_generation, self._selection_epoch, self.script),
             daemon=True,
             name=f"PreArm:{target.id}",
         ).start()
+
+    def _prearm_segment(self, target, project_gen, selection_epoch, script):
+        """PreArm:<id> body for _prearm_after_advance: arm the segment's
+        first cue, then the lookahead from it. An arm that finished after a
+        different project loaded is undone, as _prearm_lookahead undoes its
+        own walk's."""
+        if (
+            self._project_generation != project_gen
+            or self._selection_epoch != selection_epoch
+        ):
+            return
+        if not CUE_HANDLER.find_armed_cue(target):
+            was_loaded = getattr(target, "loaded", False)
+            if CUE_HANDLER.arm(target, init=True) and not was_loaded:
+                if self.script is not script:
+                    CUE_HANDLER.disarm(target)
+                    Logger.info(
+                        f"PreArm from {target.id}: disarmed it — project "
+                        "changed underneath the arm"
+                    )
+                    return
+        self._prearm_lookahead(target, project_gen, selection_epoch, script)
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
