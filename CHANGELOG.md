@@ -68,9 +68,10 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
    version-1 documents fine.
 3. What the deploy ships and at which schema version: `script.xml` **2**, the project's
    `mappings.xml` 1, the project's `settings.xml` 1.
-4. `cuems-utils` 012's node re-mint (every node converging on a uuid4 identity) goes out in the
-   **same upgrade** as rc7 engines and never runs under an older engine: a re-minted map hands
-   the engine `Uuid` node ids, which a pre-rc7 engine's `cluster_status` cannot sort.
+4. `cuems-utils` 012 and its node re-mint (every node converging on a uuid4 identity) go out in
+   the **same upgrade** as rc7 engines, and the re-mint never runs under an older engine. rc7
+   requires 012 — it takes `coerce_identity` from it — and no pre-rc7 engine has been run against
+   012 or a re-minted map.
 
 ## v0.1.0rc6 — 2026-09-28
 
