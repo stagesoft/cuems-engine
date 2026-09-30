@@ -1,3 +1,26 @@
+cuems-engine (0.1.0rc5-2) bookworm; urgency=medium
+
+  * Hotfix on 0.1.0rc5-1 (branch hotfix/rc5-2-prearm, based on 86b6290 =
+    rc5-1 + the isolated build venv). Carries ONLY two fixes; it does NOT
+    include 869ej4x38 (phase-2 dispatch reorder), 869f8hfra or anything
+    else from rc_1 after rc5.
+  * Backport of 869f79ecc (Badajoz first-run desync), 20 commits
+    cherry-picked with -x from rc_1 (0509385..5fe9d6e): the controller
+    ships the GO anchor inside GO and nodes resolve it (only from a live
+    controller MTC); setnextcue's lookahead runs on a PreArm background
+    thread off _command_lock; _arm_ahead skips other nodes' cues; the
+    PreArm walk governs arm()'s recursion and pre-arms audio too; JACK
+    port-registration time is logged. The anchor half needs the
+    controller AND every node on this version.
+  * NEW: a node pre-arms its next segment when a GO advances its pointer
+    with nothing local to play (Medina sala1, 2026-09-30: ctrl go -> ctrl
+    pause -> node go; the node's first cue fired 240 ms late on every
+    run -- a shape 869f79ecc does not cover). The shared go-chain walk
+    also stops the load pre-arm from giving up at a local-but-disabled
+    cue.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 16:51:57 +0200
+
 cuems-engine (0.1.0rc5-1) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm; bump upstream version 0.1.0rc4 -> 0.1.0rc5.
