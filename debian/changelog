@@ -17,9 +17,11 @@ cuems-engine (0.1.0rc5-2) bookworm; urgency=medium
     pause -> node go; the node's first cue fired 240 ms late on every
     run -- a shape 869f79ecc does not cover). The shared go-chain walk
     also stops the load pre-arm from giving up at a local-but-disabled
-    cue.
+    cue. The segment's first cue and its lookahead are both armed on the
+    PreArm background thread, never under _command_lock, so a STOP or the
+    next GO is not held up by an audio player's spawn + JACK port wait.
 
- -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 16:51:57 +0200
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 17:20:42 +0200
 
 cuems-engine (0.1.0rc5-1) bookworm; urgency=medium
 
