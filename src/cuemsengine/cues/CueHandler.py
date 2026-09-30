@@ -31,13 +31,17 @@ class _ArmWalk:
 
     Without it the recursion armed cues the walk excluded (audio), ran past
     the walk's should_continue checkpoint (a reload landing mid-arm), and
-    armed cues the walk could not report -- so its cleanup could not undo
-    them (test2, 2026-09-25).
+    armed cues the walk could not report (test2, 2026-09-25).
+
+    epoch: the STOP/load epoch (CueHandler._disarm_epoch) in which the walk
+    was REQUESTED, captured by whoever spawned it. Every arm the walk makes,
+    recursion included, belongs to that epoch: see CueHandler.arm().
     """
 
     skip_types: tuple[type, ...] = ()
     should_continue: Callable[[], bool] | None = None
     armed: list = field(default_factory=list)
+    epoch: int | None = None
 
 
 @dataclass
@@ -203,6 +207,21 @@ class CueHandler:
     # inside a cue's ~15s arm window stick (F4).
     _last_stop_chain_epoch = 0
 
+    # ---- disarm epoch ----------------------------------------------------
+    # Class-level default, like the two above. Bumped whenever everything a
+    # cue was armed with is about to be torn down: in stop_all_cues() -- the
+    # first step of a STOP and of a load, BEFORE the DMX/video reset and the
+    # audio-player kill -- and again in disarm_all(), together with its
+    # snapshot. An arm belongs to the epoch in which it was requested; one
+    # whose epoch has moved is never published (see arm()).
+    _disarm_epoch = 0
+
+    def arm_epoch(self) -> int:
+        """The current STOP/load epoch. Whoever requests an arm on one thread
+        and performs it on another captures this at request time and passes
+        it along (arm(epoch=), _ArmWalk.epoch, _arm_ahead(arm_epoch=))."""
+        return self._disarm_epoch
+
     @staticmethod
     def _effective_duration_ms(cue: Cue) -> float:
         """Effective time a cue occupies: prewait + body + postwait.
@@ -335,6 +354,7 @@ class CueHandler:
         start_cue: Cue,
         should_continue: Callable[[], bool] | None = None,
         skip_arming_types: tuple[type, ...] = (),
+        arm_epoch: int | None = None,
     ) -> list[Cue]:
         """Arm ahead in the target chain until 2 cues with meaningful
         duration are armed. Short/zero-duration cues are armed but don't
@@ -368,10 +388,14 @@ class CueHandler:
         budget — it is still this node's own chain, just a type this call
         chooses not to arm.
 
+        arm_epoch: the STOP/load epoch this walk was requested in (see
+        arm_epoch()). Once it has moved the walk stops, and arm() refuses or
+        abandons whatever it was still arming -- nothing is armed for a
+        request that predates a STOP or a load.
+
         Returns the cues THIS call transitioned from unloaded to loaded —
         not merely already-armed ones, and not ones a concurrent call
-        armed. The PreArm background thread uses this to undo exactly its
-        own work if the project changes under it.
+        armed.
         """
         target = getattr(start_cue, "_target_object", None)
         counted = 0
@@ -382,8 +406,12 @@ class CueHandler:
         # rules reach arm()'s own recursion and newly_armed is the walk's
         # exact record. Every other caller keeps arm()'s original call shape.
         walk = (
-            _ArmWalk(skip_arming_types, should_continue, newly_armed)
-            if (should_continue is not None or skip_arming_types)
+            _ArmWalk(skip_arming_types, should_continue, newly_armed, arm_epoch)
+            if (
+                should_continue is not None
+                or skip_arming_types
+                or arm_epoch is not None
+            )
             else None
         )
 
@@ -403,6 +431,12 @@ class CueHandler:
                 Logger.info(
                     f"_arm_ahead from {start_cue.id} stopped early — caller "
                     "asked to abort (stale selection or reloaded project)"
+                )
+                break
+            if arm_epoch is not None and arm_epoch != self._disarm_epoch:
+                Logger.info(
+                    f"_arm_ahead from {start_cue.id} stopped early — a STOP "
+                    "or a load happened since it was requested"
                 )
                 break
             if isinstance(target, CueList):
@@ -460,7 +494,13 @@ class CueHandler:
             registry = self.__dict__.setdefault("_arming", {})
         return registry
 
-    def arm(self, cue: Cue, init=False, walk: _ArmWalk | None = None) -> bool:
+    def arm(
+        self,
+        cue: Cue,
+        init=False,
+        walk: _ArmWalk | None = None,
+        epoch: int | None = None,
+    ) -> bool:
         """Arms a cue by appending it to the armed_cues list.
 
         walk: set only by a background _arm_ahead walk (NodeEngine's PreArm).
@@ -471,10 +511,31 @@ class CueHandler:
         One arm is in flight per cue id (_arming_registry). An init caller
         that finds one waits for it, up to _ARM_WAIT_TIMEOUT_S in total, and
         then re-evaluates: if the cue is still unarmed (the arm it waited on
-        failed) it arms the cue itself instead of giving up.
+        failed or was abandoned) it arms the cue itself instead of giving up.
+
+        PUBLISH OR ABANDON. An arm belongs to the STOP/load epoch in which it
+        was REQUESTED: `epoch` if given, else the walk's, else _disarm_epoch
+        as read here at entry. It is never re-read. If it has moved:
+        - before the cue is claimed (entry, or waking from a wait): return
+          False and arm nothing -- even if the cue is loaded by now, because
+          then the NEW epoch loaded it and a stale caller must not adopt it;
+        - while arm_cue() was running: the arm is ABANDONED at the publish
+          gate. The cue is never marked loaded and never enters the armed
+          list, so no GO can pick it up; what this arm built (a player the
+          STOP may already have killed, video layers) is released here,
+          while this thread still holds the cue's claim.
+        The gate also abandons a cue that was disabled while it was arming.
+        So no thread ever has to disarm a cue after the fact, which is what
+        used to cut a cue the next run was already playing (869f9wqpn).
         """
         if cue is None:
             return False
+        if epoch is None:
+            epoch = (
+                walk.epoch
+                if walk is not None and walk.epoch is not None
+                else self._disarm_epoch
+            )
         if walk is not None:
             if walk.skip_types and isinstance(cue, walk.skip_types):
                 return False
@@ -486,11 +547,15 @@ class CueHandler:
             needs_disarm = False
             claim = None
             pending = None
+            stale = False
 
             with self._lock:
                 registry = self._arming_registry()
                 in_flight = registry.get(cue.id)
-                if hasattr(cue, "loaded") and cue.loaded:
+                if epoch != self._disarm_epoch:
+                    # Checked FIRST, on entry and on every wake.
+                    stale = True
+                elif hasattr(cue, "loaded") and cue.loaded:
                     if not cue.enabled:
                         needs_disarm = True
                 elif in_flight is not None:
@@ -511,6 +576,13 @@ class CueHandler:
                     claim = _ArmClaim(holder=current_thread().name, started=monotonic())
                     registry[cue.id] = claim
 
+            if stale:
+                Logger.info(
+                    f"Not arming {type(cue).__name__} {cue.id}: a STOP or a "
+                    "load happened since this arm was requested"
+                )
+                return False
+
             if pending is None:
                 break
 
@@ -528,9 +600,11 @@ class CueHandler:
                     f"Timed out waiting for arm of {cue.id} (held by "
                     f"{pending.holder} for {monotonic() - pending.started:.1f}s)"
                 )
-                return getattr(cue, "loaded", False)
-            # Woken: loop and look again. Loaded -> done; still unarmed -> this
-            # thread claims it and arms it itself.
+                return (
+                    bool(getattr(cue, "loaded", False)) and epoch == self._disarm_epoch
+                )
+            # Woken: loop and look again. Epoch moved -> give up; loaded ->
+            # done; still unarmed -> this thread claims it and arms it itself.
 
         # Disarm disabled-but-loaded cues outside lock (disarm acquires lock)
         if needs_disarm:
@@ -540,14 +614,30 @@ class CueHandler:
         if claim is None:
             return not needs_disarm
 
+        abandoned = None
         try:
             Logger.info(f"Arming {type(cue).__name__} {cue.id}")
             arm_cue(cue)
+            # The publish gate. Same lock as the epoch bumps (stop_all_cues,
+            # disarm_all): either this section comes first and the STOP finds
+            # the cue in the armed list and disarms it itself, or the bump
+            # comes first and the cue is never published.
             with self._lock:
-                cue.loaded = True
-                if cue.id not in self._armed_cues_set:
-                    self._armed_cues.append(cue)
-                    self._armed_cues_set.add(cue.id)
+                if epoch != self._disarm_epoch:
+                    abandoned = "a STOP or a load happened while it was arming"
+                elif not cue.enabled:
+                    abandoned = "it was disabled while it was arming"
+                else:
+                    cue.loaded = True
+                    if cue.id not in self._armed_cues_set:
+                        self._armed_cues.append(cue)
+                        self._armed_cues_set.add(cue.id)
+            if abandoned is not None:
+                Logger.info(
+                    f"Abandoned arm of {type(cue).__name__} {cue.id}: {abandoned}"
+                )
+                self._release_unpublished(cue, "abandoned_arm")
+                return False
             if walk is not None:
                 walk.armed.append(cue)
             if isinstance(cue, AudioCue):
@@ -567,6 +657,9 @@ class CueHandler:
             Logger.error(f"Failed to arm {type(cue).__name__} {cue.id}: {e}")
             Logger.exception(e)
             cue.loaded = False
+            # ...and give back whatever it got as far as building (a spawned
+            # player, registered layers), still under this cue's claim.
+            self._release_unpublished(cue, "arm_failed")
             return False
         finally:
             # Always, and before the recursion below: a leaked claim would
@@ -583,9 +676,9 @@ class CueHandler:
         if cue.post_go == "go" and cue._target_object:
             if cue._target_object.enabled:
                 if walk is not None:
-                    self.arm(cue._target_object, init, walk=walk)
+                    self.arm(cue._target_object, init, walk=walk, epoch=epoch)
                 else:
-                    self.arm(cue._target_object, init)
+                    self.arm(cue._target_object, init, epoch=epoch)
 
         # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm
         # target
@@ -595,11 +688,27 @@ class CueHandler:
         if isinstance(cue, ActionCue) and cue._action_target_object:
             if cue.action_type in ("play", "fade_action"):
                 if walk is not None:
-                    self.arm(cue._action_target_object, init, walk=walk)
+                    self.arm(cue._action_target_object, init, walk=walk, epoch=epoch)
                 else:
-                    self.arm(cue._action_target_object, init)
+                    self.arm(cue._action_target_object, init, epoch=epoch)
 
         return True
+
+    def _release_unpublished(self, cue: Cue, reason: str) -> None:
+        """Give back what an arm built for a cue it is not going to publish.
+
+        Only ever called by the thread that holds the cue's arm claim, so
+        nobody else can have created resources for that cue id meanwhile.
+        Never raises: the caller is about to release the claim, and a claim
+        that leaked here would block every later arm of this cue.
+        """
+        try:
+            self._release_cue_resources(cue, reason, what="Released")
+        except Exception as e:
+            Logger.error(
+                f"Could not release what the unpublished arm of {cue.id} built "
+                f"({reason}): {e}"
+            )
 
     def disarm(self, cue: Cue, reason: str = "unspecified") -> bool:
         """Disarms a cue by removing it from the armed_cues list.
@@ -622,53 +731,63 @@ class CueHandler:
             except Exception:
                 pass
 
-            if isinstance(cue, VideoCue):
-                layer_ids = getattr(cue, "_layer_ids", [])
-                client = getattr(cue, "_osc", None)
-                unloaded, skipped = [], []
-                if client and layer_ids:
-                    for layer_id in layer_ids:
-                        # /videocomposer/reset (STOP, load, ready_script) runs
-                        # before disarm_all on purpose (instant blackout) and
-                        # already removed this layer and its endpoints.
-                        if not PLAYER_HANDLER.is_layer_registered(layer_id):
-                            skipped.append(layer_id)
-                            continue
-                        # Hiding is cosmetic (unload removes the layer anyway):
-                        # a failure here must not skip the unload.
-                        try:
-                            client.set_value(
-                                f"/videocomposer/layer/{layer_id}/visible", 0
-                            )
-                        except Exception as e:
-                            Logger.warning(
-                                f"Could not hide video layer {layer_id} (visible 0)"
-                                f" of cue {cue.id} ({reason}): {e}"
-                            )
-                        try:
-                            client.set_value("/videocomposer/layer/unload", layer_id)
-                            client.remove_layer_endpoints(layer_id)
-                            PLAYER_HANDLER.deregister_layer(layer_id)
-                            unloaded.append(layer_id)
-                        except Exception as e:
-                            # Left registered: the next /reset still cleans it up.
-                            Logger.warning(
-                                f"Could not unload video layer {layer_id} of cue"
-                                f" {cue.id} ({reason}): {e}"
-                            )
-                cue._layer_ids = []
-                Logger.debug(
-                    f"Disarmed video cue {cue.id} ({reason}): unloaded {unloaded};"
-                    f" skipped {skipped} (no longer tracked: removed by reset or quit)"
-                    + ("" if client else "; no video client")
-                )
-            else:
-                Logger.debug(f"Disarmed {type(cue).__name__} {cue.id} ({reason})")
-
-            PLAYER_HANDLER.remove_cue_player(cue)
+            self._release_cue_resources(cue, reason)
             return True
 
         return False
+
+    def _release_cue_resources(
+        self, cue: Cue, reason: str, what: str = "Disarmed"
+    ) -> None:
+        """Release what arm_cue() built for a cue: its video layers and its
+        player. The resource half of disarm(), also used for an arm that is
+        abandoned or fails before the cue is ever published (arm()).
+
+        Deliberately touches neither `_playing`, nor the armed list, nor the
+        controller's cue status: an unpublished cue has none of them.
+        """
+        if isinstance(cue, VideoCue):
+            layer_ids = getattr(cue, "_layer_ids", [])
+            client = getattr(cue, "_osc", None)
+            unloaded, skipped = [], []
+            if client and layer_ids:
+                for layer_id in layer_ids:
+                    # /videocomposer/reset (STOP, load, ready_script) runs
+                    # before disarm_all on purpose (instant blackout) and
+                    # already removed this layer and its endpoints.
+                    if not PLAYER_HANDLER.is_layer_registered(layer_id):
+                        skipped.append(layer_id)
+                        continue
+                    # Hiding is cosmetic (unload removes the layer anyway):
+                    # a failure here must not skip the unload.
+                    try:
+                        client.set_value(f"/videocomposer/layer/{layer_id}/visible", 0)
+                    except Exception as e:
+                        Logger.warning(
+                            f"Could not hide video layer {layer_id} (visible 0)"
+                            f" of cue {cue.id} ({reason}): {e}"
+                        )
+                    try:
+                        client.set_value("/videocomposer/layer/unload", layer_id)
+                        client.remove_layer_endpoints(layer_id)
+                        PLAYER_HANDLER.deregister_layer(layer_id)
+                        unloaded.append(layer_id)
+                    except Exception as e:
+                        # Left registered: the next /reset still cleans it up.
+                        Logger.warning(
+                            f"Could not unload video layer {layer_id} of cue"
+                            f" {cue.id} ({reason}): {e}"
+                        )
+            cue._layer_ids = []
+            Logger.debug(
+                f"{what} video cue {cue.id} ({reason}): unloaded {unloaded};"
+                f" skipped {skipped} (no longer tracked: removed by reset or quit)"
+                + ("" if client else "; no video client")
+            )
+        else:
+            Logger.debug(f"{what} {type(cue).__name__} {cue.id} ({reason})")
+
+        PLAYER_HANDLER.remove_cue_player(cue)
 
     def stop_all_cues(self) -> None:
         """Signal all armed cues to stop their playback loops.
@@ -684,6 +803,12 @@ class CueHandler:
             # not in _armed_cues yet (F4).
             self._chain_epoch = self._chain_epoch + 1
             self._last_stop_chain_epoch = self._chain_epoch
+            # The teardown starts HERE: between this call and disarm_all()
+            # the engine resets DMX and video and kills every audio player.
+            # Moving the epoch in this same section means an arm publishes
+            # either before it (then it is in _armed_cues, flagged just
+            # below and disarmed later) or after it (then it is abandoned).
+            self._disarm_epoch = self._disarm_epoch + 1
             for cue in self._armed_cues:
                 cue._stop_requested = True
                 cue._go_generation = getattr(cue, "_go_generation", 0) + 1
@@ -864,13 +989,22 @@ class CueHandler:
         )
 
     def disarm_all(self, reason: str = "unspecified") -> None:
-        """Disarms all cues."""
+        """Disarms all cues.
+
+        Epoch bump, snapshot and clearing the armed list are ONE lock
+        section. Clearing the list after the loop (as this used to) wiped
+        any cue a current-epoch arm published while the loop was killing
+        players: loaded but not in the list, so arm() said "already armed",
+        find_armed_cue() said no, and the cue was unplayable until a reload.
+        """
         self.stop_all_cues()
         with self._lock:
+            self._disarm_epoch = self._disarm_epoch + 1
             cues_snapshot = list(self._armed_cues)
+            self._armed_cues = []
+            self._armed_cues_set.clear()
         for cue in cues_snapshot:
             self.disarm(cue, reason=reason)
-        self.reset_armed_cues()
 
     def get_next_cue(self, cue: Cue) -> Cue | None:
         """Returns the next cue to be played."""
@@ -950,6 +1084,7 @@ class CueHandler:
         unroll: bool = True,
         stamp_skipped: list = None,
         require_stop_epoch: int = None,
+        arm_epoch: int = None,
     ) -> Thread | None:
         """Starts a cue in a thread.
 
@@ -967,6 +1102,11 @@ class CueHandler:
             unrolled and re-dispatching it would churn live cues.
             stamp_skipped: cues the caller's chain walk skipped because they
             are disabled; stamped with this pass so a later enable can rejoin.
+            arm_epoch: the STOP/load epoch this dispatch belongs to (see
+            arm_epoch()). None for a fresh entry: read here. A continuation
+            inherits its chain's. It goes into every arm this dispatch causes
+            (the fallback re-arm, the lookahead, the cue's own thread), and a
+            dispatch whose epoch has moved is refused.
 
         Returns:
             Thread running the cue, or None if the cue is disabled, not local
@@ -988,6 +1128,8 @@ class CueHandler:
             return None
         Logger.info(f"GO command received. Starting cue {cue.id}")
 
+        if arm_epoch is None:
+            arm_epoch = self._disarm_epoch
         is_continuation = chain_epoch is not None
         if not is_continuation:
             # Fresh entry: claim the next epoch. It is greater than every
@@ -1011,8 +1153,17 @@ class CueHandler:
             # that cue's own reveal. go_threaded arms the cue on its own
             # thread instead, overlapping its own prewait.
             if not is_continuation:
-                self.arm(cue, init=True)
+                self.arm(cue, init=True, epoch=arm_epoch)
                 if not hasattr(cue, "loaded") or not cue.loaded:
+                    if arm_epoch != self._disarm_epoch:
+                        # Not an arm failure: the operator's STOP (or a load)
+                        # arrived while this cue was being re-armed, and
+                        # arm() refused or abandoned it. The STOP wins.
+                        Logger.warning(
+                            f"Refusing dispatch of cue {cue.id}: a STOP or a "
+                            "load arrived while it was being re-armed"
+                        )
+                        return None
                     raise Exception(
                         f"{cue.__class__.__name__} {cue.id} not loaded to go"
                         f"(re-arm failed)"
@@ -1023,6 +1174,14 @@ class CueHandler:
             # AFTER any arm above: that is what lets a STOP which landed
             # during a long arm window survive instead of being wiped by the
             # _stop_requested reset below (F4).
+            if arm_epoch != self._disarm_epoch:
+                # Whether or not the cue is loaded: if it is, the STOP's own
+                # re-arm loaded it for the NEXT run, not for this dispatch.
+                Logger.warning(
+                    f"Refusing dispatch of cue {cue.id}: a STOP or a load "
+                    "arrived while it was being started"
+                )
+                return None
             if (
                 require_stop_epoch is not None
                 and self._last_stop_chain_epoch != require_stop_epoch
@@ -1088,6 +1247,7 @@ class CueHandler:
             name=f"GO:{cue.__class__.__name__}:{cue.id}",
             target=self.go_threaded,
             args=[cue, mtc, frozen_mtc_ms, go_gen, chain_epoch, unroll],
+            kwargs={"arm_epoch": arm_epoch},
             daemon=True,
         )
         thread.start()
@@ -1103,7 +1263,7 @@ class CueHandler:
         #   - a rejoin (unroll=False) is called from the command thread and
         #     the cue is already armed by definition.
         if not is_continuation and unroll:
-            self._arm_ahead(cue)
+            self._arm_ahead(cue, arm_epoch=arm_epoch)
         return thread
 
     def go_from(
@@ -1242,6 +1402,7 @@ class CueHandler:
         go_gen: int = 0,
         chain_epoch: int = 0,
         unroll: bool = True,
+        arm_epoch: int = None,
     ):
         """Runs a cue based on its properties.
 
@@ -1257,6 +1418,10 @@ class CueHandler:
                     the continuation dispatch so the whole chain shares it.
             unroll: False suppresses the continuation dispatch (enable-rejoin
                     of a chain that is already unrolled).
+            arm_epoch: the STOP/load epoch of the go() that dispatched this
+                    cue; every arm this thread makes (its own cue, the
+                    go_at_end lookahead) and the continuation it dispatches
+                    belong to it, so none of them survives a STOP.
         """
         # frozen_mtc_ms is this cue's ARRIVAL on the MTC timeline:
         # GO_mtc + Σ(effective durations of preceding cues in the chain).
@@ -1314,7 +1479,11 @@ class CueHandler:
                         f"at the trigger"
                     )
                     post_go_thread = self.go(
-                        next_cue, mtc, next_arrival, chain_epoch=chain_epoch
+                        next_cue,
+                        mtc,
+                        next_arrival,
+                        chain_epoch=chain_epoch,
+                        arm_epoch=arm_epoch,
                     )
             except Exception as e:
                 # The chain is downstream work; losing it must not cost THIS
@@ -1331,7 +1500,7 @@ class CueHandler:
                     f"Cue {cue.id} not loaded at dispatch — arming on its own "
                     f"thread before its slot."
                 )
-                self.arm(cue, init=True)
+                self.arm(cue, init=True, epoch=arm_epoch)
                 if not getattr(cue, "loaded", False):
                     # The rest of the chain went out at entry, so this failure
                     # costs this cue only.
@@ -1433,7 +1602,7 @@ class CueHandler:
         # that fires before run_cue — this call catches cues that were
         # disarmed between go() and here (loop passes).
         if cue.post_go == "go_at_end":
-            self._arm_ahead(cue)
+            self._arm_ahead(cue, arm_epoch=arm_epoch)
 
         Logger.info(f"Going to loop for {cue.__class__.__name__}:{cue.id}")
         loop_cue(cue, mtc)

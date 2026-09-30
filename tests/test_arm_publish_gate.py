@@ -70,7 +70,8 @@ def _until(predicate, timeout=2.0):
 
 
 def _claim(ch, cue):
-    return ch._arming.get(cue.id)
+    # The registry is created lazily, by the first arm().
+    return getattr(ch, "_arming", {}).get(cue.id)
 
 
 def _waiters(ch, cue):

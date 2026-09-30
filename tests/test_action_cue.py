@@ -862,7 +862,7 @@ class TestGoRearm:
             thread = handler.go(cue, mtc)
             thread.join(timeout=2)
 
-        mock_ahead.assert_called_once_with(cue)
+        mock_ahead.assert_called_once_with(cue, arm_epoch=handler.arm_epoch())
 
 
 # ---------------------------------------------------------------------------

@@ -854,9 +854,9 @@ class TestArmFadeCuePreArmsTarget:
             armed_ids = []
             real_arm = ch.arm
 
-            def spy_arm(cue, init=False):
+            def spy_arm(cue, init=False, **kwargs):
                 armed_ids.append(getattr(cue, "id", None))
-                return real_arm(cue, init)
+                return real_arm(cue, init, **kwargs)
 
             ch.arm = spy_arm
             ch.arm(fade_cue, init=True)
@@ -881,9 +881,9 @@ class TestArmFadeCuePreArmsTarget:
             armed_ids = []
             real_arm = ch.arm
 
-            def spy_arm(cue, init=False):
+            def spy_arm(cue, init=False, **kwargs):
                 armed_ids.append(getattr(cue, "id", None))
-                return real_arm(cue, init)
+                return real_arm(cue, init, **kwargs)
 
             ch.arm = spy_arm
             ch.arm(fade_cue, init=True)
