@@ -197,7 +197,9 @@ class TestApplyCueEnabledSideEffects:
             node._apply_cue_enabled_side_effects(cl, True)
             assert _wait_until(lambda: ch.arm.called), "CueList child never armed"
             _join_rearm(child_enabled.id)
-            ch.arm.assert_called_once_with(child_enabled, init=True)
+            ch.arm.assert_called_once_with(
+                child_enabled, init=True, epoch=ch.arm_epoch.return_value
+            )
 
 
 class TestArmWithEnabledGuard:
@@ -207,7 +209,7 @@ class TestArmWithEnabledGuard:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
 
-            def slow_arm(c, init=False):
+            def slow_arm(c, init=False, epoch=None):
                 c.enabled = False  # disable lands while media is loading
 
             ch.arm.side_effect = slow_arm
@@ -215,18 +217,66 @@ class TestArmWithEnabledGuard:
             node._arm_with_enabled_guard(cue, project_gen=1)
             ch.disarm.assert_called_once_with(cue)
 
-    def test_generation_change_mid_arm_disarms(self):
+    def test_generation_change_mid_arm_disarms_nothing(self):
+        """Replaces test_generation_change_mid_arm_disarms (869f9wqpn). A
+        STOP/reload during the arm is arm()'s business now: it abandons the
+        arm before publishing it. Disarming here, after the fact, could hit
+        a cue the next run was already playing -- or, after a reload of the
+        same project, the NEW object's player (Cue equality is by id)."""
         cue = _FakeCue()
         node = _make_node()
+        node._rejoin_running_chain = _MM()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
 
-            def gen_bump_arm(c, init=False):
+            def gen_bump_arm(c, init=False, epoch=None):
                 node._project_generation = 2  # STOP/reload during the arm
 
             ch.arm.side_effect = gen_bump_arm
             ch.find_armed_cue.return_value = True
             node._arm_with_enabled_guard(cue, project_gen=1)
-            ch.disarm.assert_called_once_with(cue)
+            ch.disarm.assert_not_called()
+        node._rejoin_running_chain.assert_not_called()
+
+    def test_the_arm_carries_the_epoch_its_spawner_captured(self):
+        cue = _FakeCue()
+        node = _make_node()
+        node._rejoin_running_chain = _MM()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=7)
+            ch.arm.assert_called_once_with(cue, init=True, epoch=7)
+
+    def _spawned_with(self, trigger):
+        """Run `trigger(node, cue, ch)` and return the args the ReArm thread
+        was started with."""
+        cue = _FakeCue(cue_id="cue-1")
+        node = _make_node(script_cue=cue)
+        node._arm_with_enabled_guard = _MM()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch.arm_epoch.return_value = 5
+            trigger(node, cue, ch)
+            assert _wait_until(lambda: node._arm_with_enabled_guard.called)
+            ch.arm_epoch.return_value = 6  # a STOP after the spawn
+        return cue, node._arm_with_enabled_guard.call_args.args
+
+    def test_a_ui_enable_captures_the_epoch_when_it_spawns_the_rearm(self):
+        cue, args = self._spawned_with(
+            lambda node, cue, ch: node._handle_cue_enabled("cue-1 1")
+        )
+        assert args == (cue, 1, 5)
+
+    def test_an_enable_action_captures_the_epoch_on_the_action_thread_too(self):
+        """_apply_cue_enabled_side_effects is also reached from an ActionCue's
+        own thread (_action_result_sink), not only from the command thread."""
+
+        def from_the_action_sink(node, cue, ch):
+            with patch("cuemsengine.cues.ActionHandler.ACTION_HANDLER"):
+                node._action_result_sink(
+                    {"action_type": "enable", "status": "applied", "target_id": "cue-1"}
+                )
+
+        cue, args = self._spawned_with(from_the_action_sink)
+        assert args == (cue, 1, 5)
 
     def test_generation_change_before_arm_aborts(self):
         cue = _FakeCue()
@@ -512,7 +562,9 @@ class TestSetNextCuePreArm:
         node = self._node(cue)
         captured = {}
 
-        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+        def capture_and_return(
+            target, should_continue=None, skip_arming_types=(), arm_epoch=None
+        ):
             captured["should_continue"] = should_continue
             return []
 
@@ -531,7 +583,9 @@ class TestSetNextCuePreArm:
         node = self._node(cue)
         captured = {}
 
-        def capture_and_return(target, should_continue=None, skip_arming_types=()):
+        def capture_and_return(
+            target, should_continue=None, skip_arming_types=(), arm_epoch=None
+        ):
             captured["should_continue"] = should_continue
             return []
 
@@ -545,13 +599,23 @@ class TestSetNextCuePreArm:
         node._project_generation += 1  # a STOP/load bumped it
         assert captured["should_continue"]() is False
 
-    def test_disarms_newly_armed_cues_when_project_changed_underneath(self):
+    def test_never_disarms_when_the_project_changed_underneath(self):
+        """Replaces test_disarms_newly_armed_cues_when_project_changed_
+        underneath (869f79ecc). Whatever the walk published before the load
+        is in the armed list, and the load's own disarm_all removes it;
+        whatever it was still arming is abandoned inside arm(). A disarm from
+        this thread, after the load, would act on stale objects that compare
+        EQUAL to the new project's (Cue equality is by id) and kill the new
+        project's players."""
         cue = _FakeCue(cue_id="cue-1")
         node = self._node(cue)
         armed_by_walk = _FakeCue(cue_id="armed-by-walk")
 
-        def swap_script_and_return(target, should_continue=None, skip_arming_types=()):
+        def swap_script_and_return(
+            target, should_continue=None, skip_arming_types=(), arm_epoch=None
+        ):
             node.script = MagicMock()  # a different project loaded meanwhile
+            node._project_generation += 1
             return [armed_by_walk]
 
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
@@ -559,7 +623,27 @@ class TestSetNextCuePreArm:
             ch._arm_ahead.side_effect = swap_script_and_return
             node.set_next_cue("cue-1")
             _join_prearm(cue.id)
-            ch.disarm.assert_called_once_with(armed_by_walk)
+            ch.disarm.assert_not_called()
+
+    def test_the_lookahead_carries_the_epoch_captured_by_set_next_cue(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = self._node(cue)
+        release = threading.Event()
+
+        def wait_then_return(*args, **kwargs):
+            release.wait(timeout=2.0)
+            return []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch.arm_epoch.return_value = 11
+            ch._arm_ahead.side_effect = wait_then_return
+            node.set_next_cue("cue-1")  # on the command thread: epoch 11
+            ch.arm_epoch.return_value = 12  # a STOP lands before the walk runs
+            release.set()
+            _join_prearm(cue.id)
+
+        assert ch._arm_ahead.call_args.kwargs["arm_epoch"] == 11
 
     def test_does_not_disarm_anything_when_same_script(self):
         cue = _FakeCue(cue_id="cue-1")
@@ -745,7 +829,7 @@ class TestAdvanceWithNoLocalCuePreArms:
         node = _go_node(pointer=c1)
         captured = {}
 
-        def capture(target, should_continue=None, skip_arming_types=()):
+        def capture(target, should_continue=None, skip_arming_types=(), arm_epoch=None):
             captured["should_continue"] = should_continue
             return []
 
@@ -766,7 +850,11 @@ class TestAdvancePreArmRunsOffTheCommandLock:
     waits for its JACK ports would wait for the whole arm -- the same
     arm-inside-the-lock shape 869f79ecc removed from set_next_cue's
     lookahead. A GO that lands mid-arm is still safe: arm() makes it wait on
-    the in-progress arm's _loading event instead of arming twice."""
+    the in-progress arm instead of arming twice.
+
+    And the PreArm thread never disarms anything (869f9wqpn): what it arms
+    belongs to the STOP/load epoch captured when it was spawned, and arm()
+    itself refuses or abandons an arm whose epoch has moved."""
 
     def test_target_is_armed_on_the_prearm_thread_not_the_callers(self):
         c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
@@ -793,55 +881,71 @@ class TestAdvancePreArmRunsOffTheCommandLock:
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = False
             ch._arm_ahead.return_value = []
-            node._prearm_segment(n1, 6, node._selection_epoch, node.script)
+            node._prearm_segment(n1, 6, node._selection_epoch, ch.arm_epoch())
 
         ch.arm.assert_not_called()
 
-    def test_a_project_change_during_the_arm_undoes_it(self):
+    def test_the_epoch_is_captured_on_the_command_thread(self):
+        """Not by the PreArm thread when it gets to run: a STOP in between
+        would hand it the NEW epoch and its arm would look current."""
         c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
         node = _go_node(pointer=c1)
-        old_script = node.script
-
-        def arm_while_a_new_project_loads(cue, init=False, walk=None):
-            node.script = _MM()
-            cue.loaded = True
-            walk.armed.append(cue)
-            return True
-
+        node._prearm_segment = _MM()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            ch.find_armed_cue.return_value = False
-            ch._arm_ahead.return_value = []
-            ch.arm.side_effect = arm_while_a_new_project_loads
-            node._prearm_segment(
-                n1, node._project_generation, node._selection_epoch, old_script
-            )
+            ch.arm_epoch.return_value = 3
+            node.go_script({"go_mtc_ms": 1000.0})
+            assert _wait_until(lambda: node._prearm_segment.called)
+            ch.arm_epoch.return_value = 4
 
-        ch.disarm.assert_called_once_with(n1)
+        assert node._prearm_segment.call_args.args == (n1, 1, 1, 3)
 
-    def test_the_target_arm_carries_the_walk_guards(self):
+    def test_the_target_arm_carries_the_walk_guards_and_the_epoch(self):
         """arm()'s own post_go / action-target recursion must honour the
-        same abort guards and be recorded, or a STOP mid-arm leaks it."""
+        same abort guards and belong to the same epoch."""
         c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
         node = _go_node(pointer=c1)
         walks = []
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = False
             ch._arm_ahead.return_value = []
+            ch.arm_epoch.return_value = 9
             ch.arm.side_effect = lambda cue, init=False, walk=None: walks.append(walk)
-            node._prearm_segment(
-                n1, node._project_generation, node._selection_epoch, node.script
-            )
+            node._prearm_segment(n1, node._project_generation, node._selection_epoch, 9)
 
         (walk,) = walks
+        assert walk.epoch == 9
         assert walk.should_continue() is True
         node._project_generation += 1
         assert walk.should_continue() is False
+        assert ch._arm_ahead.call_args.kwargs["arm_epoch"] == 9
 
-    def test_a_stop_during_the_target_arm_undoes_everything_it_armed(self):
-        """STOP keeps the same script but bumps the generation, kills every
-        audio player and disarms all: a cue this thread finishes arming
-        afterwards may hold a dead player, so it is undone -- the GO's
-        safety-net re-arm is late, a dead player is silent."""
+    def test_a_project_change_during_the_arm_disarms_nothing(self):
+        """Replaces build 2's test_a_project_change_during_the_arm_undoes_it."""
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+
+        def arm_while_a_new_project_loads(cue, init=False, walk=None):
+            node.script = _MM()
+            node._project_generation += 1
+            ch.arm_epoch.return_value = 2
+            return False  # arm() abandoned it
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch.arm_epoch.return_value = 1
+            ch.arm.side_effect = arm_while_a_new_project_loads
+            node._prearm_segment(n1, node._project_generation, node._selection_epoch, 1)
+
+        ch.disarm.assert_not_called()
+        ch._arm_ahead.assert_not_called()
+
+    def test_a_stop_during_the_target_arm_disarms_nothing_and_skips_the_lookahead(
+        self,
+    ):
+        """Replaces build 3's test_a_stop_during_the_target_arm_undoes_
+        everything_it_armed. That undo ran AFTER arm() had published the cue:
+        the restarted run's GO could already be playing it (STOP -> GO -> GO
+        inside one in-flight arm), and the undo cut it."""
         c1, n1, n2 = _chain(
             _ChainCue("c1", False, "pause"),
             _ChainCue("n1", True, "go"),
@@ -850,38 +954,51 @@ class TestAdvancePreArmRunsOffTheCommandLock:
         node = _go_node(pointer=c1)
 
         def arm_across_a_stop(cue, init=False, walk=None):
-            node._project_generation += 1  # STOP -> ready_script
-            for armed in (n1, n2):  # the target + its post_go recursion
-                armed.loaded = True
-                walk.armed.append(armed)
-            return True
+            ch.arm_epoch.return_value = 2  # stop_all_cues()
+            node._project_generation += 1  # ...then ready_script
+            return False
 
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = False
+            ch.arm_epoch.return_value = 1
             ch.arm.side_effect = arm_across_a_stop
-            node._prearm_segment(
-                n1, node._project_generation, node._selection_epoch, node.script
-            )
+            node._prearm_segment(n1, node._project_generation, node._selection_epoch, 1)
 
-        assert [c.args[0] for c in ch.disarm.call_args_list] == [n1, n2]
+        ch.disarm.assert_not_called()
         ch._arm_ahead.assert_not_called()
 
-    def test_the_lookahead_undoes_its_walk_after_a_stop_too(self):
+    def test_the_lookahead_is_skipped_once_the_stop_has_begun(self):
+        """stop_all_cues() moves the epoch before ready_script bumps the
+        project generation; the walk must not start in that gap."""
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True  # target already armed
+            ch.arm_epoch.return_value = 2  # the STOP began; generation unchanged
+            node._prearm_segment(n1, node._project_generation, node._selection_epoch, 1)
+
+        ch._arm_ahead.assert_not_called()
+
+    def test_the_lookahead_disarms_nothing_after_a_stop(self):
+        """Replaces build 3's test_the_lookahead_undoes_its_walk_after_a_
+        stop_too."""
         (n1,) = _chain(_ChainCue("n1", True, "pause"))
         node = _go_node(pointer=None)
         extra = _ChainCue("x", True, "pause")
 
-        def walk_across_a_stop(cue, should_continue=None, skip_arming_types=()):
+        def walk_across_a_stop(
+            cue, should_continue=None, skip_arming_types=(), arm_epoch=None
+        ):
             node._project_generation += 1
             return [extra]
 
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch._arm_ahead.side_effect = walk_across_a_stop
             node._prearm_lookahead(
-                n1, node._project_generation, node._selection_epoch, node.script
+                n1, node._project_generation, node._selection_epoch, ch.arm_epoch()
             )
 
-        ch.disarm.assert_called_once_with(extra)
+        ch.disarm.assert_not_called()
 
 
 class TestGoScriptToleratesARefusedDispatch:
