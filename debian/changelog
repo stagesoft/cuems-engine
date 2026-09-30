@@ -1,3 +1,35 @@
+cuems-engine (0.1.0rc5-3) bookworm; urgency=medium
+
+  * Supersedes 0.1.0rc5-2, which must not be deployed: its PreArm cleanup
+    ran AFTER arm() had published the cue, so after a STOP -> GO -> GO
+    inside one in-flight arm it could disarm a cue the restarted run was
+    already playing, or leave it playing on a player the STOP had killed
+    (869f9wqpn; found in the review of cuems-engine PR #22).
+  * Publish or abandon: an arm belongs to the STOP/load epoch in which it
+    was requested. The epoch moves in stop_all_cues() (the first step of a
+    STOP and of a load) and in disarm_all(). An arm whose epoch moved is
+    refused before it starts, or abandoned at the publish gate: the cue is
+    never marked armed, and what the arm built is released by the arming
+    thread itself. No background thread disarms after the fact any more.
+  * One arm in flight per cue ID (not per object); a thread that waited on
+    another thread's arm arms the cue itself if that arm was abandoned or
+    failed, within the same 5 s wait.
+  * go() no longer wipes a STOP that lands while it is re-arming a cue:
+    the epoch check and the _stop_requested reset are one lock section
+    (this line had no STOP barrier in go() at all). A cue dispatched
+    before a STOP does not play after it.
+  * disarm_all() clears the armed list together with its snapshot; clearing
+    it after the loop could leave a cue loaded but unplayable until a
+    reload.
+  * The JACK port wait ends when the player PROCESS has exited (a STOP or a
+    load killed it mid-wait) instead of running its full ~15 s. The wait
+    for a live player is unchanged.
+  * A GO whose cue cannot be armed in time skips it, advances the pointer
+    in lockstep with the controller and logs one ERROR line naming the cue
+    and why. It used to leave the node one GO behind until a STOP.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 30 Sep 2026 19:40:28 +0200
+
 cuems-engine (0.1.0rc5-2) bookworm; urgency=medium
 
   * Hotfix on 0.1.0rc5-1 (branch hotfix/rc5-2-prearm, based on 86b6290 =
