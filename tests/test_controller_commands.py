@@ -336,9 +336,7 @@ class TestGoScriptAnchor:
                 "/engine/command/go", {"go_mtc_ms": 79240.0}
             )
 
-    def test_forwards_original_string_value_when_mtc_listener_is_none(
-        self, controller
-    ):
+    def test_forwards_original_string_value_when_mtc_listener_is_none(self, controller):
         """The `controller` fixture builds with_mtc=False -- mtc_listener is
         None, the only reachable no-MTC case in production (go_script already
         refuses unless armed=="yes", and MTC runs by the time a project can be
@@ -349,9 +347,7 @@ class TestGoScriptAnchor:
             controller.go_script("complex_test")
             mock_fwd.assert_called_once_with("/engine/command/go", "complex_test")
 
-    def test_forwards_none_value_unchanged_when_mtc_listener_is_none(
-        self, controller
-    ):
+    def test_forwards_none_value_unchanged_when_mtc_listener_is_none(self, controller):
         self._armed(controller)
         assert controller.mtc_listener is None
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
