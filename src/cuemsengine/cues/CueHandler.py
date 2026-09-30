@@ -672,6 +672,15 @@ class CueHandler:
 
         return True
 
+    def describe_arm_in_flight(self, cue: Cue) -> str | None:
+        """Who is arming this cue right now and for how long, as text for a
+        log line; None when no arm of it is in flight."""
+        with self._lock:
+            claim = self._arming_registry().get(cue.id)
+        if claim is None:
+            return None
+        return f"held by {claim.holder} for {monotonic() - claim.started:.1f}s"
+
     def _release_unpublished(self, cue: Cue, reason: str) -> None:
         """Give back what an arm built for a cue it is not going to publish.
 
