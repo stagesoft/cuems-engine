@@ -123,7 +123,9 @@ class TestApplyCueEnabledSideEffects:
             node._apply_cue_enabled_side_effects(cue, True)
             assert _wait_until(lambda: ch.arm.called), "async ReArm never armed the cue"
             _join_rearm(cue.id)
-            ch.arm.assert_called_once_with(cue, init=True)
+            ch.arm.assert_called_once_with(
+                cue, init=True, epoch=ch.arm_epoch.return_value
+            )
 
     def test_enable_non_local_does_not_arm(self):
         cue = _FakeCue(local=False)
@@ -322,7 +324,9 @@ class TestActionResultSinkEnableDisable:
             node._notify_cue_enabled.assert_called_once_with(cue.id, True)
             assert _wait_until(lambda: ch.arm.called)
             _join_rearm(cue.id)
-            ch.arm.assert_called_once_with(cue, init=True)
+            ch.arm.assert_called_once_with(
+                cue, init=True, epoch=ch.arm_epoch.return_value
+            )
 
     def test_applied_no_change_is_a_no_op(self):
         cue = _FakeCue()

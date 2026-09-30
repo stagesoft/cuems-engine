@@ -914,35 +914,39 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f"Could not broadcast nextcue: {e}")
 
-    def _arm_with_enabled_guard(self, cue, project_gen: int):
+    def _arm_with_enabled_guard(self, cue, project_gen: int, arm_epoch: int = None):
         """
-        Arm a cue and disarm if it was disabled or project changed while
-        arming.
+        Arm a cue, and disarm it if it was disabled while arming.
 
-        Runs in a daemon thread. After arm() completes, re-checks
-        cue.enabled and project generation to handle races where:
-        - A disable command arrived while arm_cue() was loading media
-        - A stop/reload invalidated this project's cues
+        Runs in a daemon thread (ReArm:<id>). `arm_epoch` is the STOP/load
+        epoch captured by whoever spawned it (_apply_cue_enabled_side_effects):
+        the arm belongs to it, so CUE_HANDLER.arm() refuses it if a STOP or a
+        load happened before this thread got to run, and abandons it -- never
+        publishing the cue, releasing the player it spawned -- if one happens
+        while it is arming.
 
-        Bounded post-STOP window: these checks run before/after arm(), not
-        during it — arm() can block up to ~15 s in the JACK port wait, so a
-        stale arm can spawn a player that outlives a STOP by that much until
-        the re-check below disarms it. It is armed but never revealed (no
-        /mtcfollow), so it is inaudible.
+        This method therefore does NOT disarm on a project change any more
+        (869f9wqpn). It used to, after arm() had already published the cue:
+        by then the restarted run could be playing it, and after a reload of
+        the same project the disarm hit the NEW object's player, because Cue
+        equality is by id.
         """
         if self._project_generation != project_gen:
             Logger.info(f"Aborting arm of {cue.id} — project generation changed")
             return
         try:
-            CUE_HANDLER.arm(cue, init=True)
+            CUE_HANDLER.arm(cue, init=True, epoch=arm_epoch)
         except Exception as exc:
             Logger.error(f"Async re-arm of enabled cue {cue.id} failed: {exc}")
             return
-        # If project changed during arm, disarm the stale cue.
         if self._project_generation != project_gen:
-            if CUE_HANDLER.find_armed_cue(cue):
-                CUE_HANDLER.disarm(cue, reason="project_changed")
-            Logger.info(f"Disarmed cue {cue.id} — project changed during async arm")
+            # A STOP/load landed during the arm. arm() either abandoned it or
+            # published it before the STOP began, in which case the STOP's
+            # own disarm_all took it. Nothing to undo, nothing to rejoin.
+            Logger.info(
+                f"Project changed during the async arm of {cue.id} — left to "
+                "the STOP/load that caused it"
+            )
             return
         # If cue was disabled while we were arming, disarm now.
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
@@ -1097,13 +1101,15 @@ class NodeEngine(BaseEngine):
             self._selection_epoch += 1
             selection_epoch = self._selection_epoch
             project_gen = self._project_generation
-            script = self.script
+            # Captured HERE, on the command thread: the lookahead belongs to
+            # the STOP/load epoch in which it was asked for.
+            arm_epoch = CUE_HANDLER.arm_epoch()
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
             threading.Thread(
                 target=self._prearm_lookahead,
-                args=(cue, project_gen, selection_epoch, script),
+                args=(cue, project_gen, selection_epoch, arm_epoch),
                 daemon=True,
                 name=f"PreArm:{cue.id}",
             ).start()
@@ -1112,7 +1118,7 @@ class NodeEngine(BaseEngine):
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
 
-    def _prearm_lookahead(self, cue, project_gen, selection_epoch, script):
+    def _prearm_lookahead(self, cue, project_gen, selection_epoch, arm_epoch):
         """Background half of set_next_cue — see its docstring.
 
         should_continue re-checks BOTH the project generation (a STOP/load
@@ -1120,6 +1126,13 @@ class NodeEngine(BaseEngine):
         selection's own epoch (a later set_next_cue call bumps it even if
         it reselects the same cue), so a stale walk stops advancing as
         soon as either happens, without waiting for it to finish.
+
+        arm_epoch is the STOP/load epoch captured by the command that spawned
+        this thread. Every arm the walk makes belongs to it: CUE_HANDLER
+        refuses or abandons an arm whose epoch has moved, so a cue this walk
+        was arming across a STOP or a load is never published. That is why
+        this thread disarms NOTHING afterwards (869f9wqpn) -- it used to, and
+        by then the restarted run could already be playing the cue.
 
         Audio is pre-armed here like any other local cue. It was excluded
         at first (skip_arming_types=(AudioCue,)) for fear of a slow JACK
@@ -1138,32 +1151,9 @@ class NodeEngine(BaseEngine):
                 and self._selection_epoch == selection_epoch
             )
 
-        newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
-        self._undo_stale_prearm(newly_armed, cue, project_gen, script)
-
-    def _undo_stale_prearm(self, armed, origin, project_gen, script):
-        """Disarm what a PreArm thread armed if a STOP or a load happened
-        underneath it; returns True when it did.
-
-        A different project loading is the obvious case. A STOP is the other
-        one: it keeps the same script but bumps the generation, kills every
-        audio player and disarms all -- so a cue this thread finished arming
-        afterwards may hold a player that STOP just killed. Undo exactly what
-        THIS thread armed, not a concurrent call's: the next GO's safety-net
-        re-arm is late, a dead player would be silent.
-        """
-        if not armed:
-            return False
-        if self.script is script and self._project_generation == project_gen:
-            return False
-        reason = "project_changed" if self.script is not script else "stop"
-        for armed_cue in armed:
-            CUE_HANDLER.disarm(armed_cue, reason=reason)
-        Logger.info(
-            f"PreArm from {origin.id}: disarmed {len(armed)} cue(s) — a STOP "
-            "or a load happened underneath it"
+        CUE_HANDLER._arm_ahead(
+            cue, should_continue=should_continue, arm_epoch=arm_epoch
         )
-        return True
 
     def _prearm_after_advance(self):
         """Pre-arm this node's next segment after a GO advanced the pointer
@@ -1183,7 +1173,11 @@ class NodeEngine(BaseEngine):
         JACK ports -- a STOP or the next GO sent meanwhile would wait for the
         whole arm (869f79ecc removed exactly that from set_next_cue). A GO
         that lands mid-arm is safe: arm() makes it wait on the in-progress
-        arm's _loading event instead of arming the cue twice.
+        arm instead of arming the cue twice.
+
+        What IS done here, on the command thread, is capturing the STOP/load
+        epoch the arm belongs to. A STOP between this GO and the thread's
+        first step must find the arm stale, not current.
         """
         target = self._first_local_enabled_in_go_chain(self.next_cue_pointer)
         if target is None:
@@ -1195,15 +1189,24 @@ class NodeEngine(BaseEngine):
         )
         threading.Thread(
             target=self._prearm_segment,
-            args=(target, self._project_generation, self._selection_epoch, self.script),
+            args=(
+                target,
+                self._project_generation,
+                self._selection_epoch,
+                CUE_HANDLER.arm_epoch(),
+            ),
             daemon=True,
             name=f"PreArm:{target.id}",
         ).start()
 
-    def _prearm_segment(self, target, project_gen, selection_epoch, script):
+    def _prearm_segment(self, target, project_gen, selection_epoch, arm_epoch):
         """PreArm:<id> body for _prearm_after_advance: arm the segment's
-        first cue, then the lookahead from it. What either step armed is
-        undone if a STOP or a load happened underneath (_undo_stale_prearm).
+        first cue, then the lookahead from it.
+
+        It never disarms. If a STOP or a load lands while the target is
+        arming, CUE_HANDLER.arm() abandons that arm itself: the cue is never
+        published, so the restarted run's GO arms it fresh and nothing can
+        cut it afterwards (869f9wqpn; see _prearm_lookahead).
         """
 
         def should_continue():
@@ -1216,12 +1219,15 @@ class NodeEngine(BaseEngine):
             return
         if not CUE_HANDLER.find_armed_cue(target):
             # A walk, so arm()'s own post_go / action-target recursion obeys
-            # the same guards and records everything it arms (869f79ecc).
-            walk = _ArmWalk(should_continue=should_continue)
+            # the same guards and the same epoch (869f79ecc).
+            walk = _ArmWalk(should_continue=should_continue, epoch=arm_epoch)
             CUE_HANDLER.arm(target, init=True, walk=walk)
-            if self._undo_stale_prearm(walk.armed, target, project_gen, script):
-                return
-        self._prearm_lookahead(target, project_gen, selection_epoch, script)
+        # The epoch moves when a STOP BEGINS (stop_all_cues), before the
+        # generation does (ready_script): check it too, or the walk would
+        # start inside the teardown.
+        if not should_continue() or CUE_HANDLER.arm_epoch() != arm_epoch:
+            return
+        self._prearm_lookahead(target, project_gen, selection_epoch, arm_epoch)
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
@@ -1327,9 +1333,12 @@ class NodeEngine(BaseEngine):
             # (arm() is slow — media loading, process spawning).
             if cue._local and not CUE_HANDLER.find_armed_cue(cue):
                 gen = self._project_generation
+                # Captured by the spawner -- the command thread, or an
+                # ActionCue's own thread (_action_result_sink) -- not by the
+                # ReArm thread when it gets to run.
                 threading.Thread(
                     target=self._arm_with_enabled_guard,
-                    args=(cue, gen),
+                    args=(cue, gen, CUE_HANDLER.arm_epoch()),
                     daemon=True,
                     name=f"ReArm:{cue.id}",
                 ).start()
