@@ -824,7 +824,7 @@ class TestAdvancePreArmRunsOffTheCommandLock:
                 n1, node._project_generation, node._selection_epoch, old_script
             )
 
-        ch.disarm.assert_called_once_with(n1)
+        ch.disarm.assert_called_once_with(n1, reason="project_changed")
 
     def test_the_target_arm_carries_the_walk_guards(self):
         """arm()'s own post_go / action-target recursion must honour the
@@ -889,4 +889,4 @@ class TestAdvancePreArmRunsOffTheCommandLock:
                 n1, node._project_generation, node._selection_epoch, node.script
             )
 
-        ch.disarm.assert_called_once_with(extra)
+        ch.disarm.assert_called_once_with(extra, reason="stop")
