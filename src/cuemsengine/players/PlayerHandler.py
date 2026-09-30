@@ -25,6 +25,17 @@ from .VideoPlayer import VideoClient, VideoOutput
 DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
 
 
+def _process_exited(player) -> bool:
+    """True once a player's subprocess has exited (killed or crashed).
+
+    False while it runs, and False for a player with no process yet. A
+    poll() racing the player's own reader thread can only report a dead
+    process as still alive, which the next check corrects.
+    """
+    process = getattr(player, "p", None)
+    return process is not None and process.poll() is not None
+
+
 class PlayerHandler:
     """
     This class is responsible for handling and generating player objects.
@@ -529,6 +540,11 @@ class PlayerHandler:
                     player_name=player_name,
                     player_output_prefix="outport",
                     selected_outputs=selected_outputs,
+                    # A STOP/load may kill this player while we wait for its
+                    # ports; they will never register then. Stop waiting as
+                    # soon as the process is gone instead of holding this
+                    # cue's arm for the full ~15 s (869f9wqpn).
+                    should_abort=lambda: _process_exited(player),
                 )
                 if connected is False:
                     # Route to the mixer failed: the cue would show armed/green
