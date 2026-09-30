@@ -868,7 +868,7 @@ class TestGoRearm:
 
 
 # ---------------------------------------------------------------------------
-# T018: arm() — ActionCue play-target, _loading sentinel, non-local guard
+# T018: arm() — ActionCue play-target, in-flight arm claim, non-local guard
 # ---------------------------------------------------------------------------
 
 
@@ -936,16 +936,19 @@ class TestArmPlayTarget:
 
     def test_arm_loading_waits_for_in_progress_arm(self, handler, mtc):
         """An init=True arm on a cue being armed should wait and succeed."""
-        from threading import Event, Thread
+        from threading import Thread
+
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        event = Event()
-        cue._loading = event  # simulate in-progress arm
+        claim = _ArmClaim()
+        handler._arming = {cue.id: claim}  # simulate in-progress arm
 
         def _finish_arm():
             time.sleep(0.1)
             cue.loaded = True
-            event.set()
+            handler._arming.pop(cue.id)
+            claim.event.set()
 
         t = Thread(target=_finish_arm, daemon=True)
         t.start()
@@ -960,13 +963,14 @@ class TestArmPlayTarget:
         """
         An init=True arm should return False if the in-progress arm times out.
         """
-        from threading import Event
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        cue._loading = Event()  # never signalled
+        claim = _ArmClaim()  # never signalled
+        handler._arming = {cue.id: claim}
 
         # Patch timeout to avoid 5s wait in tests
-        with patch.object(cue._loading, "wait", return_value=False):
+        with patch.object(claim.event, "wait", return_value=False):
             result = handler.arm(cue, init=True)
 
         assert result is False
@@ -976,10 +980,10 @@ class TestArmPlayTarget:
         """
         A non-init arm on a cue being armed should return False immediately.
         """
-        from threading import Event
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        cue._loading = Event()  # simulate in-progress arm
+        handler._arming = {cue.id: _ArmClaim()}  # simulate in-progress arm
 
         result = handler.arm(cue, init=False)
 
