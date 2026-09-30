@@ -1,35 +1,31 @@
 # Contract — the engine's identity helpers (`src/cuemsengine/tools/ids.py`)
 
-Group 7 (FR-024–FR-029). `Uuid` canonical, **as the library delivers it**: a uuid4 is a `Uuid`,
-anything else stays the raw `str` — the engine mirrors `cuemsutils`' own (internal) uuid decoder
-rather than enforcing uuid4 (research R14; UR-6 asks upstream for a public helper).
+Group 7 (FR-024–FR-029). `Uuid` canonical, **as the library delivers it**: a converged id (uuid4) is a
+`Uuid`, anything else stays the raw `str`.
 
-## `as_id(value) -> Uuid | str | None` — ingress
+**Revised 2026-09-30**: `as_id` is no longer the engine's mirror of the library's internal decoder.
+cuems-utils 012 publishes the rule as `cuemsutils.tools.coerce_identity`, and `tools/ids.py`
+re-exports it as `as_id` (012 `sibling-repository-updates.md` §4.2; UR-6 delivered). The engine keeps
+no copy, and its tests no longer re-test the rule — the library's
+`tests/contract/test_published_coercion.py` does.
+
+## `as_id` — ingress (`cuemsutils.tools.coerce_identity`)
 
 | Input | Output |
 |---|---|
 | `Uuid` | unchanged |
-| `str` matching uuid4 | `Uuid(value)` |
-| other non-empty `str` | `value` unchanged |
+| converged `str` (lowercase uuid4) | `Uuid(value)` |
+| other non-empty `str` — uuid1, the NOT PROVISIONED sentinel, a name | `value` unchanged |
 | `""`, `None` | `None` |
-| anything else | `str(value)` passed through the rules above |
+| anything else | returned unchanged (the old mirror stringified it; no engine ingress site passes such a value) |
 
-Never raises. Idempotent: `as_id(as_id(x)) == as_id(x)`.
-
-## `id_str(value) -> str` — egress
+## `id_str(value) -> str` — egress (the engine's own)
 
 `str(value)`; `None` → `""`. The only way an id reaches a sort key, a slice, `.split`, `join`,
-string concatenation, JSON, an OSC argument or address.
+string concatenation, JSON, an OSC argument or address. The library has no equivalent.
 
-No other helper. An `is_uuid4` predicate was dropped (2026-09-29, analyze C1): after the shrink it
-had no production caller. Tests and the identity audit (T055) use a local uuid4 regex; the NOT
-PROVISIONED sentinel is checked by equality with `cuemsutils.tools.identity_check.SENTINEL`.
+## What the engine's tests pin (`tests/test_ids.py`)
 
-## Invariants the tests pin
-
-1. `as_id(u) == as_id(str(u))` and `hash` equal, for every uuid4 `u` — one member per identity in
-   any set.
+1. `as_id is coerce_identity` — the engine delegates, it does not copy.
 2. `sorted(ids, key=id_str)` never raises over mixed `Uuid`/`str`.
-3. A nil uuid and a uuid1 round-trip unchanged (`as_id(x) == x`, `type is str`).
-4. No test here re-tests `Uuid` itself (FR-030a-i spirit): the helpers' behaviour is asserted, not
-   the library class's.
+3. `id_str` renders a `Uuid`, a `str` and `None` as text.

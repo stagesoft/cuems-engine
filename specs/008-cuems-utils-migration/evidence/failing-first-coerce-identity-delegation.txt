@@ -1,0 +1,6 @@
+# §4.2 (cuems-utils 012) failing-first — as_id must BE cuemsutils.tools.coerce_identity, not the engine's mirror
+# 2026-09-30T19:28:31+02:00  engine 6fda8f3 (ids.py as committed)  cuems-utils f190c4ccfb0999ad600bb5ba361093e24116d5e4 (branch 012-uuid4-convergence)
+$ poetry run pytest -q -p no:cacheprovider tests/test_ids.py
+E       assert as_id is coerce_identity
+FAILED tests/test_ids.py::test_as_id_is_the_librarys_published_rule_not_a_copy
+========================= 1 failed, 2 passed in 0.97s ==========================

@@ -18,7 +18,9 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
   with a generic "node not found".
 - An empty `<duration/>` on an audio or video cue is treated as zero with one warning naming the
   cue (it used to be zero silently).
-- `cuemsengine.tools.ids` (`as_id` / `id_str`): the engine's one place for converting ids.
+- `cuemsengine.tools.ids` (`as_id` / `id_str`): the engine's one place for converting ids. `as_id` is
+  `cuemsutils.tools.coerce_identity`, the library's published rule (cuems-utils 012); the engine
+  keeps no copy of it.
 
 ### Changed
 
@@ -40,6 +42,9 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
   `cuems-utils (>= 0.1.0rc16)`, `cuems-utils (<< 0.1.1~)` and `cuems-common (>= 1.3.0-23~)`,
   the last inheriting `Breaks: cuems-nodeconf (<< 0.1.0-8)` because the engine reads
   `<node_role>`.
+  The engine also needs cuems-utils feature 012's `cuemsutils.tools.coerce_identity`, which
+  shipped inside the still-unreleased 0.1.0rc16 and so cannot be expressed as a version: build
+  cuemsutils from a tree that contains it.
 - `cuemsengine.__version__` is the single version source; `pyproject.toml` and this file's top
   entry are kept equal to it by a test.
 

@@ -9,6 +9,11 @@ omitted below. Line numbers are current (post-T055).
 **Rule**: an id enters through `as_id`, leaves through `id_str` — or the site is listed here as safe,
 with the reason.
 
+**2026-09-30**: `as_id` is now cuems-utils 012's `cuemsutils.tools.coerce_identity` (the engine's
+mirror is deleted). The two agree on every input an ingress site below passes — text from JSON,
+settings or an `output_name` slice, or a map `Uuid`. They differ only on a non-string, non-`Uuid`
+input (the library returns it unchanged; the mirror stringified it), which no site passes.
+
 ## Passed through the helpers
 
 | Site | What | Helper |

@@ -4,12 +4,14 @@
 
 """The engine's identity helpers (Group 7, contracts/ids.md).
 
-Pins ``as_id``/``id_str`` only. The library's ``Uuid`` is exercised as an
-input, never re-tested (FR-030a-i spirit).
+``as_id`` is cuemsutils' published ``coerce_identity``; its rule is pinned by
+the library's own ``tests/contract/test_published_coercion.py`` and is not
+re-tested here (FR-030a-i). What this file pins is the engine's side: that it
+delegates rather than keeps a copy, and that ``id_str`` renders every id the
+library can hand it as sortable text.
 """
 
-import pytest
-from cuemsutils.tools.Uuid import Uuid
+from cuemsutils.tools import coerce_identity
 
 from cuemsengine.tools.ids import as_id, id_str
 
@@ -18,52 +20,8 @@ UUID1 = "268a0b70-1dfb-11eb-bc5f-2b59ad58b106"
 NIL = "00000000-0000-0000-0000-000000000000"
 
 
-def test_a_uuid_passes_through_unchanged():
-    u = Uuid(UUID4)
-    assert as_id(u) is u
-
-
-def test_a_uuid4_string_becomes_a_uuid():
-    result = as_id(UUID4)
-    assert isinstance(result, Uuid)
-    assert str(result) == UUID4
-
-
-@pytest.mark.parametrize(
-    "raw", [UUID1, NIL, "controller"], ids=["uuid1", "nil", "text"]
-)
-def test_anything_else_non_empty_stays_the_raw_string(raw):
-    result = as_id(raw)
-    assert type(result) is str
-    assert result == raw
-
-
-@pytest.mark.parametrize("raw", ["", None])
-def test_empty_and_none_become_none(raw):
-    assert as_id(raw) is None
-
-
-def test_other_types_go_through_str_first():
-    class Stringy:
-        def __str__(self):
-            return UUID4
-
-    assert isinstance(as_id(Stringy()), Uuid)
-    assert as_id(42) == "42"
-
-
-@pytest.mark.parametrize("raw", [UUID4, UUID1, NIL, "", None, "controller"])
-def test_as_id_is_idempotent(raw):
-    once = as_id(raw)
-    assert as_id(once) == once
-    assert type(as_id(once)) is type(once)
-
-
-def test_a_uuid_and_its_string_are_one_set_member():
-    u = Uuid(UUID4)
-    ids = {as_id(u), as_id(str(u))}
-    assert len(ids) == 1
-    assert hash(as_id(u)) == hash(as_id(str(u)))
+def test_as_id_is_the_librarys_published_rule_not_a_copy():
+    assert as_id is coerce_identity
 
 
 def test_sorting_mixed_ids_by_id_str_never_raises():
