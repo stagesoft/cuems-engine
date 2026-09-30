@@ -596,6 +596,58 @@ class TestNoPlayAfterStop:
             players.remove_cue_player.assert_called_once_with(cue)
         assert cue.loaded is False
 
+    def test_a_continuation_does_not_play_a_cue_the_new_run_armed(self):
+        """The STOP's own re-arm can load the cue before the stale thread
+        wakes. arm() refuses the stale request -- and go_threaded must not
+        carry on just because the cue is 'loaded': it is loaded for the NEXT
+        run. (A DMX or action cue arms in microseconds, so the new epoch
+        winning that race is the likely order.)"""
+        from cuemsengine.cues.CueHandler import _ArmClaim
+
+        ch = _handler()
+        cue = self._dispatched()
+        claim = _ArmClaim(holder="PreArm")
+        ch._arming = {cue.id: claim}
+        with (
+            patch("cuemsengine.cues.CueHandler.run_cue") as run_cue,
+            patch("cuemsengine.cues.CueHandler.reveal_cue") as reveal_cue,
+            patch("cuemsengine.cues.CueHandler.loop_cue"),
+        ):
+            go = self._run_threaded(ch, cue, ch._disarm_epoch)
+            _until(lambda: claim.waiters == 1)
+            ch.stop_all_cues()  # does not flag the cue: it is not armed yet
+            cue.loaded = True  # the STOP's own re-arm, for the next run
+            ch._armed_cues.append(cue)
+            ch._armed_cues_set.add(cue.id)
+            del ch._arming[cue.id]
+            claim.event.set()
+            go["thread"].join(2.0)
+
+            assert not go["thread"].is_alive()
+            run_cue.assert_not_called()
+            reveal_cue.assert_not_called()
+        ch.communications_thread.add_cue.assert_not_called()  # never lit
+        assert cue.loaded is True, "the new run's arm must be left alone"
+
+    def test_a_continuation_reaching_its_arm_after_the_stop_does_not_play(self):
+        """Same, without any wait: the thread only gets to run after the STOP
+        and its re-arm are done, and finds the cue loaded."""
+        ch = _handler()
+        cue = self._dispatched()
+        stale = ch._disarm_epoch
+        ch.stop_all_cues()
+        cue.loaded = True
+        ch._armed_cues.append(cue)
+        ch._armed_cues_set.add(cue.id)
+        with (
+            patch("cuemsengine.cues.CueHandler.run_cue") as run_cue,
+            patch("cuemsengine.cues.CueHandler.reveal_cue") as reveal_cue,
+            patch("cuemsengine.cues.CueHandler.loop_cue"),
+        ):
+            ch.go_threaded(cue, _mtc(), 0.0, 1, 1, True, arm_epoch=stale)
+            run_cue.assert_not_called()
+            reveal_cue.assert_not_called()
+
     def test_a_stale_waiter_does_not_adopt_the_new_epochs_arm(self):
         """The STOP's own re-arm may publish the cue before the stale waiter
         wakes. 'Loaded' is then true -- for the new run, not for the waiter."""

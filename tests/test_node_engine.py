@@ -1092,3 +1092,61 @@ class TestGoThatCannotArmItsCueSkipsIt:
 
             assert ch.arm.call_count == arms_after_the_skip
             ch.go.assert_not_called()
+
+    def test_disabled_cues_the_walk_passed_are_stamped_like_on_the_other_paths(self):
+        """Both the success path (go(stamp_skipped=)) and the no-local branch
+        (stamp_pass) stamp them, so enabling one mid-show can rejoin."""
+        off, n1, n2 = _chain(
+            _ChainCue("off", True, "go", enabled=False),
+            _ChainCue("n1", True, "pause"),
+            _ChainCue("n2", True, "pause"),
+        )
+        node = _go_node(pointer=off)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            self._skip(node, ch)
+            _join_prearm(n2.id)
+
+        ch.stamp_pass.assert_called_once_with([off], 1000.0)
+
+    def test_an_arm_that_finished_just_too_late_is_not_reported_as_failed(self):
+        """The holder can finish between arm() giving up and the log line."""
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            # in flight before the arm, gone right after it
+            ch.describe_arm_in_flight.side_effect = ["held by PreArm:n1 for 0.1s", None]
+            with patch("cuemsengine.NodeEngine.Logger") as log:
+                node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n2.id)
+
+        (line,) = [
+            str(c.args[0])
+            for c in log.error.call_args_list
+            if "SKIPPED on this node" in str(c.args[0])
+        ]
+        assert "its arm failed" not in line
+        assert "did not deliver" in line
+
+
+class TestReArmDoesNotRejoinAnUnarmedCue:
+    def test_a_refused_or_failed_arm_does_not_go_on_to_rejoin(self):
+        """rejoin_chain would run go()'s fallback: a second wait and a second
+        arm for a cue that just could not be armed."""
+        cue = _FakeCue()
+        node = _make_node()
+        node._rejoin_running_chain = _MM()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False  # arm() did not arm it
+            node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=1)
+        node._rejoin_running_chain.assert_not_called()
+
+    def test_an_armed_cue_still_rejoins(self):
+        cue = _FakeCue()
+        node = _make_node()
+        node._rejoin_running_chain = _MM()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=1)
+        node._rejoin_running_chain.assert_called_once_with(cue)
