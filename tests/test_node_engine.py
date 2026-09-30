@@ -762,3 +762,61 @@ class TestAdvanceWithNoLocalCuePreArms:
         assert captured["should_continue"]() is True
         node._project_generation += 1  # STOP / load
         assert captured["should_continue"]() is False
+
+
+class TestAdvancePreArmRunsOffTheCommandLock:
+    """The advance pre-arm must not arm inside run_command's _command_lock:
+    an operator STOP (or the next GO) arriving while an audio cue spawns and
+    waits for its JACK ports would wait for the whole arm -- the same
+    arm-inside-the-lock shape 869f79ecc removed from set_next_cue's
+    lookahead. A GO that lands mid-arm is still safe: arm() makes it wait on
+    the in-progress arm's _loading event instead of arming twice."""
+
+    def test_target_is_armed_on_the_prearm_thread_not_the_callers(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        node._command_lock = threading.Lock()
+        node.commands_dict = {"go": node.go_script}
+        arming_threads = []
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            ch.arm.side_effect = lambda *a, **k: arming_threads.append(
+                threading.current_thread().name
+            )
+            node.run_command("go", {"go_mtc_ms": 1000.0})
+            _join_prearm(n1.id)
+
+        assert arming_threads == [f"PreArm:{n1.id}"]
+
+    def test_a_stop_before_the_thread_runs_skips_the_arm(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        node._project_generation = 7
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            node._prearm_segment(n1, 6, node._selection_epoch, node.script)
+
+        ch.arm.assert_not_called()
+
+    def test_a_project_change_during_the_arm_undoes_it(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        old_script = node.script
+
+        def arm_while_a_new_project_loads(cue, init=False):
+            node.script = _MM()
+            cue.loaded = True
+            return True
+
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            ch.arm.side_effect = arm_while_a_new_project_loads
+            node._prearm_segment(
+                n1, node._project_generation, node._selection_epoch, old_script
+            )
+
+        ch.disarm.assert_called_once_with(n1)
