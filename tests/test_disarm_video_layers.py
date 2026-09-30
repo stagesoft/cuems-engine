@@ -145,7 +145,6 @@ def test_disarm_all_passes_its_reason_to_every_cue(handler, player_handler):
     handler._armed_cues = list(cues)
     with (
         patch.object(handler, "stop_all_cues"),
-        patch.object(handler, "reset_armed_cues"),
         patch.object(handler, "disarm", wraps=handler.disarm) as disarm,
         patch("cuemsengine.cues.CueHandler.Logger"),
     ):

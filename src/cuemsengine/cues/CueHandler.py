@@ -151,12 +151,6 @@ class CueHandler:
                 return True
         return False
 
-    def reset_armed_cues(self) -> None:
-        """Resets the list of armed cues."""
-        with self._lock:
-            self._armed_cues = []
-            self._armed_cues_set.clear()
-
     # ---------------------------
     # Cue Management
     # ---------------------------
@@ -1510,6 +1504,15 @@ class CueHandler:
                     f"thread before its slot."
                 )
                 self.arm(cue, init=True, epoch=arm_epoch)
+                if arm_epoch is not None and arm_epoch != self._disarm_epoch:
+                    # arm() refused or abandoned the arm: a STOP or a load
+                    # landed since this cue was dispatched. Said here, before
+                    # the generic failure below, because it is not one.
+                    Logger.info(
+                        f"Cue {cue.id} was dispatched before a STOP or a "
+                        "load; it will not play"
+                    )
+                    return
                 if not getattr(cue, "loaded", False):
                     # The rest of the chain went out at entry, so this failure
                     # costs this cue only.
@@ -1521,6 +1524,17 @@ class CueHandler:
                 # The check above ran before the arm; an arm longer than this
                 # cue's runway makes it late, and that must not be silent.
                 self._warn_if_late(cue, mtc, start_ms)
+            elif arm_epoch is not None and arm_epoch != self._disarm_epoch:
+                # Loaded, but not for this dispatch: the STOP's own re-arm
+                # loaded it for the NEXT run while this thread was on its
+                # way here. stop_all_cues() could not flag this cue -- it was
+                # not armed when the STOP began -- so nothing downstream
+                # would hold it back.
+                Logger.info(
+                    f"Cue {cue.id} was dispatched before a STOP or a load; "
+                    "it will not play"
+                )
+                return
 
             # Illuminate (sequence-view highlight) at the cue's ARRIVAL — the
             # start of its prewait — NOT at dispatch. Under Auto continue every
