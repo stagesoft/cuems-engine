@@ -1409,6 +1409,8 @@ class NodeEngine(BaseEngine):
             self.next_cue_pointer = first_enabled
 
         Logger.info(f"Script {self.script.name} loaded and ready to be played")
+        # Measurement only: what the load / STOP re-arm left armed.
+        CUE_HANDLER.log_armed_inventory(reason)
 
     def _resolve_go_anchor(self, value):
         """Resolve the GO_mtc anchor for this GO.

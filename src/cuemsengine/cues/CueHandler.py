@@ -704,9 +704,14 @@ class CueHandler:
     def armed_inventory(self) -> dict:
         """What this node holds armed right now: published (loaded) cues by
         type, the video layers they hold, and how many of them a GO owns
-        (playing) versus are only held (idle). Measurement only."""
+        (playing) versus are only held (idle). CueLists are left out: they
+        hold nothing. Measurement only."""
         with self._lock:
-            held = [c for c in self._armed_cues if getattr(c, "loaded", False)]
+            held = [
+                c
+                for c in self._armed_cues
+                if getattr(c, "loaded", False) and not isinstance(c, CueList)
+            ]
         inv = {
             "cues": len(held),
             "video": 0,
@@ -788,8 +793,11 @@ class CueHandler:
                 armed_at is not None
                 and not getattr(cue, "_ever_played", False)
                 and reason != "cue_end"
+                and not isinstance(cue, CueList)
             ):
                 # An arm that bought nothing: what a pre-arm policy costs.
+                # Not a CueList: go() never dispatches one (the project's
+                # root is armed at every load and STOP) and it holds nothing.
                 Logger.info(
                     f"Cue {cue.id} disarmed after {monotonic() - armed_at:.1f} s "
                     f"armed, never played ({reason})"
