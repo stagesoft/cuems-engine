@@ -1150,3 +1150,71 @@ class TestReArmDoesNotRejoinAnUnarmedCue:
             ch.find_armed_cue.return_value = True
             node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=1)
         node._rejoin_running_chain.assert_called_once_with(cue)
+
+
+# ---------------------------------------------------------------------------
+# Pre-arm measurement: the armed inventory is logged after every GO and at
+# the end of every PreArm thread (Plans/2026-10-01-engine-prearm-past-pauses-
+# and-inventory.md, Part A). A line, nothing else: no behaviour changes.
+# ---------------------------------------------------------------------------
+
+
+class TestArmedInventoryIsLogged:
+    def _inventory_calls(self, ch):
+        return [c.args[0] for c in ch.log_armed_inventory.call_args_list]
+
+    def test_after_a_dispatched_go(self):
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch.go.return_value = _MM()
+            node.go_script({"go_mtc_ms": 1000.0})
+        assert self._inventory_calls(ch) == ["GO"]
+
+    def test_after_a_go_with_nothing_local(self):
+        c1, n1 = _chain(_ChainCue("c1", False, "pause"), _ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=c1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch._arm_ahead.return_value = []
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n1.id)
+        assert self._inventory_calls(ch) == ["GO", "PreArm:n1"]
+
+    def test_after_a_go_that_skipped_its_cue(self):
+        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
+        node = _go_node(pointer=n1)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch._arm_ahead.return_value = []
+            ch.describe_arm_in_flight.return_value = None
+            node.go_script({"go_mtc_ms": 1000.0})
+            _join_prearm(n2.id)
+        assert self._inventory_calls(ch) == ["GO", "PreArm:n2"]
+
+    def test_not_without_a_script(self):
+        node = _make_node(script_cue=None)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            node.go_script({"go_mtc_ms": 1000.0})
+        ch.log_armed_inventory.assert_not_called()
+
+    def test_at_the_end_of_the_set_next_cue_prearm(self):
+        cue = _FakeCue(cue_id="cue-1")
+        node = _make_node(script_cue=cue)
+        node._selection_epoch = 0
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch._arm_ahead.return_value = []
+            node.set_next_cue("cue-1")
+            _join_prearm(cue.id)
+        assert self._inventory_calls(ch) == ["PreArm:cue-1"]
+
+    def test_also_when_the_prearm_was_abandoned(self):
+        (n1,) = _chain(_ChainCue("n1", True, "pause"))
+        node = _go_node(pointer=None)
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            node._project_generation = 2  # a STOP/load: the walk is stale
+            node._prearm_thread(node._prearm_segment, n1, 1, 0, 0)
+        assert self._inventory_calls(ch) == ["PreArm:n1"]
+        ch.arm.assert_not_called()
