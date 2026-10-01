@@ -155,7 +155,7 @@ class TestStopDuringArmWindow:
         ch = _ch()
         cue = _cue(loaded=False, _stop_requested=False)
 
-        def slow_arm(target, init=False):
+        def slow_arm(target, init=False, epoch=None):
             # the operator hits STOP while the JACK ports are being waited on
             ch.stop_all_cues()
             target.loaded = True

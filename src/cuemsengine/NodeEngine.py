@@ -14,7 +14,7 @@ from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
-from .cues.CueHandler import CUE_HANDLER
+from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import PLAYER_HANDLER
@@ -914,40 +914,48 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f"Could not broadcast nextcue: {e}")
 
-    def _arm_with_enabled_guard(self, cue, project_gen: int):
+    def _arm_with_enabled_guard(self, cue, project_gen: int, arm_epoch: int = None):
         """
-        Arm a cue and disarm if it was disabled or project changed while
-        arming.
+        Arm a cue, and disarm it if it was disabled while arming.
 
-        Runs in a daemon thread. After arm() completes, re-checks
-        cue.enabled and project generation to handle races where:
-        - A disable command arrived while arm_cue() was loading media
-        - A stop/reload invalidated this project's cues
+        Runs in a daemon thread (ReArm:<id>). `arm_epoch` is the STOP/load
+        epoch captured by whoever spawned it (_apply_cue_enabled_side_effects):
+        the arm belongs to it, so CUE_HANDLER.arm() refuses it if a STOP or a
+        load happened before this thread got to run, and abandons it -- never
+        publishing the cue, releasing the player it spawned -- if one happens
+        while it is arming.
 
-        Bounded post-STOP window: these checks run before/after arm(), not
-        during it — arm() can block up to ~15 s in the JACK port wait, so a
-        stale arm can spawn a player that outlives a STOP by that much until
-        the re-check below disarms it. It is armed but never revealed (no
-        /mtcfollow), so it is inaudible.
+        This method therefore does NOT disarm on a project change any more
+        (869f9wqpn). It used to, after arm() had already published the cue:
+        by then the restarted run could be playing it, and after a reload of
+        the same project the disarm hit the NEW object's player, because Cue
+        equality is by id.
         """
         if self._project_generation != project_gen:
             Logger.info(f"Aborting arm of {cue.id} — project generation changed")
             return
         try:
-            CUE_HANDLER.arm(cue, init=True)
+            CUE_HANDLER.arm(cue, init=True, epoch=arm_epoch)
         except Exception as exc:
             Logger.error(f"Async re-arm of enabled cue {cue.id} failed: {exc}")
             return
-        # If project changed during arm, disarm the stale cue.
         if self._project_generation != project_gen:
-            if CUE_HANDLER.find_armed_cue(cue):
-                CUE_HANDLER.disarm(cue, reason="project_changed")
-            Logger.info(f"Disarmed cue {cue.id} — project changed during async arm")
+            # A STOP/load landed during the arm. arm() either abandoned it or
+            # published it before the STOP began, in which case the STOP's
+            # own disarm_all took it. Nothing to undo, nothing to rejoin.
+            Logger.info(
+                f"Project changed during the async arm of {cue.id} — left to "
+                "the STOP/load that caused it"
+            )
             return
         # If cue was disabled while we were arming, disarm now.
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
             CUE_HANDLER.disarm(cue, reason="disabled")
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
+            return
+        if not CUE_HANDLER.find_armed_cue(cue):
+            # arm() refused it (stale request) or failed. rejoin_chain would
+            # only run go()'s fallback: another wait, another arm.
             return
         # Armed and still enabled: if it belongs to a chain that is running
         # right now, put it back at its own slot. Checked here rather than
@@ -1097,13 +1105,21 @@ class NodeEngine(BaseEngine):
             self._selection_epoch += 1
             selection_epoch = self._selection_epoch
             project_gen = self._project_generation
-            script = self.script
+            # Captured HERE, on the command thread: the lookahead belongs to
+            # the STOP/load epoch in which it was asked for.
+            arm_epoch = CUE_HANDLER.arm_epoch()
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
             threading.Thread(
-                target=self._prearm_lookahead,
-                args=(cue, project_gen, selection_epoch, script),
+                target=self._prearm_thread,
+                args=(
+                    self._prearm_lookahead,
+                    cue,
+                    project_gen,
+                    selection_epoch,
+                    arm_epoch,
+                ),
                 daemon=True,
                 name=f"PreArm:{cue.id}",
             ).start()
@@ -1112,7 +1128,16 @@ class NodeEngine(BaseEngine):
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
 
-    def _prearm_lookahead(self, cue, project_gen, selection_epoch, script):
+    def _prearm_thread(self, body, cue, *args):
+        """Body of every PreArm:<id> thread: run `body(cue, *args)`, then log
+        what the node holds armed -- also when the walk was abandoned or
+        failed. Measurement only."""
+        try:
+            body(cue, *args)
+        finally:
+            CUE_HANDLER.log_armed_inventory(f"PreArm:{cue.id}")
+
+    def _prearm_lookahead(self, cue, project_gen, selection_epoch, arm_epoch):
         """Background half of set_next_cue — see its docstring.
 
         should_continue re-checks BOTH the project generation (a STOP/load
@@ -1120,6 +1145,13 @@ class NodeEngine(BaseEngine):
         selection's own epoch (a later set_next_cue call bumps it even if
         it reselects the same cue), so a stale walk stops advancing as
         soon as either happens, without waiting for it to finish.
+
+        arm_epoch is the STOP/load epoch captured by the command that spawned
+        this thread. Every arm the walk makes belongs to it: CUE_HANDLER
+        refuses or abandons an arm whose epoch has moved, so a cue this walk
+        was arming across a STOP or a load is never published. That is why
+        this thread disarms NOTHING afterwards (869f9wqpn) -- it used to, and
+        by then the restarted run could already be playing the cue.
 
         Audio is pre-armed here like any other local cue. It was excluded
         at first (skip_arming_types=(AudioCue,)) for fear of a slow JACK
@@ -1138,17 +1170,84 @@ class NodeEngine(BaseEngine):
                 and self._selection_epoch == selection_epoch
             )
 
-        newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
-        if newly_armed and self.script is not script:
-            # A different project loaded while this walk was running — its
-            # own reset already handled everything else; undo exactly what
-            # THIS walk armed, not a concurrent call's.
-            for armed_cue in newly_armed:
-                CUE_HANDLER.disarm(armed_cue, reason="project_changed")
-            Logger.info(
-                f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
-                "— project changed underneath the walk"
+        CUE_HANDLER._arm_ahead(
+            cue, should_continue=should_continue, arm_epoch=arm_epoch
+        )
+
+    def _prearm_after_advance(self):
+        """Pre-arm this node's next segment after a GO advanced the pointer
+        with nothing local to play.
+
+        Target = what the NEXT GO will dispatch on this node:
+        `_first_local_enabled_in_go_chain(next_cue_pointer)` -- None when
+        that GO is another node's too, in which case nothing is armed yet
+        (the next advance re-checks), so this never preloads a cue that is
+        many GOs away. The target AND its lookahead are armed on the same
+        PreArm:<id> background thread set_next_cue uses, with the same
+        project-generation / selection-epoch abort guards (a STOP, a load or
+        a later selection abandons it).
+
+        Nothing is armed here, synchronously: this runs inside run_command's
+        _command_lock, and an audio target spawns a player and waits for its
+        JACK ports -- a STOP or the next GO sent meanwhile would wait for the
+        whole arm (869f79ecc removed exactly that from set_next_cue). A GO
+        that lands mid-arm is safe: arm() makes it wait on the in-progress
+        arm instead of arming the cue twice.
+
+        What IS done here, on the command thread, is capturing the STOP/load
+        epoch the arm belongs to. A STOP between this GO and the thread's
+        first step must find the arm stale, not current.
+        """
+        target = self._first_local_enabled_in_go_chain(self.next_cue_pointer)
+        if target is None:
+            return
+        self._selection_epoch += 1
+        Logger.info(
+            "Pointer advanced with no local cue; pre-arming next local cue "
+            f"{target.id} ({type(target).__name__}) + lookahead"
+        )
+        threading.Thread(
+            target=self._prearm_thread,
+            args=(
+                self._prearm_segment,
+                target,
+                self._project_generation,
+                self._selection_epoch,
+                CUE_HANDLER.arm_epoch(),
+            ),
+            daemon=True,
+            name=f"PreArm:{target.id}",
+        ).start()
+
+    def _prearm_segment(self, target, project_gen, selection_epoch, arm_epoch):
+        """PreArm:<id> body for _prearm_after_advance: arm the segment's
+        first cue, then the lookahead from it.
+
+        It never disarms. If a STOP or a load lands while the target is
+        arming, CUE_HANDLER.arm() abandons that arm itself: the cue is never
+        published, so the restarted run's GO arms it fresh and nothing can
+        cut it afterwards (869f9wqpn; see _prearm_lookahead).
+        """
+
+        def should_continue():
+            return (
+                self._project_generation == project_gen
+                and self._selection_epoch == selection_epoch
             )
+
+        if not should_continue():
+            return
+        if not CUE_HANDLER.find_armed_cue(target):
+            # A walk, so arm()'s own post_go / action-target recursion obeys
+            # the same guards and the same epoch (869f79ecc).
+            walk = _ArmWalk(should_continue=should_continue, epoch=arm_epoch)
+            CUE_HANDLER.arm(target, init=True, walk=walk)
+        # The epoch moves when a STOP BEGINS (stop_all_cues), before the
+        # generation does (ready_script): check it too, or the walk would
+        # start inside the teardown.
+        if not should_continue() or CUE_HANDLER.arm_epoch() != arm_epoch:
+            return
+        self._prearm_lookahead(target, project_gen, selection_epoch, arm_epoch)
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
@@ -1254,9 +1353,12 @@ class NodeEngine(BaseEngine):
             # (arm() is slow — media loading, process spawning).
             if cue._local and not CUE_HANDLER.find_armed_cue(cue):
                 gen = self._project_generation
+                # Captured by the spawner -- the command thread, or an
+                # ActionCue's own thread (_action_result_sink) -- not by the
+                # ReArm thread when it gets to run.
                 threading.Thread(
                     target=self._arm_with_enabled_guard,
-                    args=(cue, gen),
+                    args=(cue, gen, CUE_HANDLER.arm_epoch()),
                     daemon=True,
                     name=f"ReArm:{cue.id}",
                 ).start()
@@ -1307,6 +1409,8 @@ class NodeEngine(BaseEngine):
             self.next_cue_pointer = first_enabled
 
         Logger.info(f"Script {self.script.name} loaded and ready to be played")
+        # Measurement only: what the load / STOP re-arm left armed.
+        CUE_HANDLER.log_armed_inventory(reason)
 
     def _resolve_go_anchor(self, value):
         """Resolve the GO_mtc anchor for this GO.
@@ -1343,6 +1447,16 @@ class NodeEngine(BaseEngine):
         return local
 
     def go_script(self, value):
+        try:
+            self._go_script(value)
+        finally:
+            # Measurement only: what this node holds armed once the GO is
+            # done (dispatched, nothing local, or skipped). go()'s own
+            # lookahead is synchronous, so it is included.
+            if self.script:
+                CUE_HANDLER.log_armed_inventory("GO")
+
+    def _go_script(self, value):
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
             return
@@ -1424,6 +1538,12 @@ class NodeEngine(BaseEngine):
                 f"nothing to play on this node. Advanced next cue to "
                 f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
             )
+            # ...and arm what the NEXT GO will dispatch here, now: nothing
+            # else would (load/STOP pre-arm stops at another node's pause,
+            # the controller never forwards setnextcue on an advance, and
+            # the UI / power-bridge GO is a bare GO). Medina sala1,
+            # 2026-09-30: the node's first cue fired 240 ms late otherwise.
+            self._prearm_after_advance()
             return
 
         if walked:
@@ -1434,9 +1554,15 @@ class NodeEngine(BaseEngine):
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
+            # Asked before the arm: by the time arm() gives up, the arm it
+            # waited on may have finished, and the skip line must not then
+            # call a slow arm a failed one.
+            was_in_flight = CUE_HANDLER.describe_arm_in_flight(cue_to_go)
             CUE_HANDLER.arm(cue_to_go, init=True)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
-                Logger.error(f"Failed to re-arm cue {cue_to_go.id}, cannot GO")
+                self._skip_unarmed_cue(
+                    cue_to_go, skipped_disabled, GO_mtc, was_in_flight
+                )
                 return
 
         # Update state
@@ -1475,6 +1601,47 @@ class NodeEngine(BaseEngine):
             f"Cue {cue_to_go.id} started. Next cue:"
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
+
+    def _skip_unarmed_cue(self, cue, skipped_disabled, go_mtc, was_in_flight):
+        """A GO found its cue unarmed and could not get it armed: skip the
+        cue on this node, keep the pointer in lockstep, and say so.
+
+        Decided 2026-09-30 (Ion, 869f9wqpn): arm() waits up to 5 s for an arm
+        another thread holds, and 5 s is plenty for a slow load -- one still
+        in flight after that counts as failed for this GO. Returning here
+        without moving the pointer, as this used to, made the node dispatch
+        this cue on the NEXT GO and run one GO behind the controller until a
+        STOP. Nothing is stopped and the running status is not touched.
+
+        ongoing_cue is set as on the success path: if the pointer becomes
+        None, the next GO must read "No more cues", not "first GO" (which
+        would restart this node from the top of the script).
+        """
+        in_flight = CUE_HANDLER.describe_arm_in_flight(cue)
+        if in_flight:
+            why = f"its arm is still in flight, {in_flight}"
+        elif was_in_flight:
+            why = "the arm it waited on did not deliver the cue in time"
+        else:
+            why = "its arm failed"
+        # Nothing dispatches here, so nothing would mint a pass: stamp the
+        # disabled cues the walk passed, as the no-local branch does, or
+        # enabling one mid-show could never put it back into this GO's chain.
+        if skipped_disabled:
+            CUE_HANDLER.stamp_pass(skipped_disabled, go_mtc)
+        self.ongoing_cue = cue
+        self.next_cue_pointer = cue.get_next_cue()
+        self._broadcast_nextcue()
+        next_id = self.next_cue_pointer.id if self.next_cue_pointer else "none"
+        Logger.error(
+            f"Cue {cue.id} ({type(cue).__name__}, "
+            f'"{getattr(cue, "name", "")}") SKIPPED on this node: it could '
+            f"not be armed in time for this GO ({why}). "
+            f"Pointer advanced to {next_id}."
+        )
+        # The skip never reaches go()'s own lookahead: arm what the next GO
+        # will dispatch here, or it would arm at GO time and start late.
+        self._prearm_after_advance()
 
     def stop_playback(self, value=None):
         """Stop playback, full cleanup, then re-arm so GO is available again.
