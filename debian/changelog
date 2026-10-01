@@ -1,3 +1,14 @@
+cuems-engine (0.1.0rc5-4) bookworm; urgency=medium
+
+  * Video: only enable videocomposer wraparound for cues that repeat. A
+    play-once video cue was sent /loop 1 like a looping one; the
+    videocomposer runs 33 ms ahead of MTC, so it reached end of file
+    before the engine hid the layer and showed the first frame again at
+    the end of the cue (869fa89uh; reported at Medina del Campo sala1).
+    The last pass of a counted loop now sends /loop 0 as well.
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 01 Oct 2026 10:51:26 +0200
+
 cuems-engine (0.1.0rc5-3) bookworm; urgency=medium
 
   * Supersedes 0.1.0rc5-2, which must not be deployed: its PreArm cleanup
