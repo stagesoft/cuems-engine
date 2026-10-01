@@ -28,7 +28,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
-from cuemsutils.cues import ActionCue, AudioCue, DmxCue, VideoCue  # noqa: E402
+from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue  # noqa: E402
 
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
@@ -228,6 +228,19 @@ class TestNeverPlayed:
             ch.disarm_all(reason="stop")
         assert _infos(logger, "never played") == []
 
+    def test_a_cue_list_logs_nothing(self):
+        """A CueList is armed (the project's root, at every load and STOP)
+        but never dispatched by go(): it is not a wasted arm."""
+        ch = _handler()
+        cue_list = CueList()
+        cue_list.id = str(uuid.uuid4())
+        cue_list.loaded = True
+        cue_list._armed_at = time.monotonic() - 30.0
+        cue_list._ever_played = False
+        with patch(LOGGER) as logger, patch(PLAYERS):
+            ch.disarm(cue_list, reason="stop")
+        assert _infos(logger, "never played") == []
+
     def test_disarm_all_logs_each_never_played_cue(self):
         ch = _handler()
         a, b, played = _cue(), _cue(), _cue()
@@ -259,6 +272,9 @@ class TestInventory:
             _loaded(DmxCue()),
             _loaded(_cue()),
         ]
+        root = _loaded(CueList())  # holds nothing: not counted
+        root.id = str(uuid.uuid4())
+        cues.append(root)
         registered_only = ActionCue()  # a non-init arm: listed, not loaded
         registered_only.loaded = False
         for cue in cues + [registered_only]:

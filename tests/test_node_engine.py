@@ -1219,3 +1219,20 @@ class TestArmedInventoryIsLogged:
             node._prearm_thread(node._prearm_segment, n1, 1, 0, 0)
         assert self._inventory_calls(ch) == ["PreArm:n1"]
         ch.arm.assert_not_called()
+
+    def test_after_the_load_and_the_stop_re_arm(self):
+        node = _make_node()
+        node.unload_video_devs = _MM()
+        node.initial_cuelist_process = _MM()
+        node._report_mixer_status = _MM()
+        node.script.cuelist.contents = []
+        with (
+            patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch,
+            patch("cuemsengine.NodeEngine.PLAYER_HANDLER"),
+        ):
+            node.ready_script(reason="load")
+            node.ready_script(reason="stop")
+        assert [c.args[0] for c in ch.log_armed_inventory.call_args_list] == [
+            "load",
+            "stop",
+        ]
