@@ -530,6 +530,11 @@ green against the replacement contract.
   re-mint go out in the same upgrade; the re-mint never runs under a pre-rc7 engine**, because a
   re-minted map decodes every node uuid as `Uuid`, which pre-rc7 `cluster_status` cannot sort (M12,
   M19). An upstream note asks 012's migration guide to say the same (UR-8).
+  *Amended 2026-10-01*: the order stands, the reason does not. 012 gives `Uuid` a total ordering
+  (its `sibling-repository-updates.md` §4.1), so a pre-rc7 `cluster_status` would no longer crash.
+  The coupling now rests on rc7 **requiring** 012 (`as_id` is 012's `coerce_identity`) and on no
+  pre-rc7 engine having been run against 012 or a re-minted map; the upgrade notes and hand-off
+  say so.
 - **FR-020**: Both texts MUST list the documents the deploy path ships (`script.xml`, project
   `mappings.xml`, project `settings.xml`) with their current schema versions, so that a future bump
   of `project_mappings` or `project_settings` is visibly a C11 change (M5).

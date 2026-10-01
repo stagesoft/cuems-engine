@@ -60,9 +60,11 @@ Opening summary paragraph, then `### Added` / `### Changed` / `### Removed` sect
    version-1 documents fine.
 3. The documents the deploy ships and their schema versions: `script.xml` **2**,
    `mappings.xml` 1, `settings.xml` 1.
-4. **G1 (FR-019d)**: `cuems-utils` 012's node re-mint (uuid4 convergence) goes out in the **same**
-   upgrade as rc7 engines and never runs under an older engine — a re-minted map hands the engine
-   `Uuid` node ids, which pre-rc7 `cluster_status` cannot sort.
+4. **G1 (FR-019d)**: `cuems-utils` 012 and its node re-mint (uuid4 convergence) go out in the
+   **same** upgrade as rc7 engines, and the re-mint never runs under an older engine — rc7 requires
+   012 (`coerce_identity`), and no pre-rc7 engine has been run against 012 or a re-minted map.
+   *(Amended 2026-10-01: the original reason, pre-rc7 `cluster_status` unable to sort `Uuid` node
+   ids, no longer holds once 012 orders `Uuid`.)*
 
 ## `cuems-relations` hand-off (`handoff-relations-release-order.md`, this directory)
 

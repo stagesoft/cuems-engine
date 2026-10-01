@@ -24,16 +24,20 @@ release-procedure section in `../cuems-relations`, plus two notes for owners els
    A future bump of `project_mappings` or `project_settings` past 1 puts that document under this
    same node-first rule (constraint C11); whoever makes the bump updates this table and the engine's
    `CHANGELOG.md` upgrade notes.
-4. **Release order with `cuems-utils` 012 (G1).** 012's node re-mint (every node converging on a
-   uuid4 identity) goes out **in the same upgrade as rc7 engines, and never runs under an older
-   engine.** A re-minted map hands the engine `Uuid` node ids; a pre-rc7 engine sorts them in
-   `cluster_status` and crashes (`TypeError: '<' not supported between instances of 'Uuid'`).
-   `cuems-utils` 012's migration guide is asked to say the same (upstream note UR-8).
+4. **Release order with `cuems-utils` 012 (G1).** 012 and its node re-mint (every node converging
+   on a uuid4 identity) go out **in the same upgrade as rc7 engines, and the re-mint never runs
+   under an older engine.** rc7 requires 012 — it takes `cuemsutils.tools.coerce_identity` from
+   it — and no pre-rc7 engine has been run against 012 or a re-minted map. (The reason first given
+   here, a pre-rc7 `cluster_status` crashing on `sorted()` over `Uuid` node ids, no longer holds:
+   012 gives `Uuid` a total ordering — its `sibling-repository-updates.md` §4.1. Amended
+   2026-10-01.) `cuems-utils` 012's migration guide states the same order (its FR-035).
 
 Package relations that enforce part of this (`cuems-engine`'s `debian/control`):
 `cuems-utils (>= 0.1.0rc16)`, `cuems-utils (<< 0.1.1~)`, `cuems-common (>= 1.3.0-23~)` (the last to
 inherit `Breaks: cuems-nodeconf (<< 0.1.0-8)` — the engine reads `<node_role>`). They gate what is
 installed on one host; they cannot gate the cross-host order above, which is why it is written down.
+Nor can they express rc7's need for 012: `coerce_identity` ships inside the unreleased 0.1.0rc16, so
+the engine needs a cuemsutils build containing it (cuems-utils `4cb13be` or later), not a version.
 
 ## Notes
 

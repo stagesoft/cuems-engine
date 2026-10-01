@@ -20,6 +20,12 @@ Engine coordinates cited below moved with rc7: the gradient `node_name` fallback
 `NodeEngine.py:444` (and goes through `id_str`), the hardcoded `"script.xml"` is `BaseEngine.py:492`;
 the engine's egress conversion is `id_str`, not bare `str()`.
 
+**Amended 2026-10-01**: the migration-guide statement below justifies the same-upgrade order by M-b
+(pre-rc7 `cluster_status` cannot sort `Uuid`). 012's FR-029 removed that failure by giving `Uuid` an
+ordering (its `sibling-repository-updates.md` §4.1). The order still holds — rc7 now requires 012's
+`coerce_identity`, and no pre-rc7 engine has been measured against 012 — and that is the reason
+cuems-engine's rc7 CHANGELOG and hand-off now give. Left unedited below as the prompt that was sent.
+
 **Use**: paste the block below into a fresh agent session in `../cuems-utils`, at the point where
 feature 012 (uuid4 convergence) runs `/speckit.specify` or `/speckit.clarify`. It adds four
 questions to 012's clarification pass and one statement to its migration guide. It does **not**
