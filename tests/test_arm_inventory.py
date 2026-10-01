@@ -22,6 +22,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+import uuid
 from threading import Lock
 from unittest.mock import MagicMock, Mock, patch
 
@@ -46,8 +47,10 @@ def _handler() -> CueHandler:
 
 
 def _cue(post_go="pause"):
-    """ActionCue: arm_cue() is a no-op for it, so no players are involved."""
+    """ActionCue: arm_cue() is a no-op for it, so no players are involved.
+    Its own id: default-built cues can share one, and cues compare by id."""
     cue = ActionCue()
+    cue.id = str(uuid.uuid4())
     cue.enabled = True
     cue.loaded = False
     cue._local = True

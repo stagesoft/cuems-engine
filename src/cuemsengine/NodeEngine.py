@@ -1112,8 +1112,14 @@ class NodeEngine(BaseEngine):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
             threading.Thread(
-                target=self._prearm_lookahead,
-                args=(cue, project_gen, selection_epoch, arm_epoch),
+                target=self._prearm_thread,
+                args=(
+                    self._prearm_lookahead,
+                    cue,
+                    project_gen,
+                    selection_epoch,
+                    arm_epoch,
+                ),
                 daemon=True,
                 name=f"PreArm:{cue.id}",
             ).start()
@@ -1121,6 +1127,15 @@ class NodeEngine(BaseEngine):
             Logger.info(f"Next cue overridden by UI: {value}")
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
+
+    def _prearm_thread(self, body, cue, *args):
+        """Body of every PreArm:<id> thread: run `body(cue, *args)`, then log
+        what the node holds armed -- also when the walk was abandoned or
+        failed. Measurement only."""
+        try:
+            body(cue, *args)
+        finally:
+            CUE_HANDLER.log_armed_inventory(f"PreArm:{cue.id}")
 
     def _prearm_lookahead(self, cue, project_gen, selection_epoch, arm_epoch):
         """Background half of set_next_cue — see its docstring.
@@ -1192,8 +1207,9 @@ class NodeEngine(BaseEngine):
             f"{target.id} ({type(target).__name__}) + lookahead"
         )
         threading.Thread(
-            target=self._prearm_segment,
+            target=self._prearm_thread,
             args=(
+                self._prearm_segment,
                 target,
                 self._project_generation,
                 self._selection_epoch,
@@ -1429,6 +1445,16 @@ class NodeEngine(BaseEngine):
         return local
 
     def go_script(self, value):
+        try:
+            self._go_script(value)
+        finally:
+            # Measurement only: what this node holds armed once the GO is
+            # done (dispatched, nothing local, or skipped). go()'s own
+            # lookahead is synchronous, so it is included.
+            if self.script:
+                CUE_HANDLER.log_armed_inventory("GO")
+
+    def _go_script(self, value):
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
             return

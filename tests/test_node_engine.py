@@ -1161,7 +1161,8 @@ class TestReArmDoesNotRejoinAnUnarmedCue:
 
 class TestArmedInventoryIsLogged:
     def _inventory_calls(self, ch):
-        return [c.args[0] for c in ch.log_armed_inventory.call_args_list]
+        # Sorted: the PreArm thread a GO starts may log before the GO does.
+        return sorted(c.args[0] for c in ch.log_armed_inventory.call_args_list)
 
     def test_after_a_dispatched_go(self):
         (n1,) = _chain(_ChainCue("n1", True, "pause"))

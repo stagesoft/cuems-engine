@@ -611,6 +611,7 @@ class CueHandler:
         abandoned = None
         try:
             Logger.info(f"Arming {type(cue).__name__} {cue.id}")
+            arm_started = monotonic()
             arm_cue(cue)
             # The publish gate. Same lock as the epoch bumps (stop_all_cues,
             # disarm_all): either this section comes first and the STOP finds
@@ -623,6 +624,11 @@ class CueHandler:
                     abandoned = "it was disabled while it was arming"
                 else:
                     cue.loaded = True
+                    # Measurement only (the armed-to-start and never-played
+                    # lines): set at every publish, so a cue object reused
+                    # across runs never carries the previous arm's stamps.
+                    cue._armed_at = monotonic()
+                    cue._ever_played = False
                     if cue.id not in self._armed_cues_set:
                         self._armed_cues.append(cue)
                         self._armed_cues_set.add(cue.id)
@@ -632,6 +638,13 @@ class CueHandler:
                 )
                 self._release_unpublished(cue, "abandoned_arm")
                 return False
+            # Engine side only: for audio that is the spawn and the JACK port
+            # wait; for video it is the OSC sends, and the file open is the
+            # videocomposer's own "AsyncVideoLoader: Loaded ... in Nms".
+            Logger.info(
+                f"Armed {type(cue).__name__} {cue.id} in "
+                f"{cue._armed_at - arm_started:.3f} s"
+            )
             if walk is not None:
                 walk.armed.append(cue)
             if isinstance(cue, AudioCue):
@@ -688,6 +701,51 @@ class CueHandler:
 
         return True
 
+    def armed_inventory(self) -> dict:
+        """What this node holds armed right now: published (loaded) cues by
+        type, the video layers they hold, and how many of them a GO owns
+        (playing) versus are only held (idle). Measurement only."""
+        with self._lock:
+            held = [c for c in self._armed_cues if getattr(c, "loaded", False)]
+        inv = {
+            "cues": len(held),
+            "video": 0,
+            "layers": 0,
+            "audio": 0,
+            "dmx": 0,
+            "other": 0,
+            "playing": 0,
+            "idle": 0,
+        }
+        for cue in held:
+            if isinstance(cue, VideoCue):
+                inv["video"] += 1
+                inv["layers"] += len(getattr(cue, "_layer_ids", None) or [])
+            elif isinstance(cue, AudioCue):
+                inv["audio"] += 1
+            elif isinstance(cue, DmxCue):
+                inv["dmx"] += 1
+            else:
+                inv["other"] += 1
+            inv["playing" if getattr(cue, "_playing", False) else "idle"] += 1
+        return inv
+
+    def log_armed_inventory(self, where: str) -> None:
+        """One INFO line with armed_inventory(). Never raises: it is called
+        at the end of a GO and of a PreArm thread, which must not fail on a
+        log line."""
+        try:
+            inv = self.armed_inventory()
+            Logger.info(
+                f"Armed inventory after {where}: {inv['cues']} cues "
+                f"(video {inv['video']} cues / {inv['layers']} layers, "
+                f"audio {inv['audio']} players, dmx {inv['dmx']}, "
+                f"other {inv['other']}); playing {inv['playing']}; "
+                f"idle {inv['idle']}"
+            )
+        except Exception as e:
+            Logger.warning(f"Could not count the armed inventory ({where}): {e}")
+
     def describe_arm_in_flight(self, cue: Cue) -> str | None:
         """Who is arming this cue right now and for how long, as text for a
         log line; None when no arm of it is in flight."""
@@ -725,6 +783,17 @@ class CueHandler:
         if hasattr(cue, "loaded") and cue.loaded:
             self.remove_armed_cue(cue)
             cue.loaded = False
+            armed_at = getattr(cue, "_armed_at", None)
+            if (
+                armed_at is not None
+                and not getattr(cue, "_ever_played", False)
+                and reason != "cue_end"
+            ):
+                # An arm that bought nothing: what a pre-arm policy costs.
+                Logger.info(
+                    f"Cue {cue.id} disarmed after {monotonic() - armed_at:.1f} s "
+                    f"armed, never played ({reason})"
+                )
             try:
                 if isinstance(cue, AudioCue):
                     self.communications_thread.remove_player(
@@ -1241,6 +1310,9 @@ class CueHandler:
             # the disable-action path uses it to decide whether disarming
             # would cut live playback.
             cue._playing = True
+            # Measurement only: a cue a GO took is not a wasted arm, even if
+            # it is stopped before its reveal.
+            cue._ever_played = True
             # Stamped with the epoch minted in THIS lock section: reading it
             # back off the cue afterwards could capture a newer unrelated
             # dispatch's epoch and mis-anchor the rejoin.
@@ -1592,7 +1664,17 @@ class CueHandler:
                     if do_reveal:
                         cue._revealed = True
                 if do_reveal:
+                    revealed_at = monotonic()
                     reveal_cue(cue, mtc, start_ms)
+                    armed_at = getattr(cue, "_armed_at", None)
+                    if armed_at is not None:
+                        # Both sides of the pre-arm policy in one number: a
+                        # small one is a thin margin, a large one an idle
+                        # hold. Logged after the reveal, so it never delays it.
+                        Logger.info(
+                            f"Cue {cue.id} started {revealed_at - armed_at:.3f} s "
+                            "after it was armed"
+                        )
 
         # A superseding GO/reload (new _go_generation, without _stop_requested)
         # can arrive during the now-MTC-gated reveal wait — that fresh thread
