@@ -80,7 +80,11 @@ def _dims(handler, cue):
         patch(f"{PH}.Logger") as logger,
     ):
         result = handler.cue_media_dimensions(cue)
-    return result, run.call_count, [str(c.args[0]) for c in logger.warning.call_args_list]
+    return (
+        result,
+        run.call_count,
+        [str(c.args[0]) for c in logger.warning.call_args_list],
+    )
 
 
 class TestStoredValues:
@@ -113,7 +117,16 @@ class TestFallbackToTheProbe:
             {"pixel_width": "1920", "pixel_height": "1080"},
             {"pixel_width": None, "pixel_height": None},
         ],
-        ids=["absent", "width-only", "height-only", "zero", "negative", "bool", "str", "none"],
+        ids=[
+            "absent",
+            "width-only",
+            "height-only",
+            "zero",
+            "negative",
+            "bool",
+            "str",
+            "none",
+        ],
     )
     def test_missing_or_invalid_values_probe_and_warn(self, handler, media):
         result, probes, warnings = _dims(handler, _cue(**media))
@@ -167,10 +180,14 @@ class TestCallSites:
         output = _working_output()
         with (
             patch.object(handler, "get_video_client", return_value=MagicMock()),
-            patch.object(handler, "get_all_cue_output_names", return_value=["output-0"]),
+            patch.object(
+                handler, "get_all_cue_output_names", return_value=["output-0"]
+            ),
             patch.object(handler, "resolve_video_output_for_cue", return_value=output),
             patch.object(handler, "register_layer"),
-            patch.object(handler, "media_dimensions", side_effect=AssertionError("probed")),
+            patch.object(
+                handler, "media_dimensions", side_effect=AssertionError("probed")
+            ),
             patch(f"{PH}.subprocess.run", side_effect=AssertionError("subprocess")),
             patch("cuemsengine.cues.arm_cue.Logger"),
         ):
@@ -188,9 +205,13 @@ class TestCallSites:
         mtc = MagicMock()
         mtc.main_tc.framerate = 25
         with (
-            patch.object(handler, "get_all_cue_output_names", return_value=["output-0"]),
+            patch.object(
+                handler, "get_all_cue_output_names", return_value=["output-0"]
+            ),
             patch.object(handler, "resolve_video_output_for_cue", return_value=output),
-            patch.object(handler, "media_dimensions", side_effect=AssertionError("probed")),
+            patch.object(
+                handler, "media_dimensions", side_effect=AssertionError("probed")
+            ),
             patch(f"{PH}.subprocess.run", side_effect=AssertionError("subprocess")),
             patch("cuemsengine.cues.run_cue.Logger"),
         ):
@@ -200,7 +221,9 @@ class TestCallSites:
     def test_stored_and_probed_values_give_the_same_scale(self, handler):
         """The same numbers reach get_layer_scale either way, so the picture
         cannot change size because the values were stored."""
-        stored, _, _ = _dims(handler, _cue(pixel_width=1280, pixel_height=720, file_size=1000))
+        stored, _, _ = _dims(
+            handler, _cue(pixel_width=1280, pixel_height=720, file_size=1000)
+        )
         probed, probes, _ = _dims(handler, _cue())
         assert probes == 1
         assert stored == probed
