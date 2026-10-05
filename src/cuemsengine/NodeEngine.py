@@ -17,7 +17,7 @@ from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
-from .players.PlayerHandler import PLAYER_HANDLER
+from .players.PlayerHandler import PLAYER_HANDLER, _positive_int
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
@@ -45,6 +45,37 @@ def _append_output_latency_flag(args, player_conf: dict) -> str:
     if isinstance(value, int):
         return f"{args} --output-latency-ms {value}".strip()
     return args
+
+
+def own_media_size_mismatches(own_media: dict, find_cue, media_path) -> list:
+    """This node's media files that differ from the project (869fat84r D20, L2).
+
+    *own_media* is ``{cue_id: file_name}`` (``CuemsScript.get_own_media``),
+    *find_cue* maps a cue id to its cue, *media_path* a file name to this
+    node's path. Returns ``[(file_name, stored_size, actual_size)]``, once
+    per file: ``actual_size`` is ``None`` for a missing file, and
+    ``stored_size`` is ``None`` when the project stores none. A file whose
+    project has no stored size (an older editor wrote it) is compared with
+    nothing.
+    """
+    found = []
+    seen = set()
+    for cue_id, file_name in own_media.items():
+        if not file_name or file_name in seen:
+            continue
+        seen.add(file_name)
+        media = getattr(find_cue(cue_id), "media", None)
+        stored = media.get("file_size") if hasattr(media, "get") else None
+        if not _positive_int(stored):
+            stored = None
+        try:
+            actual = os.stat(media_path(file_name)).st_size
+        except OSError:
+            found.append((file_name, stored, None))
+            continue
+        if stored is not None and actual != stored:
+            found.append((file_name, stored, actual))
+    return found
 
 
 class NodeEngine(BaseEngine):
@@ -688,7 +719,8 @@ class NodeEngine(BaseEngine):
         """
         self.cm.load_project_config(project)
         self.read_script(project)
-        self.deploy_media(project)
+        media_synced = self.deploy_media(project)
+        self.check_own_media_sizes(media_synced)
         self.ensure_video_indexes()
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
@@ -846,6 +878,44 @@ class NodeEngine(BaseEngine):
             )
             return False
         return True
+
+    def check_own_media_sizes(self, media_synced: bool = True) -> list:
+        """Report this node's media files that differ from the project, or
+        are missing (869fat84r D20, L2).
+
+        The editor corrects the project before a load when a file on the
+        controller changed; this is the last defence, for a copy that differs
+        only here (a failed media sync, a file placed on this node only, an
+        OSC load that bypassed the editor). Report only: the cue keeps the
+        stored duration, so this node stays in step with the others. Never
+        raises: the previous project is already torn down at this point.
+        """
+        try:
+            found = own_media_size_mismatches(
+                self.script.get_own_media(config=self.cm),
+                self.script.find,
+                PLAYER_HANDLER.media_path,
+            )
+        except Exception as e:
+            Logger.error(
+                f"Media size check skipped ({type(e).__name__}: {e}); the load goes on"
+            )
+            return []
+        sync = "" if media_synced else " This load's media sync failed."
+        for file_name, stored, actual in found:
+            if actual is None:
+                Logger.error(
+                    f"Media file {file_name} is missing on this node: its cues will "
+                    f"fail.{sync}"
+                )
+            else:
+                Logger.error(
+                    f"Media file {file_name} on this node is {actual} bytes; the "
+                    f"project stores {stored}: it was replaced or not synced. The "
+                    "stored duration is kept so the nodes stay in step; re-sync it, "
+                    f"or re-upload it in the editor.{sync}"
+                )
+        return found
 
     def ensure_video_indexes(self):
         """
