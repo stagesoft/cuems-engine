@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<ns0:CuemsSettings xmlns:ns0="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/settings.xsd" doc_version="2">
+<cms:CuemsSettings xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/settings.xsd" doc_version="2">
     <Settings>
         <conf_path>/etc/cuems</conf_path>
         <library_path>/opt/cuems_library</library_path>
@@ -26,23 +26,17 @@
             <osc_in_port_base>7000</osc_in_port_base>
             <nng_hub_port>5555</nng_hub_port>
             <gradient_osc_port>7100</gradient_osc_port>
-            <videoplayer>
-                <path>/usr/bin/videocomposer</path>
+            <players><player class="video"><path>/usr/bin/videocomposer</path>
                 <args />
                 <outputs>2</outputs>
                 
                 <output_latency_ms>auto</output_latency_ms>
-            </videoplayer>
-            <audioplayer>
-                <path>/usr/bin/cuems-audioplayer</path>
+            </player><player class="audio"><path>/usr/bin/cuems-audioplayer</path>
                 <args>-w -1</args>
                 <output_latency_ms>auto</output_latency_ms>
-            </audioplayer>
-            <dmxplayer>
-                <path>/usr/bin/cuems-dmxplayer</path>
+            </player><player class="dmx"><path>/usr/bin/cuems-dmxplayer</path>
                 <args />
                 <output_latency_ms>35</output_latency_ms>
-            </dmxplayer>
-        </node>
+            </player></players></node>
     </Settings>
-</ns0:CuemsSettings>
+</cms:CuemsSettings>

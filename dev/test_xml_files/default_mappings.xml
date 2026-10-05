@@ -1,20 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
-<cms:CuemsProjectMappings xmlns:cms="https://stagelab.coop/cuems/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="https://stagelab.coop/cuems/ /etc/cuems/project_mappings.xsd">
+<cms:CuemsProjectMappings xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ /etc/cuems/project_mappings.xsd">
     <number_of_nodes>1</number_of_nodes>
-    <default_audio_input>0367f391-ebf4-48b2-9f26-000000000001_system:capture_1</default_audio_input>
-    <default_audio_output>0367f391-ebf4-48b2-9f26-000000000001_system:playback_1</default_audio_output>
-    <default_video_input />
-    <default_video_output>0367f391-ebf4-48b2-9f26-000000000001_0</default_video_output>
-    <default_dmx_input />
-    <default_dmx_output />
-    <nodes>
+    <defaults><default class="audio" direction="input">0367f391-ebf4-48b2-9f26-000000000001_system:capture_1</default><default class="audio" direction="output">0367f391-ebf4-48b2-9f26-000000000001_system:playback_1</default><default class="video" direction="input" /><default class="video" direction="output">0367f391-ebf4-48b2-9f26-000000000001_0</default><default class="dmx" direction="input" /><default class="dmx" direction="output" /></defaults><nodes>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
             <mac>2cf05d21cca3</mac>
-            <audio>
-                <outputs>
+            <devices><device class="audio"><outputs>
                     <output>
                         <id>0</id>
                         <name>system:playback_1</name>
@@ -46,9 +37,7 @@
                         </mappings>
                     </input>
                 </inputs>
-            </audio>
-            <video>
-                <outputs>
+            </device><device class="video"><outputs>
                     <output>
                         <id>0</id>
                         <name>0</name>
@@ -70,14 +59,11 @@
                         </mappings>
                     </output>
                 </outputs>
-            </video>
-            <dmx />
-        </node>
+            </device><device class="dmx" /></devices></node>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000002</uuid>
             <mac>2cf05d21cca3</mac>
-            <audio>
-                <outputs>
+            <devices><device class="audio"><outputs>
                     <output>
                         <id>0</id>
                         <name>system:playback_1</name>
@@ -109,9 +95,7 @@
                         </mappings>
                     </input>
                 </inputs>
-            </audio>
-            <video>
-                <outputs>
+            </device><device class="video"><outputs>
                     <output>
                         <id>0</id>
                         <name>0</name>
@@ -133,9 +117,7 @@
                         </mappings>
                     </output>
                 </outputs>
-            </video>
-            <dmx />
-        </node>
+            </device><device class="dmx" /></devices></node>
     </nodes>
-    <new_nodes></new_nodes>
+    <new_nodes />
 </cms:CuemsProjectMappings>

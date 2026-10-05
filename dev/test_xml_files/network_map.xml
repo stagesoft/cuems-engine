@@ -1,7 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="https://stagelab.coop/cuems/ https://stagelab.coop/cuems/network_map.xsd">
+<cms:CuemsNetworkMap xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ https://stagelab.coop/cuems/network_map.xsd" doc_version="2">
     <node_list>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000001</uuid>
@@ -9,8 +7,8 @@
             <name>2cf05d21cca3._cuems_nodeconf._tcp.local.</name>
             <node_role>controller</node_role>
             <ip>192.168.1.10</ip>
-            <adopted>True</adopted>
-            <online>True</online>
+            <adopted>true</adopted>
+            <online>true</online>
         </node>
         <node>
             <uuid>0367f391-ebf4-48b2-9f26-000000000003</uuid>
@@ -18,8 +16,8 @@
             <name>0800276db133._cuems_nodeconf._tcp.local.</name>
             <node_role>node</node_role>
             <ip>192.168.1.101</ip>
-            <adopted>False</adopted>
-            <online>False</online>
+            <adopted>false</adopted>
+            <online>false</online>
         </node>
     </node_list>
 </cms:CuemsNetworkMap>

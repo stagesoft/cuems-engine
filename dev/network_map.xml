@@ -7,8 +7,8 @@
             <name>jump._cuems_nodeconf._tcp.local.</name>
             <node_type>NodeType.master</node_type>
             <ip>172.17.0.1</ip>
-            <adopted>True</adopted>
-            <online>True</online>
+            <adopted>true</adopted>
+            <online>true</online>
         </node>
     </CuemsNodeDict>
 </cms:CuemsNetworkMap>
