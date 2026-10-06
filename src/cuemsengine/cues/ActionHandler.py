@@ -494,7 +494,7 @@ def _handle_stop(
     # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
     time.sleep(0.1)
     try:
-        ch.disarm(target)
+        ch.disarm(target, reason="stop_action")
     except Exception as exc:
         return ActionHandler._action_result("failed", "stop", target_id, str(exc))
     return ActionHandler._action_result("applied", "stop", target_id)

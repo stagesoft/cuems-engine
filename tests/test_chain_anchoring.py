@@ -273,7 +273,7 @@ class TestGoThreadedAnchoring:
             ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen, chain_epoch=3)
         # the pass is carried unchanged into the continuation, so every cue in
         # the chain is dispatched under one epoch
-        ch.go.assert_called_once_with(nxt, mtc, 9000.0, chain_epoch=3)
+        ch.go.assert_called_once_with(nxt, mtc, 9000.0, chain_epoch=3, arm_epoch=None)
 
     def test_superseded_generation_does_not_fire(self):
         # go_gen=7 but the cue's live generation is 8 (a fresh GO/reload took

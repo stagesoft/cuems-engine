@@ -509,6 +509,36 @@ class BaseEngine(SignalEngine):
         reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
         self.script = reader.read_to_objects()
 
+    @staticmethod
+    def _first_local_enabled_in_go_chain(start):
+        """First cue THIS node will dispatch when a GO starts at `start`.
+
+        Walks the post_go='go' chain exactly like NodeEngine.go_script:
+        returns the first cue that is `_local` AND `enabled`; other nodes'
+        cues and disabled cues are stepped over while they chain on
+        (post_go == 'go'); a cue that hands off (post_go != 'go') before
+        any local+enabled cue means "nothing for this node on that GO" ->
+        None. Bounded by the same 1024-step cycle guard.
+
+        Shared by the load/STOP pre-arm (initial_cuelist_process) and the
+        pointer-advance pre-arm (NodeEngine._prearm_after_advance), so both
+        arm precisely what the next GO will play -- and nothing further
+        down the show.
+        """
+        cue = start
+        walked = 0
+        while cue is not None and not (
+            getattr(cue, "_local", False) and getattr(cue, "enabled", False)
+        ):
+            if getattr(cue, "post_go", None) != "go":
+                return None
+            cue = getattr(cue, "_target_object", None)
+            walked += 1
+            if walked > 1024:
+                Logger.error("Go-chain walk hit safety limit (1024); aborting")
+                return None
+        return cue
+
     @logged
     def initial_cuelist_process(self, cuelist: CueList = None):
         """
@@ -609,23 +639,15 @@ class BaseEngine(SignalEngine):
             # Without this, slaves don't pre-arm anything at load time and the
             # /videocomposer/layer/load only fires when GO is hit, producing
             # staggered starts as the async loads complete in arrival order.
-            first_local = first_cue
-            walked = 0
-            while first_local is not None and not getattr(first_local, "_local", False):
-                if first_local.post_go != "go":
-                    first_local = None
-                    break
-                first_local = getattr(first_local, "_target_object", None)
-                walked += 1
-                if walked > 1024:
-                    first_local = None
-                    break
+            # Same predicate as go_script: _local AND enabled (a local but
+            # disabled cue used to stop this walk, and arm() then refused it,
+            # so nothing was pre-armed).
+            first_local = self._first_local_enabled_in_go_chain(first_cue)
             if first_local is not None:
                 if first_local is not first_cue:
                     Logger.info(
-                        f"Pre-arm: skipped {walked} non-local cue(s); arming"
-                        f"first "
-                        f"local cue {first_local.id} + lookahead"
+                        f"Pre-arm: skipped non-local/disabled cue(s); arming "
+                        f"first local cue {first_local.id} + lookahead"
                     )
                 else:
                     Logger.info(
