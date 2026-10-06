@@ -1502,7 +1502,29 @@
 <span class="normal">633</span>
 <span class="normal">634</span>
 <span class="normal">635</span>
-<span class="normal">636</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BaseEngine</span><span class="p">(</span><span class="n">SignalEngine</span><span class="p">):</span>
+<span class="normal">636</span>
+<span class="normal">637</span>
+<span class="normal">638</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span>
+<span class="normal">650</span>
+<span class="normal">651</span>
+<span class="normal">652</span>
+<span class="normal">653</span>
+<span class="normal">654</span>
+<span class="normal">655</span>
+<span class="normal">656</span>
+<span class="normal">657</span>
+<span class="normal">658</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BaseEngine</span><span class="p">(</span><span class="n">SignalEngine</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">with_cm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1976,6 +1998,36 @@
         <span class="n">reader</span> <span class="o">=</span> <span class="n">XmlReaderWriter</span><span class="p">(</span><span class="n">schema_name</span><span class="o">=</span><span class="s2">"script"</span><span class="p">,</span> <span class="n">xmlfile</span><span class="o">=</span><span class="n">xml_file</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read_to_objects</span><span class="p">()</span>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_first_local_enabled_in_go_chain</span><span class="p">(</span><span class="n">start</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""First cue THIS node will dispatch when a GO starts at `start`.</span>
+
+<span class="sd">        Walks the post_go='go' chain exactly like NodeEngine.go_script:</span>
+<span class="sd">        returns the first cue that is `_local` AND `enabled`; other nodes'</span>
+<span class="sd">        cues and disabled cues are stepped over while they chain on</span>
+<span class="sd">        (post_go == 'go'); a cue that hands off (post_go != 'go') before</span>
+<span class="sd">        any local+enabled cue means "nothing for this node on that GO" -&gt;</span>
+<span class="sd">        None. Bounded by the same 1024-step cycle guard.</span>
+
+<span class="sd">        Shared by the load/STOP pre-arm (initial_cuelist_process) and the</span>
+<span class="sd">        pointer-advance pre-arm (NodeEngine._prearm_after_advance), so both</span>
+<span class="sd">        arm precisely what the next GO will play -- and nothing further</span>
+<span class="sd">        down the show.</span>
+<span class="sd">        """</span>
+        <span class="n">cue</span> <span class="o">=</span> <span class="n">start</span>
+        <span class="n">walked</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">cue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_local"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"post_go"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">"go"</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">cue</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_target_object"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">walked</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">walked</span> <span class="o">&gt;</span> <span class="mi">1024</span><span class="p">:</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"Go-chain walk hit safety limit (1024); aborting"</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">cue</span>
+
     <span class="nd">@logged</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">initial_cuelist_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cuelist</span><span class="p">:</span> <span class="n">CueList</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
@@ -2076,23 +2128,15 @@
             <span class="c1"># Without this, slaves don't pre-arm anything at load time and the</span>
             <span class="c1"># /videocomposer/layer/load only fires when GO is hit, producing</span>
             <span class="c1"># staggered starts as the async loads complete in arrival order.</span>
-            <span class="n">first_local</span> <span class="o">=</span> <span class="n">first_cue</span>
-            <span class="n">walked</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">while</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">first_local</span><span class="p">,</span> <span class="s2">"_local"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">first_local</span><span class="o">.</span><span class="n">post_go</span> <span class="o">!=</span> <span class="s2">"go"</span><span class="p">:</span>
-                    <span class="n">first_local</span> <span class="o">=</span> <span class="kc">None</span>
-                    <span class="k">break</span>
-                <span class="n">first_local</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">first_local</span><span class="p">,</span> <span class="s2">"_target_object"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="n">walked</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="k">if</span> <span class="n">walked</span> <span class="o">&gt;</span> <span class="mi">1024</span><span class="p">:</span>
-                    <span class="n">first_local</span> <span class="o">=</span> <span class="kc">None</span>
-                    <span class="k">break</span>
+            <span class="c1"># Same predicate as go_script: _local AND enabled (a local but</span>
+            <span class="c1"># disabled cue used to stop this walk, and arm() then refused it,</span>
+            <span class="c1"># so nothing was pre-armed).</span>
+            <span class="n">first_local</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_first_local_enabled_in_go_chain</span><span class="p">(</span><span class="n">first_cue</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">first_cue</span><span class="p">:</span>
                     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">"Pre-arm: skipped </span><span class="si">{</span><span class="n">walked</span><span class="si">}</span><span class="s2"> non-local cue(s); arming"</span>
-                        <span class="sa">f</span><span class="s2">"first "</span>
-                        <span class="sa">f</span><span class="s2">"local cue </span><span class="si">{</span><span class="n">first_local</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> + lookahead"</span>
+                        <span class="sa">f</span><span class="s2">"Pre-arm: skipped non-local/disabled cue(s); arming "</span>
+                        <span class="sa">f</span><span class="s2">"first local cue </span><span class="si">{</span><span class="n">first_local</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> + lookahead"</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
@@ -2617,37 +2661,7 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">512</span>
-<span class="normal">513</span>
-<span class="normal">514</span>
-<span class="normal">515</span>
-<span class="normal">516</span>
-<span class="normal">517</span>
-<span class="normal">518</span>
-<span class="normal">519</span>
-<span class="normal">520</span>
-<span class="normal">521</span>
-<span class="normal">522</span>
-<span class="normal">523</span>
-<span class="normal">524</span>
-<span class="normal">525</span>
-<span class="normal">526</span>
-<span class="normal">527</span>
-<span class="normal">528</span>
-<span class="normal">529</span>
-<span class="normal">530</span>
-<span class="normal">531</span>
-<span class="normal">532</span>
-<span class="normal">533</span>
-<span class="normal">534</span>
-<span class="normal">535</span>
-<span class="normal">536</span>
-<span class="normal">537</span>
-<span class="normal">538</span>
-<span class="normal">539</span>
-<span class="normal">540</span>
-<span class="normal">541</span>
-<span class="normal">542</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">542</span>
 <span class="normal">543</span>
 <span class="normal">544</span>
 <span class="normal">545</span>
@@ -2741,7 +2755,29 @@ and to load all the "loaded" flagged</p>
 <span class="normal">633</span>
 <span class="normal">634</span>
 <span class="normal">635</span>
-<span class="normal">636</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@logged</span>
+<span class="normal">636</span>
+<span class="normal">637</span>
+<span class="normal">638</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span>
+<span class="normal">650</span>
+<span class="normal">651</span>
+<span class="normal">652</span>
+<span class="normal">653</span>
+<span class="normal">654</span>
+<span class="normal">655</span>
+<span class="normal">656</span>
+<span class="normal">657</span>
+<span class="normal">658</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@logged</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">initial_cuelist_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cuelist</span><span class="p">:</span> <span class="n">CueList</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Review all the items recursively to update target uuids and objects</span>
@@ -2841,23 +2877,15 @@ and to load all the "loaded" flagged</p>
         <span class="c1"># Without this, slaves don't pre-arm anything at load time and the</span>
         <span class="c1"># /videocomposer/layer/load only fires when GO is hit, producing</span>
         <span class="c1"># staggered starts as the async loads complete in arrival order.</span>
-        <span class="n">first_local</span> <span class="o">=</span> <span class="n">first_cue</span>
-        <span class="n">walked</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">while</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">first_local</span><span class="p">,</span> <span class="s2">"_local"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">first_local</span><span class="o">.</span><span class="n">post_go</span> <span class="o">!=</span> <span class="s2">"go"</span><span class="p">:</span>
-                <span class="n">first_local</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">break</span>
-            <span class="n">first_local</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">first_local</span><span class="p">,</span> <span class="s2">"_target_object"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">walked</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">if</span> <span class="n">walked</span> <span class="o">&gt;</span> <span class="mi">1024</span><span class="p">:</span>
-                <span class="n">first_local</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">break</span>
+        <span class="c1"># Same predicate as go_script: _local AND enabled (a local but</span>
+        <span class="c1"># disabled cue used to stop this walk, and arm() then refused it,</span>
+        <span class="c1"># so nothing was pre-armed).</span>
+        <span class="n">first_local</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_first_local_enabled_in_go_chain</span><span class="p">(</span><span class="n">first_cue</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">first_local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">first_cue</span><span class="p">:</span>
                 <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"Pre-arm: skipped </span><span class="si">{</span><span class="n">walked</span><span class="si">}</span><span class="s2"> non-local cue(s); arming"</span>
-                    <span class="sa">f</span><span class="s2">"first "</span>
-                    <span class="sa">f</span><span class="s2">"local cue </span><span class="si">{</span><span class="n">first_local</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> + lookahead"</span>
+                    <span class="sa">f</span><span class="s2">"Pre-arm: skipped non-local/disabled cue(s); arming "</span>
+                    <span class="sa">f</span><span class="s2">"first local cue </span><span class="si">{</span><span class="n">first_local</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> + lookahead"</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
