@@ -298,12 +298,6 @@ class AudioMixer(Player):
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
 
-        # Build output→input mapping from the configured audio_outputs list
-        output_to_input = {
-            name: f"{self.client_name}:input_{i+1}"
-            for i, name in enumerate(self.audio_outputs)
-        }
-
         # Fail fast when there is no JACK client at all. The retry loop below
         # exists for a TRANSIENT race (player ports registering a beat after
         # the process spawns); a missing JACK server is PERMANENT for this arm
@@ -445,41 +439,26 @@ class AudioMixer(Player):
             for connection in channel_1_connections:
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
-        # Determine which mixer inputs to connect to
-        target_inputs = []
-        for output in selected_outputs:
-            if output in output_to_input:
-                mixer_input = output_to_input[output]
-                if self.conn_man.port_exists(mixer_input):
-                    target_inputs.append(mixer_input)
-                else:
-                    Logger.warning(f"Mixer input {mixer_input} does not exist")
-
-        if not target_inputs:
+        expected = self._expected_edges(
+            player_name,
+            player_output_prefix,
+            selected_outputs,
+            is_stereo,
+            log_missing_inputs=True,
+        )
+        if not expected:
             Logger.error(f"No valid mixer inputs found for outputs: {selected_outputs}")
             return False
 
         Logger.info(
             f"Connecting {player_name} to outputs:"
-            f"{selected_outputs} -> {target_inputs}"
+            f"{selected_outputs} -> {[dst for _src, dst in expected]}"
         )
 
-        # Fan-out routing: treat target_inputs as alternating L/R pairs.
-        # Even-indexed targets (0, 2, 4 …) receive outport 0 (L channel).
-        # Odd-indexed targets  (1, 3, 5 …) receive outport 1 (R channel)
-        #   or outport 0 again when the player is mono.
-        # This covers 1, 2 or any number of outputs uniformly.
         all_connected = True
-        for i, mixer_input in enumerate(target_inputs):
-            if i % 2 == 0:
-                Logger.debug(f"L → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
-            elif is_stereo:
-                Logger.debug(f"R → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_1_output, mixer_input)
-            else:
-                Logger.debug(f"Mono → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
+        for src, dst in expected:
+            Logger.debug(f"{src} → {dst}")
+            ok = self.conn_man.connect_by_name(src, dst)
             all_connected = all_connected and ok
 
         if not all_connected:
@@ -489,59 +468,136 @@ class AudioMixer(Player):
             )
         return all_connected
 
-    def player_connections_correct(
+    def _expected_edges(
         self,
         player_name: str,
-        player_output_prefix: str = "outport",
-        selected_outputs: list = None,
-    ) -> bool:
-        """
-        Verify the player's outputs are wired exactly as
-        connect_player_to_outputs would wire them.
+        player_output_prefix: str,
+        selected_outputs: list,
+        is_stereo: bool,
+        log_missing_inputs: bool = False,
+    ) -> list:
+        """The (player outport, mixer input) edges a player should have.
 
-        Mirrors the routing in connect_player_to_outputs: same output_to_input
-        mapping (built from audio_outputs), same alternating L/R fan-out walk,
-        same mono branch (outport 0 → both pair members when channel_1 absent).
+        The ONE copy of the routing, used by the arm-time wiring
+        (connect_player_to_outputs), the GO-time check
+        (player_connection_diff) and the tests, so they cannot drift apart
+        (869fbyjzx). Selected outputs map to mixer inputs through
+        audio_outputs; inputs that do not exist are dropped, which shifts the
+        L/R pairing exactly as the wiring does. The targets are treated as
+        alternating L/R pairs: even-indexed targets (0, 2, 4 ...) get outport
+        0, odd-indexed ones outport 1, or outport 0 again on a mono player.
+        This covers 1, 2 or any number of outputs uniformly.
 
-        Returns False if any expected edge is missing, points elsewhere, or if
-        outport 0 itself does not exist (subprocess gone). Caller decides
-        whether to repair via connect_player_to_outputs or abort the cue.
+        Returns [] when no mixer input resolves.
         """
         if not selected_outputs:
             selected_outputs = ["system:playback_1", "system:playback_2"]
-
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
-
-        if not self.conn_man.port_exists(channel_0_output):
-            return False
-
-        is_stereo = self.conn_man.port_exists(channel_1_output)
-
         output_to_input = {
-            name: f"{self.client_name}:input_{i+1}"
+            name: f"{self.client_name}:input_{i + 1}"
             for i, name in enumerate(self.audio_outputs)
         }
-
         target_inputs = []
         for output in selected_outputs:
             if output in output_to_input:
                 mixer_input = output_to_input[output]
                 if self.conn_man.port_exists(mixer_input):
                     target_inputs.append(mixer_input)
-
-        if not target_inputs:
-            return False
-
+                elif log_missing_inputs:
+                    Logger.warning(f"Mixer input {mixer_input} does not exist")
+        edges = []
         for i, mixer_input in enumerate(target_inputs):
             if i % 2 == 0 or not is_stereo:
-                expected_src = channel_0_output
+                edges.append((channel_0_output, mixer_input))
             else:
-                expected_src = channel_1_output
-            if not self.conn_man.is_connected(expected_src, mixer_input):
-                return False
+                edges.append((channel_1_output, mixer_input))
+        return edges
 
-        return True
+    def player_connection_diff(
+        self,
+        player_name: str,
+        player_output_prefix: str = "outport",
+        selected_outputs: list = None,
+    ):
+        """Compare a player's outport edges with the expected wiring.
+
+        Returns (missing, stray), two lists of (source, destination) edges:
+        missing = expected edges that are not connected; stray = edges on the
+        player's outports that are not expected (e.g. RtAudio's own
+        auto-connect to system:playback, 869fcvz85). An edge is never in
+        both. Returns None when the graph cannot be wired at all: outport 0
+        does not exist (the subprocess is gone) or no mixer input resolves —
+        callers must treat None as a silent cue, never as "correct".
+
+        One get_connections per outport (outport 1 only on a stereo player):
+        this runs on the GO path before /offset.
+        """
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
+        if not self.conn_man.port_exists(channel_0_output):
+            return None
+        is_stereo = self.conn_man.port_exists(channel_1_output)
+        expected = self._expected_edges(
+            player_name, player_output_prefix, selected_outputs, is_stereo
+        )
+        if not expected:
+            return None
+        ports = [channel_0_output] + ([channel_1_output] if is_stereo else [])
+        present = {port: list(self.conn_man.get_connections(port)) for port in ports}
+        missing = [(src, dst) for src, dst in expected if dst not in present[src]]
+        wanted = set(expected)
+        stray = [
+            (port, dst)
+            for port in ports
+            for dst in present[port]
+            if (port, dst) not in wanted
+        ]
+        return missing, stray
+
+    def player_connections_correct(
+        self,
+        player_name: str,
+        player_output_prefix: str = "outport",
+        selected_outputs: list = None,
+    ) -> bool:
+        """True when the player is wired exactly as connect_player_to_outputs
+        wires it: every expected edge present and nothing else on its
+        outports. False on a missing edge, a stray edge, a missing outport 0
+        (subprocess gone) or no mixer input. See player_connection_diff.
+        """
+        diff = self.player_connection_diff(
+            player_name, player_output_prefix, selected_outputs
+        )
+        return diff is not None and not diff[0] and not diff[1]
+
+    def repair_player_connections(self, missing: list, stray: list):
+        """Fix a player's wiring edge by edge, never by a full rewire.
+
+        A GO can reach this while the cue is audible (a fresh GO or a 'play'
+        action on a playing cue), so a working mixer edge is never
+        disconnected: strays are disconnected one by one, missing edges
+        connected one by one (869fbyjzx).
+
+        Each stray is re-checked just before its disconnect: one already gone
+        (a stale diff, a re-arm wiring the same player) is skipped, because a
+        failed disconnect resets the SHARED JACK client under any arm wiring
+        at the same moment (JackConnectionManager.disconnect_by_name).
+
+        Returns (connected_ok, strays_left): whether every missing edge got
+        connected, and the strays whose disconnect failed.
+        """
+        strays_left = []
+        for src, dst in stray:
+            if not self.conn_man.is_connected(src, dst):
+                continue
+            if not self.conn_man.disconnect_by_name(src, dst):
+                strays_left.append((src, dst))
+        connected_ok = True
+        for src, dst in missing:
+            ok = self.conn_man.connect_by_name(src, dst)
+            connected_ok = connected_ok and ok
+        return connected_ok, strays_left
 
     @logged
     def disconnect_player(
