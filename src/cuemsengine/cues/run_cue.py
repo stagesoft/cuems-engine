@@ -136,6 +136,50 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     return
 
 
+def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: list):
+    """Check a player's mixer wiring at GO and fix it edge by edge.
+
+    Never a full rewire (869fbyjzx): a GO can reach this while the cue is
+    audible (a fresh GO, or a 'play' action, on a cue that is still
+    playing), and connect_player_to_outputs disconnects every edge first —
+    it would cut the healthy channels too. Strays (RtAudio's auto-connect to
+    system:playback that an early arm-time wiring missed, 869fcvz85) are
+    removed one by one; missing mixer edges are added one by one.
+    """
+    diff = mixer.player_connection_diff(
+        player_name=player_name,
+        player_output_prefix="outport",
+        selected_outputs=selected_outputs,
+    )
+    if diff is None:
+        Logger.error(
+            f"Audio cue {cue.id}: no mixer input for its outputs at GO "
+            f"({selected_outputs}) — cue will be SILENT despite showing "
+            f"armed (mixer inputs unavailable)."
+        )
+        return
+    missing, stray = diff
+    if not missing and not stray:
+        Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
+        return
+    Logger.warning(
+        f"Audio cue {cue.id}: graph not wired correctly at GO "
+        f"(missing: {missing}; stray: {stray}); repairing edge by edge"
+    )
+    connected_ok, strays_left = mixer.repair_player_connections(missing, stray)
+    if not connected_ok:
+        Logger.error(
+            f"Audio cue {cue.id}: mixer repair failed at GO — cue will be "
+            f"SILENT despite showing armed (a mixer connection could not be "
+            f"made)."
+        )
+    if strays_left:
+        Logger.error(
+            f"Audio cue {cue.id}: stray edge(s) still connected after repair: "
+            f"{strays_left} — the cue may sound doubled and outside the mixer."
+        )
+
+
 @run_cue.register
 def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     """
@@ -221,30 +265,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                 )
                 return
 
-            if mixer.player_connections_correct(
-                player_name=player_name,
-                player_output_prefix="outport",
-                selected_outputs=selected_outputs,
-            ):
-                Logger.debug(
-                    f"Audio cue {cue.id}: graph already wired, skipping connect"
-                )
-            else:
-                Logger.warning(
-                    f"Audio cue {cue.id}: graph not wired correctly at GO; "
-                    f"repairing via connect_player_to_outputs"
-                )
-                repaired = mixer.connect_player_to_outputs(
-                    player_name=player_name,
-                    player_output_prefix="outport",
-                    selected_outputs=selected_outputs,
-                )
-                if repaired is False:
-                    Logger.error(
-                        f"Audio cue {cue.id}: mixer repair failed at GO — "
-                        f"cue will be SILENT despite showing armed (player "
-                        f"ports missing or mixer inputs unavailable)."
-                    )
+            _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
 
