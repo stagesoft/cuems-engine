@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
+from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
 HELD = "held by PreArm:abc for 0.3s"
@@ -138,6 +140,43 @@ class TestGoSite:
         assert isinstance(kwargs["wait_report"], dict)
 
 
+class _FakeMtc:
+    """MTC whose timeline advances by the duration of each patched sleep (as in
+    test_dispatch_reorder.py), so go_threaded's waits terminate."""
+
+    def __init__(self, ms=0.0):
+        self.main_tc = SimpleNamespace(
+            milliseconds_exact=float(ms),
+            milliseconds_rounded=int(ms),
+            framerate=25.0,
+            frames=0,
+        )
+
+    def advance(self, seconds):
+        ms = float(seconds) * 1000.0
+        self.main_tc.milliseconds_exact += ms
+        self.main_tc.milliseconds_rounded = int(self.main_tc.milliseconds_exact)
+        self.main_tc.frames = int(self.main_tc.milliseconds_exact / 1000 * 25)
+
+
+def _chain_cue(cid):
+    """A continuation cue shaped like test_dispatch_reorder.py's _cue()."""
+    return SimpleNamespace(
+        id=cid,
+        _local=True,
+        enabled=True,
+        loaded=False,
+        post_go="go",
+        prewait=CTimecode(start_seconds=0),
+        postwait=CTimecode(start_seconds=0),
+        _target_object=None,
+        _stop_requested=False,
+        _go_generation=1,
+        _revealed=False,
+        _start_mtc=None,
+    )
+
+
 def _dispatch_handler(in_flight, arm):
     """go_threaded on a continuation cue, as test_dispatch_reorder drives it."""
     ch = object.__new__(CueHandler)
@@ -158,11 +197,8 @@ def _dispatch_handler(in_flight, arm):
 class TestDispatchSite:
     @staticmethod
     def _dispatch(ch, cue):
-        from test_dispatch_reorder import _FakeMtc, _cue as reorder_cue
-
         mtc = _FakeMtc(0)
-        c = reorder_cue(id=cue.id)
-        c.loaded = False
+        c = _chain_cue(cue.id)
         with (
             patch("cuemsengine.cues.CueHandler.run_cue"),
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
