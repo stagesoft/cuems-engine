@@ -1,4 +1,7 @@
 #!/usr/bin/make -f
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 export DH_VIRTUALENV_INSTALL_ROOT=/usr/lib
 
@@ -59,6 +62,10 @@ override_dh_fixperms:
 	find debian/cuems-engine/usr/lib/cuems/bin -name "python*" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "wheel*" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "xmlschema-*" -delete
+	# cffi's console script: cffi itself is stripped below (cuems-utils provides
+	# it), and shipping its script too made every utils upgrade fail with
+	# "trying to overwrite /usr/lib/cuems/bin/cffi-gen-src". Nothing runs it.
+	find debian/cuems-engine/usr/lib/cuems/bin -name "cffi-gen-src" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "pwiz.py" -delete
 	# Remove mido console scripts (not needed)
 	find debian/cuems-engine/usr/lib/cuems/bin -name "mido-*" -delete
