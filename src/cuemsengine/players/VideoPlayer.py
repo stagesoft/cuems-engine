@@ -2,34 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
-from cuemsutils.log import Logger, logged
+from cuemsutils.log import Logger
 
 from ..osc.endpoints import OSC_VIDEOPLAYER_CONF, OSC_VIDEOPLAYER_LAYER_CONF
 from ..osc.OssiaClient import PlayerClient
-from .Player import Player
-
-
-class VideoPlayer(Player):
-    """Video player systemd service wrapper.
-
-    This class restarts the videocomposer service.
-
-    IMPORTANT: This class should not be used, since videocomposer is a systemd
-    service and not a subprocess.
-    """
-
-    def __init__(self):
-        super().__init__()
-        Logger.warning(
-            "Restarting the videocomposer service. Use VideoClient only to"
-            "control videocomposer."
-        )
-
-    @logged
-    def run(self):
-        process_call_list = ["systemctl", "restart", "videocomposer.service"]
-        Logger.info(f"Restarting videocomposer service: {process_call_list}")
-        self.call_subprocess(process_call_list)
 
 
 class VideoClient(PlayerClient):

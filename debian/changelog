@@ -1,12 +1,21 @@
-cuems-engine (0.1.0rc6-2) UNRELEASED; urgency=medium
+cuems-engine (0.1.0rc6-2) bookworm; urgency=medium
 
+  * Merge rc_1 into debian/bookworm (PR #22):
+    - 869f9wqpn: a node pre-arms its next segment when a GO advances its
+      pointer with nothing local to play; arms belong to the STOP/load
+      epoch they were requested in and are abandoned, never undone, if it
+      moved (publish or abandon).
+    - 869fat84r: a video cue takes its pixel size from the project instead
+      of running ffprobe while arming (probe only if missing or the file
+      size differs); each node reports its own media files that differ
+      from the project.
   * Stop shipping /usr/lib/cuems/bin/cffi-gen-src. It is cffi's console
     script; cffi itself already comes from cuems-utils, which ships the same
     file, so installing one package over the other failed with "trying to
     overwrite". cuems-utils declares Replaces: cuems-engine (<< 0.1.0rc6-2~)
     for the engine debs that still ship it.
 
- -- Ion Reguera <ion@stagelab.coop>  Tue, 06 Oct 2026 21:00:00 +0200
+ -- Ion Reguera <ion@stagelab.coop>  Tue, 06 Oct 2026 20:18:57 +0200
 
 cuems-engine (0.1.0rc6-1) bookworm; urgency=medium
 

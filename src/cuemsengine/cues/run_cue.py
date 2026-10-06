@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
 
@@ -400,6 +401,15 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         Logger.exception(e)
 
 
+def _record_placement_failure(cue: VideoCue, layer_id: str) -> None:
+    """Add layer_id to cue._placement_failed (reset by every arm)."""
+    failed = getattr(cue, "_placement_failed", None)
+    if failed is None:
+        failed = cue._placement_failed = []
+    if layer_id not in failed:
+        failed.append(layer_id)
+
+
 @run_cue.register
 def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     """Run a VideoCue.
@@ -462,7 +472,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # Re-apply position for each layer before making visible (layer may not
     # have been ready when position was set during arm)
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media.file_name)
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
 
     for index, layer_id in enumerate(layer_ids):
         layer_path = f"/videocomposer/layer/{layer_id}"
@@ -476,12 +486,22 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
                 client.set_value(f"{layer_path}/position", [x, y])
                 sx, sy = output.get_layer_scale(media_w, media_h)
                 client.set_value(f"{layer_path}/scale", [sx, sy])
+                # Applied now: clear a failure recorded at arm.
+                failed = getattr(cue, "_placement_failed", None)
+                if failed and layer_id in failed:
+                    failed.remove(layer_id)
             except (KeyError, RuntimeError, ValueError) as e:
-                Logger.warning(f"Could not re-apply position for layer {layer_id}: {e}")
+                _record_placement_failure(cue, layer_id)
+                Logger.error(
+                    f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
+                    f" position/scale re-apply at GO NOT applied, either may be"
+                    f" left at its default ({type(e).__name__}: {e})"
+                )
             except Exception:
+                _record_placement_failure(cue, layer_id)
                 Logger.exception(
                     f"Unexpected error re-applying position for layer"
-                    f'{layer_id} (output "{output_name}")'
+                    f' {layer_id} (output "{output_name}"): NOT applied'
                 )
 
         client.set_value(f"{layer_path}/offset", int(offset_to_go))

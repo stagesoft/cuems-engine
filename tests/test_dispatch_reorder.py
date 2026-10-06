@@ -159,7 +159,7 @@ class TestDispatchAtEntry:
         ch._next_local_fire = MagicMock(return_value=(nxt, 1234.0))
         mtc = _FakeMtc(0)
         _run(ch, _cue(), mtc, chain_epoch=42)
-        ch.go.assert_called_once_with(nxt, mtc, 1234.0, chain_epoch=42)
+        ch.go.assert_called_once_with(nxt, mtc, 1234.0, chain_epoch=42, arm_epoch=None)
 
     def test_a_pause_cue_does_not_dispatch_its_target(self):
         """post_go='pause'/'go_at_end' cues carry a _target_object too — it is
@@ -344,7 +344,9 @@ class TestOwnArm:
         ch = _ch()
         cue = _cue()
         cue.loaded = False
-        ch.arm = MagicMock(side_effect=lambda c, init=False: setattr(c, "loaded", True))
+        ch.arm = MagicMock(
+            side_effect=lambda c, init=False, epoch=None: setattr(c, "loaded", True)
+        )
         mtc = _FakeMtc(0)
         with (
             patch("cuemsengine.cues.CueHandler.run_cue"),
@@ -353,7 +355,7 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
             ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
-        ch.arm.assert_called_once_with(cue, init=True)
+        ch.arm.assert_called_once_with(cue, init=True, epoch=None)
         rv.assert_called_once()
 
     def test_an_unarmable_cue_dies_alone(self):
@@ -386,7 +388,7 @@ class TestOwnArm:
         cue.loaded = False
         mtc = _FakeMtc(0)
 
-        def slow_arm(c, init=False):
+        def slow_arm(c, init=False, epoch=None):
             mtc.advance(20)  # 20s of JACK port waiting
             c.loaded = True
 

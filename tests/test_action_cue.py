@@ -61,8 +61,6 @@ def handler():
     h = object.__new__(CueHandler)
     h._armed_cues = []
     h._armed_cues_set = set()
-    h._video_players = {}
-    h._front_video_player = None
     h._lock = __import__("threading").Lock()
     h.communications_thread = MagicMock()
     ACTION_HANDLER.bind_cue_handler(h)
@@ -205,7 +203,7 @@ class TestStopAction:
         assert result["action_type"] == "stop"
         assert target._stop_requested is True
         assert target._go_generation == 2
-        mock_disarm.assert_called_once_with(target)
+        mock_disarm.assert_called_once_with(target, reason="stop_action")
 
     def test_stop_disarm_raises_returns_failed(self, handler, mtc):
         target = _make_target(_stop_requested=False)
@@ -864,11 +862,11 @@ class TestGoRearm:
             thread = handler.go(cue, mtc)
             thread.join(timeout=2)
 
-        mock_ahead.assert_called_once_with(cue)
+        mock_ahead.assert_called_once_with(cue, arm_epoch=handler.arm_epoch())
 
 
 # ---------------------------------------------------------------------------
-# T018: arm() — ActionCue play-target, _loading sentinel, non-local guard
+# T018: arm() — ActionCue play-target, in-flight arm claim, non-local guard
 # ---------------------------------------------------------------------------
 
 
@@ -936,16 +934,19 @@ class TestArmPlayTarget:
 
     def test_arm_loading_waits_for_in_progress_arm(self, handler, mtc):
         """An init=True arm on a cue being armed should wait and succeed."""
-        from threading import Event, Thread
+        from threading import Thread
+
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        event = Event()
-        cue._loading = event  # simulate in-progress arm
+        claim = _ArmClaim()
+        handler._arming = {cue.id: claim}  # simulate in-progress arm
 
         def _finish_arm():
             time.sleep(0.1)
             cue.loaded = True
-            event.set()
+            handler._arming.pop(cue.id)
+            claim.event.set()
 
         t = Thread(target=_finish_arm, daemon=True)
         t.start()
@@ -960,13 +961,14 @@ class TestArmPlayTarget:
         """
         An init=True arm should return False if the in-progress arm times out.
         """
-        from threading import Event
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        cue._loading = Event()  # never signalled
+        claim = _ArmClaim()  # never signalled
+        handler._arming = {cue.id: claim}
 
         # Patch timeout to avoid 5s wait in tests
-        with patch.object(cue._loading, "wait", return_value=False):
+        with patch.object(claim.event, "wait", return_value=False):
             result = handler.arm(cue, init=True)
 
         assert result is False
@@ -976,10 +978,10 @@ class TestArmPlayTarget:
         """
         A non-init arm on a cue being armed should return False immediately.
         """
-        from threading import Event
+        from cuemsengine.cues.CueHandler import _ArmClaim
 
         cue = _make_action_target(loaded=False)
-        cue._loading = Event()  # simulate in-progress arm
+        handler._arming = {cue.id: _ArmClaim()}  # simulate in-progress arm
 
         result = handler.arm(cue, init=False)
 
