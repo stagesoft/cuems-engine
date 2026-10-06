@@ -555,6 +555,10 @@ class PlayerHandler:
                     # soon as the process is gone instead of holding this
                     # cue's arm for the full ~15 s (869f9wqpn).
                     should_abort=lambda: _process_exited(player),
+                    # Wire only once the player reports itself started: its
+                    # ports exist earlier, before RtAudio's auto-connect,
+                    # which an earlier wiring would leave in place (869fbyjzx).
+                    ready=getattr(player, "ready", None),
                 )
                 if connected is False:
                     # Route to the mixer failed: the cue would show armed/green
