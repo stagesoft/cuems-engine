@@ -235,6 +235,49 @@ class TestConnectPlayerToOutputs:
         # broke on attempt 0 without a single sleep).
         assert mock_sleep.call_count >= 29
 
+    def test_a_dead_player_process_ends_the_wait(self, caplog):
+        """869f9wqpn: a STOP (or a load) kills the player while the engine
+        is still waiting for its JACK ports. They can never register now,
+        but the wait ran its full ~15 s, holding that cue's arm all along."""
+        ports = {"test_mixer:input_1", "test_mixer:input_2"}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        polls = []
+
+        def process_gone():
+            polls.append(1)
+            return len(polls) > 2  # alive twice, then dead
+
+        with caplog.at_level("WARNING"), patch("time.sleep") as mock_sleep:
+            result = m.connect_player_to_outputs(
+                self.PLAYER, "outport", self.OUTS, should_abort=process_gone
+            )
+        assert result is False
+        cm.connect_by_name.assert_not_called()
+        assert mock_sleep.call_count == 2, "kept waiting for a dead process"
+        assert "exited before registering" in caplog.text
+
+    def test_a_live_player_still_gets_the_whole_wait(self):
+        ports = {"test_mixer:input_1", "test_mixer:input_2"}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch("time.sleep") as mock_sleep:
+            result = m.connect_player_to_outputs(
+                self.PLAYER, "outport", self.OUTS, should_abort=lambda: False
+            )
+        assert result is False
+        assert mock_sleep.call_count >= 29
+
+    def test_registered_ports_win_over_the_abort_check(self):
+        ports = {"test_mixer:input_1", "test_mixer:input_2", self.CH0, self.CH1}
+        cm = _fake_conn_man(ports)
+        m = _build_bare_mixer(self.OUTS, cm)
+        with patch("time.sleep"):
+            result = m.connect_player_to_outputs(
+                self.PLAYER, "outport", self.OUTS, should_abort=lambda: True
+            )
+        assert result is True
+
     def test_port_registers_late_waits_then_connects(self):
         ports = {"test_mixer:input_1", "test_mixer:input_2"}
         cm = _fake_conn_man(ports)

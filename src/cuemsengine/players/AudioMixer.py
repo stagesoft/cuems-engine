@@ -241,6 +241,7 @@ class AudioMixer(Player):
         selected_outputs: list = None,
         max_retries: int = 30,
         retry_delay: float = 0.5,
+        should_abort=None,
     ):
         """
         Connect a player to specific system outputs based on cue configuration.
@@ -260,6 +261,11 @@ class AudioMixer(Player):
             ['system:playback_1'])
             max_retries: Maximum number of connection attempts
             retry_delay: Delay between retries in seconds
+            should_abort: optional predicate, checked on every attempt the
+            port is still missing. True ends the wait at once with False. The
+            caller passes "the player process has exited": its ports can
+            never register then (869f9wqpn -- a STOP/load kills the player
+            mid-wait). It does NOT shorten the wait for a live process.
 
         Returns:
             True if every required player→mixer connection was made, False if
@@ -330,6 +336,18 @@ class AudioMixer(Player):
                     f"/{max_retries})"
                 )
                 break
+            if should_abort is not None and should_abort():
+                # WARNING, not ERROR: after a STOP or a load this is the
+                # expected end of an arm that was in flight. A crash lands
+                # here too, and the caller's "will be SILENT" error covers it.
+                Logger.warning(
+                    f"Player process for {player_name} exited before "
+                    f"registering its JACK ports (waited "
+                    f"{monotonic() - wait_started:.3f}s, attempt {attempt + 1}"
+                    f"/{max_retries}) - killed by a STOP/load, or crashed. "
+                    "Not waiting any longer."
+                )
+                return False
             if attempt < max_retries - 1:
                 Logger.debug(
                     f"Waiting for JACK port {channel_0_output} (attempt"

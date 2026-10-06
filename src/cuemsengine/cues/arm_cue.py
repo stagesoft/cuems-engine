@@ -145,7 +145,7 @@ def arm_videoCue(cue: VideoCue):
         return
 
     video_path = PLAYER_HANDLER.media_path(cue.media["file_name"])
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media["file_name"])
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
     cue._layer_ids = []
     # Layers whose placement/scale could not be applied on this arm; reset
     # every arm so a clean re-arm clears an earlier failure.

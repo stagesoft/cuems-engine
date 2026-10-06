@@ -472,7 +472,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # Re-apply position for each layer before making visible (layer may not
     # have been ready when position was set during arm)
     output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media.file_name)
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
 
     for index, layer_id in enumerate(layer_ids):
         layer_path = f"/videocomposer/layer/{layer_id}"

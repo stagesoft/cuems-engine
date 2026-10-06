@@ -26,6 +26,22 @@ from .VideoPlayer import VideoClient, VideoOutput
 DEFAULT_MEDIA_FOLDER = "/opt/cuems_library/media/"
 
 
+def _process_exited(player) -> bool:
+    """True once a player's subprocess has exited (killed or crashed).
+
+    False while it runs, and False for a player with no process yet. A
+    poll() racing the player's own reader thread can only report a dead
+    process as still alive, which the next check corrects.
+    """
+    process = getattr(player, "p", None)
+    return process is not None and process.poll() is not None
+
+
+def _positive_int(value) -> bool:
+    """A stored dimension or size is usable: a positive int (not a bool)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 class PlayerHandler:
     """
     This class is responsible for handling and generating player objects.
@@ -81,6 +97,9 @@ class PlayerHandler:
             cls._instance._media_folder = DEFAULT_MEDIA_FOLDER
             cls._instance._node_uuid = None
             cls._instance._media_dims_cache = {}
+            # Files whose stored dimensions were missing or stale, already
+            # warned about once (cue_media_dimensions).
+            cls._instance._media_dims_warned = set()
         return cls._instance
 
     # ---------------------------
@@ -135,6 +154,7 @@ class PlayerHandler:
         with self._lock:
             self._loaded_layer_ids.clear()
             self._media_dims_cache = {}
+            self._media_dims_warned = set()
 
     # ---------------------------
     # Audio Player Management
@@ -530,6 +550,11 @@ class PlayerHandler:
                     player_name=player_name,
                     player_output_prefix="outport",
                     selected_outputs=selected_outputs,
+                    # A STOP/load may kill this player while we wait for its
+                    # ports; they will never register then. Stop waiting as
+                    # soon as the process is gone instead of holding this
+                    # cue's arm for the full ~15 s (869f9wqpn).
+                    should_abort=lambda: _process_exited(player),
                 )
                 if connected is False:
                     # Route to the mixer failed: the cue would show armed/green
@@ -893,6 +918,57 @@ class PlayerHandler:
     def media_path(self, file_name: str) -> str:
         """Returns the media path for a given file name"""
         return self._media_folder + "/" + file_name
+
+    def cue_media_dimensions(self, cue) -> tuple[int | None, int | None]:
+        """(width, height) px of a video cue's media, as stored in the project.
+
+        The editor stores ``pixel_width`` / ``pixel_height`` and the file's
+        ``file_size`` in the cue's ``Media`` when the file is uploaded, as it
+        stores the duration, so arming a video cue needs no ``ffprobe``: a
+        cue selection arms the selected chain under the command lock, and a
+        GO sent right after it waited for the probes (869fat84r).
+
+        Falls back to :meth:`media_dimensions` (the probe), warning once per
+        file, when the values are missing or invalid (a project saved before
+        they existed, or by an older editor), or when ``file_size`` differs
+        from this node's copy of the file (replaced under the same name).
+        Read with ``.get()``: projects are parsed without ``Media``'s
+        setters, and an older cuemsutils has none for these keys.
+        """
+        media = cue.media
+        file_name = media["file_name"]
+        width, height = media.get("pixel_width"), media.get("pixel_height")
+        if not (_positive_int(width) and _positive_int(height)):
+            self._warn_media_dims_once(
+                ("missing", file_name),
+                f"No stored dimensions for {file_name} in the project; probing it, "
+                "which delays the first arm of this file. A current editor stores "
+                "them when the project is saved.",
+            )
+            return self.media_dimensions(file_name)
+        stored_size = media.get("file_size")
+        if _positive_int(stored_size):
+            try:
+                actual_size = os.stat(self.media_path(file_name)).st_size
+            except OSError:
+                # A missing file is reported by the layer load, not here.
+                actual_size = None
+            if actual_size is not None and actual_size != stored_size:
+                self._warn_media_dims_once(
+                    ("size", file_name, stored_size, actual_size),
+                    f"Stored dimensions of {file_name} do not match the file on this "
+                    f"node (file_size {stored_size} in the project, {actual_size} on "
+                    "disk): it was replaced or not synced; probing it.",
+                )
+                return self.media_dimensions(file_name)
+        return (width, height)
+
+    def _warn_media_dims_once(self, key: tuple, message: str) -> None:
+        with self._lock:
+            if key in self._media_dims_warned:
+                return
+            self._media_dims_warned.add(key)
+        Logger.warning(message)
 
     def media_dimensions(self, file_name: str) -> tuple[int | None, int | None]:
         """Return (width, height) px of the media's first video stream via
