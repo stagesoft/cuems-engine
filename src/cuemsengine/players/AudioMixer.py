@@ -242,6 +242,7 @@ class AudioMixer(Player):
         max_retries: int = 30,
         retry_delay: float = 0.5,
         should_abort=None,
+        ready=None,
     ):
         """
         Connect a player to specific system outputs based on cue configuration.
@@ -266,6 +267,17 @@ class AudioMixer(Player):
             caller passes "the player process has exited": its ports can
             never register then (869f9wqpn -- a STOP/load kills the player
             mid-wait). It does NOT shorten the wait for a live process.
+            ready: optional threading.Event the player sets once it reports
+            itself started (Player.ready, its "[OK] RUNNING!" line). When
+            given, the wiring waits for it before looking at the ports: the
+            ports exist before the player has finished starting, and RtAudio
+            auto-connects them to system:playback only when its stream starts.
+            Wiring earlier finds nothing to disconnect, and the auto-connect
+            lands afterwards and stays - the cue then sounds through the mixer
+            AND straight to the outputs (869fbyjzx / 869fcvz85). The ready wait
+            and the port wait share one budget, today's port-wait ceiling.
+            A player that never reports ready is wired on port presence, with
+            a WARNING.
 
         Returns:
             True if every required player→mixer connection was made, False if
@@ -311,6 +323,51 @@ class AudioMixer(Player):
             )
             return False
 
+        # Wait for the player to report itself started (869fbyjzx). AFTER the
+        # no-JACK fail-fast above: a JACK-stubbed host (the test2 controller)
+        # must still return at once. Counted slices, not a monotonic deadline,
+        # bound the wait, so a test can patch ready.wait. Whatever this phase
+        # uses comes off the port wait below: one budget for both.
+        port_attempts = max_retries
+        if ready is not None:
+            ready_slice = 0.05
+            # Today's port wait sleeps between its checks, (max_retries - 1)
+            # times: that total (14.5 s by default) is the whole budget.
+            budget_s = max(0, max_retries - 1) * retry_delay
+            ready_slices = max(1, int(round(budget_s / ready_slice)))
+            ready_started = monotonic()
+            slices_used = 0
+            got_ready = False
+            for _ in range(ready_slices):
+                if ready.wait(ready_slice):
+                    got_ready = True
+                    break
+                slices_used += 1
+                if should_abort is not None and should_abort():
+                    Logger.warning(
+                        f"Player process for {player_name} exited before "
+                        f"reporting RUNNING (waited "
+                        f"{monotonic() - ready_started:.3f}s) - killed by a "
+                        "STOP/load, or crashed. Not waiting any longer."
+                    )
+                    return False
+            if got_ready:
+                Logger.info(
+                    f"Audio player {player_name} reported RUNNING after "
+                    f"{monotonic() - ready_started:.3f}s"
+                )
+            else:
+                Logger.warning(
+                    f"Audio player {player_name} never reported RUNNING in "
+                    f"{monotonic() - ready_started:.1f}s - wiring on port "
+                    "presence (old or unusual player build)"
+                )
+            if retry_delay > 0:
+                spent_attempts = int(slices_used * ready_slice / retry_delay)
+                port_attempts = max(1, max_retries - spent_attempts)
+            else:
+                port_attempts = 1
+
         # Wait for player JACK ports to be available.
         # NOTE: gate ONLY on port_exists(); get_connections() returns [] (not
         # None) for a missing port, so the old 'connections is not None' guard
@@ -328,12 +385,12 @@ class AudioMixer(Player):
         # already cost a real show. Log the success path so the fleet's own
         # journals can answer that instead of another guess.
         wait_started = monotonic()
-        for attempt in range(max_retries):
+        for attempt in range(port_attempts):
             if self.conn_man.port_exists(channel_0_output):
                 Logger.info(
                     f"JACK port {channel_0_output} registered after "
                     f"{monotonic() - wait_started:.3f}s (attempt {attempt + 1}"
-                    f"/{max_retries})"
+                    f"/{port_attempts})"
                 )
                 break
             if should_abort is not None and should_abort():
@@ -344,20 +401,20 @@ class AudioMixer(Player):
                     f"Player process for {player_name} exited before "
                     f"registering its JACK ports (waited "
                     f"{monotonic() - wait_started:.3f}s, attempt {attempt + 1}"
-                    f"/{max_retries}) - killed by a STOP/load, or crashed. "
+                    f"/{port_attempts}) - killed by a STOP/load, or crashed. "
                     "Not waiting any longer."
                 )
                 return False
-            if attempt < max_retries - 1:
+            if attempt < port_attempts - 1:
                 Logger.debug(
                     f"Waiting for JACK port {channel_0_output} (attempt"
-                    f"{attempt + 1}/{max_retries})"
+                    f"{attempt + 1}/{port_attempts})"
                 )
                 sleep(retry_delay)
         else:
             Logger.warning(
                 f"JACK port {channel_0_output} not available after"
-                f"{max_retries} attempts"
+                f"{port_attempts} attempts"
             )
             return False
 
