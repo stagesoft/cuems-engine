@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import partial
 from threading import Event, Lock, Thread, current_thread
 from time import monotonic, sleep
 from typing import Callable
@@ -57,6 +58,23 @@ class _ArmClaim:
     holder: str = ""
     started: float = 0.0
     waiters: int = 0
+
+
+@dataclass
+class _FollowOut:
+    """What one cue thread did about its cross-node Auto follow (869fc8ytz).
+
+    `record` is the (instant_ms, run_seq) it announced; the cue carries the
+    same tuple as `_follow_out` until whoever takes it (the fire, the thread
+    leaving, or go() starting the cue again) compare-and-clears it, so one
+    announcement is followed by at most one cancel.
+    """
+
+    revealed: bool = False
+    record: tuple | None = None
+    fired: bool = False
+    yielded: bool = False
+    error: bool = False
 
 
 class CueHandler:
@@ -209,6 +227,10 @@ class CueHandler:
     # snapshot. An arm belongs to the epoch in which it was requested; one
     # whose epoch has moved is never published (see arm()).
     _disarm_epoch = 0
+
+    # Cross-node Auto follow relay (cues.FollowRelay), attached by NodeEngine.
+    # None (unit tests, an engine without comms): nothing is announced.
+    _follow = None
 
     def arm_epoch(self) -> int:
         """The current STOP/load epoch. Whoever requests an arm on one thread
@@ -1165,6 +1187,7 @@ class CueHandler:
         stamp_skipped: list = None,
         require_stop_epoch: int = None,
         arm_epoch: int = None,
+        commit_gate: Callable[[Cue, int], bool] | None = None,
     ) -> Thread | None:
         """Starts a cue in a thread.
 
@@ -1187,6 +1210,11 @@ class CueHandler:
             inherits its chain's. It goes into every arm this dispatch causes
             (the fallback re-arm, the lookahead, the cue's own thread), and a
             dispatch whose epoch has moved is refused.
+            commit_gate: called inside the commit section, after every other
+            refusal, with the cue and the generation about to be assigned;
+            False (or an exception) refuses the dispatch. A cross-node follow
+            uses it so that its cancel and its dispatch are decided in one
+            place (869fc8ytz).
 
         Returns:
             Thread running the cue, or None if the cue is disabled, not local
@@ -1298,6 +1326,23 @@ class CueHandler:
                     )
                     return None
 
+            go_gen = getattr(cue, "_go_generation", 0) + 1
+            if commit_gate is not None:
+                try:
+                    allowed = commit_gate(cue, go_gen)
+                except Exception as e:
+                    Logger.error(f"Commit gate for cue {cue.id} failed: {e}")
+                    allowed = False
+                if not allowed:
+                    Logger.info(
+                        f"Refusing dispatch of cue {cue.id}: its cross-node "
+                        "follow was cancelled or replaced"
+                    )
+                    return None
+            # Only past every refusal: a dispatch that is refused must not
+            # cancel the follow of the pass still playing.
+            self._take_follow_on_restart_locked(cue)
+
             cue._go_epoch = chain_epoch
             # Recorded here, not in the spawned thread: a disable arriving in
             # between has to find this cue's anchor to stamp a rejoin with, and
@@ -1306,12 +1351,14 @@ class CueHandler:
             # thread", which is not an anchor a rejoin can be pinned to.
             cue._dispatch_arrival_ms = frozen_mtc_ms
             cue._stop_requested = False
-            go_gen = getattr(cue, "_go_generation", 0) + 1
             cue._go_generation = go_gen
             # Output-commit flag: True once this cue has produced output
             # (reveal, or the DMX scene send). The stop walk cancels only
             # cues that have NOT committed — a playing cue is never cut.
             cue._revealed = False
+            # When this pass produced output (monotonic); set by go_threaded.
+            # A late cross-node follow cancel reads it (869fc8ytz).
+            cue._revealed_at = None
             # Lifecycle flag: True while a GO owns this cue; cleared by
             # disarm() and stop_all_cues(). Unlike _go_generation
             # (increment-only), this is a sound "currently playing" signal —
@@ -1350,7 +1397,13 @@ class CueHandler:
         return thread
 
     def go_from(
-        self, start_cue: Cue, mtc: MtcListener, seed_ms: float = None
+        self,
+        start_cue: Cue,
+        mtc: MtcListener,
+        seed_ms: float = None,
+        arm_epoch: int = None,
+        require_stop_epoch: int = None,
+        commit_gate: Callable[[Cue, int], bool] | None = None,
     ) -> Thread | None:
         """Re-enter a post_go='go' chain from start_cue (inclusive), firing THIS
         node's first local+enabled cue at seed_ms + Σ(chain advance of the
@@ -1364,7 +1417,20 @@ class CueHandler:
         than the play target: a loop-back 'play' aimed at node01's cue would
         never re-fire the controller's own cues. Walking here makes each engine
         re-enter its own local segment, exactly as it does on a GO.
+
+        arm_epoch / require_stop_epoch / commit_gate are passed to go() when
+        set: a cross-node follow dispatches on another thread than the one
+        that received it, and a STOP or a cancel in between must win.
         """
+        guards = {
+            k: v
+            for k, v in (
+                ("arm_epoch", arm_epoch),
+                ("require_stop_epoch", require_stop_epoch),
+                ("commit_gate", commit_gate),
+            )
+            if v is not None
+        }
         if seed_ms is None:
             seed_ms = mtc.main_tc.milliseconds_exact
         cue = start_cue
@@ -1395,8 +1461,14 @@ class CueHandler:
                 self.stamp_pass(skipped_disabled, seed_ms)
             return None
         if skipped_disabled:
-            return self.go(cue, mtc, seed_ms + sigma_ms, stamp_skipped=skipped_disabled)
-        return self.go(cue, mtc, seed_ms + sigma_ms)
+            return self.go(
+                cue,
+                mtc,
+                seed_ms + sigma_ms,
+                stamp_skipped=skipped_disabled,
+                **guards,
+            )
+        return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
         """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
@@ -1506,6 +1578,37 @@ class CueHandler:
                     go_at_end lookahead) and the continuation it dispatches
                     belong to it, so none of them survives a STOP.
         """
+        follow = _FollowOut()
+        try:
+            self._run_cue_pass(
+                cue,
+                mtc,
+                frozen_mtc_ms,
+                go_gen,
+                chain_epoch,
+                unroll,
+                arm_epoch,
+                follow,
+            )
+        except Exception:
+            follow.error = True
+            raise
+        finally:
+            self._leave_follow(cue, follow, arm_epoch)
+
+    def _run_cue_pass(
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        frozen_mtc_ms: float,
+        go_gen: int,
+        chain_epoch: int,
+        unroll: bool,
+        arm_epoch: int | None,
+        follow: _FollowOut,
+    ):
+        """The body of go_threaded; `follow` records what this pass did about
+        its cross-node Auto follow, for go_threaded's exit (869fc8ytz)."""
         # frozen_mtc_ms is this cue's ARRIVAL on the MTC timeline:
         # GO_mtc + Σ(effective durations of preceding cues in the chain).
         # None → manual GO / go_at_end: arrival = live MTC now (so those paths
@@ -1656,6 +1759,7 @@ class CueHandler:
                     # as still cancellable.
                     with self._lock:
                         cue._revealed = True
+                        cue._revealed_at = monotonic()
 
             # MTC-gated reveal: wait until live MTC reaches start_ms, then reveal
             # (video /visible; audio /mtcfollow; action EXECUTE; dmx no-op). This
@@ -1671,8 +1775,13 @@ class CueHandler:
                     )
                     if do_reveal:
                         cue._revealed = True
+                        # Same section: a cross-node follow cancel deciding
+                        # "not started yet" must never see _revealed set
+                        # without its stamp.
+                        cue._revealed_at = monotonic()
                 if do_reveal:
-                    revealed_at = monotonic()
+                    revealed_at = cue._revealed_at
+                    follow.revealed = True
                     reveal_cue(cue, mtc, start_ms)
                     armed_at = getattr(cue, "_armed_at", None)
                     if armed_at is not None:
@@ -1714,11 +1823,26 @@ class CueHandler:
         # in parallel with the media. go() also calls _arm_ahead but
         # that fires before run_cue — this call catches cues that were
         # disarmed between go() and here (loop passes).
+        # Cross-node Auto follow (869fc8ytz): tell the other nodes the follow
+        # instant as soon as it is final -- now, or at the start of the last
+        # loop -- and before the lookahead below, which can take seconds.
+        on_last_loop = None
+        if follow.revealed and self._follows_out(cue):
+            if cue.loop == 1:
+                self._announce_follow(cue, go_gen, start_ms, follow)
+            elif cue.loop > 1:
+                on_last_loop = partial(
+                    self._announce_follow, cue, go_gen, start_ms, follow
+                )
+
         if cue.post_go == "go_at_end":
             self._arm_ahead(cue, arm_epoch=arm_epoch)
 
         Logger.info(f"Going to loop for {cue.__class__.__name__}:{cue.id}")
-        loop_cue(cue, mtc)
+        if on_last_loop is None:
+            loop_cue(cue, mtc)
+        else:
+            loop_cue(cue, mtc, on_last_loop=on_last_loop)
 
         if getattr(cue, "_go_generation", 0) != go_gen:
             Logger.info(
@@ -1735,11 +1859,7 @@ class CueHandler:
         # setup; CueList) — and guard against a stale _end_mtc left by a
         # previous GO of this object. (FadeCue DOES set a real _end_mtc via
         # _handle_fade_action — used as-is.)
-        end_attr = getattr(cue, "_end_mtc", None)
-        base_end_ms = end_attr.milliseconds_exact if end_attr is not None else start_ms
-        if base_end_ms < start_ms:
-            base_end_ms = start_ms  # stale from a previous run
-        fire_seed_ms = base_end_ms + cue.postwait.milliseconds_exact
+        fire_seed_ms = self._follow_instant_ms(cue, start_ms)
 
         tail = (
             cue.post_go in ("pause", "go_at_end")
@@ -1805,12 +1925,14 @@ class CueHandler:
             # arrival on the shared timeline; go_threaded adds the target's own
             # prewait on top. The target_gen0 compare makes this auto-fire YIELD
             # if a manual GO already started the target during the tail.
-            go_at_end_thread = self.go_from(cue._target_object, mtc, fire_seed_ms)
+            if self._follow_fired(cue, follow, fire_seed_ms, go_gen):
+                go_at_end_thread = self.go_from(cue._target_object, mtc, fire_seed_ms)
         elif (
             cue.post_go == "go_at_end"
             and cue._target_object
             and not cue._stop_requested
         ):
+            follow.yielded = True
             Logger.info(
                 f"go_at_end fire for {cue.id} yielded: "
                 "target already started by a newer GO"
@@ -1824,6 +1946,263 @@ class CueHandler:
         if cue.post_go == "go" and cue._target_object and not cue._stop_requested:
             if post_go_thread:
                 self.wait_for_cue(post_go_thread)
+
+    # ---------------------------
+    # Cross-node Auto follow (869fc8ytz)
+    # ---------------------------
+
+    @staticmethod
+    def _follow_instant_ms(cue: Cue, start_ms: float) -> float:
+        """When an Auto follow fires its target: the body's end on the MTC
+        timeline plus the postwait. The one expression both the fire and the
+        announcement use. Fallbacks for cues that never set _end_mtc (plain
+        ActionCue body=0; aborted A/V setup; CueList) and a stale _end_mtc
+        left by a previous GO of this object. (FadeCue DOES set a real
+        _end_mtc via _handle_fade_action -- used as-is.)"""
+        end_attr = getattr(cue, "_end_mtc", None)
+        base_end_ms = end_attr.milliseconds_exact if end_attr is not None else start_ms
+        if base_end_ms < start_ms:
+            base_end_ms = start_ms  # stale from a previous run
+        return base_end_ms + cue.postwait.milliseconds_exact
+
+    @staticmethod
+    def _follows_out(cue: Cue) -> bool:
+        """An Auto follow whose source plays only where it has an output.
+
+        ActionCue, FadeCue, CueList and DmxCue are local on every node, so
+        every node fires their follow itself; only AudioCue and VideoCue need
+        the other nodes told."""
+        return (
+            isinstance(cue, (AudioCue, VideoCue))
+            and getattr(cue, "_local", False)
+            and getattr(cue, "post_go", None) == "go_at_end"
+            and getattr(cue, "_target_object", None) is not None
+        )
+
+    def _announce_follow(
+        self, cue: Cue, go_gen: int, start_ms: float, follow: _FollowOut
+    ) -> None:
+        """Announce this pass's follow instant to the other nodes, once.
+
+        Decided, recorded and queued in one lock section, so the messages
+        leave in the order the decisions were taken; only the pass that still
+        owns the cue announces. Never raises: it runs on the cue's thread."""
+        relay = self._follow
+        if relay is None or follow.record is not None:
+            return
+        try:
+            with self._lock:
+                if getattr(cue, "_go_generation", 0) != go_gen or getattr(
+                    cue, "_stop_requested", False
+                ):
+                    return
+                if relay.stop_pending:
+                    # A STOP or a load was received and has not run yet: this
+                    # pass is about to be stopped.
+                    return
+                run_seq = relay.run_seq
+                if run_seq is None:
+                    relay.warn_no_run()
+                    return
+                record = (self._follow_instant_ms(cue, start_ms), run_seq)
+                cue._follow_out = record
+                follow.record = record
+                relay.announce(cue, record[0], run_seq)
+        except Exception as e:
+            Logger.error(f"Could not announce the follow of cue {cue.id}: {e}")
+
+    def _take_follow_record_locked(self, cue: Cue, record: tuple) -> bool:
+        """Compare-and-clear the cue's outstanding announcement. Caller holds
+        self._lock. True if `record` was still the outstanding one."""
+        if getattr(cue, "_follow_out", None) == record:
+            cue._follow_out = None
+            return True
+        return False
+
+    def _take_follow_on_restart_locked(self, cue: Cue) -> None:
+        """go() is starting a cue whose earlier pass announced a follow: that
+        follow will not happen. Caller holds self._lock (go()'s commit
+        section, after every refusal). The earlier pass's thread may only
+        notice at the new pass's end, so the cancel goes out here."""
+        record = getattr(cue, "_follow_out", None)
+        if record is None:
+            return
+        cue._follow_out = None
+        relay = self._follow
+        if relay is None or record[1] != relay.run_seq:
+            return
+        try:
+            relay.cancel(cue, record[0], record[1], "restart")
+        except Exception as e:
+            Logger.error(f"Could not cancel the follow of cue {cue.id}: {e}")
+
+    def _follow_fired(
+        self, cue: Cue, follow: _FollowOut, fire_ms: float, go_gen: int
+    ) -> bool:
+        """The pass is about to fire its follow: nothing to cancel any more.
+
+        Returns False -- do not fire -- when this pass announced its follow
+        and has been replaced since (the cue was started again): go() already
+        cancelled the announcement on the other nodes, so firing here would
+        play only half of the target. An unannounced follow fires as before."""
+        if follow.record is None:
+            follow.fired = True
+            return True
+        with self._lock:
+            if getattr(cue, "_go_generation", 0) != go_gen:
+                Logger.info(
+                    f"Cue {cue.id} was started again before its follow fired; "
+                    "the new pass owns the follow"
+                )
+                return False
+            follow.fired = True
+            self._take_follow_record_locked(cue, follow.record)
+        if abs(fire_ms - follow.record[0]) > 1.0:
+            Logger.error(
+                f"Cue {cue.id} fires its follow at {fire_ms:.0f}ms but "
+                f"announced {follow.record[0]:.0f}ms to the other nodes"
+            )
+        return True
+
+    def _leave_follow(
+        self, cue: Cue, follow: _FollowOut, arm_epoch: int | None
+    ) -> None:
+        """go_threaded's exit: a pass that announced and did not fire cancels,
+        unless every node already knows (a STOP or a load, the yield) or go()
+        took the announcement (the cue was started again). Never raises."""
+        record = follow.record
+        if record is None or follow.fired:
+            return
+        try:
+            with self._lock:
+                if not self._take_follow_record_locked(cue, record):
+                    return
+                if arm_epoch is not None and arm_epoch != self._disarm_epoch:
+                    return
+                if follow.error:
+                    reason = "error"
+                elif follow.yielded:
+                    return
+                elif getattr(cue, "_stop_requested", False):
+                    reason = "stop"
+                else:
+                    Logger.warning(
+                        f"Cue {cue.id} ended without firing its follow for no "
+                        "known reason; cancelling it on the other nodes"
+                    )
+                    reason = "error"
+                relay = self._follow
+                if relay is not None:
+                    relay.cancel(cue, record[0], record[1], reason)
+        except Exception as e:
+            Logger.error(f"Could not cancel the follow of cue {cue.id}: {e}")
+
+    def stop_dispatched_follow(
+        self,
+        cue: Cue,
+        gen: int,
+        disarm_epoch: int,
+        armed_at: float | None,
+        may_cut: bool,
+        grace_s: float,
+        started_before: float | None = None,
+    ) -> tuple[str, float | None]:
+        """Stop a cue a cross-node follow dispatched, after the owner
+        cancelled that follow (869fc8ytz). Returns (outcome, age):
+
+        - "owned": a newer GO or a STOP has the cue (generation or epoch
+          moved); nothing is touched;
+        - "stopped": it had not started, or started less than `grace_s` ago
+          and `may_cut` (the source was stopped or started again);
+        - "left": it started too long ago, or the cancel came from an error
+          -- a cue on stage is never cut for an internal reason.
+
+        `age` is seconds since the cue produced output, None if it had not.
+        `started_before` is when the cue went on stage in a pass that was
+        still playing when the follow dispatched it again (recorded by the
+        follow's commit gate): its output counts as started.
+        The decision and the stop flags are one lock section; the disarm is
+        guarded again (disarm_if_unchanged)."""
+        with self._lock:
+            if (
+                getattr(cue, "_go_generation", 0) != gen
+                or self._disarm_epoch != disarm_epoch
+            ):
+                return "owned", None
+            started = getattr(cue, "_revealed_at", None)
+            if started is None and getattr(cue, "_revealed", False):
+                started = monotonic()
+            if started is None:
+                started = started_before
+            age = None if started is None else monotonic() - started
+            if age is not None and (age >= grace_s or not may_cut):
+                return "left", age
+            cue._stop_requested = True
+            new_gen = gen + 1
+            cue._go_generation = new_gen
+            cue._playing = False
+        self.cancel_pending_descendants(cue)
+        self._end_illumination(cue)
+        # Let the cue's own loop see the flag and leave (polls every 20 ms),
+        # as the stop action does.
+        sleep(0.1)
+        self.disarm_if_unchanged(
+            cue, new_gen, disarm_epoch, armed_at, reason="follow_cancelled"
+        )
+        return "stopped", age
+
+    def disarm_if_unchanged(
+        self,
+        cue: Cue,
+        gen: int,
+        disarm_epoch: int,
+        armed_at: float | None,
+        reason: str,
+    ) -> bool:
+        """Disarm a cue only if nothing took it since the caller decided to.
+
+        In one lock section: the generation, the STOP/load epoch and the arm
+        stamp must be the caller's, the cue still loaded and no arm of it in
+        flight; then this thread takes the cue's arm claim and unpublishes it
+        (unloaded, out of the armed list). Its player and layers are released
+        outside the lock while the claim is held, so no arm of the same cue
+        can run meanwhile; the claim is released in a finally (a leaked one
+        would make the cue unarmable until the engine restarts). Returns True
+        if it disarmed."""
+        with self._lock:
+            registry = self._arming_registry()
+            if (
+                getattr(cue, "_go_generation", 0) != gen
+                or self._disarm_epoch != disarm_epoch
+                or not getattr(cue, "loaded", False)
+                or getattr(cue, "_armed_at", None) != armed_at
+                or registry.get(cue.id) is not None
+            ):
+                return False
+            claim = _ArmClaim(holder=current_thread().name, started=monotonic())
+            registry[cue.id] = claim
+            cue.loaded = False
+            cue._playing = False
+            if cue.id in self._armed_cues_set:
+                self._armed_cues.remove(cue)
+                self._armed_cues_set.discard(cue.id)
+        try:
+            Logger.info(f"Disarming cue {cue.id} ({reason})")
+            try:
+                if isinstance(cue, AudioCue):
+                    self.communications_thread.remove_player(
+                        f"audioplayer_{cue.id}", timeout=0.1
+                    )
+                self.communications_thread.remove_cue(cue.id, timeout=0.1)
+            except Exception:
+                pass
+            self._release_cue_resources(cue, reason)
+        finally:
+            with self._lock:
+                if registry.get(cue.id) is claim:
+                    del registry[cue.id]
+            claim.event.set()
+        return True
 
     def wait_for_cue(self, thread: Thread) -> None:
         """Waits for a cue to finish."""

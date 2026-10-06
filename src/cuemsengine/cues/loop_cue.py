@@ -25,6 +25,16 @@ from ..tools.MtcListener import CTimecode, MtcListener
 CUE_STATUS_UPDATE_HZ = 2
 
 
+def _start_of_last_loop(cue, loop_counter: int, on_last_loop) -> None:
+    """Call on_last_loop at the start of the last of several loops: the
+    previous iteration has re-based _end_mtc to the final end by now."""
+    if on_last_loop is not None and cue.loop > 1 and loop_counter == cue.loop - 1:
+        try:
+            on_last_loop()
+        except Exception as e:
+            Logger.error(f"Last-loop callback of cue {cue.id} failed: {e}")
+
+
 @singledispatch
 def loop_cue(cue: Cue, mtc: MtcListener):
     """
@@ -92,7 +102,7 @@ def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
 
 
 @loop_cue.register
-def loop_audioCue(cue: AudioCue, mtc: MtcListener):
+def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
     """Handle the audio media playback loop.
 
     This method manages the playback loop for audio media, including handling
@@ -101,6 +111,9 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
     Args:
         ossia: The OSC communication interface.
         mtc: The MIDI Time Code interface.
+        on_last_loop: called once, at the start of the last of several loops,
+            when the cue's final end is known (cross-node Auto follow,
+            869fc8ytz). Never for a single or an endless loop.
     """
     Logger.info(
         f"Running audio cue loop {cue.id}, cue.loop={cue.loop}"
@@ -122,6 +135,7 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener):
             if cue._stop_requested:
                 Logger.info(f"Audio loop {cue.id} cancelled by stop request")
                 return
+            _start_of_last_loop(cue, loop_counter, on_last_loop)
             Logger.info(
                 f"Audio loop iteration starting: loop_counter={loop_counter},"
                 f"cue.loop={cue.loop}"
@@ -260,11 +274,12 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
 
 
 @loop_cue.register
-def loop_videoCue(cue: VideoCue, mtc: MtcListener):
+def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
     """Handle the video media playback loop.
 
     Manages looping behavior for all layers in cue._layer_ids,
     updating offset via the single VideoClient in cue._osc.
+    on_last_loop: as for loop_audioCue.
     """
     Logger.info(
         f"Running video cue loop {cue.id}, cue.loop={cue.loop}"
@@ -300,6 +315,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener):
             if cue._stop_requested:
                 Logger.info(f"Video loop {cue.id} cancelled by stop request")
                 return
+            _start_of_last_loop(cue, loop_counter, on_last_loop)
             # Future: uncomment to enable percentage progress updates.
             # last_status_update = 0.0
             while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
