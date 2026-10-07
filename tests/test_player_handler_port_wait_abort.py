@@ -66,3 +66,31 @@ def test_an_exited_process_aborts_the_wait():
 
 def test_a_player_without_a_process_yet_does_not_abort_the_wait():
     assert _should_abort(SimpleNamespace(p=None))() is False
+
+
+# 869fbyjzx: the wiring waits for the player's own readiness event. The whole
+# fix hangs on this one argument, so it has its own tests.
+
+
+def _wire(player):
+    ph = _handler(player)
+    with patch("cuemsengine.players.PlayerHandler.PORT_HANDLER") as ports:
+        ports.assign_ports.return_value = {"audio_output": 9999}
+        ph.new_audio_output(_cue())
+    return ph._audio_mixer.connect_player_to_outputs.call_args.kwargs
+
+
+def test_the_players_ready_event_reaches_the_wiring():
+    from threading import Event
+
+    player = SimpleNamespace(p=None, ready=Event())
+    assert _wire(player)["ready"] is player.ready
+
+
+def test_a_player_without_a_ready_event_warns_and_is_wired_on_the_port(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        kwargs = _wire(SimpleNamespace(p=None))
+    assert kwargs["ready"] is None
+    assert "has no ready event" in caplog.text

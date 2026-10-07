@@ -60,7 +60,6 @@ class TestAudioMixer:
             patch("cuemsengine.players.AudioMixer.sleep"),
             patch.object(AudioMixer, "call_subprocess"),
         ):
-
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs, port=8000, mixer_id="test-node-123"
             )
@@ -79,7 +78,6 @@ class TestAudioMixer:
             patch("cuemsengine.players.AudioMixer.sleep"),
             patch.object(AudioMixer, "call_subprocess"),
         ):
-
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
@@ -756,7 +754,6 @@ class TestMixerClient:
                 "cuemsengine.players.AudioMixer.add_callback_to_all"
             ) as mock_add_callback,
         ):
-
             mixer_client.add_to_oscquery_server(mock_server)
 
             mock_add_callback.assert_called_once()
@@ -804,7 +801,6 @@ class TestStartAudioMixer:
             patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
-
             # Mock mixer instance
             mock_mixer = Mock()
             mock_mixer.pid = 12345
@@ -844,7 +840,6 @@ class TestStartAudioMixer:
             patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
-
             mock_mixer = Mock()
             mock_mixer.pid = 12345
             mock_mixer_class.return_value = mock_mixer
@@ -1004,6 +999,24 @@ class TestPlayerReadyLine:
             ]
         )
         assert player.ready.is_set()
+
+    def test_a_second_run_starts_not_ready(self):
+        from cuemsengine.players.Player import Player
+
+        player = Player()
+        player.ready.set()  # left over from an earlier run
+        import io
+
+        fake = Mock()
+        fake.pid = 1
+        fake.stdout = io.BytesIO(b"starting\n")
+        fake.poll.side_effect = [None, 0]
+        with (
+            patch("cuemsengine.players.Player.Popen", return_value=fake),
+            patch("cuemsengine.players.Player.sleep"),
+        ):
+            player.call_subprocess(["cuems-audioplayer"])
+        assert not player.ready.is_set()
 
     def test_other_lines_do_not(self):
         player = self._run(
@@ -1295,3 +1308,51 @@ class TestVerifyAudioWiringAtGo:
                 repair=(True, [(P0, "system:playback_1")]),
             )
         assert "stray edge(s) still connected" in caplog.text
+
+
+class TestSharedBudget:
+    """The ready wait and the port wait never exceed today's ceiling,
+    whatever share the ready wait used (869fbyjzx review)."""
+
+    @pytest.mark.parametrize("n", [0, 1, 7, 10, 11, 100, 289])
+    @pytest.mark.parametrize(
+        "max_retries,retry_delay", [(30, 0.5), (10, 0.3), (6, 0.2)]
+    )
+    def test_total_wait_stays_within_the_ceiling(self, n, max_retries, retry_delay):
+        ready = _ReadyAfter(n)
+        m, cm = TestConnectWaitsForReady._mixer({IN1, IN2})  # port never appears
+        with patch("time.sleep") as mock_sleep:
+            m.connect_player_to_outputs(
+                PL,
+                "outport",
+                OUTS2,
+                should_abort=lambda: False,
+                ready=ready,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+            )
+        ceiling = (max_retries - 1) * retry_delay
+        # Slices actually waited: the call that returns \"ready\" waits for nothing.
+        waited_slices = min(n, max(1, int(round(ceiling / 0.05))))
+        used = waited_slices * 0.05 + sum(c.args[0] for c in mock_sleep.call_args_list)
+        assert used <= ceiling + 1e-9, (n, used, ceiling)
+
+
+class TestRepairRecheck:
+    def test_a_stray_removed_by_someone_else_is_not_a_survivor(self):
+        # disconnect_by_name fails (the edge was already gone), and the edge
+        # is not connected any more: it is not reported as left.
+        cm = _fake_conn_man({P0, P1, IN1, IN2}, {P0: ["system:playback_2"]})
+        calls = {"n": 0}
+
+        def is_connected(src, dst):
+            calls["n"] += 1
+            return calls["n"] == 1  # connected at the first check, gone after
+
+        cm.is_connected.side_effect = is_connected
+        cm.disconnect_by_name.return_value = False
+        m = _build_bare_mixer(OUTS2, cm)
+        assert m.repair_player_connections([], [(P0, "system:playback_2")]) == (
+            True,
+            [],
+        )

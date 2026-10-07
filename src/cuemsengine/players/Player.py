@@ -65,6 +65,9 @@ class Player(Thread):
         Sets status to 'running' on success, 'failed' on error.
         """
         try:
+            # This run starts not ready: an Event left set by an earlier run of
+            # the same Player object would pass the audio wiring's gate at once.
+            self.ready.clear()
             my_env = os.environ.copy()
             my_env["DISPLAY"] = ":0"
             self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT, env=my_env)
