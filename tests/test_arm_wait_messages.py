@@ -6,11 +6,11 @@
 A GO that finds its cue still being armed (a pre-arm, an audio player still
 starting) used to log "this should not happen, pre-arm may have failed.
 Re-arming as fallback." It had not failed: it was in flight, and the GO waited
-for it. The two sites — go() and the cue's own thread (go_threaded) — now say
-which case it is, and report the wait from what arm() actually did.
+for it. go() now says which case it is, and reports the wait from what arm()
+actually did. (rc5 has only this site; rc_1 also has the cue's own-thread
+dispatch site, with its own tests.)
 
-True fallbacks keep "not loaded at go() time" / "not loaded at dispatch" and
-"Re-arming as fallback": the harnesses and an acceptance criterion count them.
+True fallbacks keep "not loaded at go() time" and "Re-arming as fallback": the harnesses and an acceptance criterion count them.
 """
 
 import logging
@@ -65,9 +65,9 @@ def _go_handler(in_flight, arm):
     return ch
 
 
-def _go(ch, cue, chain_epoch=None):
+def _go(ch, cue):
     with patch("cuemsengine.cues.CueHandler.Thread") as thread:
-        ch.go(cue, MagicMock(), 0.0, chain_epoch=chain_epoch)
+        ch.go(cue, MagicMock(), 0.0)
     return thread
 
 
@@ -97,17 +97,6 @@ class TestGoSite:
         ), caplog.text
         assert "pre-arm may have failed" not in caplog.text
 
-    def test_a_continuation_dispatches_and_does_not_claim_to_wait(self, caplog):
-        cue = _cue()
-        arm = _arm_that()
-        ch = _go_handler(HELD, arm)
-        with caplog.at_level(logging.INFO):
-            _go(ch, cue, chain_epoch=1)
-        assert "not armed yet at go() time — dispatching" in caplog.text
-        assert "waited" not in caplog.text
-        assert "Re-arming as fallback" not in caplog.text
-        arm.assert_not_called()  # a continuation never arms in go()
-
     def test_the_arm_finished_before_this_go_looked(self, caplog):
         # in flight at the first look, but arm() found it loaded: no wait.
         cue = _cue()
@@ -136,53 +125,3 @@ class TestGoSite:
         assert args == (cue,)
         assert kwargs["init"] is True and kwargs["epoch"] == 0
         assert isinstance(kwargs["wait_report"], dict)
-
-
-def _dispatch_handler(in_flight, arm):
-    """go_threaded on a continuation cue, as test_dispatch_reorder drives it."""
-    ch = object.__new__(CueHandler)
-    ch._lock = Lock()
-    ch._armed_cues = []
-    ch._armed_cues_set = set()
-    ch._disarm_epoch = 0
-    ch.communications_thread = MagicMock()
-    ch.disarm = MagicMock()
-    ch._arm_ahead = MagicMock()
-    ch.go = MagicMock(return_value=None)
-    ch._next_local_fire = MagicMock(return_value=(None, 0.0))
-    ch.describe_arm_in_flight = MagicMock(return_value=in_flight)
-    ch.arm = arm
-    return ch
-
-
-class TestDispatchSite:
-    @staticmethod
-    def _dispatch(ch, cue):
-        from test_dispatch_reorder import _FakeMtc, _cue as reorder_cue
-
-        mtc = _FakeMtc(0)
-        c = reorder_cue(id=cue.id)
-        c.loaded = False
-        with (
-            patch("cuemsengine.cues.CueHandler.run_cue"),
-            patch("cuemsengine.cues.CueHandler.reveal_cue"),
-            patch("cuemsengine.cues.CueHandler.loop_cue"),
-            patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
-        ):
-            ch.go_threaded(c, mtc, 0.0, c._go_generation, 1)
-        return c
-
-    def test_an_arm_in_flight_is_waited_for(self, caplog):
-        ch = _dispatch_handler(HELD, _arm_that(waited_s=0.36))
-        with caplog.at_level(logging.INFO):
-            self._dispatch(ch, _cue())
-        assert f"is still being armed ({HELD}) at dispatch" in caplog.text
-        assert "waited 0.36s at dispatch" in caplog.text
-        assert "Re-arming as fallback" not in caplog.text
-
-    def test_nothing_in_flight_is_a_fallback(self, caplog):
-        ch = _dispatch_handler(None, _arm_that())
-        with caplog.at_level(logging.INFO):
-            self._dispatch(ch, _cue())
-        assert "not loaded at dispatch — no arm in flight" in caplog.text
-        assert "Re-arming as fallback" in caplog.text

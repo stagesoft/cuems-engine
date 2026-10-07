@@ -472,8 +472,15 @@ class CueHandler:
         init=False,
         walk: _ArmWalk | None = None,
         epoch: int | None = None,
+        wait_report: dict | None = None,
     ) -> bool:
         """Arms a cue by appending it to the armed_cues list.
+
+        wait_report: optional dict. When this call waits for another thread's
+        arm of the same cue, it sets wait_report["waited_s"] (total seconds
+        waited) and wait_report["holder"] (that thread's name), so a caller
+        can say what really happened instead of guessing from a check made
+        before the call (869fbyjzx).
 
         walk: set only by a background _arm_ahead walk (NodeEngine's PreArm).
         Its excluded types and should_continue checkpoint also govern this
@@ -515,6 +522,7 @@ class CueHandler:
                 return False
 
         wait_deadline = None
+        waited_total = 0.0
         while True:
             needs_disarm = False
             claim = None
@@ -564,7 +572,12 @@ class CueHandler:
             Logger.debug(
                 f"Waiting for in-progress arm of {type(cue).__name__} {cue.id}"
             )
+            wait_started = monotonic()
             woke = remaining > 0 and pending.event.wait(timeout=remaining)
+            waited_total += monotonic() - wait_started
+            if wait_report is not None:
+                wait_report["waited_s"] = waited_total
+                wait_report["holder"] = pending.holder
             with self._lock:
                 pending.waiters -= 1
             if not woke:
@@ -665,6 +678,23 @@ class CueHandler:
                     self.arm(cue._action_target_object, init, epoch=epoch)
 
         return True
+
+    @staticmethod
+    def _log_arm_wait(
+        cue: Cue, where: str, in_flight: str | None, wait_report: dict
+    ) -> None:
+        """Report what arm() did about an arm in flight (869fbyjzx)."""
+        waited = wait_report.get("waited_s")
+        if waited is not None:
+            Logger.info(
+                f"Cue {cue.id} waited {waited:.2f}s at {where} for the arm in "
+                f"progress (held by {wait_report.get('holder')})"
+            )
+        elif in_flight is not None:
+            Logger.info(
+                f"Cue {cue.id}: the arm in progress at {where} had finished "
+                f"before this call looked; no wait"
+            )
 
     def describe_arm_in_flight(self, cue: Cue) -> str | None:
         """Who is arming this cue right now and for how long, as text for a
@@ -828,12 +858,33 @@ class CueHandler:
         if arm_epoch is None:
             arm_epoch = self._disarm_epoch
         if not hasattr(cue, "loaded") or not cue.loaded:
-            Logger.warning(
-                f"Cue {cue.id} not loaded at go() time — this should not"
-                f"happen, "
-                f"pre-arm may have failed. Re-arming as fallback."
-            )
-            self.arm(cue, init=True, epoch=arm_epoch)
+            # 869fbyjzx: say which case this is. An arm still in flight (a
+            # pre-arm, an audio player still starting) is not a failure; the
+            # old "pre-arm may have failed" said it was. Best-effort: the arm
+            # can start or finish between this look and arm() below, so the
+            # wait itself is reported from what arm() actually did. A true
+            # fallback keeps "not loaded at go() time" and "Re-arming as
+            # fallback": the harnesses count them. (rc5 has only this site;
+            # the cue's own-thread dispatch site exists on rc_1 only.)
+            # An arm in flight that a GO waits for is still a LATE cue when
+            # the arm is slower than the GO gap (an audio arm is ~0.47 s
+            # cold): arming before the hand-off ("Part B") is the only cure
+            # and is not built; see AudioMixer.connect_player_to_outputs.
+            in_flight = self.describe_arm_in_flight(cue)
+            if in_flight is not None:
+                Logger.info(
+                    f"Cue {cue.id} is still being armed ({in_flight}) at go() "
+                    f"time — waiting for the arm in progress"
+                )
+            else:
+                Logger.warning(
+                    f"Cue {cue.id} not loaded at go() time — no arm in flight "
+                    f"(never armed, or an earlier arm failed or was "
+                    f"abandoned). Re-arming as fallback."
+                )
+            wait_report = {}
+            self.arm(cue, init=True, epoch=arm_epoch, wait_report=wait_report)
+            self._log_arm_wait(cue, "go() time", in_flight, wait_report)
             if not hasattr(cue, "loaded") or not cue.loaded:
                 if arm_epoch != self._disarm_epoch:
                     # Not an arm failure: the operator's STOP (or a load)
