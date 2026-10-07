@@ -1,3 +1,28 @@
+cuems-engine (0.1.0rc5-5) bookworm; urgency=medium
+
+  * Audio: wire a player to the mixer only once it reports RUNNING
+    (869fbyjzx, 869fcvz85). The player's JACK ports exist before it has
+    finished starting, and RtAudio auto-connects them to system:playback_*
+    only when its stream starts. Wiring earlier found nothing to disconnect,
+    and the auto-connect then stayed: the cue sounded through the mixer AND
+    straight to the outputs, doubled and outside mixer volume and mute (9 %
+    of arms in earlier test2 logs). The wiring now waits for the player's
+    own "[OK] RUNNING!" line (Player.ready), sharing the old 14.5 s budget
+    with the port wait; a dead player ends the wait, a player that never
+    prints it is wired on port presence with a WARNING.
+  * The GO-time wiring check and repair work edge by edge (stray and missing
+    edges), never by a full rewire: a GO can reach a cue that is still
+    playing.
+  * A GO that finds its cue still being armed says so ("still being armed,
+    waiting") instead of "pre-arm may have failed".
+  * KNOWN LIMIT: an audio arm still takes ~0.47 s cold (0.35 s warm), so a GO
+    that reaches a node audio cue sooner than that after its arm began is
+    still late. Plan B (arm before the hand-off) is not built; see the engine
+    CLAUDE.md. Backport of the rc_1 change (cuems-engine PR #27).
+  * UNRELEASED until tested on test2 on the rc5 line.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 07 Oct 2026 14:00:00 +0200
+
 cuems-engine (0.1.0rc5-4) bookworm; urgency=medium
 
   * Video: only enable videocomposer wraparound for cues that repeat. A
