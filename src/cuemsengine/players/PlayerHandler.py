@@ -536,6 +536,15 @@ class PlayerHandler:
                 )
             else:
                 Logger.info(f"Connecting {player_name} to outputs: {selected_outputs}")
+                ready = getattr(player, "ready", None)
+                if ready is None:
+                    # Every Player has one. Without it the wiring would fall
+                    # back to port presence and the doubled-audio race (869fcvz85)
+                    # would come back unnoticed.
+                    Logger.warning(
+                        f"Audio player {player_name} has no ready event - wiring "
+                        "on port presence (the auto-connect race is possible)"
+                    )
                 connected = self._audio_mixer.connect_player_to_outputs(
                     player_name=player_name,
                     player_output_prefix="outport",
@@ -548,7 +557,7 @@ class PlayerHandler:
                     # Wire only once the player reports itself started: its
                     # ports exist earlier, before RtAudio's auto-connect,
                     # which an earlier wiring would leave in place (869fbyjzx).
-                    ready=getattr(player, "ready", None),
+                    ready=ready,
                 )
                 if connected is False:
                     # Route to the mixer failed: the cue would show armed/green

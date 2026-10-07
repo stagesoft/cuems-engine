@@ -3,6 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import math
 from time import sleep
 
 from cuemsutils.log import Logger, logged
@@ -373,7 +374,11 @@ class AudioMixer(Player):
                     "presence (old or unusual player build)"
                 )
             if retry_delay > 0:
-                spent_attempts = int(slices_used * ready_slice / retry_delay)
+                # Round UP (to 6 places first, against float noise): the ready
+                # wait may never leave the port wait more than the budget.
+                spent_attempts = math.ceil(
+                    round(slices_used * ready_slice / retry_delay, 6)
+                )
                 port_attempts = max(1, max_retries - spent_attempts)
             else:
                 port_attempts = 1
@@ -608,7 +613,11 @@ class AudioMixer(Player):
             if not self.conn_man.is_connected(src, dst):
                 continue
             if not self.conn_man.disconnect_by_name(src, dst):
-                strays_left.append((src, dst))
+                # Another thread (a re-arm wiring the same player) may have
+                # removed it between our check and our disconnect: then it is
+                # gone, not a survivor.
+                if self.conn_man.is_connected(src, dst):
+                    strays_left.append((src, dst))
         connected_ok = True
         for src, dst in missing:
             ok = self.conn_man.connect_by_name(src, dst)
