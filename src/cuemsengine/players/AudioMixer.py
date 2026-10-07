@@ -279,6 +279,22 @@ class AudioMixer(Player):
             A player that never reports ready is wired on port presence, with
             a WARNING.
 
+        KNOWN LIMIT (869fbyjzx): this makes an audio arm correct and as fast as the
+        player allows, about 0.47 s cold (0.35 s warm), most of it the player's
+        own start-up. A GO that reaches a cue less than that after its arm
+        started still waits for the arm and fires LATE by the difference. On
+        test2 (a node audio cue behind another node's pause, second GO after
+        the hand-off): 0.3 s -> ~0.2 s late; 0.5 s and later -> on time.
+        Only arming BEFORE the hand-off removes it. PLAN B, not built because
+        no real show hits it today (sala1's node segments are video only; the
+        cost is players and layers held for the whole pause): arm the first
+        local segment at load even behind another node's pause, and the next
+        one after each GO ("Part B", Plans/2026-10-01-engine-prearm-past-
+        pauses-and-inventory.md; measured cost ~15 MB per held audio player,
+        ~40 MB GPU per held 1080p video layer). A cheaper variant is to
+        pre-launch players. Revisit if a venue reports a late node audio cue
+        after a fast double GO.
+
         Returns:
             True if every required player→mixer connection was made, False if
             the player ports never registered, no mixer inputs resolved, or any

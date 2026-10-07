@@ -48,6 +48,10 @@ class Player(Thread):
         # before wiring the player to the mixer: the player's JACK ports exist
         # before it has finished starting, and wiring them that early leaves
         # RtAudio's own auto-connect to system:playback in place (869fbyjzx).
+        # Known limit: waiting for it makes an audio arm ~0.47 s cold, so a GO
+        # that comes sooner after the arm began is still late. Plan B (arm
+        # before the hand-off) is described in AudioMixer.connect_player_to_
+        # outputs and the 869fbyjzx plan; it is not built.
         self.ready = Event()
 
     def run(self):
