@@ -530,9 +530,9 @@ class TestPlayerConnectionsCorrect:
         )
         # Outport 1 must never be read on a mono player.
         for c in cm.get_connections.call_args_list + cm.is_connected.call_args_list:
-            assert c.args[0] != "Audio_Player-X:outport 1", (
-                f"mono check leaked an outport 1 probe: {c}"
-            )
+            assert (
+                c.args[0] != "Audio_Player-X:outport 1"
+            ), f"mono check leaked an outport 1 probe: {c}"
 
     def test_mono_with_4_outputs(self):
         # 4 fan-out targets, mono player: outport 0 → all 4 inputs.
