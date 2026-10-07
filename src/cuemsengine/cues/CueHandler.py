@@ -1259,6 +1259,10 @@ class CueHandler:
             # wait itself is reported from what arm() actually did. True
             # fallbacks keep "not loaded at go() time" and "Re-arming as
             # fallback": the harnesses count them.
+            # An arm in flight that a GO waits for is still a LATE cue when the
+            # arm is slower than the GO gap (an audio arm is ~0.47 s cold):
+            # arming before the hand-off ("Part B") is the only cure and is
+            # not built; see AudioMixer.connect_player_to_outputs (869fbyjzx).
             in_flight = self.describe_arm_in_flight(cue)
             if is_continuation:
                 Logger.info(
