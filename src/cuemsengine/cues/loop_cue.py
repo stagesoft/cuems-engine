@@ -302,14 +302,18 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
 
         layer_ids = getattr(cue, "_layer_ids", [])
 
-        # Tell the videocomposer this is a looping cue so it wraps frames at
-        # the
-        # loop boundary (instead of clamping to the last frame).
-        for layer_id in layer_ids:
-            try:
-                cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", 1)
-            except Exception as e:
-                Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
+        # Tell the videocomposer to wrap frames at the loop boundary (instead
+        # of clamping to the last frame) ONLY for a cue that really repeats.
+        # A play-once cue must clamp: the videocomposer runs its display
+        # latency (33 ms) ahead of MTC, so with wraparound on it reaches end
+        # of file before the engine hides the layer and shows frame 0 again
+        # (869fa89uh).
+        if cue.loop != 1:
+            for layer_id in layer_ids:
+                try:
+                    cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", 1)
+                except Exception as e:
+                    Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
 
         while cue.loop < 1 or loop_counter < cue.loop:
             if cue._stop_requested:
@@ -368,6 +372,20 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
                         )
                     except Exception as e:
                         Logger.error(f"Offset send failed for layer {layer_id}: {e}")
+
+                # Last pass of a counted loop: stop wrapping (after the new
+                # offset, so the layer never clamps mid-boundary) so the end
+                # of this pass holds the last frame like a play-once cue.
+                if cue.loop >= 1 and loop_counter + 1 >= cue.loop:
+                    for layer_id in layer_ids:
+                        try:
+                            cue._osc.set_value(
+                                f"/videocomposer/layer/{layer_id}/loop", 0
+                            )
+                        except Exception as e:
+                            Logger.error(
+                                f"Loop disable failed for layer {layer_id}: {e}"
+                            )
 
         Logger.info(f"Loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}")
 

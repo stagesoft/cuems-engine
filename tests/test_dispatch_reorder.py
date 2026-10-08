@@ -345,7 +345,9 @@ class TestOwnArm:
         cue = _cue()
         cue.loaded = False
         ch.arm = MagicMock(
-            side_effect=lambda c, init=False, epoch=None: setattr(c, "loaded", True)
+            side_effect=lambda c, init=False, epoch=None, wait_report=None: setattr(
+                c, "loaded", True
+            )
         )
         mtc = _FakeMtc(0)
         with (
@@ -355,7 +357,7 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
             ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
-        ch.arm.assert_called_once_with(cue, init=True, epoch=None)
+        ch.arm.assert_called_once_with(cue, init=True, epoch=None, wait_report={})
         rv.assert_called_once()
 
     def test_an_unarmable_cue_dies_alone(self):
@@ -388,7 +390,7 @@ class TestOwnArm:
         cue.loaded = False
         mtc = _FakeMtc(0)
 
-        def slow_arm(c, init=False, epoch=None):
+        def slow_arm(c, init=False, epoch=None, wait_report=None):
             mtc.advance(20)  # 20s of JACK port waiting
             c.loaded = True
 

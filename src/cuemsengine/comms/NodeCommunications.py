@@ -141,8 +141,12 @@ class NodeCommunications(AsyncCommsThread):
                 try:
                     self._command_callback(command_name, value, address)
                 except Exception as e:
+                    # With the traceback: the message alone ("[Errno 1]
+                    # Operation not permitted") does not say which step of
+                    # the command failed (869evtdf7).
                     Logger.error(
-                        f"Error executing command callback for {command_name}: {e}"
+                        f"Error executing command callback for {command_name}: {e}",
+                        exc_info=True,
                     )
 
             thread = threading.Thread(
