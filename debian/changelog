@@ -1,3 +1,18 @@
+cuems-engine (0.1.0rc5-6) UNRELEASED; urgency=medium
+
+  * Orphan sweeps never abort a project load (869evtdf7, backport of
+    stagesoft/cuems-engine#29). An orphaned player the node could not kill
+    (EPERM: a process of another user whose command line merely contained
+    "cuems-audioplayer") escaped _load_project_inner after the old project
+    was torn down: no armed_ready, only "Error executing command callback
+    for load: [Errno 1] Operation not permitted". Both sweeps and the zombie
+    JACK client cleanup now log and go on (EPERM names the PID and owner;
+    pgrep rc >= 2 is a WARNING), match only own-user processes with argv[0]
+    anchored, warn at start about unknown player binary names, and the
+    command callback failure is logged with its traceback.
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 08 Oct 2026 19:33:28 +0200
+
 cuems-engine (0.1.0rc5-5) bookworm; urgency=medium
 
   * Audio: wire a player to the mixer only once it reports RUNNING
