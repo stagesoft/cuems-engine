@@ -3,7 +3,9 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import contextlib
 import logging
+import threading
 from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
@@ -15,6 +17,28 @@ from cuemsengine.players.AudioMixer import (
     start_audio_mixer,
 )
 from cuemsengine.players.JackConnectionManager import JackConnectionManager
+
+
+@contextlib.contextmanager
+def _this_thread_sleeps():
+    """Patch time.sleep (connect_player_to_outputs imports it at call time)
+    and record only the calls made by the test's own thread.
+
+    Patching time.sleep is process-wide: under pytest-xdist, threads left
+    running by other tests in the same worker sleep through the patch too.
+    Counting every call once added 6083 s of foreign sleeps to a sub-second
+    budget check and failed CI on an unrelated PR (869fbyjzx test, found
+    2026-10-08 on PR #25). Foreign calls are still swallowed, as before.
+    """
+    me = threading.get_ident()
+    calls = []
+
+    def fake_sleep(seconds):
+        if threading.get_ident() == me:
+            calls.append(seconds)
+
+    with patch("time.sleep", side_effect=fake_sleep):
+        yield calls
 
 
 class TestAudioMixer:
@@ -225,13 +249,13 @@ class TestConnectPlayerToOutputs:
         ports = {"test_mixer:input_1", "test_mixer:input_2"}
         cm = _fake_conn_man(ports)
         m = _build_bare_mixer(self.OUTS, cm)
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(self.PLAYER, "outport", self.OUTS)
         assert result is False
         cm.connect_by_name.assert_not_called()
         # The wait loop must actually have waited (the old defeated guard
         # broke on attempt 0 without a single sleep).
-        assert mock_sleep.call_count >= 29
+        assert len(sleeps) >= 29
 
     def test_a_dead_player_process_ends_the_wait(self, caplog):
         """869f9wqpn: a STOP (or a load) kills the player while the engine
@@ -246,25 +270,25 @@ class TestConnectPlayerToOutputs:
             polls.append(1)
             return len(polls) > 2  # alive twice, then dead
 
-        with caplog.at_level("WARNING"), patch("time.sleep") as mock_sleep:
+        with caplog.at_level("WARNING"), _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(
                 self.PLAYER, "outport", self.OUTS, should_abort=process_gone
             )
         assert result is False
         cm.connect_by_name.assert_not_called()
-        assert mock_sleep.call_count == 2, "kept waiting for a dead process"
+        assert len(sleeps) == 2, "kept waiting for a dead process"
         assert "exited before registering" in caplog.text
 
     def test_a_live_player_still_gets_the_whole_wait(self):
         ports = {"test_mixer:input_1", "test_mixer:input_2"}
         cm = _fake_conn_man(ports)
         m = _build_bare_mixer(self.OUTS, cm)
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(
                 self.PLAYER, "outport", self.OUTS, should_abort=lambda: False
             )
         assert result is False
-        assert mock_sleep.call_count >= 29
+        assert len(sleeps) >= 29
 
     def test_registered_ports_win_over_the_abort_check(self):
         ports = {"test_mixer:input_1", "test_mixer:input_2", self.CH0, self.CH1}
@@ -1040,10 +1064,10 @@ class TestConnectWaitsForReady:
         ready = threading.Event()
         ready.set()
         m, cm = self._mixer({P0, P1, IN1, IN2})
-        with patch("time.sleep") as mock_sleep, caplog.at_level(logging.INFO):
+        with _this_thread_sleeps() as sleeps, caplog.at_level(logging.INFO):
             result = m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
         assert result is True
-        mock_sleep.assert_not_called()
+        assert sleeps == []
         assert "reported RUNNING" in caplog.text
         cm.connect_by_name.assert_any_call(P0, IN1)
         cm.connect_by_name.assert_any_call(P1, IN2)
@@ -1097,24 +1121,24 @@ class TestConnectWaitsForReady:
         ready = _ReadyNever()
         m, cm = self._mixer({P0, P1, IN1, IN2})
         cm.client = None
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
         assert result is False
         assert ready.calls == 0
-        mock_sleep.assert_not_called()
+        assert sleeps == []
 
     def test_one_budget_for_both_phases(self):
         """Never ready AND no port: the total stays today's ceiling (14.5 s),
         not the ready wait plus a full port wait on top."""
         ready = _ReadyNever()
         m, cm = self._mixer({IN1, IN2})
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(
                 PL, "outport", OUTS2, should_abort=lambda: False, ready=ready
             )
         assert result is False
         ready_s = ready.calls * 0.05
-        port_s = sum(c.args[0] for c in mock_sleep.call_args_list)
+        port_s = sum(sleeps)
         assert ready_s + port_s <= 14.5 + 1e-9
         assert ready_s >= 14.5 - 0.05
 
@@ -1321,7 +1345,7 @@ class TestSharedBudget:
     def test_total_wait_stays_within_the_ceiling(self, n, max_retries, retry_delay):
         ready = _ReadyAfter(n)
         m, cm = TestConnectWaitsForReady._mixer({IN1, IN2})  # port never appears
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             m.connect_player_to_outputs(
                 PL,
                 "outport",
@@ -1334,7 +1358,7 @@ class TestSharedBudget:
         ceiling = (max_retries - 1) * retry_delay
         # Slices actually waited: the call that returns \"ready\" waits for nothing.
         waited_slices = min(n, max(1, int(round(ceiling / 0.05))))
-        used = waited_slices * 0.05 + sum(c.args[0] for c in mock_sleep.call_args_list)
+        used = waited_slices * 0.05 + sum(sleeps)
         assert used <= ceiling + 1e-9, (n, used, ceiling)
 
 
@@ -1356,3 +1380,27 @@ class TestRepairRecheck:
             True,
             [],
         )
+
+
+def test_sleep_patch_ignores_other_threads():
+    # The guard against the 869fbyjzx CI flake: a thread left running by
+    # another test sleeps while the patch is active; its calls must not be
+    # counted against the test's own wait budget.
+    import time
+
+    go, done = threading.Event(), threading.Event()
+
+    def foreign():
+        go.wait(5)
+        for _ in range(50):
+            time.sleep(100)
+        done.set()
+
+    t = threading.Thread(target=foreign, daemon=True)
+    t.start()
+    with _this_thread_sleeps() as sleeps:
+        go.set()
+        done.wait(5)
+        time.sleep(0.25)
+    assert done.is_set()
+    assert sleeps == [0.25]
