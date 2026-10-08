@@ -1,5 +1,7 @@
-cuems-engine (0.1.0rc5-6) UNRELEASED; urgency=medium
+cuems-engine (0.1.0rc5-6) bookworm; urgency=medium
 
+  * Released together with 0.1.0rc5-5 (never shipped on its own): the
+    audio ready gate below and this fix.
   * Orphan sweeps never abort a project load (869evtdf7, backport of
     stagesoft/cuems-engine#29). An orphaned player the node could not kill
     (EPERM: a process of another user whose command line merely contained
@@ -11,7 +13,7 @@ cuems-engine (0.1.0rc5-6) UNRELEASED; urgency=medium
     anchored, warn at start about unknown player binary names, and the
     command callback failure is logged with its traceback.
 
- -- Ion Reguera <ion@stagelab.coop>  Thu, 08 Oct 2026 19:33:28 +0200
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 08 Oct 2026 19:47:45 +0200
 
 cuems-engine (0.1.0rc5-5) bookworm; urgency=medium
 
