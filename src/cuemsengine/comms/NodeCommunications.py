@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import asyncio
 from typing import Any, Callable, Optional
@@ -118,8 +119,12 @@ class NodeCommunications(AsyncCommsThread):
                 try:
                     self._command_callback(command_name, value, address)
                 except Exception as e:
+                    # With the traceback: the message alone ("[Errno 1]
+                    # Operation not permitted") does not say which step of
+                    # the command failed (869evtdf7).
                     Logger.error(
-                        f"Error executing command callback for {command_name}: {e}"
+                        f"Error executing command callback for {command_name}: {e}",
+                        exc_info=True,
                     )
 
             thread = threading.Thread(
