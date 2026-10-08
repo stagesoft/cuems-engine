@@ -15,6 +15,7 @@ from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
+from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
 from .players.PlayerHandler import (
@@ -101,6 +102,10 @@ class NodeEngine(BaseEngine):
 
     """
 
+    # Set in _setup_nng_command_callback; None until then (and in unit tests
+    # that build the engine without its comms).
+    _follow_relay = None
+
     # GO anchor tolerance (Badajoz 2026-09-25 fix): how far the controller's
     # shipped GO instant may disagree with this node's own MTC before
     # _resolve_go_anchor distrusts it and falls back to a live local read.
@@ -175,6 +180,21 @@ class NodeEngine(BaseEngine):
                 self._handle_nng_command
             )
             Logger.info("NNG command callback registered for NodeEngine")
+            # Cross-node Auto follow (869fc8ytz): announce this node's
+            # follows, apply the ones relayed from other nodes, in bus order.
+            self._follow_relay = FollowRelay(
+                CUE_HANDLER,
+                node_id=self.cm.node_uuid,
+                send=self._send_follow,
+                get_script=lambda: self.script,
+                get_mtc=lambda: getattr(self, "mtc_listener", None),
+                get_project_gen=lambda: self._project_generation,
+                first_local=self._first_local_enabled_in_go_chain,
+            )
+            CUE_HANDLER._follow = self._follow_relay
+            CUE_HANDLER.communications_thread.set_receive_hook(
+                self._on_command_received
+            )
         else:
             Logger.warning(
                 "CUE_HANDLER communications thread: "
@@ -185,6 +205,46 @@ class NodeEngine(BaseEngine):
 
         ACTION_HANDLER.finalize_node_layer_bindings()
         ACTION_HANDLER.set_result_sink(self._action_result_sink)
+
+    def _on_command_received(self, command_name: str, value) -> bool:
+        """Receive hook: runs for every command in BUS order, before its
+        command thread races the others for the command lock (869fc8ytz).
+
+        A follow message is applied here and consumed. GO records the
+        controller's run counter, STOP and load clear it and every pending
+        follow -- here, so a follow relayed before a STOP can never be applied
+        after it. Must not block."""
+        relay = self._follow_relay
+        if relay is None:
+            return False
+        if command_name == "follow":
+            try:
+                relay.on_message(value)
+            except Exception as e:
+                # Consumed anyway: a follow message must never reach the
+                # command lock.
+                Logger.error(f"Follow message failed: {e}")
+            return True
+        if command_name == "go":
+            relay.begin_run(value)
+        elif command_name in ("stop", "load"):
+            relay.end_run(command_name)
+        return False
+
+    def _send_follow(self, data: dict) -> None:
+        """Queue a follow message (announce or cancel) to the controller,
+        which relays it to every node. Never waits."""
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        CUE_HANDLER.communications_thread.send_operation_nowait(
+            NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid,
+                target="follow",
+                data=data,
+            )
+        )
 
     def _handle_nng_command(self, command_name: str, value, address: str = None):
         """Handle a command received via NNG from ControllerEngine.
@@ -436,7 +496,14 @@ class NodeEngine(BaseEngine):
             if command in self.commands_dict.keys():
                 handler = self.commands_dict[command]
                 if handler is not None:
-                    handler(value)
+                    try:
+                        handler(value)
+                    finally:
+                        if command in ("stop", "load") and self._follow_relay:
+                            # The receive hook counted it received; until
+                            # here this node's epochs still belonged to the
+                            # run it ends (869fc8ytz).
+                            self._follow_relay.stop_applied()
                     return True
                 else:
                     Logger.warning(f"Command {command} has no handler")
