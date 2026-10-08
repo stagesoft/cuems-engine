@@ -333,26 +333,36 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"go_mtc_ms": 79240.0}
+                "/engine/command/go",
+                {"go_mtc_ms": 79240.0, "run_seq": controller._run_seq},
             )
 
-    def test_forwards_original_string_value_when_mtc_listener_is_none(self, controller):
+    def test_forwards_only_run_seq_when_mtc_listener_is_none(self, controller):
         """The `controller` fixture builds with_mtc=False -- mtc_listener is
         None, the only reachable no-MTC case in production (go_script already
         refuses unless armed=="yes", and MTC runs by the time a project can be
-        armed)."""
+        armed).
+
+        The GO value is always a dict now (869fc8ytz): it carries the run
+        counter that cross-node follows are checked against. The caller's
+        own value is dropped -- nodes never read it; they only read the
+        anchor, and fall back to their own MTC when it is absent."""
         self._armed(controller)
         assert controller.mtc_listener is None
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script("complex_test")
-            mock_fwd.assert_called_once_with("/engine/command/go", "complex_test")
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
 
-    def test_forwards_none_value_unchanged_when_mtc_listener_is_none(self, controller):
+    def test_forwards_only_run_seq_for_none_value_without_mtc(self, controller):
         self._armed(controller)
         assert controller.mtc_listener is None
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
-            mock_fwd.assert_called_once_with("/engine/command/go", None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
 
     def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
         """test2, 2026-09-25: the controller's listener never opened a port
@@ -360,11 +370,13 @@ class TestGoScriptAnchor:
         node accepted 0.0 as the anchor -- 4.48s late. A listener that is
         present but not receiving must not be trusted: send the GO without
         an anchor, so each node falls back to its own MTC (pre-fix
-        behaviour)."""
+        behaviour). The run counter still goes out (869fc8ytz)."""
         self._armed(controller)
         controller.mtc_listener = Mock()
         controller.mtc_listener.main_tc.milliseconds_exact = 0.0
         controller.mtc_listener.is_receiving.return_value = False
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
-            mock_fwd.assert_called_once_with("/engine/command/go", None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )

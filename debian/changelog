@@ -1,3 +1,32 @@
+cuems-engine (0.1.0rc6-3) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm:
+    - 869fa89uh (#23): a play-once video cue no longer wraps to frame 0 at
+      its end; videocomposer wraparound is enabled only for cues that
+      repeat.
+    - 869fc8ytz (#25): an Auto follow into a cue on another node starts
+      it; the controller relays the follow to the owning node. Every GO
+      value is now a dict carrying run_seq: the WHOLE CLUSTER must run
+      this engine (controller and every node).
+    - 869fbyjzx, 869fcvz85 (#27): an audio player is wired to the mixer
+      only once it reports RUNNING, so RtAudio's auto-connect to
+      system:playback_* is always removed (no more doubled audio outside
+      mixer volume); the GO-time check repairs the wiring edge by edge;
+      arm-wait log lines say whether a GO waited or fell back.
+    - 869fedahu (#28): the controller broadcasts each cue's name on the
+      :9190 channel after every load (/engine/status/cue_name/<uuid>) and
+      replays it to late clients. Additive; older UIs ignore it.
+    - 869evtdf7 (#29): orphan sweeps never abort a project load. An
+      orphaned player the node could not kill (EPERM) used to abort the
+      load after the old project was torn down; both sweeps and the zombie
+      JACK client cleanup now log and go on, match only own-user players
+      by argv[0], and warn at start about unknown player binary names. A
+      failing command callback is logged with its traceback.
+    - #30: AudioMixer wait tests count only the test thread's sleeps
+      (test-only).
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 08 Oct 2026 21:12:33 +0200
+
 cuems-engine (0.1.0rc6-2) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (PR #22):
