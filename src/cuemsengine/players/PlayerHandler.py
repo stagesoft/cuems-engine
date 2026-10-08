@@ -470,7 +470,10 @@ class PlayerHandler:
         with tracked players in _audio_players_by_id. Unmatched ports are
         zombies left by crashed processes — disconnect them from the mixer.
 
-        Called on project load to clear stale state from previous runs.
+        Called on project load to clear stale state from previous runs. Like
+        the orphan sweeps it is hygiene, so it never raises into the load
+        (869evtdf7): a JACK error skips the cleanup with a warning, and audio
+        cues then fail loudly at their own arm.
 
         Returns:
             Number of zombie clients found and cleaned up.
@@ -478,9 +481,15 @@ class PlayerHandler:
         if self._audio_mixer is None:
             return 0
 
-        all_ports = self._audio_mixer.conn_man.get_ports(
-            pattern="Audio_Player-.*", is_audio=True, is_output=True
-        )
+        try:
+            all_ports = self._audio_mixer.conn_man.get_ports(
+                pattern="Audio_Player-.*", is_audio=True, is_output=True
+            )
+        except Exception as e:
+            Logger.warning(
+                f"JACK not reachable, zombie JACK client cleanup skipped: {e!r}"
+            )
+            return 0
         if not all_ports:
             return 0
 
