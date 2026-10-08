@@ -3,7 +3,9 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import contextlib
 import logging
+import threading
 from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
@@ -15,6 +17,28 @@ from cuemsengine.players.AudioMixer import (
     start_audio_mixer,
 )
 from cuemsengine.players.JackConnectionManager import JackConnectionManager
+
+
+@contextlib.contextmanager
+def _this_thread_sleeps():
+    """Patch time.sleep (connect_player_to_outputs imports it at call time)
+    and record only the calls made by the test's own thread.
+
+    Patching time.sleep is process-wide: under pytest-xdist, threads left
+    running by other tests in the same worker sleep through the patch too.
+    Counting every call once added 6083 s of foreign sleeps to a sub-second
+    budget check and failed CI on an unrelated PR (869fbyjzx test, found
+    2026-10-08 on PR #25). Foreign calls are still swallowed, as before.
+    """
+    me = threading.get_ident()
+    calls = []
+
+    def fake_sleep(seconds):
+        if threading.get_ident() == me:
+            calls.append(seconds)
+
+    with patch("time.sleep", side_effect=fake_sleep):
+        yield calls
 
 
 class TestAudioMixer:
@@ -60,7 +84,6 @@ class TestAudioMixer:
             patch("cuemsengine.players.AudioMixer.sleep"),
             patch.object(AudioMixer, "call_subprocess"),
         ):
-
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs, port=8000, mixer_id="test-node-123"
             )
@@ -79,7 +102,6 @@ class TestAudioMixer:
             patch("cuemsengine.players.AudioMixer.sleep"),
             patch.object(AudioMixer, "call_subprocess"),
         ):
-
             mixer = AudioMixer(
                 audio_outputs=mock_audio_outputs,
                 port=8000,
@@ -227,13 +249,13 @@ class TestConnectPlayerToOutputs:
         ports = {"test_mixer:input_1", "test_mixer:input_2"}
         cm = _fake_conn_man(ports)
         m = _build_bare_mixer(self.OUTS, cm)
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(self.PLAYER, "outport", self.OUTS)
         assert result is False
         cm.connect_by_name.assert_not_called()
         # The wait loop must actually have waited (the old defeated guard
         # broke on attempt 0 without a single sleep).
-        assert mock_sleep.call_count >= 29
+        assert len(sleeps) >= 29
 
     def test_a_dead_player_process_ends_the_wait(self, caplog):
         """869f9wqpn: a STOP (or a load) kills the player while the engine
@@ -248,25 +270,25 @@ class TestConnectPlayerToOutputs:
             polls.append(1)
             return len(polls) > 2  # alive twice, then dead
 
-        with caplog.at_level("WARNING"), patch("time.sleep") as mock_sleep:
+        with caplog.at_level("WARNING"), _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(
                 self.PLAYER, "outport", self.OUTS, should_abort=process_gone
             )
         assert result is False
         cm.connect_by_name.assert_not_called()
-        assert mock_sleep.call_count == 2, "kept waiting for a dead process"
+        assert len(sleeps) == 2, "kept waiting for a dead process"
         assert "exited before registering" in caplog.text
 
     def test_a_live_player_still_gets_the_whole_wait(self):
         ports = {"test_mixer:input_1", "test_mixer:input_2"}
         cm = _fake_conn_man(ports)
         m = _build_bare_mixer(self.OUTS, cm)
-        with patch("time.sleep") as mock_sleep:
+        with _this_thread_sleeps() as sleeps:
             result = m.connect_player_to_outputs(
                 self.PLAYER, "outport", self.OUTS, should_abort=lambda: False
             )
         assert result is False
-        assert mock_sleep.call_count >= 29
+        assert len(sleeps) >= 29
 
     def test_registered_ports_win_over_the_abort_check(self):
         ports = {"test_mixer:input_1", "test_mixer:input_2", self.CH0, self.CH1}
@@ -384,7 +406,11 @@ class TestPlayerConnectionsCorrect:
     """Pin the routing equivalence between player_connections_correct and
     connect_player_to_outputs. If connect_player_to_outputs is refactored
     and these diverge, run_audioCue will silently choose the wrong branch
-    on every GO."""
+    on every GO.
+
+    869fbyjzx: the check is now a diff built on one get_connections per
+    outport (both share _expected_edges), so the mock answers
+    get_connections; every case and its intent is unchanged."""
 
     @staticmethod
     def _build_mixer(audio_outputs, conn_man):
@@ -403,6 +429,7 @@ class TestPlayerConnectionsCorrect:
         cm = Mock()
         cm.port_exists.side_effect = lambda p: p in existing_ports
         cm.is_connected.side_effect = lambda src, dst: dst in edges.get(src, [])
+        cm.get_connections.side_effect = lambda p: list(edges.get(p, []))
         return cm
 
     def test_stereo_all_edges_correct_returns_true(self):
@@ -525,9 +552,8 @@ class TestPlayerConnectionsCorrect:
             "outport",
             ["system:playback_1", "system:playback_2"],
         )
-        # is_connected must never be called with outport 1 as source on a mono
-        # player.
-        for c in cm.is_connected.call_args_list:
+        # Outport 1 must never be read on a mono player.
+        for c in cm.get_connections.call_args_list + cm.is_connected.call_args_list:
             assert (
                 c.args[0] != "Audio_Player-X:outport 1"
             ), f"mono check leaked an outport 1 probe: {c}"
@@ -587,10 +613,11 @@ class TestPlayerConnectionsCorrect:
         )
         # No edge probes when port is gone.
         cm.is_connected.assert_not_called()
+        cm.get_connections.assert_not_called()
 
     def test_query_count_is_linear_in_selected_outputs(self):
-        # 8 outputs → at most 8 is_connected calls. Quadratic blowup
-        # under refactor would push this over the bound.
+        # 8 outputs → one get_connections per outport (2), whatever the
+        # number of outputs; it runs on the GO path before /offset.
         n = 8
         audio_outputs = [f"system:playback_{i+1}" for i in range(n)]
         existing_ports = {f"test_mixer:input_{i+1}" for i in range(n)}
@@ -618,7 +645,8 @@ class TestPlayerConnectionsCorrect:
             )
             is True
         )
-        assert cm.is_connected.call_count == n
+        assert cm.get_connections.call_count == 2
+        cm.is_connected.assert_not_called()
 
 
 class TestMixerClient:
@@ -750,7 +778,6 @@ class TestMixerClient:
                 "cuemsengine.players.AudioMixer.add_callback_to_all"
             ) as mock_add_callback,
         ):
-
             mixer_client.add_to_oscquery_server(mock_server)
 
             mock_add_callback.assert_called_once()
@@ -798,7 +825,6 @@ class TestStartAudioMixer:
             patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
-
             # Mock mixer instance
             mock_mixer = Mock()
             mock_mixer.pid = 12345
@@ -838,7 +864,6 @@ class TestStartAudioMixer:
             patch("cuemsengine.players.AudioMixer.MixerClient") as mock_client_class,
             patch("cuemsengine.players.AudioMixer.sleep"),
         ):
-
             mock_mixer = Mock()
             mock_mixer.pid = 12345
             mock_mixer_class.return_value = mock_mixer
@@ -933,3 +958,449 @@ class TestMixerClientGainState:
         snap = mixer_client.snapshot()
         snap["master"] = 0.0
         assert mixer_client.snapshot() == {"master": 0.5}
+
+
+# ---------------------------------------------------------------------------
+# 869fbyjzx — wire an audio player only once it reports itself started, and
+# check / repair its wiring at GO edge by edge.
+# ---------------------------------------------------------------------------
+
+PL = "Audio_Player-X"
+P0 = f"{PL}:outport 0"
+P1 = f"{PL}:outport 1"
+IN1, IN2, IN3, IN4 = (f"test_mixer:input_{i}" for i in range(1, 5))
+OUTS2 = ["system:playback_1", "system:playback_2"]
+OUTS4 = [f"system:playback_{i}" for i in range(1, 5)]
+
+
+class _ReadyNever:
+    """Stands in for Player.ready: wait() returns at once, never set."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def wait(self, _timeout):
+        self.calls += 1
+        return False
+
+
+class _ReadyAfter(_ReadyNever):
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
+
+    def wait(self, _timeout):
+        self.calls += 1
+        return self.calls > self.n
+
+
+class TestPlayerReadyLine:
+    """Player.ready is set by the stdout reader on the player's RUNNING line."""
+
+    @staticmethod
+    def _run(lines):
+        import io
+
+        from cuemsengine.players.Player import Player
+
+        player = Player()
+        fake = Mock()
+        fake.pid = 1234
+        fake.stdout = io.BytesIO(b"".join(lines))
+        fake.poll.side_effect = [None, 0]
+        with (
+            patch("cuemsengine.players.Player.Popen", return_value=fake),
+            patch("cuemsengine.players.Player.sleep"),
+        ):
+            player.call_subprocess(["cuems-audioplayer"])
+        return player
+
+    def test_the_running_line_sets_ready(self):
+        player = self._run(
+            [
+                b"[Cuems:dabc] [OK] AudioPlayer object created OK!\n",
+                b"[Cuems:dabc] [OK] RUNNING!\n",
+            ]
+        )
+        assert player.ready.is_set()
+
+    def test_a_second_run_starts_not_ready(self):
+        from cuemsengine.players.Player import Player
+
+        player = Player()
+        player.ready.set()  # left over from an earlier run
+        import io
+
+        fake = Mock()
+        fake.pid = 1
+        fake.stdout = io.BytesIO(b"starting\n")
+        fake.poll.side_effect = [None, 0]
+        with (
+            patch("cuemsengine.players.Player.Popen", return_value=fake),
+            patch("cuemsengine.players.Player.sleep"),
+        ):
+            player.call_subprocess(["cuems-audioplayer"])
+        assert not player.ready.is_set()
+
+    def test_other_lines_do_not(self):
+        player = self._run(
+            [
+                b"[Cuems:dabc] [OK] AudioPlayer object created OK!\n",
+                b"Starting object with 2 channels\n",
+            ]
+        )
+        assert not player.ready.is_set()
+
+
+class TestConnectWaitsForReady:
+    @staticmethod
+    def _mixer(ports, edges=None):
+        cm = _fake_conn_man(ports, edges)
+        return _build_bare_mixer(OUTS2, cm), cm
+
+    def test_ready_already_set_wires_without_waiting(self, caplog):
+        import threading
+
+        ready = threading.Event()
+        ready.set()
+        m, cm = self._mixer({P0, P1, IN1, IN2})
+        with _this_thread_sleeps() as sleeps, caplog.at_level(logging.INFO):
+            result = m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
+        assert result is True
+        assert sleeps == []
+        assert "reported RUNNING" in caplog.text
+        cm.connect_by_name.assert_any_call(P0, IN1)
+        cm.connect_by_name.assert_any_call(P1, IN2)
+
+    def test_ready_after_some_slices_then_wires(self, caplog):
+        ready = _ReadyAfter(3)
+        m, cm = self._mixer({P0, P1, IN1, IN2})
+        with patch("time.sleep"), caplog.at_level(logging.INFO):
+            result = m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
+        assert result is True
+        assert ready.calls == 4
+        assert "reported RUNNING after" in caplog.text
+
+    def test_wiring_happens_after_ready_and_removes_the_auto_connect(self):
+        """The point of the gate: by RUNNING, RtAudio has auto-connected the
+        outports to system:playback, and the wiring removes those edges."""
+        edges = {P0: ["system:playback_1"], P1: ["system:playback_2"]}
+        m, cm = self._mixer({P0, P1, IN1, IN2}, edges)
+        ready = _ReadyAfter(0)
+        with patch("time.sleep"):
+            assert m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
+        cm.disconnect_by_name.assert_any_call(P0, "system:playback_1")
+        cm.disconnect_by_name.assert_any_call(P1, "system:playback_2")
+
+    def test_a_dead_player_ends_the_ready_wait(self, caplog):
+        ready = _ReadyNever()
+        m, cm = self._mixer({IN1, IN2})
+        with patch("time.sleep"), caplog.at_level(logging.WARNING):
+            result = m.connect_player_to_outputs(
+                PL, "outport", OUTS2, should_abort=lambda: True, ready=ready
+            )
+        assert result is False
+        assert ready.calls == 1
+        cm.connect_by_name.assert_not_called()
+        assert "exited before reporting RUNNING" in caplog.text
+
+    def test_never_ready_falls_back_to_the_port_and_warns(self, caplog):
+        ready = _ReadyNever()
+        m, cm = self._mixer({P0, P1, IN1, IN2})
+        with patch("time.sleep"), caplog.at_level(logging.WARNING):
+            result = m.connect_player_to_outputs(
+                PL, "outport", OUTS2, should_abort=lambda: False, ready=ready
+            )
+        assert result is True
+        assert "never reported RUNNING" in caplog.text
+        cm.connect_by_name.assert_any_call(P0, IN1)
+
+    def test_no_jack_client_returns_at_once_without_waiting(self):
+        """A JACK-stubbed host (the test2 controller) must not wait for ready:
+        the 2026-07 load->GO 16 s regression came from such a wait."""
+        ready = _ReadyNever()
+        m, cm = self._mixer({P0, P1, IN1, IN2})
+        cm.client = None
+        with _this_thread_sleeps() as sleeps:
+            result = m.connect_player_to_outputs(PL, "outport", OUTS2, ready=ready)
+        assert result is False
+        assert ready.calls == 0
+        assert sleeps == []
+
+    def test_one_budget_for_both_phases(self):
+        """Never ready AND no port: the total stays today's ceiling (14.5 s),
+        not the ready wait plus a full port wait on top."""
+        ready = _ReadyNever()
+        m, cm = self._mixer({IN1, IN2})
+        with _this_thread_sleeps() as sleeps:
+            result = m.connect_player_to_outputs(
+                PL, "outport", OUTS2, should_abort=lambda: False, ready=ready
+            )
+        assert result is False
+        ready_s = ready.calls * 0.05
+        port_s = sum(sleeps)
+        assert ready_s + port_s <= 14.5 + 1e-9
+        assert ready_s >= 14.5 - 0.05
+
+    def test_without_ready_nothing_changes(self):
+        m, cm = self._mixer({P0, P1, IN1, IN2})
+        with patch("time.sleep"):
+            assert m.connect_player_to_outputs(PL, "outport", OUTS2) is True
+
+
+class TestPlayerConnectionDiff:
+    """Every case asserts both lists exactly."""
+
+    @staticmethod
+    def _diff(ports, edges, audio_outputs=OUTS2, selected=None):
+        cm = _fake_conn_man(ports, edges)
+        m = _build_bare_mixer(audio_outputs, cm)
+        return m.player_connection_diff(PL, "outport", selected or audio_outputs)
+
+    def test_clean(self):
+        assert self._diff({P0, P1, IN1, IN2}, {P0: [IN1], P1: [IN2]}) == ([], [])
+
+    def test_one_stray(self):
+        edges = {P0: [IN1, "system:playback_1"], P1: [IN2]}
+        assert self._diff({P0, P1, IN1, IN2}, edges) == (
+            [],
+            [(P0, "system:playback_1")],
+        )
+
+    def test_right_edge_missing(self):
+        assert self._diff({P0, P1, IN1, IN2}, {P0: [IN1]}) == ([(P1, IN2)], [])
+
+    def test_wrong_destination_is_a_stray_plus_the_missing_edge(self):
+        edges = {P0: [IN1], P1: [IN3]}
+        assert self._diff({P0, P1, IN1, IN2, IN3}, edges) == (
+            [(P1, IN2)],
+            [(P1, IN3)],
+        )
+
+    def test_stereo_player_one_output_selected(self):
+        # Arm wires only outport 0 to input_1; outport 1 -> input_1 is stray.
+        edges = {P0: [IN1], P1: [IN1]}
+        assert self._diff(
+            {P0, P1, IN1, IN2}, edges, selected=["system:playback_1"]
+        ) == ([], [(P1, IN1)])
+
+    def test_four_outputs_with_a_missing_middle_input_shifts_the_pairing(self):
+        # input_2 does not exist: targets are [input_1, input_3, input_4],
+        # so L -> 1, R -> 3, L -> 4, exactly as the arm-time wiring pairs them.
+        edges = {P0: [IN1, IN4], P1: [IN3]}
+        assert self._diff({P0, P1, IN1, IN3, IN4}, edges, audio_outputs=OUTS4) == (
+            [],
+            [],
+        )
+
+    def test_strays_on_both_outports(self):
+        edges = {
+            P0: [IN1, "system:playback_1"],
+            P1: [IN2, "system:playback_2"],
+        }
+        assert self._diff({P0, P1, IN1, IN2}, edges) == (
+            [],
+            [(P0, "system:playback_1"), (P1, "system:playback_2")],
+        )
+
+    def test_mono_player_ignores_outport_1(self):
+        edges = {P0: [IN1, IN2]}
+        assert self._diff({P0, IN1, IN2}, edges) == ([], [])
+
+    def test_mono_at_arm_stereo_at_go_converges(self):
+        # Wired as mono (outport 0 to both); outport 1 exists by GO.
+        edges = {P0: [IN1, IN2]}
+        assert self._diff({P0, P1, IN1, IN2}, edges) == ([(P1, IN2)], [(P0, IN2)])
+
+    def test_an_edge_is_never_both_missing_and_stray(self):
+        edges = {P0: ["x:y", IN2], P1: [IN1]}
+        missing, stray = self._diff({P0, P1, IN1, IN2}, edges)
+        assert not set(missing) & set(stray)
+
+    def test_no_mixer_input_is_none_not_clean(self):
+        assert self._diff({P0, P1}, {P0: [], P1: []}) is None
+
+    def test_player_port_gone_is_none(self):
+        assert self._diff({IN1, IN2}, {}) is None
+
+
+class TestRepairPlayerConnections:
+    @staticmethod
+    def _mixer(edges, connect_result=True, disconnect_result=True):
+        cm = _fake_conn_man({P0, P1, IN1, IN2}, edges, connect_result)
+        cm.disconnect_by_name.return_value = disconnect_result
+        return _build_bare_mixer(OUTS2, cm), cm
+
+    def test_strays_only(self):
+        m, cm = self._mixer({P0: [IN1, "system:playback_1"], P1: [IN2]})
+        assert m.repair_player_connections([], [(P0, "system:playback_1")]) == (
+            True,
+            [],
+        )
+        cm.disconnect_by_name.assert_called_once_with(P0, "system:playback_1")
+        cm.connect_by_name.assert_not_called()
+
+    def test_a_stray_already_gone_is_not_disconnected(self):
+        m, cm = self._mixer({P0: [IN1], P1: [IN2]})
+        assert m.repair_player_connections([], [(P0, "system:playback_1")]) == (
+            True,
+            [],
+        )
+        cm.disconnect_by_name.assert_not_called()
+
+    def test_missing_only(self):
+        m, cm = self._mixer({P0: [IN1]})
+        assert m.repair_player_connections([(P1, IN2)], []) == (True, [])
+        cm.connect_by_name.assert_called_once_with(P1, IN2)
+        cm.disconnect_by_name.assert_not_called()
+
+    def test_both(self):
+        m, cm = self._mixer({P0: [IN1, "system:playback_1"]})
+        m.repair_player_connections([(P1, IN2)], [(P0, "system:playback_1")])
+        cm.disconnect_by_name.assert_called_once_with(P0, "system:playback_1")
+        cm.connect_by_name.assert_called_once_with(P1, IN2)
+
+    def test_a_failed_connect_is_reported(self):
+        m, cm = self._mixer({P0: [IN1]}, connect_result=False)
+        assert m.repair_player_connections([(P1, IN2)], []) == (False, [])
+
+    def test_a_failed_stray_disconnect_is_reported(self):
+        m, cm = self._mixer(
+            {P0: [IN1, "system:playback_1"], P1: [IN2]}, disconnect_result=False
+        )
+        assert m.repair_player_connections([], [(P0, "system:playback_1")]) == (
+            True,
+            [(P0, "system:playback_1")],
+        )
+
+    def test_never_disconnects_an_expected_edge(self):
+        m, cm = self._mixer({P0: [IN1, "system:playback_1"], P1: []})
+        m.repair_player_connections([(P1, IN2)], [(P0, "system:playback_1")])
+        for c in cm.disconnect_by_name.call_args_list:
+            assert c.args[1] not in (IN1, IN2), c
+
+
+class TestVerifyAudioWiringAtGo:
+    """run_audioCue's GO-time check (869fbyjzx): edge by edge, never a full
+    rewire — a GO can reach it while the cue is audible."""
+
+    @staticmethod
+    def _run(diff, repair=(True, [])):
+        from types import SimpleNamespace
+
+        from cuemsengine.cues.run_cue import _verify_audio_wiring_at_go
+
+        mixer = Mock()
+        mixer.player_connection_diff.return_value = diff
+        mixer.repair_player_connections.return_value = repair
+        _verify_audio_wiring_at_go(SimpleNamespace(id="cue-1"), mixer, PL, OUTS2)
+        mixer.connect_player_to_outputs.assert_not_called()
+        return mixer
+
+    def test_clean_graph_is_left_alone(self):
+        mixer = self._run(([], []))
+        mixer.repair_player_connections.assert_not_called()
+
+    def test_a_stray_is_repaired_edge_by_edge(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            mixer = self._run(([], [(P0, "system:playback_1")]))
+        mixer.repair_player_connections.assert_called_once_with(
+            [], [(P0, "system:playback_1")]
+        )
+        # The go_repair= harness counter reads this literal prefix.
+        assert "graph not wired correctly at GO" in caplog.text
+
+    def test_a_missing_edge_is_repaired_edge_by_edge(self):
+        mixer = self._run(([(P1, IN2)], []))
+        mixer.repair_player_connections.assert_called_once_with([(P1, IN2)], [])
+
+    def test_no_mixer_input_is_a_silent_cue_error(self, caplog):
+        with caplog.at_level(logging.ERROR):
+            mixer = self._run(None)
+        mixer.repair_player_connections.assert_not_called()
+        assert "will be SILENT" in caplog.text
+
+    def test_a_failed_connect_is_a_silent_cue_error(self, caplog):
+        with caplog.at_level(logging.ERROR):
+            self._run(([(P1, IN2)], []), repair=(False, []))
+        assert "will be SILENT" in caplog.text
+
+    def test_a_surviving_stray_is_an_error(self, caplog):
+        with caplog.at_level(logging.ERROR):
+            self._run(
+                ([], [(P0, "system:playback_1")]),
+                repair=(True, [(P0, "system:playback_1")]),
+            )
+        assert "stray edge(s) still connected" in caplog.text
+
+
+class TestSharedBudget:
+    """The ready wait and the port wait never exceed today's ceiling,
+    whatever share the ready wait used (869fbyjzx review)."""
+
+    @pytest.mark.parametrize("n", [0, 1, 7, 10, 11, 100, 289])
+    @pytest.mark.parametrize(
+        "max_retries,retry_delay", [(30, 0.5), (10, 0.3), (6, 0.2)]
+    )
+    def test_total_wait_stays_within_the_ceiling(self, n, max_retries, retry_delay):
+        ready = _ReadyAfter(n)
+        m, cm = TestConnectWaitsForReady._mixer({IN1, IN2})  # port never appears
+        with _this_thread_sleeps() as sleeps:
+            m.connect_player_to_outputs(
+                PL,
+                "outport",
+                OUTS2,
+                should_abort=lambda: False,
+                ready=ready,
+                max_retries=max_retries,
+                retry_delay=retry_delay,
+            )
+        ceiling = (max_retries - 1) * retry_delay
+        # Slices actually waited: the call that returns \"ready\" waits for nothing.
+        waited_slices = min(n, max(1, int(round(ceiling / 0.05))))
+        used = waited_slices * 0.05 + sum(sleeps)
+        assert used <= ceiling + 1e-9, (n, used, ceiling)
+
+
+class TestRepairRecheck:
+    def test_a_stray_removed_by_someone_else_is_not_a_survivor(self):
+        # disconnect_by_name fails (the edge was already gone), and the edge
+        # is not connected any more: it is not reported as left.
+        cm = _fake_conn_man({P0, P1, IN1, IN2}, {P0: ["system:playback_2"]})
+        calls = {"n": 0}
+
+        def is_connected(src, dst):
+            calls["n"] += 1
+            return calls["n"] == 1  # connected at the first check, gone after
+
+        cm.is_connected.side_effect = is_connected
+        cm.disconnect_by_name.return_value = False
+        m = _build_bare_mixer(OUTS2, cm)
+        assert m.repair_player_connections([], [(P0, "system:playback_2")]) == (
+            True,
+            [],
+        )
+
+
+def test_sleep_patch_ignores_other_threads():
+    # The guard against the 869fbyjzx CI flake: a thread left running by
+    # another test sleeps while the patch is active; its calls must not be
+    # counted against the test's own wait budget.
+    import time
+
+    go, done = threading.Event(), threading.Event()
+
+    def foreign():
+        go.wait(5)
+        for _ in range(50):
+            time.sleep(100)
+        done.set()
+
+    t = threading.Thread(target=foreign, daemon=True)
+    t.start()
+    with _this_thread_sleeps() as sleeps:
+        go.set()
+        done.wait(5)
+        time.sleep(0.25)
+    assert done.is_set()
+    assert sleeps == [0.25]

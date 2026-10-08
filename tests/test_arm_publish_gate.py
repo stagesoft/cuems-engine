@@ -696,7 +696,7 @@ class TestGoCarriesTheEpoch:
         ch._arm_ahead = MagicMock()
         epoch = ch._disarm_epoch
 
-        def arm(c, init=False, walk=None, epoch=None):
+        def arm(c, init=False, walk=None, epoch=None, wait_report=None):
             c.loaded = True
 
         ch.arm = MagicMock(side_effect=arm)
@@ -713,7 +713,7 @@ class TestGoCarriesTheEpoch:
         cue = _cue()
         cue._stop_requested = True
 
-        def arm(c, init=False, walk=None, epoch=None):
+        def arm(c, init=False, walk=None, epoch=None, wait_report=None):
             ch.stop_all_cues()  # and the arm, stale now, loads nothing
 
         ch.arm = MagicMock(side_effect=arm)
