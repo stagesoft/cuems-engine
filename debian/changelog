@@ -1,3 +1,14 @@
+cuems-engine (0.1.0rc6-3+nodeadopt2) bookworm; urgency=medium
+
+  * Test-rig integration build for the taller rigs test (demo) and test2
+    (not a release): 0.1.0rc6-3 merged with feat/project-status-loaded,
+    which carries the node-adoption dispatch (feat/nodelist-modify-dispatch:
+    nodelist_modify, cluster_status, the running-project guard, the
+    missing-node alert) and project_status. Successor of
+    0.1.0rc6-2+nodeadopt1; the only conflict was CLAUDE.md's SPDX header.
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 08 Oct 2026 21:34:03 +0200
+
 cuems-engine (0.1.0rc6-3) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:
