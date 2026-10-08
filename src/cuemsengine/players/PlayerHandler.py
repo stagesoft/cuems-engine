@@ -48,12 +48,54 @@ def _process_exited(player) -> bool:
 # (old project torn down, new one never armed), and one from the mixer sweep
 # left the node without a mixer.
 
-AUDIOPLAYER_ORPHAN_PATTERN = "cuems-audioplayer"
+#
+# The sweeps list only processes of the engine's own user (as the node-engine
+# unit's own `pkill -u cuems` does): JACK is a per-user server, so another
+# user's process cannot hold a client name on ours, and killing it would only
+# get EPERM. The audioplayer pattern is a POSIX ERE (pgrep -f matches it
+# against the space-joined cmdline) anchored on argv[0], whose basename must
+# be exactly the binary: the engine spawns players with argv[0] = the
+# configured path, and a `tail -f …/cuems-audioplayer.log` must not be killed.
+# The mixer pattern was already narrowed (869cwpkz4); its install name varies.
+AUDIOPLAYER_ORPHAN_PATTERN = r"^([^ ]*/)?cuems-audioplayer( |$)"
 MIXER_ORPHAN_PATTERN = "jack-volume -c"
+
+# Basenames the orphan cleanups (these sweeps and the node-engine unit's
+# ExecStartPre/ExecStopPost pkill, cuems-common) recognise, per settings.xml
+# key. A configured binary with any other name escapes every cleanup.
+ORPHAN_BINARY_NAMES = {
+    "audioplayer": ("cuems-audioplayer",),
+    "audiomixer": ("jack-volume", "cuems-jack-volume"),
+    "dmxplayer": ("cuems-dmxplayer",),
+}
+
+
+def check_orphan_binary_names(node_conf: dict) -> list[str]:
+    """Warn about configured player binaries the orphan cleanups cannot see.
+
+    Returns the settings keys whose path basename is not a known name. A
+    missing key is skipped: not every node configures every player.
+    """
+    unknown = []
+    for key, names in ORPHAN_BINARY_NAMES.items():
+        entry = node_conf.get(key) if isinstance(node_conf, dict) else None
+        path = entry.get("path") if isinstance(entry, dict) else None
+        if not path:
+            continue
+        base = os.path.basename(str(path))
+        if base not in names:
+            unknown.append(key)
+            Logger.warning(
+                f"{key}.path basename '{base}' is not one the orphan cleanup "
+                f"knows ({', '.join(names)}): orphaned {key} processes from an "
+                f"earlier engine run will not be cleaned up"
+            )
+    return unknown
 
 
 def _orphan_pids(pattern: str, label: str) -> list[int]:
-    """PIDs whose command line matches `pattern` (pgrep -f). Never raises.
+    """PIDs of our own user whose command line matches `pattern`
+    (pgrep -u <euid> -f). Never raises.
 
     pgrep exits 1 when nothing matches: the normal case, silent. Any other
     non-zero exit (bad option or pattern, fatal error) is logged, so a sweep
@@ -61,7 +103,7 @@ def _orphan_pids(pattern: str, label: str) -> list[int]:
     """
     try:
         result = subprocess.run(
-            ["pgrep", "-f", pattern],
+            ["pgrep", "-u", str(os.geteuid()), "-f", pattern],
             capture_output=True,
             text=True,
         )
