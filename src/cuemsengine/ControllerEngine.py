@@ -4,7 +4,9 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import asyncio
+import json
 import math
+import os
 import threading
 import time
 from functools import partial
@@ -16,6 +18,15 @@ from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
+
+# Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
+# disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
+NODECONF_IPC_PATH = "/tmp/nodeconf.ipc"
+# Adopt/un-adopt is a local XML rewrite; it has no business taking longer.
+NODECONF_TIMEOUT_S = 5.0
+# Shortest gap between two real cluster probes served to the UI. Each probe
+# pings every adopted node, and the settings panel polls while it is open.
+CLUSTER_STATUS_CLAMP_S = 2.0
 
 
 class ControllerEngine(BaseEngine):
@@ -101,6 +112,16 @@ class ControllerEngine(BaseEngine):
         self._pong_expected: set[str] = set()
         self._pong_event = threading.Event()
         self._cluster_lock = threading.Lock()
+        # What the last load found wrong with the cluster, kept so it can be
+        # pushed at load time AND replayed to a browser that connects later
+        # (with boot auto-load the UI is normally opened after the load).
+        # Initialised here on purpose: _on_ws_client_connect reads it, and a
+        # client connecting before the first load of a freshly restarted engine
+        # would otherwise raise AttributeError mid-coroutine and take the rest
+        # of the late-join dump down with it. _load_id is bumped on every
+        # resolve so a UI can tell an operator's retry from a reconnect replay.
+        self._load_diagnosis: dict | None = None
+        self._load_id: int = 0
         # One-shot watchdog: fires N seconds after _resolve_cluster_state if
         # _armed_nodes still doesn't cover _required_nodes (e.g. a node ponged
         # alive but then died mid-rsync). Logs an error listing the pending
@@ -248,14 +269,30 @@ class ControllerEngine(BaseEngine):
             "/engine/players/*", self._handle_player_osc_message
         )
 
-        # Register direct player handler for every adopted node in the network
-        # map.
-        # UI sends /{node_uuid}/<type>/... for both controller and worker
-        # nodes;
-        # without per-node registration the WS dispatcher silently drops the
-        # message and the NNG forward never happens.
-        # The set deduplicates so the controller's own UUID isn't registered
-        # twice (it appears in both node_conf and network_map['node_list']).
+        self._register_node_osc_handlers()
+
+        Logger.info("OSC command handlers registered for WebSocket receiving")
+
+    def _register_node_osc_handlers(self) -> None:
+        """Register the direct player OSC route for every adopted node.
+
+        UI sends /{node_uuid}/<type>/... for both controller and worker nodes;
+        without per-node registration the WS dispatcher silently drops the
+        message and the NNG forward never happens. The set deduplicates so the
+        controller's own UUID isn't registered twice (it appears in both
+        node_conf and network_map['node_list']).
+
+        Called at startup and again after a nodelist_modify, so a node adopted
+        from the UI gets its route without an engine restart. Re-registering is
+        safe: register_osc_handler is dict-keyed, so a repeat overwrites.
+
+        ⚠ get_nodes_by_adoption() mutates online/adopted from str to bool IN
+        PLACE, so it only survives one pass over a given dict. Call this either
+        at startup or immediately after ConfigManager.load_network_map() has
+        installed a fresh dict — see _reload_network_map(). A REMOVE leaves the
+        old route registered on purpose: traffic from a non-adopted node is
+        already filtered by _adopted_nodes at the callbacks.
+        """
         node_uuids: set[str] = set()
         own_uuid = (
             self.cm.node_conf.get("uuid", "") if hasattr(self, "cm") and self.cm else ""
@@ -277,8 +314,6 @@ class ControllerEngine(BaseEngine):
                 f"/{nuuid}/*", self._handle_direct_player_osc_message
             )
             Logger.info(f"Registered direct player OSC handler for /{nuuid}/*")
-
-        Logger.info("OSC command handlers registered for WebSocket receiving")
 
     def _handle_direct_player_osc_message(self, address: str, args: list):
         """Handle direct player OSC messages from UI (/<node_uuid>/<type>/...).
@@ -703,7 +738,10 @@ class ControllerEngine(BaseEngine):
 
         try:
             self.handle_editor_command(
-                action=item["action"], value=item["value"], context=context
+                action=item["action"],
+                value=item["value"],
+                context=context,
+                modify_action=item.get("modify_action"),
             )
         except Exception as e:
             Logger.error(f"{type(e)} handling editor command: {e}")
@@ -716,7 +754,24 @@ class ControllerEngine(BaseEngine):
                 request_uuid=request_uuid,
             )
 
-    def handle_editor_command(self, action, value, context=None):
+    def handle_editor_command(self, action, value, context=None, modify_action=None):
+        # nodelist_modify cannot ride the dispatch table below: every entry is
+        # invoked as command_dict[action](value, context) — a two-argument
+        # contract with nowhere to put modify_action. Registering it there sends
+        # modify_action=None to nodeconf, which answers
+        # {'OK': False, 'error': 'Invalid modify_action: None'} to EVERY click.
+        # So bind the message here and dispatch it directly.
+        if action == "nodelist_modify":
+            message = {
+                "action": action,
+                "value": value,
+                "modify_action": modify_action,
+            }
+            if self.nodelist_modify(message, context):
+                self.confirm_to_editor(context, type=action, value="OK")
+                self.set_editor_request("")
+            return
+
         command_dict = {
             "project_deploy": partial(self.load_project, deploy_only=True),
             "project_ready": self.load_project,
@@ -725,6 +780,7 @@ class ControllerEngine(BaseEngine):
             "go_script": self.go_script,
             "project_status": self.get_project_status,
             "project_unload": self.unload_project,
+            "cluster_status": self.get_cluster_status,
         }
         if action in command_dict.keys():
             result = command_dict[action](value, context)
@@ -801,6 +857,157 @@ class ControllerEngine(BaseEngine):
         except Exception as e:
             Logger.error(f"{type(e)} sending nodeconf request: {e}")
             return False
+
+    def _nodelist_refuse(self, context, msg: str) -> bool:
+        """Refuse a nodelist_modify with one clean sentence for the operator.
+
+        Every failure path in nodelist_modify goes through here and returns
+        False. It must NOT raise: editor_command_callback's except clause also
+        replies (prefixing "Command <class 'RuntimeError'>: ..."), and the
+        editor wraps that again as "Engine reports error: ...". Raising after
+        replying would also put two replies on a single NNG Rep context.
+
+        Clears the pending editor request the same way the generic error path
+        does (see editor_command_callback): capture the uuid, clear it, then
+        reply with it explicitly, so no stale uuid is left behind for whatever
+        reads get_editor_request() next.
+        """
+        Logger.error(f"nodelist_modify refused: {msg}")
+        request_uuid = self.get_editor_request()
+        self.set_editor_request("")
+        self.error_to_editor(
+            context, value=msg, request_uuid=request_uuid, action="nodelist_modify"
+        )
+        return False
+
+    def nodelist_modify(self, message: dict, context=None) -> bool:
+        """Adopt or un-adopt a node, then refresh our cached topology.
+
+        Forwards {'action','value','modify_action'} to cuems-nodeconf over
+        /tmp/nodeconf.ipc, which flips <adopted> in network_map.xml. On success
+        we re-read that file, because our own copy was loaded once at startup
+        (ConfigManager(load_all=True)) and would otherwise keep the GO gate
+        blind to the change until an engine restart.
+
+        Returns True only when nodeconf confirmed AND our reload succeeded; the
+        caller confirms "OK" to the editor on True. Every False path has
+        already sent an explanatory error.
+        """
+        node_uuid = message.get("value")
+        modify_action = message.get("modify_action")
+        Logger.info(f"nodelist_modify: {modify_action} node {node_uuid}")
+
+        # Adoption is a setup-time operation. Refuse (never stop anything) when
+        # a project is running, and also when one is merely loaded: the GO
+        # gate's _required_nodes snapshot is computed once, in load_project, so
+        # a REMOVE accepted now would leave it waiting on a node the operator
+        # just removed until the next load.
+        if self.get_status("running") == "yes":
+            return self._nodelist_refuse(
+                context,
+                "Cannot modify the node list while a project is running. "
+                "Stop playback first.",
+            )
+        if self.get_status("load"):
+            return self._nodelist_refuse(
+                context,
+                "Cannot modify the node list while a project is loaded. "
+                "Unload the project first.",
+            )
+
+        if not node_uuid or not isinstance(node_uuid, str):
+            return self._nodelist_refuse(
+                context, f"nodelist_modify needs a node uuid, got {node_uuid!r}"
+            )
+        if modify_action not in ("ADD", "REMOVE"):
+            return self._nodelist_refuse(
+                context,
+                f"Invalid modify_action: {modify_action!r}. Must be 'ADD' or 'REMOVE'",
+            )
+
+        # Fail fast when the daemon is not there at all. Measured on the rig:
+        # with the socket absent, request_to_nodeconf does NOT return quickly —
+        # it burns the full 15 s IPC timeout and then raises. Editor commands
+        # are serialized by the engine's single listener, so a second click
+        # queues behind the first and can blow the editor's own 25 s timeout,
+        # turning a clear refusal into "Engine did not respond". nodeconf ships
+        # disabled on most of the fleet, so this is the common path, not a rare
+        # one.
+        if not os.path.exists(NODECONF_IPC_PATH):
+            return self._nodelist_refuse(
+                context,
+                "The node configuration service (cuems-nodeconf) is not "
+                "running on this controller, so the node list cannot be "
+                "changed. Enable it with: systemctl enable --now cuems-nodeconf",
+            )
+
+        try:
+            reply = self.communications_thread.request_to_nodeconf(
+                message, timeout=NODECONF_TIMEOUT_S
+            )
+        except Exception as e:
+            return self._nodelist_refuse(
+                context, f"Could not reach cuems-nodeconf: {type(e).__name__}: {e}"
+            )
+
+        # Communicator.send_request swallows every exception and returns None —
+        # an absent socket (nodeconf disabled, which is the fleet default) and a
+        # peer that never answers both land here.
+        if reply is None:
+            return self._nodelist_refuse(
+                context,
+                "The node configuration service (cuems-nodeconf) is not "
+                "responding. Is it enabled on this controller?",
+            )
+        if not isinstance(reply, dict):
+            return self._nodelist_refuse(
+                context, f"Unexpected reply from cuems-nodeconf: {reply!r}"
+            )
+        if not reply.get("OK", False):
+            return self._nodelist_refuse(
+                context, reply.get("error", "cuems-nodeconf reported an error")
+            )
+
+        Logger.info(
+            f"nodelist_modify: cuems-nodeconf confirmed {modify_action} "
+            f"for node {node_uuid}"
+        )
+
+        # nodeconf has already rewritten network_map.xml. If we cannot re-read
+        # it the operation is a PARTIAL success: the map (and so the editor and
+        # the UI) is correct, only this process is behind. Say exactly that
+        # instead of confirming OK over a stale topology.
+        try:
+            self._reload_network_map()
+        except Exception as e:
+            Logger.error(f"{type(e).__name__} reloading network_map: {e}")
+            return self._nodelist_refuse(
+                context,
+                f"Node {modify_action.lower()}ed, but the engine could not "
+                f"reload the topology ({type(e).__name__}: {e}) — restart "
+                f"cuems-controller-engine before loading a project.",
+            )
+        return True
+
+    def _reload_network_map(self) -> None:
+        """Re-read network_map.xml and re-register per-node OSC routes.
+
+        Targeted on purpose: ConfigManager.load_network_map() reassigns
+        self.cm.network_map to a NEW dict, so a concurrent reader sees either
+        the old one or the new one, never a torn one. A full
+        ConfigManager(load_all=True) would also re-read settings and mappings —
+        that is the "restart both daemons" trap, not what we want here.
+
+        ORDER MATTERS: _register_node_osc_handlers() calls
+        NetworkMap.get_nodes_by_adoption(), which mutates online/adopted from
+        str to bool IN PLACE and therefore survives only one pass over a given
+        dict (same hazard _adopted_uuids_from_network_map documents). It is safe
+        only on the freshly reloaded dict — never call it as a standalone
+        "shortcut" refresh.
+        """
+        self.cm.load_network_map()
+        Logger.info("network_map reloaded after a node list change")
+        self._register_node_osc_handlers()
 
     #########################
     # Status Updates (stub - OSCQuery removed)
@@ -977,6 +1184,44 @@ class ControllerEngine(BaseEngine):
         ):
             self.communications_thread.broadcast_osc(f"/engine/status/{key}", value)
 
+    @staticmethod
+    def _cluster_warning_payload(diagnosis: dict | None) -> str:
+        """Serialize a load diagnosis for the OSC status channel.
+
+        OSC cannot carry lists, so this travels as a JSON string — the same
+        thing the codebase already does elsewhere on this channel. A cleared
+        diagnosis serializes to empty lists rather than being withheld: a clean
+        load after a bad one has to actively erase the previous warning, or it
+        stays on the operator's screen forever.
+        """
+        d = diagnosis or {}
+        return json.dumps(
+            {
+                "load_id": d.get("load_id", 0),
+                "project": d.get("project", ""),
+                "missing": d.get("missing", []),
+                "unreachable": d.get("unreachable", []),
+            }
+        )
+
+    def _broadcast_cluster_warning(self, diagnosis: dict | None) -> None:
+        """Push the load diagnosis to every connected UI. Always sent."""
+        self._broadcast_status(
+            "cluster_warning", self._cluster_warning_payload(diagnosis)
+        )
+
+    def _clear_load_diagnosis(self) -> None:
+        """Forget the last load's diagnosis and erase it from every UI.
+
+        Called wherever a load ENDS — a new load starting, a load failing
+        early, an unload — but deliberately NOT from _clear_playback_state(),
+        which also runs on STOP: a stopped project is still loaded, and its
+        missing nodes are still missing.
+        """
+        with self._cluster_lock:
+            self._load_diagnosis = None
+        self._broadcast_cluster_warning(None)
+
     async def _on_ws_client_connect(self, websocket) -> None:
         """Send full state dump to a newly connected WebSocket client."""
         from .osc.WebSocketOscHandler import build_osc_message
@@ -988,6 +1233,20 @@ class ControllerEngine(BaseEngine):
                 data = build_osc_message(f"/engine/status/{key}", val)
                 if data:
                     await websocket.send(data)
+
+        # Last load's cluster diagnosis. Replayed here because with boot
+        # auto-load the browser is normally opened well after the load, so the
+        # push in _resolve_cluster_state has nobody listening.
+        with self._cluster_lock:
+            diagnosis = (
+                dict(self._load_diagnosis) if self._load_diagnosis else None
+            )
+        data = build_osc_message(
+            "/engine/status/cluster_warning",
+            self._cluster_warning_payload(diagnosis),
+        )
+        if data:
+            await websocket.send(data)
 
         # Per-cue playback status
         for cid, status in self.cue_status.items():
@@ -1079,6 +1338,23 @@ class ControllerEngine(BaseEngine):
         self._bump_run_seq("load")
         self._clear_playback_state()
         self.reset_script()
+        # Before anything can fail. load_project_config() and read_script()
+        # both return False further down, and without this the previous
+        # project's warning would stay on screen for a project that, to the
+        # operator, just failed to load. A successful _resolve_cluster_state
+        # overwrites it a few lines later.
+        self._clear_load_diagnosis()
+        # The same argument, applied to the load status. reset_script() drops
+        # self.script, but nothing dropped `load`, so a failed load left the
+        # engine holding no project while still broadcasting the PREVIOUS
+        # project's name on /engine/status/load. That lie reached the transport
+        # bar and power-bridge alike — project_loaded() stayed True, so
+        # /setnextcue and /gocue were accepted against a project the engine no
+        # longer had. The two signals now die together, which is what lets
+        # get_project_status() trust either of them.
+        # Deliberate cost: during a *successful* load the transport bar shows
+        # "—" until the new name arrives, instead of the stale previous one.
+        self.set_status("load", "")
 
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -1134,9 +1410,13 @@ class ControllerEngine(BaseEngine):
             f"Cue enabled status initialised for {len(self.cue_enabled_status)} cues"
         )
 
-        # Update internal status
-        # TODO: send project UUID instead of name for robustness (would break
-        # UI contract)
+        # Update internal status.
+        # This broadcast carries the project's unix_name, NOT its uuid, and
+        # that is a decision rather than a leftover: the frontend prints this
+        # string in the transport bar and matches it against project.unix_name,
+        # so switching it to a uuid shows the operator a raw uuid and breaks
+        # that match. Consumers that need the uuid ask project_status, which
+        # returns both (869dr2k2h, closed the additive way).
         self.set_status("load", project_name)
 
         # Per-cue names, deliberately AFTER the load status (unlike cue_status
@@ -1319,8 +1599,45 @@ class ControllerEngine(BaseEngine):
             Logger.warning(f"Could not read network_map: {e}")
         return out
 
+    def _node_label(self, uuid: str) -> str:
+        """Human-readable name for a node, for LOG LINES ONLY.
+
+        A bare UUID in a journal is unreadable under pressure, so the log says
+        `node01 (2b6f…)`. Wire payloads stay UUID-only: role_id/alias are
+        mutable projections per the node-identity contract, and the browser
+        already resolves them from initial_mappings. Two sources of truth for a
+        name is exactly what that contract forbids.
+        """
+        try:
+            node_list = (self.cm.network_map or {}).get("node_list", [])
+            for entry in node_list:
+                if not isinstance(entry, dict):
+                    continue
+                node = entry.get("node") or {}
+                if node.get("uuid") != uuid:
+                    continue
+                for field in ("alias", "role_id", "hostname"):
+                    name = node.get(field)
+                    if name:
+                        return f"{name} ({uuid[:8]}…)"
+                break
+        except Exception:
+            pass
+        return uuid
+
     def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
         """Broadcast a ping to all nodes and collect pong replies.
+
+        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong
+        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is
+        shared instance state with no per-call correlation id, so two probes in
+        flight would eat each other's replies. Nothing enforces that — it holds
+        only because every caller arrives through the engine's single editor
+        listener, which awaits one command's handler before accepting the next
+        (see ControllerCommunications.editor_listener). If editor commands are
+        ever processed concurrently, this needs a real lock or a correlation id
+        first. get_cluster_status made this reachable from the UI, so the
+        invariant now matters beyond project loads.
 
         The set of senders that respond within `timeout` is the authoritative
         "alive right now" view of the cluster. The controller's own UUID is
@@ -1408,25 +1725,47 @@ class ControllerEngine(BaseEngine):
             if in_alive and in_project:
                 continue  # the silent happy path — tracked via armed_ready
             if in_alive and not in_project:
-                Logger.info(f"node {uuid} online but unused by this project")
+                Logger.info(
+                    f"node {self._node_label(uuid)} online but unused by this "
+                    f"project"
+                )
             elif not in_alive and in_project:
+                # Say what the code below actually does. `required` is
+                # (adopted & alive & project), so this node is EXCLUDED from
+                # the gate: GO is enabled without it and its cues stay silent.
+                # The old wording here claimed "GO blocked", which sent anyone
+                # debugging a mute show from the journal the wrong way.
                 Logger.error(
-                    f"node {uuid} required by this project but did not "
-                    f"respond to ping; cues for it will not play. GO blocked."
+                    f"node {self._node_label(uuid)} is used by this project "
+                    f"but did not respond to ping; its cues will NOT play. "
+                    f"GO is NOT blocked — the node is excluded from the arm "
+                    f"gate."
                 )
             else:
                 Logger.warning(
-                    f"node {uuid} is adopted but did not respond to ping; "
-                    f"not required by this project — investigate why it is"
-                    f"offline"
+                    f"node {self._node_label(uuid)} is adopted but did not "
+                    f"respond to ping; not required by this project — "
+                    f"investigate why it is offline"
                 )
+
+        # The two categories worth telling the operator about. Warn loudly,
+        # never block: `required` below is untouched by any of this.
+        #
+        # The controller is excluded from both. It is added to `required`
+        # unconditionally, so it can never be a node whose cues silently do not
+        # play — and it is not always flagged `adopted` in network_map.xml, so
+        # without this it would be reported as "not in the cluster" on a
+        # perfectly healthy load. A false alarm here is worse than no alarm:
+        # it teaches operators to ignore the real one.
+        missing = sorted(project - adopted - {controller_uuid})
+        unreachable = sorted((project & adopted) - alive - {controller_uuid})
 
         # Project nodes that are NOT adopted at all — script is broken for
         # this cluster.
-        for uuid in sorted(project - adopted):
+        for uuid in missing:
             Logger.warning(
-                f"project references node {uuid} which is not in the cluster; "
-                f"cues for it will not fire"
+                f"project references node {self._node_label(uuid)} which is "
+                f"not in the cluster; cues for it will not fire"
             )
 
         required = (adopted & alive & project) | {controller_uuid}
@@ -1436,12 +1775,24 @@ class ControllerEngine(BaseEngine):
             self._required_nodes = required
             self._armed_nodes.clear()
             self._finished_nodes.clear()
+            self._load_id += 1
+            self._load_diagnosis = {
+                "load_id": self._load_id,
+                "project": str(self.get_status("load") or ""),
+                "missing": missing,
+                "unreachable": unreachable,
+            }
+            diagnosis = dict(self._load_diagnosis)
 
         Logger.info(
             f"Cluster state resolved: required={sorted(required)} "
             f"alive={sorted(alive)} adopted={sorted(adopted)} "
             f"project={sorted(project)}"
         )
+
+        # Tell the UI, even when both lists are empty — see
+        # _cluster_warning_payload.
+        self._broadcast_cluster_warning(diagnosis)
 
         # The probe's `alive` set is a runtime liveness snapshot (sub-second,
         # used here for GO gating). The <online> field in network_map.xml is
@@ -1511,12 +1862,110 @@ class ControllerEngine(BaseEngine):
         return True
 
     def get_project_status(self, value, context=None):
-        """Return current project playback status."""
+        """Return the current project load/playback state.
+
+        Three states, deliberately distinct:
+
+        * `running` — a project is loaded AND playing.
+        * `loaded`  — a project is loaded and NOT playing. This is the state
+          the reply used to collapse into `none`, which made a loaded-but-
+          stopped project indistinguishable from no project at all — and left
+          this reply contradicting /engine/status/load, which kept naming the
+          project all along.
+        * `none`    — no project.
+
+        `loaded` says nothing about readiness: the GO gate waits on `armed`,
+        published separately on /engine/status/armed. A project whose nodes
+        never answer sits in `loaded` for the whole 120 s arm watchdog and
+        never becomes GO-able. Do not treat this field as a GO gate.
+
+        `project_uuid` is populated in both `running` and `loaded`, and the
+        invariant is one-way: **a status other than `none` always carries a
+        non-empty uuid**. That is why `running` with no script — which the
+        guards in load_project/unload_project should make unreachable —
+        degrades to `none` here rather than to a `running` a client cannot
+        act on.
+
+        `project_unix_name` is the same string /engine/status/load broadcasts,
+        returned here so a consumer that needs the uuid never has to make that
+        broadcast carry one (869dr2k2h).
+
+        The load state is read from two attributes that another thread can be
+        mutating mid-load. They are ANDed, so a torn read falls to `none` —
+        never to a `loaded` naming a project the engine does not hold.
+        """
         running = self.get_status("running") == "yes"
+        loaded = self.script is not None and bool(self.get_status("load"))
+
+        if running:
+            status = "running"
+        elif loaded:
+            status = "loaded"
+        else:
+            status = "none"
+
+        if status == "none" or self.script is None:
+            return {"status": "none", "project_uuid": "", "project_unix_name": ""}
+
+        # unix_name is not a CuemsScript field — load_project attaches it by
+        # hand — so any script built by another path simply lacks it.
         return {
-            "status": "running" if running else "none",
-            "project_uuid": (str(self.script.id) if running and self.script else ""),
+            "status": status,
+            "project_uuid": str(self.script.id),
+            "project_unix_name": str(getattr(self.script, "unix_name", "") or ""),
         }
+
+    def get_cluster_status(self, value, context=None) -> dict:
+        """Return who is adopted and who answers right now.
+
+        Two different signals, deliberately kept apart (the UI must never merge
+        them):
+
+        * `adopted` — from network_map.xml, i.e. what cuems-nodeconf knows.
+        * `alive`   — this engine's sub-second ping/pong, the only thing the GO
+          gate trusts. `<online>` in the XML is nodeconf's discovery view and
+          is NOT this.
+
+        `age_s` is how old the probe behind this answer is, computed here: the
+        browser cannot interpret our monotonic clock.
+
+        Read-only — it never loads, unloads, arms or stops anything, so it is
+        safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are
+        served from cache so a polling panel cannot turn into a ping flood.
+        Always returns a populated dict: the dispatch path confirms only on a
+        truthy result, and an empty one would leave the editor waiting out its
+        25 s timeout.
+        """
+        now = time.monotonic()
+        cached = getattr(self, "_cluster_status_cache", None)
+        if cached is not None and (now - cached[0]) < CLUSTER_STATUS_CLAMP_S:
+            probed_at, payload = cached
+        else:
+            alive = self._probe_cluster_liveness()
+            adopted = self._adopted_uuids_from_network_map()
+            payload = {
+                "alive": sorted(alive),
+                "adopted": sorted(adopted),
+                "controller": self._controller_uuid(),
+            }
+            probed_at = time.monotonic()
+            self._cluster_status_cache = (probed_at, payload)
+
+        # Read the diagnosis fresh, OUTSIDE the clamp. Folding it into the
+        # cached payload would serve the pre-transition diagnosis to any poll
+        # landing within CLUSTER_STATUS_CLAMP_S of a load, unload or reload —
+        # a warning outliving its cause, which is the worst outcome this
+        # surface has. The clamp exists to stop ping floods; a lock-guarded
+        # dict read is not a ping. Same treatment as age_s.
+        with self._cluster_lock:
+            diagnosis = dict(self._load_diagnosis) if self._load_diagnosis else {}
+
+        return dict(
+            payload,
+            age_s=round(time.monotonic() - probed_at, 3),
+            missing=diagnosis.get("missing", []),
+            unreachable=diagnosis.get("unreachable", []),
+        )
 
     def unload_project(self, value, context=None):
         """Unload the current project. Rejects if playback is running."""
@@ -1535,6 +1984,7 @@ class ControllerEngine(BaseEngine):
         with self._cluster_lock:
             self._required_nodes.clear()
             self._adopted_nodes.clear()
+        self._clear_load_diagnosis()
         self._forward_command_to_nodes("/engine/command/stop", value)
         Logger.info("Project unloaded")
         return True
