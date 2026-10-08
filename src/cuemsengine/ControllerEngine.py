@@ -107,6 +107,17 @@ class ControllerEngine(BaseEngine):
         # nodes. Does NOT force armed=yes — operator decides.
         self._arm_watchdog: threading.Timer | None = None
 
+        # Run counter for cross-node Auto follows (869fc8ytz). Every GO ships
+        # it; STOP, load and unload bump it BEFORE they forward anything; a
+        # node's follow message is relayed only if it carries the current
+        # value. Started from the clock so a restarted controller never
+        # reuses a value a node still holds. The lock makes "bump" and
+        # "check, then forward a follow" atomic, so a relayed follow is
+        # always queued to the nodes ahead of the STOP that ends its run.
+        # Never held across a wait or the cluster probe.
+        self._run_seq: int = time.time_ns() // 1_000_000
+        self._run_seq_lock = threading.Lock()
+
         super().__init__(**kwargs)
         self.set_editor_request("")
         self.set_node_operation_callback()
@@ -621,8 +632,55 @@ class ControllerEngine(BaseEngine):
                 )
                 updated += 1
             Logger.info(f"Mixer status from {node_uuid}: {updated} channel(s) updated")
+        elif operation.target == "follow":
+            self._relay_follow(operation)
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
+
+    def _bump_run_seq(self, why: str) -> None:
+        """A run ends here (STOP, load, unload): follow messages sent for it
+        are no longer relayed. Call BEFORE forwarding the command."""
+        with self._run_seq_lock:
+            self._run_seq += 1
+            seq = self._run_seq
+        Logger.debug(f"run_seq -> {seq} ({why})")
+
+    def _relay_follow(self, operation: NodeOperation) -> None:
+        """Relay a cross-node Auto follow message (announce or cancel) to
+        every node (869fc8ytz). The controller keeps no follow state: the
+        node that owns the source decides, the others act. Dropped when the
+        sender is not adopted, a cue is not in the loaded project, the show
+        is not running, or the message belongs to an earlier run."""
+        data = operation.data if isinstance(operation.data, dict) else None
+        if data is None:
+            Logger.warning(f"Follow message without data from {operation.sender}")
+            return
+        what = (
+            f"follow {data.get('op')} {data.get('source')} -> {data.get('target')}"
+            f" at {data.get('seed_ms')} from {operation.sender}"
+        )
+        if operation.sender not in self._adopted_nodes:
+            Logger.warning(f"Dropping {what}: sender is not an adopted node")
+            return
+        if (
+            data.get("source") not in self.cue_status
+            or data.get("target") not in self.cue_status
+        ):
+            Logger.warning(f"Dropping {what}: cue not in the loaded project")
+            return
+        with self._run_seq_lock:
+            if (
+                self.get_status("running") != "yes"
+                or data.get("run_seq") != self._run_seq
+            ):
+                Logger.info(
+                    f"Dropping {what}: not part of the current run "
+                    f"(run_seq {data.get('run_seq')}, current {self._run_seq}, "
+                    f"running={self.get_status('running')})"
+                )
+                return
+            self._forward_command_to_nodes("/engine/command/follow", data)
+        Logger.info(f"Relayed {what}")
 
     #########################
     # Editor commands
@@ -1018,6 +1076,7 @@ class ControllerEngine(BaseEngine):
             return False
 
         Logger.info(f"Loading project {project_name}")
+        self._bump_run_seq("load")
         self._clear_playback_state()
         self.reset_script()
 
@@ -1142,10 +1201,13 @@ class ControllerEngine(BaseEngine):
         # every node fire 4.48s late on test2 (2026-09-25). Without a live
         # reading, send the GO without an anchor -- each node falls back to
         # its own MTC, exactly as before this fix.
-        go_value = value
+        # Always a dict (869fc8ytz): it carries the run counter that
+        # cross-node follow messages are checked against. Nodes read nothing
+        # else from the GO value, so the caller's own `value` is not passed on.
+        go_value = {"run_seq": self._run_seq}
         if self.mtc_listener is not None:
             if self.mtc_listener.is_receiving():
-                go_value = {"go_mtc_ms": self.mtc_listener.main_tc.milliseconds_exact}
+                go_value["go_mtc_ms"] = self.mtc_listener.main_tc.milliseconds_exact
             else:
                 Logger.error(
                     "GO: controller MTC listener is not receiving -- sending GO "
@@ -1433,6 +1495,7 @@ class ControllerEngine(BaseEngine):
             Logger.info("Script not running, nothing to stop.")
             return
 
+        self._bump_run_seq("stop")
         self.go_offset = None
         self.set_status("running", "no")
         self._clear_playback_state()
@@ -1459,6 +1522,7 @@ class ControllerEngine(BaseEngine):
         """Unload the current project. Rejects if playback is running."""
         if self.get_status("running") == "yes":
             raise RuntimeError("Cannot unload while running. Stop playback first.")
+        self._bump_run_seq("unload")
         self._clear_playback_state()
         self.reset_script()
         self.cue_status = {}

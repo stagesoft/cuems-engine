@@ -14,6 +14,8 @@ reserved for cue lifecycle commands like load/go/stop).
 """
 
 import asyncio
+import logging
+import threading
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -123,3 +125,21 @@ def test_non_command_type_returns_early(comms):
     comms._handle_command_operation(status_op)
     assert comms.nng_hub.send_operation.call_count == 0
     comms._command_callback.assert_not_called()
+
+
+def test_a_failing_command_callback_is_logged_with_its_traceback(comms, caplog):
+    # 869evtdf7: a load that died on an EPERM left only "Error executing
+    # command callback for load: [Errno 1] Operation not permitted" — no
+    # step, no line. The traceback says where it came from.
+    comms._command_callback.side_effect = PermissionError(1, "Operation not permitted")
+    with caplog.at_level(logging.ERROR):
+        comms._handle_command_operation(_normal_command_op("load"))
+        for t in threading.enumerate():
+            if t.name == "NNG-Command-load":
+                t.join(timeout=5)
+
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert "load" in errors[0].getMessage()
+    assert errors[0].exc_info is not None
+    assert errors[0].exc_info[0] is PermissionError
