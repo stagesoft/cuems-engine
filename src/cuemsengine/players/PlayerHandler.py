@@ -1,9 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
+import pwd
 import shutil
+import signal
 import subprocess
 from functools import partial
 from threading import RLock
@@ -34,6 +37,97 @@ def _process_exited(player) -> bool:
     """
     process = getattr(player, "p", None)
     return process is not None and process.poll() is not None
+
+
+# ---------------------------
+# Orphan sweeps (869evtdf7)
+# ---------------------------
+# Killing the players a previous engine left behind is hygiene, not a
+# precondition: nothing here may raise into the caller. An exception from the
+# audioplayer sweep used to abort a project load half-way through its teardown
+# (old project torn down, new one never armed), and one from the mixer sweep
+# left the node without a mixer.
+
+AUDIOPLAYER_ORPHAN_PATTERN = "cuems-audioplayer"
+MIXER_ORPHAN_PATTERN = "jack-volume -c"
+
+
+def _orphan_pids(pattern: str, label: str) -> list[int]:
+    """PIDs whose command line matches `pattern` (pgrep -f). Never raises.
+
+    pgrep exits 1 when nothing matches: the normal case, silent. Any other
+    non-zero exit (bad option or pattern, fatal error) is logged, so a sweep
+    that stops working says so instead of going inert.
+    """
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+        )
+    except Exception as e:
+        Logger.warning(f"Orphan {label} sweep skipped: cannot run pgrep: {e!r}")
+        return []
+    if result.returncode == 1:
+        return []
+    if result.returncode != 0:
+        Logger.warning(
+            f"Orphan {label} sweep skipped: pgrep failed with rc "
+            f"{result.returncode}: {(result.stderr or '').strip()}"
+        )
+        return []
+    pids = []
+    for line in (result.stdout or "").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            pids.append(int(line))
+        except ValueError:
+            Logger.warning(f"Orphan {label} sweep: ignoring pgrep line {line!r}")
+    return pids
+
+
+def _pid_owner(pid: int) -> str:
+    """Owner of `pid` as "name(uid)", plus the effective user when it
+    differs; "?" when it cannot be read (the process may be gone)."""
+
+    def name(uid: int) -> str:
+        try:
+            return f"{pwd.getpwuid(uid).pw_name}({uid})"
+        except Exception:
+            return f"({uid})"
+
+    try:
+        with open(f"/proc/{pid}/status") as status:
+            for line in status:
+                if line.startswith("Uid:"):
+                    real, effective = (int(x) for x in line.split()[1:3])
+                    owner = name(real)
+                    if effective != real:
+                        owner += f", euid {name(effective)}"
+                    return owner
+    except Exception:
+        pass
+    return "?"
+
+
+def _kill_orphan(pid: int, label: str) -> None:
+    """SIGKILL an orphaned `label` process. Never raises: an orphan the
+    engine cannot signal is reported and left alone."""
+    Logger.warning(f"Killing orphaned {label} process {pid}")
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # already gone
+    except PermissionError:
+        Logger.warning(
+            f"Cannot kill orphaned {label} process {pid} (owner "
+            f"{_pid_owner(pid)}): not permitted. Leaving it; if it holds a "
+            f"JACK client name, a cue may stay silent"
+        )
+    except Exception as e:
+        Logger.warning(f"Cannot kill orphaned {label} process {pid}: {e!r}")
 
 
 class PlayerHandler:
@@ -373,16 +467,11 @@ class PlayerHandler:
         On engine restart, previously spawned audioplayer processes survive
         because they are independent subprocesses. The new engine has no
         reference to them, so they steal JACK client names and cause silence.
-        """
-        import os
-        import signal
 
-        result = subprocess.run(
-            ["pgrep", "-f", "cuems-audioplayer"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
+        Runs in the middle of a project load, so it never raises (869evtdf7).
+        """
+        pids = _orphan_pids(AUDIOPLAYER_ORPHAN_PATTERN, "audioplayer")
+        if not pids:
             return
 
         tracked_pids = set()
@@ -391,16 +480,9 @@ class PlayerHandler:
                 if player and player.p:
                     tracked_pids.add(player.p.pid)
 
-        for pid_str in result.stdout.strip().split("\n"):
-            if not pid_str:
-                continue
-            pid = int(pid_str)
+        for pid in pids:
             if pid not in tracked_pids:
-                Logger.warning(f"Killing orphaned audioplayer process {pid}")
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                _kill_orphan(pid, "audioplayer")
 
     def kill_orphaned_mixer_processes(self):
         """Kill jack-volume mixer processes not tracked by this engine.
@@ -417,32 +499,21 @@ class PlayerHandler:
         rather than the bare word, so an operator's `tail -f .../jack-volume.log`
         or a grep isn't caught and killed. Covers both the plain and
         "cuems-jack-volume" install names.
-        """
-        import os
-        import signal
 
-        result = subprocess.run(
-            ["pgrep", "-f", "jack-volume -c"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
+        Never raises (869evtdf7): an orphan it cannot kill used to stop the
+        mixer from starting, leaving every audio cue on the node silent.
+        """
+        pids = _orphan_pids(MIXER_ORPHAN_PATTERN, "jack-volume mixer")
+        if not pids:
             return
 
         tracked_pid = None
         if self._audio_mixer is not None and getattr(self._audio_mixer, "p", None):
             tracked_pid = self._audio_mixer.p.pid
 
-        for pid_str in result.stdout.strip().split("\n"):
-            if not pid_str:
-                continue
-            pid = int(pid_str)
+        for pid in pids:
             if pid != tracked_pid:
-                Logger.warning(f"Killing orphaned jack-volume mixer process {pid}")
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                _kill_orphan(pid, "jack-volume mixer")
 
     # ---------------------------
     # Audio Cue Management
