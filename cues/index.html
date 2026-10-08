@@ -11882,7 +11882,25 @@ updating offset via the single VideoClient in cue._osc.</p>
 <span class="normal">356</span>
 <span class="normal">357</span>
 <span class="normal">358</span>
-<span class="normal">359</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@loop_cue</span><span class="o">.</span><span class="n">register</span>
+<span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@loop_cue</span><span class="o">.</span><span class="n">register</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">loop_videoCue</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">VideoCue</span><span class="p">,</span> <span class="n">mtc</span><span class="p">:</span> <span class="n">MtcListener</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Handle the video media playback loop.</span>
 
@@ -11910,14 +11928,18 @@ updating offset via the single VideoClient in cue._osc.</p>
 
         <span class="n">layer_ids</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_layer_ids"</span><span class="p">,</span> <span class="p">[])</span>
 
-        <span class="c1"># Tell the videocomposer this is a looping cue so it wraps frames at</span>
-        <span class="c1"># the</span>
-        <span class="c1"># loop boundary (instead of clamping to the last frame).</span>
-        <span class="k">for</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="n">layer_ids</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">cue</span><span class="o">.</span><span class="n">_osc</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/videocomposer/layer/</span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">/loop"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Loop enable failed for layer </span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="c1"># Tell the videocomposer to wrap frames at the loop boundary (instead</span>
+        <span class="c1"># of clamping to the last frame) ONLY for a cue that really repeats.</span>
+        <span class="c1"># A play-once cue must clamp: the videocomposer runs its display</span>
+        <span class="c1"># latency (33 ms) ahead of MTC, so with wraparound on it reaches end</span>
+        <span class="c1"># of file before the engine hides the layer and shows frame 0 again</span>
+        <span class="c1"># (869fa89uh).</span>
+        <span class="k">if</span> <span class="n">cue</span><span class="o">.</span><span class="n">loop</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="n">layer_ids</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">cue</span><span class="o">.</span><span class="n">_osc</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/videocomposer/layer/</span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">/loop"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Loop enable failed for layer </span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
         <span class="k">while</span> <span class="n">cue</span><span class="o">.</span><span class="n">loop</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">loop_counter</span> <span class="o">&lt;</span> <span class="n">cue</span><span class="o">.</span><span class="n">loop</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">cue</span><span class="o">.</span><span class="n">_stop_requested</span><span class="p">:</span>
@@ -11975,6 +11997,20 @@ updating offset via the single VideoClient in cue._osc.</p>
                         <span class="p">)</span>
                     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                         <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Offset send failed for layer </span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+                <span class="c1"># Last pass of a counted loop: stop wrapping (after the new</span>
+                <span class="c1"># offset, so the layer never clamps mid-boundary) so the end</span>
+                <span class="c1"># of this pass holds the last frame like a play-once cue.</span>
+                <span class="k">if</span> <span class="n">cue</span><span class="o">.</span><span class="n">loop</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">loop_counter</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="n">cue</span><span class="o">.</span><span class="n">loop</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="n">layer_ids</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">cue</span><span class="o">.</span><span class="n">_osc</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">"/videocomposer/layer/</span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">/loop"</span><span class="p">,</span> <span class="mi">0</span>
+                            <span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                            <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">"Loop disable failed for layer </span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span>
+                            <span class="p">)</span>
 
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Loop FINISHED: loop_counter=</span><span class="si">{</span><span class="n">loop_counter</span><span class="si">}</span><span class="s2">, cue.loop=</span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">loop</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
