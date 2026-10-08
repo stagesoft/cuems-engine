@@ -78,6 +78,12 @@ class ControllerEngine(BaseEngine):
         # so no lock is needed — keep it that way.
         self.mixer_status: dict[str, float] = {}
 
+        # Per-cue names of the loaded script, {uuid: name}. Rebuilt at every
+        # load and broadcast AFTER the load status, replayed to late joiners,
+        # emptied on unload. The late-join dump reads it before the first load,
+        # so it must exist from __init__.
+        self.cue_names: dict[str, str] = {}
+
         # Cluster-state tracking. Populated at load time by
         # _resolve_cluster_state
         # (chunk 3); used to gate the armed=yes flip on all required nodes
@@ -864,6 +870,28 @@ class ControllerEngine(BaseEngine):
                     ids.extend(self._collect_cue_ids(item))
         return ids
 
+    def _collect_cue_names(self, cuelist) -> dict[str, str]:
+        """Recursively collect cue names from a cuelist, same walk as
+        _collect_cue_ids (nested CueLists included, as items and recursed).
+
+        Reads the name as a dict item, not through the Cue.name property: the
+        property raises KeyError on a cue that has no name key. None becomes
+        "" and anything else is str()-ed as is (never `or ""`, so a name an
+        old cuems-utils coerced to 0/False still prints).
+        """
+        from cuemsutils.cues import CueList
+
+        names = {}
+        if hasattr(cuelist, "contents") and cuelist.contents:
+            for item in cuelist.contents:
+                if item is None:
+                    continue
+                name = item.get("name")
+                names[item.id] = "" if name is None else str(name)
+                if isinstance(item, CueList):
+                    names.update(self._collect_cue_names(item))
+        return names
+
     def _collect_cue_enabled(self, cuelist) -> dict[str, bool]:
         """Recursively collect cue enabled states from a cuelist."""
         from cuemsutils.cues import CueList
@@ -877,6 +905,20 @@ class ControllerEngine(BaseEngine):
                 if isinstance(item, CueList):
                     result.update(self._collect_cue_enabled(item))
         return result
+
+    def _broadcast_cue_name(self, cue_id: str, name: str) -> None:
+        """
+        Broadcast a cue's name to UI at /engine/status/cue_name/{uuid}.
+        Sent once per load (no throttle), like cue_enabled.
+        """
+        if (
+            hasattr(self, "communications_thread")
+            and self.communications_thread
+            and hasattr(self.communications_thread, "broadcast_osc")
+        ):
+            self.communications_thread.broadcast_osc(
+                f"/engine/status/cue_name/{cue_id}", name
+            )
 
     def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
         """
@@ -958,6 +1000,12 @@ class ControllerEngine(BaseEngine):
             data = build_osc_message(
                 f"/engine/status/cue_enabled/{cid}", 1 if enabled else 0
             )
+            if data:
+                await websocket.send(data)
+
+        # Per-cue names (after `load` above, like the live burst)
+        for cid, name in self.cue_names.items():
+            data = build_osc_message(f"/engine/status/cue_name/{cid}", name)
             if data:
                 await websocket.send(data)
 
@@ -1090,6 +1138,15 @@ class ControllerEngine(BaseEngine):
         # TODO: send project UUID instead of name for robustness (would break
         # UI contract)
         self.set_status("load", project_name)
+
+        # Per-cue names, deliberately AFTER the load status (unlike cue_status
+        # and cue_enabled above): duplicated projects share cue uuids, so a
+        # client treats a change of `load` as "new table" and refills it from
+        # this burst. Keep this order.
+        self.cue_names = self._collect_cue_names(self.script.cuelist)
+        for cid, name in self.cue_names.items():
+            self._broadcast_cue_name(cid, name)
+        Logger.info(f"Cue names initialised for {len(self.cue_names)} cues")
 
         # Probe cluster, derive _required_nodes for GO gating, refresh <online>
         # in network_map. Done BEFORE _forward_load_to_nodes so the gating set
@@ -1470,6 +1527,7 @@ class ControllerEngine(BaseEngine):
         self.reset_script()
         self.cue_status = {}
         self.cue_enabled_status = {}
+        self.cue_names = {}
         self.set_status("load", "")
         # No project loaded → no required/adopted snapshot. Without this, a
         # late armed_ready from a slow node could flip armed=yes on an
