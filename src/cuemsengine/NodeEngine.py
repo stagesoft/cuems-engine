@@ -17,7 +17,11 @@ from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
-from .players.PlayerHandler import PLAYER_HANDLER, _positive_int
+from .players.PlayerHandler import (
+    PLAYER_HANDLER,
+    _positive_int,
+    check_orphan_binary_names,
+)
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
@@ -445,6 +449,9 @@ class NodeEngine(BaseEngine):
     # Player logic
     #########################
     def set_players(self):
+        # A player binary the orphan cleanups do not know by name escapes them
+        # all; say so at start (869evtdf7).
+        check_orphan_binary_names(self.cm.node_conf)
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
