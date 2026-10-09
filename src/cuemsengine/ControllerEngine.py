@@ -1238,9 +1238,7 @@ class ControllerEngine(BaseEngine):
         # auto-load the browser is normally opened well after the load, so the
         # push in _resolve_cluster_state has nobody listening.
         with self._cluster_lock:
-            diagnosis = (
-                dict(self._load_diagnosis) if self._load_diagnosis else None
-            )
+            diagnosis = dict(self._load_diagnosis) if self._load_diagnosis else None
         data = build_osc_message(
             "/engine/status/cluster_warning",
             self._cluster_warning_payload(diagnosis),

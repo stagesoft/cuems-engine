@@ -81,9 +81,7 @@ def resolve(controller, *, adopted, alive, project):
             controller, "_adopted_uuids_from_network_map", return_value=set(adopted)
         ),
         patch.object(controller, "_probe_cluster_liveness", return_value=set(alive)),
-        patch.object(
-            controller, "_collect_project_nodes", return_value=set(project)
-        ),
+        patch.object(controller, "_collect_project_nodes", return_value=set(project)),
         patch.object(controller, "_arm_arm_watchdog"),
     ):
         controller._resolve_cluster_state()
@@ -161,9 +159,7 @@ class TestDiagnosisShapes:
         """Its own UUID is in project and always in required; if it failed to
         answer its own probe there are much larger problems than this alert.
         """
-        d = resolve(
-            controller, adopted=set(), alive=set(), project={CONTROLLER, NODE1}
-        )
+        d = resolve(controller, adopted=set(), alive=set(), project={CONTROLLER, NODE1})
         assert CONTROLLER not in d["missing"]
         assert CONTROLLER not in d["unreachable"]
 

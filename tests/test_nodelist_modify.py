@@ -481,7 +481,8 @@ class TestClusterStatus:
         """
         controller.communications_thread.nng_hub = Mock()
         with patch.object(
-            controller, "_adopted_uuids_from_network_map",
+            controller,
+            "_adopted_uuids_from_network_map",
             return_value={controller._controller_uuid()},
         ):
             alive = controller._probe_cluster_liveness(timeout=0.1)
