@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
 
@@ -144,8 +145,11 @@ def arm_videoCue(cue: VideoCue):
         return
 
     video_path = PLAYER_HANDLER.media_path(cue.media["file_name"])
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media["file_name"])
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
     cue._layer_ids = []
+    # Layers whose placement/scale could not be applied on this arm; reset
+    # every arm so a clean re-arm clears an earlier failure.
+    cue._placement_failed = []
 
     driver_layer_id = None
     for index, output_name in enumerate(output_names):
@@ -181,14 +185,17 @@ def arm_videoCue(cue: VideoCue):
             sx, sy = output.get_layer_scale(media_w, media_h)
             client.set_value(f"{layer_path}/scale", [sx, sy])
         except (KeyError, RuntimeError, ValueError) as e:
-            Logger.warning(
-                f'Video output "{output_name}" placement/scale failed'
-                f"({type(e).__name__}: {e}), skipping for layer {layer_id}"
+            cue._placement_failed.append(layer_id)
+            Logger.error(
+                f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
+                f" position/scale NOT applied, either may be left at its default"
+                f" ({type(e).__name__}: {e})"
             )
         except Exception:
+            cue._placement_failed.append(layer_id)
             Logger.exception(
                 f"Unexpected error setting placement/scale for layer"
-                f'{layer_id} (output "{output_name}")'
+                f' {layer_id} (output "{output_name}"): NOT applied'
             )
 
         PLAYER_HANDLER.register_layer(layer_id)

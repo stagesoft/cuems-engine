@@ -3,6 +3,7 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import math
 from inspect import signature
 from time import sleep
 from typing import Any, Callable, Union
@@ -12,6 +13,12 @@ from pyossia import Node, ValueType, ossia
 
 CLEANUP_DELAY = 0.3
 STARTUP_DELAY = 0.3
+# set_value() readback tolerance. pyossia stores Float and the elements of
+# List/Vec2f as float32 (~6e-8 relative precision): rel covers large values,
+# abs covers values at or near 0, where a relative bound alone would demand
+# bit-exactness.
+READBACK_REL_TOL = 1e-6
+READBACK_ABS_TOL = 1e-6
 
 
 class OssiaNodes(object):
@@ -182,19 +189,40 @@ class OssiaNodes(object):
             return
         node.parameter.push_value(value)
         stored = node.parameter.value
-        # Float parameters go through float32 (OSC wire format), so an exact
-        # Python float64 equality check produces false negatives (e.g. 0.66).
-        # Use a tolerance-based comparison for floats; strict equality for all
-        # others.
-        if isinstance(value, float):
-            if abs(stored - value) > 1e-5:
-                raise ValueError(f"Could not set {str(node)} to {value} (got {stored})")
-        elif stored != value:
-            raise ValueError(f"Could not set {str(node)} to {value}")
+        # The value has already been sent; this only checks that the local
+        # parameter accepted it (a type the parameter cannot hold reads back
+        # as its default).
+        if not self._values_match(value, stored):
+            raise ValueError(f"Could not set {str(node)} to {value} (got {stored})")
         if path is not None:
             self._explicit_values.add(path)
             # A real push is the freshest truth — supersede any recorded value
             self._recorded_values.pop(path, None)
+
+    @staticmethod
+    def _values_match(sent, stored) -> bool:
+        """Compare a pushed value with what the parameter reads back.
+
+        pyossia stores floats as float32 — scalars and the elements of
+        List/Vec2f alike — so a float64 that is not exactly representable
+        comes back rounded (1200/2160 reads back as 0.5555555820465088).
+        Numbers are compared with a tolerance, lists element by element
+        (recursively); everything else must be equal.
+        """
+        if isinstance(sent, (list, tuple)):
+            if not isinstance(stored, (list, tuple)) or len(sent) != len(stored):
+                return False
+            return all(OssiaNodes._values_match(a, b) for a, b in zip(sent, stored))
+        if isinstance(sent, float) or isinstance(stored, float):
+            if isinstance(sent, (int, float)) and isinstance(stored, (int, float)):
+                return math.isclose(
+                    stored,
+                    sent,
+                    rel_tol=READBACK_REL_TOL,
+                    abs_tol=READBACK_ABS_TOL,
+                )
+            return False
+        return sent == stored
 
     @logged
     def get_value(self, node: Union[Node, str]):

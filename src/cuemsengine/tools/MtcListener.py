@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
 from threading import Lock, Thread
+from time import monotonic
 from typing import Callable
 
 import mido
@@ -31,6 +33,9 @@ class MtcListener(Thread):
         self.__quarter_frames = [0, 0, 0, 0, 0, 0, 0, 0]
         self.port = None
         self.port_name = None
+        # monotonic() of the last MTC message received (quarter frame or
+        # timecode full frame), None until the first one. See is_receiving.
+        self.last_rx_monotonic: float | None = None
         self.__open_port(port)
 
         self.step_callback = step_callback
@@ -176,6 +181,19 @@ class MtcListener(Thread):
         """
         return self.milliseconds_rounded()
 
+    def is_receiving(self, max_age_s: float = 0.5) -> bool:
+        """True if an MTC message arrived within the last max_age_s seconds.
+
+        A listener that failed to open its port (or whose sender stopped)
+        keeps a main_tc that looks like a valid reading -- 0.0 if it never
+        received anything. ControllerEngine.go_script ships that reading as
+        every node's GO anchor, so it must be able to tell a live reading
+        from a dead one (test2, 2026-09-25, 869f79ecc). While MTC rolls,
+        quarter frames arrive every ~10ms at 25fps, so 0.5s is generous.
+        """
+        last = self.last_rx_monotonic
+        return last is not None and (monotonic() - last) <= max_age_s
+
     def __update_timecode(self, timecode):
         self.main_tc = timecode
         if self.main_tc.milliseconds_rounded == 0:
@@ -244,6 +262,7 @@ class MtcListener(Thread):
 
     def __handle_message(self, message):
         if message.type == "quarter_frame":
+            self.last_rx_monotonic = monotonic()
             self.__quarter_frames[message.frame_type] = message.frame_value
             if (message.frame_type == 3) or (message.frame_type == 7):
                 self.__update_timecode(self.main_tc + 1)
@@ -260,6 +279,7 @@ class MtcListener(Thread):
                 1,
                 1,
             ):
+                self.last_rx_monotonic = monotonic()
                 data = message.data[4:]
                 tc = self.__mtc_decode(data)
                 Logger.debug("FF:" + tc.__str__())

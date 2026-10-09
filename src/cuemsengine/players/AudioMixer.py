@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import math
 from time import sleep
 
 from cuemsutils.log import Logger, logged
@@ -240,6 +242,8 @@ class AudioMixer(Player):
         selected_outputs: list = None,
         max_retries: int = 30,
         retry_delay: float = 0.5,
+        should_abort=None,
+        ready=None,
     ):
         """
         Connect a player to specific system outputs based on cue configuration.
@@ -259,13 +263,45 @@ class AudioMixer(Player):
             ['system:playback_1'])
             max_retries: Maximum number of connection attempts
             retry_delay: Delay between retries in seconds
+            should_abort: optional predicate, checked on every attempt the
+            port is still missing. True ends the wait at once with False. The
+            caller passes "the player process has exited": its ports can
+            never register then (869f9wqpn -- a STOP/load kills the player
+            mid-wait). It does NOT shorten the wait for a live process.
+            ready: optional threading.Event the player sets once it reports
+            itself started (Player.ready, its "[OK] RUNNING!" line). When
+            given, the wiring waits for it before looking at the ports: the
+            ports exist before the player has finished starting, and RtAudio
+            auto-connects them to system:playback only when its stream starts.
+            Wiring earlier finds nothing to disconnect, and the auto-connect
+            lands afterwards and stays - the cue then sounds through the mixer
+            AND straight to the outputs (869fbyjzx / 869fcvz85). The ready wait
+            and the port wait share one budget, today's port-wait ceiling.
+            A player that never reports ready is wired on port presence, with
+            a WARNING.
+
+        KNOWN LIMIT (869fbyjzx): this makes an audio arm correct and as fast as the
+        player allows, about 0.47 s cold (0.35 s warm), most of it the player's
+        own start-up. A GO that reaches a cue less than that after its arm
+        started still waits for the arm and fires LATE by the difference. On
+        test2 (a node audio cue behind another node's pause, second GO after
+        the hand-off): 0.3 s -> ~0.2 s late; 0.5 s and later -> on time.
+        Only arming BEFORE the hand-off removes it. PLAN B, not built because
+        no real show hits it today (sala1's node segments are video only; the
+        cost is players and layers held for the whole pause): arm the first
+        local segment at load even behind another node's pause, and the next
+        one after each GO ("Part B", Plans/2026-10-01-engine-prearm-past-
+        pauses-and-inventory.md; measured cost ~15 MB per held audio player,
+        ~40 MB GPU per held 1080p video layer). A cheaper variant is to
+        pre-launch players. Revisit if a venue reports a late node audio cue
+        after a fast double GO.
 
         Returns:
             True if every required player→mixer connection was made, False if
             the player ports never registered, no mixer inputs resolved, or any
             connection failed (caller should treat False as a silent cue).
         """
-        from time import sleep
+        from time import monotonic, sleep
 
         # Default to stereo (both outputs) if none specified
         if not selected_outputs:
@@ -278,12 +314,6 @@ class AudioMixer(Player):
         # "outport 1"
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
-
-        # Build output→input mapping from the configured audio_outputs list
-        output_to_input = {
-            name: f"{self.client_name}:input_{i+1}"
-            for i, name in enumerate(self.audio_outputs)
-        }
 
         # Fail fast when there is no JACK client at all. The retry loop below
         # exists for a TRANSIENT race (player ports registering a beat after
@@ -304,24 +334,102 @@ class AudioMixer(Player):
             )
             return False
 
+        # Wait for the player to report itself started (869fbyjzx). AFTER the
+        # no-JACK fail-fast above: a JACK-stubbed host (the test2 controller)
+        # must still return at once. Counted slices, not a monotonic deadline,
+        # bound the wait, so a test can patch ready.wait. Whatever this phase
+        # uses comes off the port wait below: one budget for both.
+        port_attempts = max_retries
+        if ready is not None:
+            ready_slice = 0.05
+            # Today's port wait sleeps between its checks, (max_retries - 1)
+            # times: that total (14.5 s by default) is the whole budget.
+            budget_s = max(0, max_retries - 1) * retry_delay
+            ready_slices = max(1, int(round(budget_s / ready_slice)))
+            ready_started = monotonic()
+            slices_used = 0
+            got_ready = False
+            for _ in range(ready_slices):
+                if ready.wait(ready_slice):
+                    got_ready = True
+                    break
+                slices_used += 1
+                if should_abort is not None and should_abort():
+                    Logger.warning(
+                        f"Player process for {player_name} exited before "
+                        f"reporting RUNNING (waited "
+                        f"{monotonic() - ready_started:.3f}s) - killed by a "
+                        "STOP/load, or crashed. Not waiting any longer."
+                    )
+                    return False
+            if got_ready:
+                Logger.info(
+                    f"Audio player {player_name} reported RUNNING after "
+                    f"{monotonic() - ready_started:.3f}s"
+                )
+            else:
+                Logger.warning(
+                    f"Audio player {player_name} never reported RUNNING in "
+                    f"{monotonic() - ready_started:.1f}s - wiring on port "
+                    "presence (old or unusual player build)"
+                )
+            if retry_delay > 0:
+                # Round UP (to 6 places first, against float noise): the ready
+                # wait may never leave the port wait more than the budget.
+                spent_attempts = math.ceil(
+                    round(slices_used * ready_slice / retry_delay, 6)
+                )
+                port_attempts = max(1, max_retries - spent_attempts)
+            else:
+                port_attempts = 1
+
         # Wait for player JACK ports to be available.
         # NOTE: gate ONLY on port_exists(); get_connections() returns [] (not
         # None) for a missing port, so the old 'connections is not None' guard
         # made this loop break immediately and connect a not-yet-registered
         # port -> jackd 'Unknown source port' -> silent-but-green cue.
-        for attempt in range(max_retries):
+        #
+        # 869f79ecc: only the FAILURE path left a trace (DEBUG per retry,
+        # WARNING on giving up); the success path -- which is every normal
+        # arm -- logged nothing, so nobody could tell whether this ~15s
+        # ceiling (max_retries * retry_delay) reflects real registration
+        # latency or is just an untested guess. It IS a guess -- CLAUDE.md:91
+        # explains the pipeline (OSC bind + RtMidi + FFmpeg probe before
+        # RtAudio registers the port) but gives no distribution, and the
+        # 2026-07 isil multilingual incident shows underestimating it once
+        # already cost a real show. Log the success path so the fleet's own
+        # journals can answer that instead of another guess.
+        wait_started = monotonic()
+        for attempt in range(port_attempts):
             if self.conn_man.port_exists(channel_0_output):
+                Logger.info(
+                    f"JACK port {channel_0_output} registered after "
+                    f"{monotonic() - wait_started:.3f}s (attempt {attempt + 1}"
+                    f"/{port_attempts})"
+                )
                 break
-            if attempt < max_retries - 1:
+            if should_abort is not None and should_abort():
+                # WARNING, not ERROR: after a STOP or a load this is the
+                # expected end of an arm that was in flight. A crash lands
+                # here too, and the caller's "will be SILENT" error covers it.
+                Logger.warning(
+                    f"Player process for {player_name} exited before "
+                    f"registering its JACK ports (waited "
+                    f"{monotonic() - wait_started:.3f}s, attempt {attempt + 1}"
+                    f"/{port_attempts}) - killed by a STOP/load, or crashed. "
+                    "Not waiting any longer."
+                )
+                return False
+            if attempt < port_attempts - 1:
                 Logger.debug(
                     f"Waiting for JACK port {channel_0_output} (attempt"
-                    f"{attempt + 1}/{max_retries})"
+                    f"{attempt + 1}/{port_attempts})"
                 )
                 sleep(retry_delay)
         else:
             Logger.warning(
                 f"JACK port {channel_0_output} not available after"
-                f"{max_retries} attempts"
+                f"{port_attempts} attempts"
             )
             return False
 
@@ -352,41 +460,26 @@ class AudioMixer(Player):
             for connection in channel_1_connections:
                 self.conn_man.disconnect_by_name(channel_1_output, connection)
 
-        # Determine which mixer inputs to connect to
-        target_inputs = []
-        for output in selected_outputs:
-            if output in output_to_input:
-                mixer_input = output_to_input[output]
-                if self.conn_man.port_exists(mixer_input):
-                    target_inputs.append(mixer_input)
-                else:
-                    Logger.warning(f"Mixer input {mixer_input} does not exist")
-
-        if not target_inputs:
+        expected = self._expected_edges(
+            player_name,
+            player_output_prefix,
+            selected_outputs,
+            is_stereo,
+            log_missing_inputs=True,
+        )
+        if not expected:
             Logger.error(f"No valid mixer inputs found for outputs: {selected_outputs}")
             return False
 
         Logger.info(
             f"Connecting {player_name} to outputs:"
-            f"{selected_outputs} -> {target_inputs}"
+            f"{selected_outputs} -> {[dst for _src, dst in expected]}"
         )
 
-        # Fan-out routing: treat target_inputs as alternating L/R pairs.
-        # Even-indexed targets (0, 2, 4 …) receive outport 0 (L channel).
-        # Odd-indexed targets  (1, 3, 5 …) receive outport 1 (R channel)
-        #   or outport 0 again when the player is mono.
-        # This covers 1, 2 or any number of outputs uniformly.
         all_connected = True
-        for i, mixer_input in enumerate(target_inputs):
-            if i % 2 == 0:
-                Logger.debug(f"L → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
-            elif is_stereo:
-                Logger.debug(f"R → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_1_output, mixer_input)
-            else:
-                Logger.debug(f"Mono → {mixer_input}")
-                ok = self.conn_man.connect_by_name(channel_0_output, mixer_input)
+        for src, dst in expected:
+            Logger.debug(f"{src} → {dst}")
+            ok = self.conn_man.connect_by_name(src, dst)
             all_connected = all_connected and ok
 
         if not all_connected:
@@ -396,59 +489,140 @@ class AudioMixer(Player):
             )
         return all_connected
 
-    def player_connections_correct(
+    def _expected_edges(
         self,
         player_name: str,
-        player_output_prefix: str = "outport",
-        selected_outputs: list = None,
-    ) -> bool:
-        """
-        Verify the player's outputs are wired exactly as
-        connect_player_to_outputs would wire them.
+        player_output_prefix: str,
+        selected_outputs: list,
+        is_stereo: bool,
+        log_missing_inputs: bool = False,
+    ) -> list:
+        """The (player outport, mixer input) edges a player should have.
 
-        Mirrors the routing in connect_player_to_outputs: same output_to_input
-        mapping (built from audio_outputs), same alternating L/R fan-out walk,
-        same mono branch (outport 0 → both pair members when channel_1 absent).
+        The ONE copy of the routing, used by the arm-time wiring
+        (connect_player_to_outputs), the GO-time check
+        (player_connection_diff) and the tests, so they cannot drift apart
+        (869fbyjzx). Selected outputs map to mixer inputs through
+        audio_outputs; inputs that do not exist are dropped, which shifts the
+        L/R pairing exactly as the wiring does. The targets are treated as
+        alternating L/R pairs: even-indexed targets (0, 2, 4 ...) get outport
+        0, odd-indexed ones outport 1, or outport 0 again on a mono player.
+        This covers 1, 2 or any number of outputs uniformly.
 
-        Returns False if any expected edge is missing, points elsewhere, or if
-        outport 0 itself does not exist (subprocess gone). Caller decides
-        whether to repair via connect_player_to_outputs or abort the cue.
+        Returns [] when no mixer input resolves.
         """
         if not selected_outputs:
             selected_outputs = ["system:playback_1", "system:playback_2"]
-
         channel_0_output = f"{player_name}:{player_output_prefix} 0"
         channel_1_output = f"{player_name}:{player_output_prefix} 1"
-
-        if not self.conn_man.port_exists(channel_0_output):
-            return False
-
-        is_stereo = self.conn_man.port_exists(channel_1_output)
-
         output_to_input = {
-            name: f"{self.client_name}:input_{i+1}"
+            name: f"{self.client_name}:input_{i + 1}"
             for i, name in enumerate(self.audio_outputs)
         }
-
         target_inputs = []
         for output in selected_outputs:
             if output in output_to_input:
                 mixer_input = output_to_input[output]
                 if self.conn_man.port_exists(mixer_input):
                     target_inputs.append(mixer_input)
-
-        if not target_inputs:
-            return False
-
+                elif log_missing_inputs:
+                    Logger.warning(f"Mixer input {mixer_input} does not exist")
+        edges = []
         for i, mixer_input in enumerate(target_inputs):
             if i % 2 == 0 or not is_stereo:
-                expected_src = channel_0_output
+                edges.append((channel_0_output, mixer_input))
             else:
-                expected_src = channel_1_output
-            if not self.conn_man.is_connected(expected_src, mixer_input):
-                return False
+                edges.append((channel_1_output, mixer_input))
+        return edges
 
-        return True
+    def player_connection_diff(
+        self,
+        player_name: str,
+        player_output_prefix: str = "outport",
+        selected_outputs: list = None,
+    ):
+        """Compare a player's outport edges with the expected wiring.
+
+        Returns (missing, stray), two lists of (source, destination) edges:
+        missing = expected edges that are not connected; stray = edges on the
+        player's outports that are not expected (e.g. RtAudio's own
+        auto-connect to system:playback, 869fcvz85). An edge is never in
+        both. Returns None when the graph cannot be wired at all: outport 0
+        does not exist (the subprocess is gone) or no mixer input resolves —
+        callers must treat None as a silent cue, never as "correct".
+
+        One get_connections per outport (outport 1 only on a stereo player):
+        this runs on the GO path before /offset.
+        """
+        channel_0_output = f"{player_name}:{player_output_prefix} 0"
+        channel_1_output = f"{player_name}:{player_output_prefix} 1"
+        if not self.conn_man.port_exists(channel_0_output):
+            return None
+        is_stereo = self.conn_man.port_exists(channel_1_output)
+        expected = self._expected_edges(
+            player_name, player_output_prefix, selected_outputs, is_stereo
+        )
+        if not expected:
+            return None
+        ports = [channel_0_output] + ([channel_1_output] if is_stereo else [])
+        present = {port: list(self.conn_man.get_connections(port)) for port in ports}
+        missing = [(src, dst) for src, dst in expected if dst not in present[src]]
+        wanted = set(expected)
+        stray = [
+            (port, dst)
+            for port in ports
+            for dst in present[port]
+            if (port, dst) not in wanted
+        ]
+        return missing, stray
+
+    def player_connections_correct(
+        self,
+        player_name: str,
+        player_output_prefix: str = "outport",
+        selected_outputs: list = None,
+    ) -> bool:
+        """True when the player is wired exactly as connect_player_to_outputs
+        wires it: every expected edge present and nothing else on its
+        outports. False on a missing edge, a stray edge, a missing outport 0
+        (subprocess gone) or no mixer input. See player_connection_diff.
+        """
+        diff = self.player_connection_diff(
+            player_name, player_output_prefix, selected_outputs
+        )
+        return diff is not None and not diff[0] and not diff[1]
+
+    def repair_player_connections(self, missing: list, stray: list):
+        """Fix a player's wiring edge by edge, never by a full rewire.
+
+        A GO can reach this while the cue is audible (a fresh GO or a 'play'
+        action on a playing cue), so a working mixer edge is never
+        disconnected: strays are disconnected one by one, missing edges
+        connected one by one (869fbyjzx).
+
+        Each stray is re-checked just before its disconnect: one already gone
+        (a stale diff, a re-arm wiring the same player) is skipped, because a
+        failed disconnect resets the SHARED JACK client under any arm wiring
+        at the same moment (JackConnectionManager.disconnect_by_name).
+
+        Returns (connected_ok, strays_left): whether every missing edge got
+        connected, and the strays whose disconnect failed.
+        """
+        strays_left = []
+        for src, dst in stray:
+            if not self.conn_man.is_connected(src, dst):
+                continue
+            if not self.conn_man.disconnect_by_name(src, dst):
+                # Another thread (a re-arm wiring the same player) may have
+                # removed it between our check and our disconnect: then it is
+                # gone, not a survivor.
+                if self.conn_man.is_connected(src, dst):
+                    strays_left.append((src, dst))
+        connected_ok = True
+        for src, dst in missing:
+            ok = self.conn_man.connect_by_name(src, dst)
+            connected_ok = connected_ok and ok
+        return connected_ok, strays_left
 
     @logged
     def disconnect_player(

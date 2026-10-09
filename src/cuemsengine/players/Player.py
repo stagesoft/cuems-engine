@@ -1,13 +1,21 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
 from subprocess import PIPE, STDOUT, Popen
-from threading import Thread
+from threading import Event, Thread
 from time import sleep
 
 from cuemsutils.log import Logger, logged
+
+# The line a CUEMS player prints on stdout once it is fully started (the
+# cuems-audioplayer calls its SIGUSR1 handler from main() right after the
+# AudioPlayer object is built and its stream runs: "to let everyone know that
+# we are running"). Matched as a substring: the line starts with the player's
+# logger slug, e.g. b"[Cuems:d<uuid>] [OK] RUNNING!\n".
+READY_LINE = b"[OK] RUNNING!"
 
 
 class Player(Thread):
@@ -36,6 +44,15 @@ class Player(Thread):
         self.started = False
         self.status = "starting"  # 'starting', 'running', 'failed'
         self.error = None
+        # Set when the subprocess prints READY_LINE. An audio arm waits on it
+        # before wiring the player to the mixer: the player's JACK ports exist
+        # before it has finished starting, and wiring them that early leaves
+        # RtAudio's own auto-connect to system:playback in place (869fbyjzx).
+        # Known limit: waiting for it makes an audio arm ~0.47 s cold, so a GO
+        # that comes sooner after the arm began is still late. Plan B (arm
+        # before the hand-off) is described in AudioMixer.connect_player_to_
+        # outputs and the 869fbyjzx plan; it is not built.
+        self.ready = Event()
 
     def run(self):
         raise NotImplementedError
@@ -48,6 +65,9 @@ class Player(Thread):
         Sets status to 'running' on success, 'failed' on error.
         """
         try:
+            # This run starts not ready: an Event left set by an earlier run of
+            # the same Player object would pass the audio wiring's gate at once.
+            self.ready.clear()
             my_env = os.environ.copy()
             my_env["DISPLAY"] = ":0"
             self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT, env=my_env)
@@ -57,6 +77,8 @@ class Player(Thread):
             while self.p.poll() is None:
                 for line in stdout_lines_iterator:
                     Logger.debug(f"Subprocess output: {line}")
+                    if READY_LINE in line:
+                        self.ready.set()
                 # Prevent CPU spinning when subprocess has no output
                 sleep(0.01)
 

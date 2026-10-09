@@ -456,3 +456,92 @@ class TestHandleEditorCommandDictReturn:
             patch.object(controller, "_forward_command_to_nodes"),
         ):
             controller.handle_editor_command("project_unload", None)
+
+
+# ─── go_script GO anchor ─────────────────────────────────────────────────
+
+
+class TestGoScriptAnchor:
+    """go_script must ship the controller's own GO instant to nodes, instead
+    of letting each node read its own MTC whenever it happens to execute the
+    command.
+
+    Badajoz, 2026-09-25: node02's setnextcue pre-arm held _command_lock for
+    ~500ms; by the time its go() ran, its own MTC read ~520ms later than the
+    other two boxes', so it anchored its whole Auto-continue chain late.
+    MTC-following cannot correct a wrong anchor -- only sharing one fixes it.
+    """
+
+    def _armed(self, controller):
+        controller.set_status("armed", "yes")
+        controller.script = Mock()
+
+    def test_does_not_forward_when_not_armed(self, controller):
+        controller.set_status("armed", "no")
+        controller.script = Mock()
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_not_called()
+
+    def test_does_not_forward_when_no_script(self, controller):
+        controller.set_status("armed", "yes")
+        controller.script = None
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_not_called()
+
+    def test_forwards_go_mtc_ms_when_mtc_present(self, controller):
+        self._armed(controller)
+        controller.mtc_listener = Mock()
+        controller.mtc_listener.main_tc.milliseconds_exact = 79240.0
+        controller.mtc_listener.is_receiving.return_value = True
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go",
+                {"go_mtc_ms": 79240.0, "run_seq": controller._run_seq},
+            )
+
+    def test_forwards_only_run_seq_when_mtc_listener_is_none(self, controller):
+        """The `controller` fixture builds with_mtc=False -- mtc_listener is
+        None, the only reachable no-MTC case in production (go_script already
+        refuses unless armed=="yes", and MTC runs by the time a project can be
+        armed).
+
+        The GO value is always a dict now (869fc8ytz): it carries the run
+        counter that cross-node follows are checked against. The caller's
+        own value is dropped -- nodes never read it; they only read the
+        anchor, and fall back to their own MTC when it is absent."""
+        self._armed(controller)
+        assert controller.mtc_listener is None
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script("complex_test")
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
+
+    def test_forwards_only_run_seq_for_none_value_without_mtc(self, controller):
+        self._armed(controller)
+        assert controller.mtc_listener is None
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
+
+    def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
+        """test2, 2026-09-25: the controller's listener never opened a port
+        (python-rtmidi missing from a bad build), read 0.0 at GO, and every
+        node accepted 0.0 as the anchor -- 4.48s late. A listener that is
+        present but not receiving must not be trusted: send the GO without
+        an anchor, so each node falls back to its own MTC (pre-fix
+        behaviour). The run counter still goes out (869fc8ytz)."""
+        self._armed(controller)
+        controller.mtc_listener = Mock()
+        controller.mtc_listener.main_tc.milliseconds_exact = 0.0
+        controller.mtc_listener.is_receiving.return_value = False
+        with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
+            controller.go_script(None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
