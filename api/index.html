@@ -343,10 +343,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cuemsengine.ControllerEngine.ControllerEngine.get_cluster_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_cluster_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cuemsengine.ControllerEngine.ControllerEngine.get_project_status" class="md-nav__link">
     <span class="md-ellipsis">
       
         get_project_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuemsengine.ControllerEngine.ControllerEngine.nodelist_modify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nodelist_modify
       
     </span>
   </a>
@@ -969,10 +991,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cuemsengine.ControllerEngine.ControllerEngine.get_cluster_status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_cluster_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cuemsengine.ControllerEngine.ControllerEngine.get_project_status" class="md-nav__link">
     <span class="md-ellipsis">
       
         get_project_status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuemsengine.ControllerEngine.ControllerEngine.nodelist_modify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nodelist_modify
       
     </span>
   </a>
@@ -1464,18 +1508,7 @@ with:
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">  21</span>
-<span class="normal">  22</span>
-<span class="normal">  23</span>
-<span class="normal">  24</span>
-<span class="normal">  25</span>
-<span class="normal">  26</span>
-<span class="normal">  27</span>
-<span class="normal">  28</span>
-<span class="normal">  29</span>
-<span class="normal">  30</span>
-<span class="normal">  31</span>
-<span class="normal">  32</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">  32</span>
 <span class="normal">  33</span>
 <span class="normal">  34</span>
 <span class="normal">  35</span>
@@ -2983,7 +3016,455 @@ with:
 <span class="normal">1537</span>
 <span class="normal">1538</span>
 <span class="normal">1539</span>
-<span class="normal">1540</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ControllerEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
+<span class="normal">1540</span>
+<span class="normal">1541</span>
+<span class="normal">1542</span>
+<span class="normal">1543</span>
+<span class="normal">1544</span>
+<span class="normal">1545</span>
+<span class="normal">1546</span>
+<span class="normal">1547</span>
+<span class="normal">1548</span>
+<span class="normal">1549</span>
+<span class="normal">1550</span>
+<span class="normal">1551</span>
+<span class="normal">1552</span>
+<span class="normal">1553</span>
+<span class="normal">1554</span>
+<span class="normal">1555</span>
+<span class="normal">1556</span>
+<span class="normal">1557</span>
+<span class="normal">1558</span>
+<span class="normal">1559</span>
+<span class="normal">1560</span>
+<span class="normal">1561</span>
+<span class="normal">1562</span>
+<span class="normal">1563</span>
+<span class="normal">1564</span>
+<span class="normal">1565</span>
+<span class="normal">1566</span>
+<span class="normal">1567</span>
+<span class="normal">1568</span>
+<span class="normal">1569</span>
+<span class="normal">1570</span>
+<span class="normal">1571</span>
+<span class="normal">1572</span>
+<span class="normal">1573</span>
+<span class="normal">1574</span>
+<span class="normal">1575</span>
+<span class="normal">1576</span>
+<span class="normal">1577</span>
+<span class="normal">1578</span>
+<span class="normal">1579</span>
+<span class="normal">1580</span>
+<span class="normal">1581</span>
+<span class="normal">1582</span>
+<span class="normal">1583</span>
+<span class="normal">1584</span>
+<span class="normal">1585</span>
+<span class="normal">1586</span>
+<span class="normal">1587</span>
+<span class="normal">1588</span>
+<span class="normal">1589</span>
+<span class="normal">1590</span>
+<span class="normal">1591</span>
+<span class="normal">1592</span>
+<span class="normal">1593</span>
+<span class="normal">1594</span>
+<span class="normal">1595</span>
+<span class="normal">1596</span>
+<span class="normal">1597</span>
+<span class="normal">1598</span>
+<span class="normal">1599</span>
+<span class="normal">1600</span>
+<span class="normal">1601</span>
+<span class="normal">1602</span>
+<span class="normal">1603</span>
+<span class="normal">1604</span>
+<span class="normal">1605</span>
+<span class="normal">1606</span>
+<span class="normal">1607</span>
+<span class="normal">1608</span>
+<span class="normal">1609</span>
+<span class="normal">1610</span>
+<span class="normal">1611</span>
+<span class="normal">1612</span>
+<span class="normal">1613</span>
+<span class="normal">1614</span>
+<span class="normal">1615</span>
+<span class="normal">1616</span>
+<span class="normal">1617</span>
+<span class="normal">1618</span>
+<span class="normal">1619</span>
+<span class="normal">1620</span>
+<span class="normal">1621</span>
+<span class="normal">1622</span>
+<span class="normal">1623</span>
+<span class="normal">1624</span>
+<span class="normal">1625</span>
+<span class="normal">1626</span>
+<span class="normal">1627</span>
+<span class="normal">1628</span>
+<span class="normal">1629</span>
+<span class="normal">1630</span>
+<span class="normal">1631</span>
+<span class="normal">1632</span>
+<span class="normal">1633</span>
+<span class="normal">1634</span>
+<span class="normal">1635</span>
+<span class="normal">1636</span>
+<span class="normal">1637</span>
+<span class="normal">1638</span>
+<span class="normal">1639</span>
+<span class="normal">1640</span>
+<span class="normal">1641</span>
+<span class="normal">1642</span>
+<span class="normal">1643</span>
+<span class="normal">1644</span>
+<span class="normal">1645</span>
+<span class="normal">1646</span>
+<span class="normal">1647</span>
+<span class="normal">1648</span>
+<span class="normal">1649</span>
+<span class="normal">1650</span>
+<span class="normal">1651</span>
+<span class="normal">1652</span>
+<span class="normal">1653</span>
+<span class="normal">1654</span>
+<span class="normal">1655</span>
+<span class="normal">1656</span>
+<span class="normal">1657</span>
+<span class="normal">1658</span>
+<span class="normal">1659</span>
+<span class="normal">1660</span>
+<span class="normal">1661</span>
+<span class="normal">1662</span>
+<span class="normal">1663</span>
+<span class="normal">1664</span>
+<span class="normal">1665</span>
+<span class="normal">1666</span>
+<span class="normal">1667</span>
+<span class="normal">1668</span>
+<span class="normal">1669</span>
+<span class="normal">1670</span>
+<span class="normal">1671</span>
+<span class="normal">1672</span>
+<span class="normal">1673</span>
+<span class="normal">1674</span>
+<span class="normal">1675</span>
+<span class="normal">1676</span>
+<span class="normal">1677</span>
+<span class="normal">1678</span>
+<span class="normal">1679</span>
+<span class="normal">1680</span>
+<span class="normal">1681</span>
+<span class="normal">1682</span>
+<span class="normal">1683</span>
+<span class="normal">1684</span>
+<span class="normal">1685</span>
+<span class="normal">1686</span>
+<span class="normal">1687</span>
+<span class="normal">1688</span>
+<span class="normal">1689</span>
+<span class="normal">1690</span>
+<span class="normal">1691</span>
+<span class="normal">1692</span>
+<span class="normal">1693</span>
+<span class="normal">1694</span>
+<span class="normal">1695</span>
+<span class="normal">1696</span>
+<span class="normal">1697</span>
+<span class="normal">1698</span>
+<span class="normal">1699</span>
+<span class="normal">1700</span>
+<span class="normal">1701</span>
+<span class="normal">1702</span>
+<span class="normal">1703</span>
+<span class="normal">1704</span>
+<span class="normal">1705</span>
+<span class="normal">1706</span>
+<span class="normal">1707</span>
+<span class="normal">1708</span>
+<span class="normal">1709</span>
+<span class="normal">1710</span>
+<span class="normal">1711</span>
+<span class="normal">1712</span>
+<span class="normal">1713</span>
+<span class="normal">1714</span>
+<span class="normal">1715</span>
+<span class="normal">1716</span>
+<span class="normal">1717</span>
+<span class="normal">1718</span>
+<span class="normal">1719</span>
+<span class="normal">1720</span>
+<span class="normal">1721</span>
+<span class="normal">1722</span>
+<span class="normal">1723</span>
+<span class="normal">1724</span>
+<span class="normal">1725</span>
+<span class="normal">1726</span>
+<span class="normal">1727</span>
+<span class="normal">1728</span>
+<span class="normal">1729</span>
+<span class="normal">1730</span>
+<span class="normal">1731</span>
+<span class="normal">1732</span>
+<span class="normal">1733</span>
+<span class="normal">1734</span>
+<span class="normal">1735</span>
+<span class="normal">1736</span>
+<span class="normal">1737</span>
+<span class="normal">1738</span>
+<span class="normal">1739</span>
+<span class="normal">1740</span>
+<span class="normal">1741</span>
+<span class="normal">1742</span>
+<span class="normal">1743</span>
+<span class="normal">1744</span>
+<span class="normal">1745</span>
+<span class="normal">1746</span>
+<span class="normal">1747</span>
+<span class="normal">1748</span>
+<span class="normal">1749</span>
+<span class="normal">1750</span>
+<span class="normal">1751</span>
+<span class="normal">1752</span>
+<span class="normal">1753</span>
+<span class="normal">1754</span>
+<span class="normal">1755</span>
+<span class="normal">1756</span>
+<span class="normal">1757</span>
+<span class="normal">1758</span>
+<span class="normal">1759</span>
+<span class="normal">1760</span>
+<span class="normal">1761</span>
+<span class="normal">1762</span>
+<span class="normal">1763</span>
+<span class="normal">1764</span>
+<span class="normal">1765</span>
+<span class="normal">1766</span>
+<span class="normal">1767</span>
+<span class="normal">1768</span>
+<span class="normal">1769</span>
+<span class="normal">1770</span>
+<span class="normal">1771</span>
+<span class="normal">1772</span>
+<span class="normal">1773</span>
+<span class="normal">1774</span>
+<span class="normal">1775</span>
+<span class="normal">1776</span>
+<span class="normal">1777</span>
+<span class="normal">1778</span>
+<span class="normal">1779</span>
+<span class="normal">1780</span>
+<span class="normal">1781</span>
+<span class="normal">1782</span>
+<span class="normal">1783</span>
+<span class="normal">1784</span>
+<span class="normal">1785</span>
+<span class="normal">1786</span>
+<span class="normal">1787</span>
+<span class="normal">1788</span>
+<span class="normal">1789</span>
+<span class="normal">1790</span>
+<span class="normal">1791</span>
+<span class="normal">1792</span>
+<span class="normal">1793</span>
+<span class="normal">1794</span>
+<span class="normal">1795</span>
+<span class="normal">1796</span>
+<span class="normal">1797</span>
+<span class="normal">1798</span>
+<span class="normal">1799</span>
+<span class="normal">1800</span>
+<span class="normal">1801</span>
+<span class="normal">1802</span>
+<span class="normal">1803</span>
+<span class="normal">1804</span>
+<span class="normal">1805</span>
+<span class="normal">1806</span>
+<span class="normal">1807</span>
+<span class="normal">1808</span>
+<span class="normal">1809</span>
+<span class="normal">1810</span>
+<span class="normal">1811</span>
+<span class="normal">1812</span>
+<span class="normal">1813</span>
+<span class="normal">1814</span>
+<span class="normal">1815</span>
+<span class="normal">1816</span>
+<span class="normal">1817</span>
+<span class="normal">1818</span>
+<span class="normal">1819</span>
+<span class="normal">1820</span>
+<span class="normal">1821</span>
+<span class="normal">1822</span>
+<span class="normal">1823</span>
+<span class="normal">1824</span>
+<span class="normal">1825</span>
+<span class="normal">1826</span>
+<span class="normal">1827</span>
+<span class="normal">1828</span>
+<span class="normal">1829</span>
+<span class="normal">1830</span>
+<span class="normal">1831</span>
+<span class="normal">1832</span>
+<span class="normal">1833</span>
+<span class="normal">1834</span>
+<span class="normal">1835</span>
+<span class="normal">1836</span>
+<span class="normal">1837</span>
+<span class="normal">1838</span>
+<span class="normal">1839</span>
+<span class="normal">1840</span>
+<span class="normal">1841</span>
+<span class="normal">1842</span>
+<span class="normal">1843</span>
+<span class="normal">1844</span>
+<span class="normal">1845</span>
+<span class="normal">1846</span>
+<span class="normal">1847</span>
+<span class="normal">1848</span>
+<span class="normal">1849</span>
+<span class="normal">1850</span>
+<span class="normal">1851</span>
+<span class="normal">1852</span>
+<span class="normal">1853</span>
+<span class="normal">1854</span>
+<span class="normal">1855</span>
+<span class="normal">1856</span>
+<span class="normal">1857</span>
+<span class="normal">1858</span>
+<span class="normal">1859</span>
+<span class="normal">1860</span>
+<span class="normal">1861</span>
+<span class="normal">1862</span>
+<span class="normal">1863</span>
+<span class="normal">1864</span>
+<span class="normal">1865</span>
+<span class="normal">1866</span>
+<span class="normal">1867</span>
+<span class="normal">1868</span>
+<span class="normal">1869</span>
+<span class="normal">1870</span>
+<span class="normal">1871</span>
+<span class="normal">1872</span>
+<span class="normal">1873</span>
+<span class="normal">1874</span>
+<span class="normal">1875</span>
+<span class="normal">1876</span>
+<span class="normal">1877</span>
+<span class="normal">1878</span>
+<span class="normal">1879</span>
+<span class="normal">1880</span>
+<span class="normal">1881</span>
+<span class="normal">1882</span>
+<span class="normal">1883</span>
+<span class="normal">1884</span>
+<span class="normal">1885</span>
+<span class="normal">1886</span>
+<span class="normal">1887</span>
+<span class="normal">1888</span>
+<span class="normal">1889</span>
+<span class="normal">1890</span>
+<span class="normal">1891</span>
+<span class="normal">1892</span>
+<span class="normal">1893</span>
+<span class="normal">1894</span>
+<span class="normal">1895</span>
+<span class="normal">1896</span>
+<span class="normal">1897</span>
+<span class="normal">1898</span>
+<span class="normal">1899</span>
+<span class="normal">1900</span>
+<span class="normal">1901</span>
+<span class="normal">1902</span>
+<span class="normal">1903</span>
+<span class="normal">1904</span>
+<span class="normal">1905</span>
+<span class="normal">1906</span>
+<span class="normal">1907</span>
+<span class="normal">1908</span>
+<span class="normal">1909</span>
+<span class="normal">1910</span>
+<span class="normal">1911</span>
+<span class="normal">1912</span>
+<span class="normal">1913</span>
+<span class="normal">1914</span>
+<span class="normal">1915</span>
+<span class="normal">1916</span>
+<span class="normal">1917</span>
+<span class="normal">1918</span>
+<span class="normal">1919</span>
+<span class="normal">1920</span>
+<span class="normal">1921</span>
+<span class="normal">1922</span>
+<span class="normal">1923</span>
+<span class="normal">1924</span>
+<span class="normal">1925</span>
+<span class="normal">1926</span>
+<span class="normal">1927</span>
+<span class="normal">1928</span>
+<span class="normal">1929</span>
+<span class="normal">1930</span>
+<span class="normal">1931</span>
+<span class="normal">1932</span>
+<span class="normal">1933</span>
+<span class="normal">1934</span>
+<span class="normal">1935</span>
+<span class="normal">1936</span>
+<span class="normal">1937</span>
+<span class="normal">1938</span>
+<span class="normal">1939</span>
+<span class="normal">1940</span>
+<span class="normal">1941</span>
+<span class="normal">1942</span>
+<span class="normal">1943</span>
+<span class="normal">1944</span>
+<span class="normal">1945</span>
+<span class="normal">1946</span>
+<span class="normal">1947</span>
+<span class="normal">1948</span>
+<span class="normal">1949</span>
+<span class="normal">1950</span>
+<span class="normal">1951</span>
+<span class="normal">1952</span>
+<span class="normal">1953</span>
+<span class="normal">1954</span>
+<span class="normal">1955</span>
+<span class="normal">1956</span>
+<span class="normal">1957</span>
+<span class="normal">1958</span>
+<span class="normal">1959</span>
+<span class="normal">1960</span>
+<span class="normal">1961</span>
+<span class="normal">1962</span>
+<span class="normal">1963</span>
+<span class="normal">1964</span>
+<span class="normal">1965</span>
+<span class="normal">1966</span>
+<span class="normal">1967</span>
+<span class="normal">1968</span>
+<span class="normal">1969</span>
+<span class="normal">1970</span>
+<span class="normal">1971</span>
+<span class="normal">1972</span>
+<span class="normal">1973</span>
+<span class="normal">1974</span>
+<span class="normal">1975</span>
+<span class="normal">1976</span>
+<span class="normal">1977</span>
+<span class="normal">1978</span>
+<span class="normal">1979</span>
+<span class="normal">1980</span>
+<span class="normal">1981</span>
+<span class="normal">1982</span>
+<span class="normal">1983</span>
+<span class="normal">1984</span>
+<span class="normal">1985</span>
+<span class="normal">1986</span>
+<span class="normal">1987</span>
+<span class="normal">1988</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ControllerEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    The main engine class for the CUEMS system.</span>
 
@@ -3066,6 +3547,16 @@ with:
         <span class="bp">self</span><span class="o">.</span><span class="n">_pong_expected</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pong_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="c1"># What the last load found wrong with the cluster, kept so it can be</span>
+        <span class="c1"># pushed at load time AND replayed to a browser that connects later</span>
+        <span class="c1"># (with boot auto-load the UI is normally opened after the load).</span>
+        <span class="c1"># Initialised here on purpose: _on_ws_client_connect reads it, and a</span>
+        <span class="c1"># client connecting before the first load of a freshly restarted engine</span>
+        <span class="c1"># would otherwise raise AttributeError mid-coroutine and take the rest</span>
+        <span class="c1"># of the late-join dump down with it. _load_id is bumped on every</span>
+        <span class="c1"># resolve so a UI can tell an operator's retry from a reconnect replay.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># One-shot watchdog: fires N seconds after _resolve_cluster_state if</span>
         <span class="c1"># _armed_nodes still doesn't cover _required_nodes (e.g. a node ponged</span>
         <span class="c1"># alive but then died mid-rsync). Logs an error listing the pending</span>
@@ -3213,14 +3704,30 @@ with:
             <span class="s2">"/engine/players/*"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_player_osc_message</span>
         <span class="p">)</span>
 
-        <span class="c1"># Register direct player handler for every adopted node in the network</span>
-        <span class="c1"># map.</span>
-        <span class="c1"># UI sends /{node_uuid}/&lt;type&gt;/... for both controller and worker</span>
-        <span class="c1"># nodes;</span>
-        <span class="c1"># without per-node registration the WS dispatcher silently drops the</span>
-        <span class="c1"># message and the NNG forward never happens.</span>
-        <span class="c1"># The set deduplicates so the controller's own UUID isn't registered</span>
-        <span class="c1"># twice (it appears in both node_conf and network_map['node_list']).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_node_osc_handlers</span><span class="p">()</span>
+
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"OSC command handlers registered for WebSocket receiving"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_register_node_osc_handlers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Register the direct player OSC route for every adopted node.</span>
+
+<span class="sd">        UI sends /{node_uuid}/&lt;type&gt;/... for both controller and worker nodes;</span>
+<span class="sd">        without per-node registration the WS dispatcher silently drops the</span>
+<span class="sd">        message and the NNG forward never happens. The set deduplicates so the</span>
+<span class="sd">        controller's own UUID isn't registered twice (it appears in both</span>
+<span class="sd">        node_conf and network_map['node_list']).</span>
+
+<span class="sd">        Called at startup and again after a nodelist_modify, so a node adopted</span>
+<span class="sd">        from the UI gets its route without an engine restart. Re-registering is</span>
+<span class="sd">        safe: register_osc_handler is dict-keyed, so a repeat overwrites.</span>
+
+<span class="sd">        ⚠ get_nodes_by_adoption() mutates online/adopted from str to bool IN</span>
+<span class="sd">        PLACE, so it only survives one pass over a given dict. Call this either</span>
+<span class="sd">        at startup or immediately after ConfigManager.load_network_map() has</span>
+<span class="sd">        installed a fresh dict — see _reload_network_map(). A REMOVE leaves the</span>
+<span class="sd">        old route registered on purpose: traffic from a non-adopted node is</span>
+<span class="sd">        already filtered by _adopted_nodes at the callbacks.</span>
+<span class="sd">        """</span>
         <span class="n">node_uuids</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="n">own_uuid</span> <span class="o">=</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">node_conf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"uuid"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"cm"</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cm</span> <span class="k">else</span> <span class="s2">""</span>
@@ -3242,8 +3749,6 @@ with:
                 <span class="sa">f</span><span class="s2">"/</span><span class="si">{</span><span class="n">nuuid</span><span class="si">}</span><span class="s2">/*"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_direct_player_osc_message</span>
             <span class="p">)</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Registered direct player OSC handler for /</span><span class="si">{</span><span class="n">nuuid</span><span class="si">}</span><span class="s2">/*"</span><span class="p">)</span>
-
-        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"OSC command handlers registered for WebSocket receiving"</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_handle_direct_player_osc_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Handle direct player OSC messages from UI (/&lt;node_uuid&gt;/&lt;type&gt;/...).</span>
@@ -3668,7 +4173,10 @@ with:
 
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">handle_editor_command</span><span class="p">(</span>
-                <span class="n">action</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">"action"</span><span class="p">],</span> <span class="n">value</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">"value"</span><span class="p">],</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">"action"</span><span class="p">],</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">"value"</span><span class="p">],</span>
+                <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+                <span class="n">modify_action</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"modify_action"</span><span class="p">),</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2"> handling editor command: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -3681,7 +4189,24 @@ with:
                 <span class="n">request_uuid</span><span class="o">=</span><span class="n">request_uuid</span><span class="p">,</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">handle_editor_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_editor_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">modify_action</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># nodelist_modify cannot ride the dispatch table below: every entry is</span>
+        <span class="c1"># invoked as command_dict[action](value, context) — a two-argument</span>
+        <span class="c1"># contract with nowhere to put modify_action. Registering it there sends</span>
+        <span class="c1"># modify_action=None to nodeconf, which answers</span>
+        <span class="c1"># {'OK': False, 'error': 'Invalid modify_action: None'} to EVERY click.</span>
+        <span class="c1"># So bind the message here and dispatch it directly.</span>
+        <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="s2">"nodelist_modify"</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">"action"</span><span class="p">:</span> <span class="n">action</span><span class="p">,</span>
+                <span class="s2">"value"</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span>
+                <span class="s2">"modify_action"</span><span class="p">:</span> <span class="n">modify_action</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodelist_modify</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">confirm_to_editor</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s2">"OK"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">set_editor_request</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+            <span class="k">return</span>
+
         <span class="n">command_dict</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">"project_deploy"</span><span class="p">:</span> <span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">load_project</span><span class="p">,</span> <span class="n">deploy_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
             <span class="s2">"project_ready"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_project</span><span class="p">,</span>
@@ -3690,6 +4215,7 @@ with:
             <span class="s2">"go_script"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">go_script</span><span class="p">,</span>
             <span class="s2">"project_status"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_project_status</span><span class="p">,</span>
             <span class="s2">"project_unload"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">unload_project</span><span class="p">,</span>
+            <span class="s2">"cluster_status"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_cluster_status</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="k">if</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">command_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">command_dict</span><span class="p">[</span><span class="n">action</span><span class="p">](</span><span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
@@ -3766,6 +4292,157 @@ with:
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2"> sending nodeconf request: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_nodelist_refuse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Refuse a nodelist_modify with one clean sentence for the operator.</span>
+
+<span class="sd">        Every failure path in nodelist_modify goes through here and returns</span>
+<span class="sd">        False. It must NOT raise: editor_command_callback's except clause also</span>
+<span class="sd">        replies (prefixing "Command &lt;class 'RuntimeError'&gt;: ..."), and the</span>
+<span class="sd">        editor wraps that again as "Engine reports error: ...". Raising after</span>
+<span class="sd">        replying would also put two replies on a single NNG Rep context.</span>
+
+<span class="sd">        Clears the pending editor request the same way the generic error path</span>
+<span class="sd">        does (see editor_command_callback): capture the uuid, clear it, then</span>
+<span class="sd">        reply with it explicitly, so no stale uuid is left behind for whatever</span>
+<span class="sd">        reads get_editor_request() next.</span>
+<span class="sd">        """</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"nodelist_modify refused: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">request_uuid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_editor_request</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_editor_request</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">error_to_editor</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">request_uuid</span><span class="o">=</span><span class="n">request_uuid</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"nodelist_modify"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodelist_modify</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Adopt or un-adopt a node, then refresh our cached topology.</span>
+
+<span class="sd">        Forwards {'action','value','modify_action'} to cuems-nodeconf over</span>
+<span class="sd">        /tmp/nodeconf.ipc, which flips &lt;adopted&gt; in network_map.xml. On success</span>
+<span class="sd">        we re-read that file, because our own copy was loaded once at startup</span>
+<span class="sd">        (ConfigManager(load_all=True)) and would otherwise keep the GO gate</span>
+<span class="sd">        blind to the change until an engine restart.</span>
+
+<span class="sd">        Returns True only when nodeconf confirmed AND our reload succeeded; the</span>
+<span class="sd">        caller confirms "OK" to the editor on True. Every False path has</span>
+<span class="sd">        already sent an explanatory error.</span>
+<span class="sd">        """</span>
+        <span class="n">node_uuid</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"value"</span><span class="p">)</span>
+        <span class="n">modify_action</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"modify_action"</span><span class="p">)</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"nodelist_modify: </span><span class="si">{</span><span class="n">modify_action</span><span class="si">}</span><span class="s2"> node </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="c1"># Adoption is a setup-time operation. Refuse (never stop anything) when</span>
+        <span class="c1"># a project is running, and also when one is merely loaded: the GO</span>
+        <span class="c1"># gate's _required_nodes snapshot is computed once, in load_project, so</span>
+        <span class="c1"># a REMOVE accepted now would leave it waiting on a node the operator</span>
+        <span class="c1"># just removed until the next load.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="s2">"Cannot modify the node list while a project is running. "</span>
+                <span class="s2">"Stop playback first."</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="s2">"Cannot modify the node list while a project is loaded. "</span>
+                <span class="s2">"Unload the project first."</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">node_uuid</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node_uuid</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"nodelist_modify needs a node uuid, got </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">modify_action</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"ADD"</span><span class="p">,</span> <span class="s2">"REMOVE"</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="sa">f</span><span class="s2">"Invalid modify_action: </span><span class="si">{</span><span class="n">modify_action</span><span class="si">!r}</span><span class="s2">. Must be 'ADD' or 'REMOVE'"</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Fail fast when the daemon is not there at all. Measured on the rig:</span>
+        <span class="c1"># with the socket absent, request_to_nodeconf does NOT return quickly —</span>
+        <span class="c1"># it burns the full 15 s IPC timeout and then raises. Editor commands</span>
+        <span class="c1"># are serialized by the engine's single listener, so a second click</span>
+        <span class="c1"># queues behind the first and can blow the editor's own 25 s timeout,</span>
+        <span class="c1"># turning a clear refusal into "Engine did not respond". nodeconf ships</span>
+        <span class="c1"># disabled on most of the fleet, so this is the common path, not a rare</span>
+        <span class="c1"># one.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">NODECONF_IPC_PATH</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="s2">"The node configuration service (cuems-nodeconf) is not "</span>
+                <span class="s2">"running on this controller, so the node list cannot be "</span>
+                <span class="s2">"changed. Enable it with: systemctl enable --now cuems-nodeconf"</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">communications_thread</span><span class="o">.</span><span class="n">request_to_nodeconf</span><span class="p">(</span>
+                <span class="n">message</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">NODECONF_TIMEOUT_S</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Could not reach cuems-nodeconf: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Communicator.send_request swallows every exception and returns None —</span>
+        <span class="c1"># an absent socket (nodeconf disabled, which is the fleet default) and a</span>
+        <span class="c1"># peer that never answers both land here.</span>
+        <span class="k">if</span> <span class="n">reply</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="s2">"The node configuration service (cuems-nodeconf) is not "</span>
+                <span class="s2">"responding. Is it enabled on this controller?"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reply</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Unexpected reply from cuems-nodeconf: </span><span class="si">{</span><span class="n">reply</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reply</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"OK"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error"</span><span class="p">,</span> <span class="s2">"cuems-nodeconf reported an error"</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"nodelist_modify: cuems-nodeconf confirmed </span><span class="si">{</span><span class="n">modify_action</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"for node </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+        <span class="c1"># nodeconf has already rewritten network_map.xml. If we cannot re-read</span>
+        <span class="c1"># it the operation is a PARTIAL success: the map (and so the editor and</span>
+        <span class="c1"># the UI) is correct, only this process is behind. Say exactly that</span>
+        <span class="c1"># instead of confirming OK over a stale topology.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reload_network_map</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> reloading network_map: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="sa">f</span><span class="s2">"Node </span><span class="si">{</span><span class="n">modify_action</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="si">}</span><span class="s2">ed, but the engine could not "</span>
+                <span class="sa">f</span><span class="s2">"reload the topology (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">) — restart "</span>
+                <span class="sa">f</span><span class="s2">"cuems-controller-engine before loading a project."</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reload_network_map</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Re-read network_map.xml and re-register per-node OSC routes.</span>
+
+<span class="sd">        Targeted on purpose: ConfigManager.load_network_map() reassigns</span>
+<span class="sd">        self.cm.network_map to a NEW dict, so a concurrent reader sees either</span>
+<span class="sd">        the old one or the new one, never a torn one. A full</span>
+<span class="sd">        ConfigManager(load_all=True) would also re-read settings and mappings —</span>
+<span class="sd">        that is the "restart both daemons" trap, not what we want here.</span>
+
+<span class="sd">        ORDER MATTERS: _register_node_osc_handlers() calls</span>
+<span class="sd">        NetworkMap.get_nodes_by_adoption(), which mutates online/adopted from</span>
+<span class="sd">        str to bool IN PLACE and therefore survives only one pass over a given</span>
+<span class="sd">        dict (same hazard _adopted_uuids_from_network_map documents). It is safe</span>
+<span class="sd">        only on the freshly reloaded dict — never call it as a standalone</span>
+<span class="sd">        "shortcut" refresh.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">load_network_map</span><span class="p">()</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"network_map reloaded after a node list change"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_node_osc_handlers</span><span class="p">()</span>
 
     <span class="c1">#########################</span>
     <span class="c1"># Status Updates (stub - OSCQuery removed)</span>
@@ -3942,6 +4619,44 @@ with:
         <span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">communications_thread</span><span class="o">.</span><span class="n">broadcast_osc</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/engine/status/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cluster_warning_payload</span><span class="p">(</span><span class="n">diagnosis</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Serialize a load diagnosis for the OSC status channel.</span>
+
+<span class="sd">        OSC cannot carry lists, so this travels as a JSON string — the same</span>
+<span class="sd">        thing the codebase already does elsewhere on this channel. A cleared</span>
+<span class="sd">        diagnosis serializes to empty lists rather than being withheld: a clean</span>
+<span class="sd">        load after a bad one has to actively erase the previous warning, or it</span>
+<span class="sd">        stays on the operator's screen forever.</span>
+<span class="sd">        """</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">diagnosis</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">"load_id"</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"load_id"</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                <span class="s2">"project"</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+                <span class="s2">"missing"</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">,</span> <span class="p">[]),</span>
+                <span class="s2">"unreachable"</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"unreachable"</span><span class="p">,</span> <span class="p">[]),</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_broadcast_cluster_warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">diagnosis</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Push the load diagnosis to every connected UI. Always sent."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_status</span><span class="p">(</span>
+            <span class="s2">"cluster_warning"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_warning_payload</span><span class="p">(</span><span class="n">diagnosis</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear_load_diagnosis</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Forget the last load's diagnosis and erase it from every UI.</span>
+
+<span class="sd">        Called wherever a load ENDS — a new load starting, a load failing</span>
+<span class="sd">        early, an unload — but deliberately NOT from _clear_playback_state(),</span>
+<span class="sd">        which also runs on STOP: a stopped project is still loaded, and its</span>
+<span class="sd">        missing nodes are still missing.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_cluster_warning</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_on_ws_client_connect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">websocket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Send full state dump to a newly connected WebSocket client."""</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.osc.WebSocketOscHandler</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_osc_message</span>
@@ -3953,6 +4668,18 @@ with:
                 <span class="n">data</span> <span class="o">=</span> <span class="n">build_osc_message</span><span class="p">(</span><span class="sa">f</span><span class="s2">"/engine/status/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">data</span><span class="p">:</span>
                     <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="c1"># Last load's cluster diagnosis. Replayed here because with boot</span>
+        <span class="c1"># auto-load the browser is normally opened well after the load, so the</span>
+        <span class="c1"># push in _resolve_cluster_state has nobody listening.</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
+            <span class="n">diagnosis</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">build_osc_message</span><span class="p">(</span>
+            <span class="s2">"/engine/status/cluster_warning"</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_warning_payload</span><span class="p">(</span><span class="n">diagnosis</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
         <span class="c1"># Per-cue playback status</span>
         <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">status</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cue_status</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -4044,6 +4771,23 @@ with:
         <span class="bp">self</span><span class="o">.</span><span class="n">_bump_run_seq</span><span class="p">(</span><span class="s2">"load"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_playback_state</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_script</span><span class="p">()</span>
+        <span class="c1"># Before anything can fail. load_project_config() and read_script()</span>
+        <span class="c1"># both return False further down, and without this the previous</span>
+        <span class="c1"># project's warning would stay on screen for a project that, to the</span>
+        <span class="c1"># operator, just failed to load. A successful _resolve_cluster_state</span>
+        <span class="c1"># overwrites it a few lines later.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_load_diagnosis</span><span class="p">()</span>
+        <span class="c1"># The same argument, applied to the load status. reset_script() drops</span>
+        <span class="c1"># self.script, but nothing dropped `load`, so a failed load left the</span>
+        <span class="c1"># engine holding no project while still broadcasting the PREVIOUS</span>
+        <span class="c1"># project's name on /engine/status/load. That lie reached the transport</span>
+        <span class="c1"># bar and power-bridge alike — project_loaded() stayed True, so</span>
+        <span class="c1"># /setnextcue and /gocue were accepted against a project the engine no</span>
+        <span class="c1"># longer had. The two signals now die together, which is what lets</span>
+        <span class="c1"># get_project_status() trust either of them.</span>
+        <span class="c1"># Deliberate cost: during a *successful* load the transport bar shows</span>
+        <span class="c1"># "—" until the new name arrives, instead of the stale previous one.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">deploy_only</span><span class="p">:</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Deploy only requested for </span><span class="si">{</span><span class="n">project_name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -4099,9 +4843,13 @@ with:
             <span class="sa">f</span><span class="s2">"Cue enabled status initialised for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cue_enabled_status</span><span class="p">)</span><span class="si">}</span><span class="s2"> cues"</span>
         <span class="p">)</span>
 
-        <span class="c1"># Update internal status</span>
-        <span class="c1"># TODO: send project UUID instead of name for robustness (would break</span>
-        <span class="c1"># UI contract)</span>
+        <span class="c1"># Update internal status.</span>
+        <span class="c1"># This broadcast carries the project's unix_name, NOT its uuid, and</span>
+        <span class="c1"># that is a decision rather than a leftover: the frontend prints this</span>
+        <span class="c1"># string in the transport bar and matches it against project.unix_name,</span>
+        <span class="c1"># so switching it to a uuid shows the operator a raw uuid and breaks</span>
+        <span class="c1"># that match. Consumers that need the uuid ask project_status, which</span>
+        <span class="c1"># returns both (869dr2k2h, closed the additive way).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">,</span> <span class="n">project_name</span><span class="p">)</span>
 
         <span class="c1"># Per-cue names, deliberately AFTER the load status (unlike cue_status</span>
@@ -4284,8 +5032,45 @@ with:
             <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Could not read network_map: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_node_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Human-readable name for a node, for LOG LINES ONLY.</span>
+
+<span class="sd">        A bare UUID in a journal is unreadable under pressure, so the log says</span>
+<span class="sd">        `node01 (2b6f…)`. Wire payloads stay UUID-only: role_id/alias are</span>
+<span class="sd">        mutable projections per the node-identity contract, and the browser</span>
+<span class="sd">        already resolves them from initial_mappings. Two sources of truth for a</span>
+<span class="sd">        name is exactly what that contract forbids.</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">node_list</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">network_map</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"node_list"</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">node_list</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                    <span class="k">continue</span>
+                <span class="n">node</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"node"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"uuid"</span><span class="p">)</span> <span class="o">!=</span> <span class="n">uuid</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"alias"</span><span class="p">,</span> <span class="s2">"role_id"</span><span class="p">,</span> <span class="s2">"hostname"</span><span class="p">):</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">name</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">uuid</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">…)"</span>
+                <span class="k">break</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">return</span> <span class="n">uuid</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_probe_cluster_liveness</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Broadcast a ping to all nodes and collect pong replies.</span>
+
+<span class="sd">        ⚠ NOT re-entrant, and not safe to run twice concurrently: the pong</span>
+<span class="sd">        bookkeeping below (_pong_responses / _pong_expected / _pong_event) is</span>
+<span class="sd">        shared instance state with no per-call correlation id, so two probes in</span>
+<span class="sd">        flight would eat each other's replies. Nothing enforces that — it holds</span>
+<span class="sd">        only because every caller arrives through the engine's single editor</span>
+<span class="sd">        listener, which awaits one command's handler before accepting the next</span>
+<span class="sd">        (see ControllerCommunications.editor_listener). If editor commands are</span>
+<span class="sd">        ever processed concurrently, this needs a real lock or a correlation id</span>
+<span class="sd">        first. get_cluster_status made this reachable from the UI, so the</span>
+<span class="sd">        invariant now matters beyond project loads.</span>
 
 <span class="sd">        The set of senders that respond within `timeout` is the authoritative</span>
 <span class="sd">        "alive right now" view of the cluster. The controller's own UUID is</span>
@@ -4373,25 +5158,47 @@ with:
             <span class="k">if</span> <span class="n">in_alive</span> <span class="ow">and</span> <span class="n">in_project</span><span class="p">:</span>
                 <span class="k">continue</span>  <span class="c1"># the silent happy path — tracked via armed_ready</span>
             <span class="k">if</span> <span class="n">in_alive</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">in_project</span><span class="p">:</span>
-                <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2"> online but unused by this project"</span><span class="p">)</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node_label</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span><span class="si">}</span><span class="s2"> online but unused by this "</span>
+                    <span class="sa">f</span><span class="s2">"project"</span>
+                <span class="p">)</span>
             <span class="k">elif</span> <span class="ow">not</span> <span class="n">in_alive</span> <span class="ow">and</span> <span class="n">in_project</span><span class="p">:</span>
+                <span class="c1"># Say what the code below actually does. `required` is</span>
+                <span class="c1"># (adopted &amp; alive &amp; project), so this node is EXCLUDED from</span>
+                <span class="c1"># the gate: GO is enabled without it and its cues stay silent.</span>
+                <span class="c1"># The old wording here claimed "GO blocked", which sent anyone</span>
+                <span class="c1"># debugging a mute show from the journal the wrong way.</span>
                 <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2"> required by this project but did not "</span>
-                    <span class="sa">f</span><span class="s2">"respond to ping; cues for it will not play. GO blocked."</span>
+                    <span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node_label</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span><span class="si">}</span><span class="s2"> is used by this project "</span>
+                    <span class="sa">f</span><span class="s2">"but did not respond to ping; its cues will NOT play. "</span>
+                    <span class="sa">f</span><span class="s2">"GO is NOT blocked — the node is excluded from the arm "</span>
+                    <span class="sa">f</span><span class="s2">"gate."</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2"> is adopted but did not respond to ping; "</span>
-                    <span class="sa">f</span><span class="s2">"not required by this project — investigate why it is"</span>
-                    <span class="sa">f</span><span class="s2">"offline"</span>
+                    <span class="sa">f</span><span class="s2">"node </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node_label</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span><span class="si">}</span><span class="s2"> is adopted but did not "</span>
+                    <span class="sa">f</span><span class="s2">"respond to ping; not required by this project — "</span>
+                    <span class="sa">f</span><span class="s2">"investigate why it is offline"</span>
                 <span class="p">)</span>
+
+        <span class="c1"># The two categories worth telling the operator about. Warn loudly,</span>
+        <span class="c1"># never block: `required` below is untouched by any of this.</span>
+        <span class="c1">#</span>
+        <span class="c1"># The controller is excluded from both. It is added to `required`</span>
+        <span class="c1"># unconditionally, so it can never be a node whose cues silently do not</span>
+        <span class="c1"># play — and it is not always flagged `adopted` in network_map.xml, so</span>
+        <span class="c1"># without this it would be reported as "not in the cluster" on a</span>
+        <span class="c1"># perfectly healthy load. A false alarm here is worse than no alarm:</span>
+        <span class="c1"># it teaches operators to ignore the real one.</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">project</span> <span class="o">-</span> <span class="n">adopted</span> <span class="o">-</span> <span class="p">{</span><span class="n">controller_uuid</span><span class="p">})</span>
+        <span class="n">unreachable</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">project</span> <span class="o">&amp;</span> <span class="n">adopted</span><span class="p">)</span> <span class="o">-</span> <span class="n">alive</span> <span class="o">-</span> <span class="p">{</span><span class="n">controller_uuid</span><span class="p">})</span>
 
         <span class="c1"># Project nodes that are NOT adopted at all — script is broken for</span>
         <span class="c1"># this cluster.</span>
-        <span class="k">for</span> <span class="n">uuid</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">project</span> <span class="o">-</span> <span class="n">adopted</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">uuid</span> <span class="ow">in</span> <span class="n">missing</span><span class="p">:</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"project references node </span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2"> which is not in the cluster; "</span>
-                <span class="sa">f</span><span class="s2">"cues for it will not fire"</span>
+                <span class="sa">f</span><span class="s2">"project references node </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node_label</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span><span class="si">}</span><span class="s2"> which is "</span>
+                <span class="sa">f</span><span class="s2">"not in the cluster; cues for it will not fire"</span>
             <span class="p">)</span>
 
         <span class="n">required</span> <span class="o">=</span> <span class="p">(</span><span class="n">adopted</span> <span class="o">&amp;</span> <span class="n">alive</span> <span class="o">&amp;</span> <span class="n">project</span><span class="p">)</span> <span class="o">|</span> <span class="p">{</span><span class="n">controller_uuid</span><span class="p">}</span>
@@ -4401,12 +5208,24 @@ with:
             <span class="bp">self</span><span class="o">.</span><span class="n">_required_nodes</span> <span class="o">=</span> <span class="n">required</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_armed_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_finished_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_id</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">"load_id"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_id</span><span class="p">,</span>
+                <span class="s2">"project"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">),</span>
+                <span class="s2">"missing"</span><span class="p">:</span> <span class="n">missing</span><span class="p">,</span>
+                <span class="s2">"unreachable"</span><span class="p">:</span> <span class="n">unreachable</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">diagnosis</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span><span class="p">)</span>
 
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"Cluster state resolved: required=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">required</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
             <span class="sa">f</span><span class="s2">"alive=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">alive</span><span class="p">)</span><span class="si">}</span><span class="s2"> adopted=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">adopted</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
             <span class="sa">f</span><span class="s2">"project=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
+
+        <span class="c1"># Tell the UI, even when both lists are empty — see</span>
+        <span class="c1"># _cluster_warning_payload.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_cluster_warning</span><span class="p">(</span><span class="n">diagnosis</span><span class="p">)</span>
 
         <span class="c1"># The probe's `alive` set is a runtime liveness snapshot (sub-second,</span>
         <span class="c1"># used here for GO gating). The &lt;online&gt; field in network_map.xml is</span>
@@ -4476,12 +5295,110 @@ with:
         <span class="k">return</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_project_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Return current project playback status."""</span>
+<span class="w">        </span><span class="sd">"""Return the current project load/playback state.</span>
+
+<span class="sd">        Three states, deliberately distinct:</span>
+
+<span class="sd">        * `running` — a project is loaded AND playing.</span>
+<span class="sd">        * `loaded`  — a project is loaded and NOT playing. This is the state</span>
+<span class="sd">          the reply used to collapse into `none`, which made a loaded-but-</span>
+<span class="sd">          stopped project indistinguishable from no project at all — and left</span>
+<span class="sd">          this reply contradicting /engine/status/load, which kept naming the</span>
+<span class="sd">          project all along.</span>
+<span class="sd">        * `none`    — no project.</span>
+
+<span class="sd">        `loaded` says nothing about readiness: the GO gate waits on `armed`,</span>
+<span class="sd">        published separately on /engine/status/armed. A project whose nodes</span>
+<span class="sd">        never answer sits in `loaded` for the whole 120 s arm watchdog and</span>
+<span class="sd">        never becomes GO-able. Do not treat this field as a GO gate.</span>
+
+<span class="sd">        `project_uuid` is populated in both `running` and `loaded`, and the</span>
+<span class="sd">        invariant is one-way: **a status other than `none` always carries a</span>
+<span class="sd">        non-empty uuid**. That is why `running` with no script — which the</span>
+<span class="sd">        guards in load_project/unload_project should make unreachable —</span>
+<span class="sd">        degrades to `none` here rather than to a `running` a client cannot</span>
+<span class="sd">        act on.</span>
+
+<span class="sd">        `project_unix_name` is the same string /engine/status/load broadcasts,</span>
+<span class="sd">        returned here so a consumer that needs the uuid never has to make that</span>
+<span class="sd">        broadcast carry one (869dr2k2h).</span>
+
+<span class="sd">        The load state is read from two attributes that another thread can be</span>
+<span class="sd">        mutating mid-load. They are ANDed, so a torn read falls to `none` —</span>
+<span class="sd">        never to a `loaded` naming a project the engine does not hold.</span>
+<span class="sd">        """</span>
         <span class="n">running</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span>
+        <span class="n">loaded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">running</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">"running"</span>
+        <span class="k">elif</span> <span class="n">loaded</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">"loaded"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">"none"</span>
+
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">"none"</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"none"</span><span class="p">,</span> <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"project_unix_name"</span><span class="p">:</span> <span class="s2">""</span><span class="p">}</span>
+
+        <span class="c1"># unix_name is not a CuemsScript field — load_project attaches it by</span>
+        <span class="c1"># hand — so any script built by another path simply lacks it.</span>
         <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"running"</span> <span class="k">if</span> <span class="n">running</span> <span class="k">else</span> <span class="s2">"none"</span><span class="p">,</span>
-            <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">running</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="k">else</span> <span class="s2">""</span><span class="p">),</span>
+            <span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span>
+            <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">id</span><span class="p">),</span>
+            <span class="s2">"project_unix_name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"unix_name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">),</span>
         <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return who is adopted and who answers right now.</span>
+
+<span class="sd">        Two different signals, deliberately kept apart (the UI must never merge</span>
+<span class="sd">        them):</span>
+
+<span class="sd">        * `adopted` — from network_map.xml, i.e. what cuems-nodeconf knows.</span>
+<span class="sd">        * `alive`   — this engine's sub-second ping/pong, the only thing the GO</span>
+<span class="sd">          gate trusts. `&lt;online&gt;` in the XML is nodeconf's discovery view and</span>
+<span class="sd">          is NOT this.</span>
+
+<span class="sd">        `age_s` is how old the probe behind this answer is, computed here: the</span>
+<span class="sd">        browser cannot interpret our monotonic clock.</span>
+
+<span class="sd">        Read-only — it never loads, unloads, arms or stops anything, so it is</span>
+<span class="sd">        safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are</span>
+<span class="sd">        served from cache so a polling panel cannot turn into a ping flood.</span>
+<span class="sd">        Always returns a populated dict: the dispatch path confirms only on a</span>
+<span class="sd">        truthy result, and an empty one would leave the editor waiting out its</span>
+<span class="sd">        25 s timeout.</span>
+<span class="sd">        """</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="n">cached</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_cluster_status_cache"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">now</span> <span class="o">-</span> <span class="n">cached</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="n">CLUSTER_STATUS_CLAMP_S</span><span class="p">:</span>
+            <span class="n">probed_at</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="n">cached</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">alive</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_probe_cluster_liveness</span><span class="p">()</span>
+            <span class="n">adopted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_uuids_from_network_map</span><span class="p">()</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">"alive"</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">alive</span><span class="p">),</span>
+                <span class="s2">"adopted"</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">adopted</span><span class="p">),</span>
+                <span class="s2">"controller"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_controller_uuid</span><span class="p">(),</span>
+            <span class="p">}</span>
+            <span class="n">probed_at</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_status_cache</span> <span class="o">=</span> <span class="p">(</span><span class="n">probed_at</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+
+        <span class="c1"># Read the diagnosis fresh, OUTSIDE the clamp. Folding it into the</span>
+        <span class="c1"># cached payload would serve the pre-transition diagnosis to any poll</span>
+        <span class="c1"># landing within CLUSTER_STATUS_CLAMP_S of a load, unload or reload —</span>
+        <span class="c1"># a warning outliving its cause, which is the worst outcome this</span>
+        <span class="c1"># surface has. The clamp exists to stop ping floods; a lock-guarded</span>
+        <span class="c1"># dict read is not a ping. Same treatment as age_s.</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
+            <span class="n">diagnosis</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span> <span class="k">else</span> <span class="p">{}</span>
+
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">payload</span><span class="p">,</span>
+            <span class="n">age_s</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">probed_at</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="n">missing</span><span class="o">=</span><span class="n">diagnosis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">,</span> <span class="p">[]),</span>
+            <span class="n">unreachable</span><span class="o">=</span><span class="n">diagnosis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"unreachable"</span><span class="p">,</span> <span class="p">[]),</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Unload the current project. Rejects if playback is running."""</span>
@@ -4500,6 +5417,7 @@ with:
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_required_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_load_diagnosis</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/stop"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Project unloaded"</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
@@ -4541,42 +5459,7 @@ with:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">443</span>
-<span class="normal">444</span>
-<span class="normal">445</span>
-<span class="normal">446</span>
-<span class="normal">447</span>
-<span class="normal">448</span>
-<span class="normal">449</span>
-<span class="normal">450</span>
-<span class="normal">451</span>
-<span class="normal">452</span>
-<span class="normal">453</span>
-<span class="normal">454</span>
-<span class="normal">455</span>
-<span class="normal">456</span>
-<span class="normal">457</span>
-<span class="normal">458</span>
-<span class="normal">459</span>
-<span class="normal">460</span>
-<span class="normal">461</span>
-<span class="normal">462</span>
-<span class="normal">463</span>
-<span class="normal">464</span>
-<span class="normal">465</span>
-<span class="normal">466</span>
-<span class="normal">467</span>
-<span class="normal">468</span>
-<span class="normal">469</span>
-<span class="normal">470</span>
-<span class="normal">471</span>
-<span class="normal">472</span>
-<span class="normal">473</span>
-<span class="normal">474</span>
-<span class="normal">475</span>
-<span class="normal">476</span>
-<span class="normal">477</span>
-<span class="normal">478</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">478</span>
 <span class="normal">479</span>
 <span class="normal">480</span>
 <span class="normal">481</span>
@@ -4617,7 +5500,42 @@ with:
 <span class="normal">516</span>
 <span class="normal">517</span>
 <span class="normal">518</span>
-<span class="normal">519</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cue_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
+<span class="normal">519</span>
+<span class="normal">520</span>
+<span class="normal">521</span>
+<span class="normal">522</span>
+<span class="normal">523</span>
+<span class="normal">524</span>
+<span class="normal">525</span>
+<span class="normal">526</span>
+<span class="normal">527</span>
+<span class="normal">528</span>
+<span class="normal">529</span>
+<span class="normal">530</span>
+<span class="normal">531</span>
+<span class="normal">532</span>
+<span class="normal">533</span>
+<span class="normal">534</span>
+<span class="normal">535</span>
+<span class="normal">536</span>
+<span class="normal">537</span>
+<span class="normal">538</span>
+<span class="normal">539</span>
+<span class="normal">540</span>
+<span class="normal">541</span>
+<span class="normal">542</span>
+<span class="normal">543</span>
+<span class="normal">544</span>
+<span class="normal">545</span>
+<span class="normal">546</span>
+<span class="normal">547</span>
+<span class="normal">548</span>
+<span class="normal">549</span>
+<span class="normal">550</span>
+<span class="normal">551</span>
+<span class="normal">552</span>
+<span class="normal">553</span>
+<span class="normal">554</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cue_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Callback invoked when cues are received from nodes.</span>
 
 <span class="sd">    Handles three action types:</span>
@@ -4703,6 +5621,145 @@ with:
 <div class="doc doc-object doc-function">
 
 
+<h3 id="cuemsengine.ControllerEngine.ControllerEngine.get_cluster_status" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_cluster_status</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return who is adopted and who answers right now.</p>
+<p>Two different signals, deliberately kept apart (the UI must never merge
+them):</p>
+<ul>
+<li><code>adopted</code> — from network_map.xml, i.e. what cuems-nodeconf knows.</li>
+<li><code>alive</code>   — this engine's sub-second ping/pong, the only thing the GO
+  gate trusts. <code>&lt;online&gt;</code> in the XML is nodeconf's discovery view and
+  is NOT this.</li>
+</ul>
+<p><code>age_s</code> is how old the probe behind this answer is, computed here: the
+browser cannot interpret our monotonic clock.</p>
+<p>Read-only — it never loads, unloads, arms or stops anything, so it is
+safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are
+served from cache so a polling panel cannot turn into a ping flood.
+Always returns a populated dict: the dispatch path confirms only on a
+truthy result, and an empty one would leave the editor waiting out its
+25 s timeout.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1916</span>
+<span class="normal">1917</span>
+<span class="normal">1918</span>
+<span class="normal">1919</span>
+<span class="normal">1920</span>
+<span class="normal">1921</span>
+<span class="normal">1922</span>
+<span class="normal">1923</span>
+<span class="normal">1924</span>
+<span class="normal">1925</span>
+<span class="normal">1926</span>
+<span class="normal">1927</span>
+<span class="normal">1928</span>
+<span class="normal">1929</span>
+<span class="normal">1930</span>
+<span class="normal">1931</span>
+<span class="normal">1932</span>
+<span class="normal">1933</span>
+<span class="normal">1934</span>
+<span class="normal">1935</span>
+<span class="normal">1936</span>
+<span class="normal">1937</span>
+<span class="normal">1938</span>
+<span class="normal">1939</span>
+<span class="normal">1940</span>
+<span class="normal">1941</span>
+<span class="normal">1942</span>
+<span class="normal">1943</span>
+<span class="normal">1944</span>
+<span class="normal">1945</span>
+<span class="normal">1946</span>
+<span class="normal">1947</span>
+<span class="normal">1948</span>
+<span class="normal">1949</span>
+<span class="normal">1950</span>
+<span class="normal">1951</span>
+<span class="normal">1952</span>
+<span class="normal">1953</span>
+<span class="normal">1954</span>
+<span class="normal">1955</span>
+<span class="normal">1956</span>
+<span class="normal">1957</span>
+<span class="normal">1958</span>
+<span class="normal">1959</span>
+<span class="normal">1960</span>
+<span class="normal">1961</span>
+<span class="normal">1962</span>
+<span class="normal">1963</span>
+<span class="normal">1964</span>
+<span class="normal">1965</span>
+<span class="normal">1966</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_cluster_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return who is adopted and who answers right now.</span>
+
+<span class="sd">    Two different signals, deliberately kept apart (the UI must never merge</span>
+<span class="sd">    them):</span>
+
+<span class="sd">    * `adopted` — from network_map.xml, i.e. what cuems-nodeconf knows.</span>
+<span class="sd">    * `alive`   — this engine's sub-second ping/pong, the only thing the GO</span>
+<span class="sd">      gate trusts. `&lt;online&gt;` in the XML is nodeconf's discovery view and</span>
+<span class="sd">      is NOT this.</span>
+
+<span class="sd">    `age_s` is how old the probe behind this answer is, computed here: the</span>
+<span class="sd">    browser cannot interpret our monotonic clock.</span>
+
+<span class="sd">    Read-only — it never loads, unloads, arms or stops anything, so it is</span>
+<span class="sd">    safe while a show runs. Repeat calls inside CLUSTER_STATUS_CLAMP_S are</span>
+<span class="sd">    served from cache so a polling panel cannot turn into a ping flood.</span>
+<span class="sd">    Always returns a populated dict: the dispatch path confirms only on a</span>
+<span class="sd">    truthy result, and an empty one would leave the editor waiting out its</span>
+<span class="sd">    25 s timeout.</span>
+<span class="sd">    """</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+    <span class="n">cached</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_cluster_status_cache"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">now</span> <span class="o">-</span> <span class="n">cached</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="n">CLUSTER_STATUS_CLAMP_S</span><span class="p">:</span>
+        <span class="n">probed_at</span><span class="p">,</span> <span class="n">payload</span> <span class="o">=</span> <span class="n">cached</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">alive</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_probe_cluster_liveness</span><span class="p">()</span>
+        <span class="n">adopted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_uuids_from_network_map</span><span class="p">()</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"alive"</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">alive</span><span class="p">),</span>
+            <span class="s2">"adopted"</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">adopted</span><span class="p">),</span>
+            <span class="s2">"controller"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_controller_uuid</span><span class="p">(),</span>
+        <span class="p">}</span>
+        <span class="n">probed_at</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_status_cache</span> <span class="o">=</span> <span class="p">(</span><span class="n">probed_at</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+
+    <span class="c1"># Read the diagnosis fresh, OUTSIDE the clamp. Folding it into the</span>
+    <span class="c1"># cached payload would serve the pre-transition diagnosis to any poll</span>
+    <span class="c1"># landing within CLUSTER_STATUS_CLAMP_S of a load, unload or reload —</span>
+    <span class="c1"># a warning outliving its cause, which is the worst outcome this</span>
+    <span class="c1"># surface has. The clamp exists to stop ping floods; a lock-guarded</span>
+    <span class="c1"># dict read is not a ping. Same treatment as age_s.</span>
+    <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
+        <span class="n">diagnosis</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_diagnosis</span> <span class="k">else</span> <span class="p">{}</span>
+
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="n">age_s</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">probed_at</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">missing</span><span class="o">=</span><span class="n">diagnosis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">,</span> <span class="p">[]),</span>
+        <span class="n">unreachable</span><span class="o">=</span><span class="n">diagnosis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"unreachable"</span><span class="p">,</span> <span class="p">[]),</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="cuemsengine.ControllerEngine.ControllerEngine.get_project_status" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">get_project_status</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -4711,24 +5768,387 @@ with:
 
     <div class="doc doc-contents ">
 
-        <p>Return current project playback status.</p>
+        <p>Return the current project load/playback state.</p>
+<p>Three states, deliberately distinct:</p>
+<ul>
+<li><code>running</code> — a project is loaded AND playing.</li>
+<li><code>loaded</code>  — a project is loaded and NOT playing. This is the state
+  the reply used to collapse into <code>none</code>, which made a loaded-but-
+  stopped project indistinguishable from no project at all — and left
+  this reply contradicting /engine/status/load, which kept naming the
+  project all along.</li>
+<li><code>none</code>    — no project.</li>
+</ul>
+<p><code>loaded</code> says nothing about readiness: the GO gate waits on <code>armed</code>,
+published separately on /engine/status/armed. A project whose nodes
+never answer sits in <code>loaded</code> for the whole 120 s arm watchdog and
+never becomes GO-able. Do not treat this field as a GO gate.</p>
+<p><code>project_uuid</code> is populated in both <code>running</code> and <code>loaded</code>, and the
+invariant is one-way: <strong>a status other than <code>none</code> always carries a
+non-empty uuid</strong>. That is why <code>running</code> with no script — which the
+guards in load_project/unload_project should make unreachable —
+degrades to <code>none</code> here rather than to a <code>running</code> a client cannot
+act on.</p>
+<p><code>project_unix_name</code> is the same string /engine/status/load broadcasts,
+returned here so a consumer that needs the uuid never has to make that
+broadcast carry one (869dr2k2h).</p>
+<p>The load state is read from two attributes that another thread can be
+mutating mid-load. They are ANDed, so a torn read falls to <code>none</code> —
+never to a <code>loaded</code> naming a project the engine does not hold.</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1513</span>
-<span class="normal">1514</span>
-<span class="normal">1515</span>
-<span class="normal">1516</span>
-<span class="normal">1517</span>
-<span class="normal">1518</span>
-<span class="normal">1519</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_project_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Return current project playback status."""</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1862</span>
+<span class="normal">1863</span>
+<span class="normal">1864</span>
+<span class="normal">1865</span>
+<span class="normal">1866</span>
+<span class="normal">1867</span>
+<span class="normal">1868</span>
+<span class="normal">1869</span>
+<span class="normal">1870</span>
+<span class="normal">1871</span>
+<span class="normal">1872</span>
+<span class="normal">1873</span>
+<span class="normal">1874</span>
+<span class="normal">1875</span>
+<span class="normal">1876</span>
+<span class="normal">1877</span>
+<span class="normal">1878</span>
+<span class="normal">1879</span>
+<span class="normal">1880</span>
+<span class="normal">1881</span>
+<span class="normal">1882</span>
+<span class="normal">1883</span>
+<span class="normal">1884</span>
+<span class="normal">1885</span>
+<span class="normal">1886</span>
+<span class="normal">1887</span>
+<span class="normal">1888</span>
+<span class="normal">1889</span>
+<span class="normal">1890</span>
+<span class="normal">1891</span>
+<span class="normal">1892</span>
+<span class="normal">1893</span>
+<span class="normal">1894</span>
+<span class="normal">1895</span>
+<span class="normal">1896</span>
+<span class="normal">1897</span>
+<span class="normal">1898</span>
+<span class="normal">1899</span>
+<span class="normal">1900</span>
+<span class="normal">1901</span>
+<span class="normal">1902</span>
+<span class="normal">1903</span>
+<span class="normal">1904</span>
+<span class="normal">1905</span>
+<span class="normal">1906</span>
+<span class="normal">1907</span>
+<span class="normal">1908</span>
+<span class="normal">1909</span>
+<span class="normal">1910</span>
+<span class="normal">1911</span>
+<span class="normal">1912</span>
+<span class="normal">1913</span>
+<span class="normal">1914</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_project_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Return the current project load/playback state.</span>
+
+<span class="sd">    Three states, deliberately distinct:</span>
+
+<span class="sd">    * `running` — a project is loaded AND playing.</span>
+<span class="sd">    * `loaded`  — a project is loaded and NOT playing. This is the state</span>
+<span class="sd">      the reply used to collapse into `none`, which made a loaded-but-</span>
+<span class="sd">      stopped project indistinguishable from no project at all — and left</span>
+<span class="sd">      this reply contradicting /engine/status/load, which kept naming the</span>
+<span class="sd">      project all along.</span>
+<span class="sd">    * `none`    — no project.</span>
+
+<span class="sd">    `loaded` says nothing about readiness: the GO gate waits on `armed`,</span>
+<span class="sd">    published separately on /engine/status/armed. A project whose nodes</span>
+<span class="sd">    never answer sits in `loaded` for the whole 120 s arm watchdog and</span>
+<span class="sd">    never becomes GO-able. Do not treat this field as a GO gate.</span>
+
+<span class="sd">    `project_uuid` is populated in both `running` and `loaded`, and the</span>
+<span class="sd">    invariant is one-way: **a status other than `none` always carries a</span>
+<span class="sd">    non-empty uuid**. That is why `running` with no script — which the</span>
+<span class="sd">    guards in load_project/unload_project should make unreachable —</span>
+<span class="sd">    degrades to `none` here rather than to a `running` a client cannot</span>
+<span class="sd">    act on.</span>
+
+<span class="sd">    `project_unix_name` is the same string /engine/status/load broadcasts,</span>
+<span class="sd">    returned here so a consumer that needs the uuid never has to make that</span>
+<span class="sd">    broadcast carry one (869dr2k2h).</span>
+
+<span class="sd">    The load state is read from two attributes that another thread can be</span>
+<span class="sd">    mutating mid-load. They are ANDed, so a torn read falls to `none` —</span>
+<span class="sd">    never to a `loaded` naming a project the engine does not hold.</span>
+<span class="sd">    """</span>
     <span class="n">running</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span>
+    <span class="n">loaded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">running</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="s2">"running"</span>
+    <span class="k">elif</span> <span class="n">loaded</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="s2">"loaded"</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="s2">"none"</span>
+
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">"none"</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"none"</span><span class="p">,</span> <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"project_unix_name"</span><span class="p">:</span> <span class="s2">""</span><span class="p">}</span>
+
+    <span class="c1"># unix_name is not a CuemsScript field — load_project attaches it by</span>
+    <span class="c1"># hand — so any script built by another path simply lacks it.</span>
     <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"running"</span> <span class="k">if</span> <span class="n">running</span> <span class="k">else</span> <span class="s2">"none"</span><span class="p">,</span>
-        <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">running</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="k">else</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span>
+        <span class="s2">"project_uuid"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">id</span><span class="p">),</span>
+        <span class="s2">"project_unix_name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"unix_name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">),</span>
     <span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.ControllerEngine.ControllerEngine.nodelist_modify" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">nodelist_modify</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Adopt or un-adopt a node, then refresh our cached topology.</p>
+<p>Forwards {'action','value','modify_action'} to cuems-nodeconf over
+/tmp/nodeconf.ipc, which flips <adopted> in network_map.xml. On success
+we re-read that file, because our own copy was loaded once at startup
+(ConfigManager(load_all=True)) and would otherwise keep the GO gate
+blind to the change until an engine restart.</p>
+<p>Returns True only when nodeconf confirmed AND our reload succeeded; the
+caller confirms "OK" to the editor on True. Every False path has
+already sent an explanatory error.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">883</span>
+<span class="normal">884</span>
+<span class="normal">885</span>
+<span class="normal">886</span>
+<span class="normal">887</span>
+<span class="normal">888</span>
+<span class="normal">889</span>
+<span class="normal">890</span>
+<span class="normal">891</span>
+<span class="normal">892</span>
+<span class="normal">893</span>
+<span class="normal">894</span>
+<span class="normal">895</span>
+<span class="normal">896</span>
+<span class="normal">897</span>
+<span class="normal">898</span>
+<span class="normal">899</span>
+<span class="normal">900</span>
+<span class="normal">901</span>
+<span class="normal">902</span>
+<span class="normal">903</span>
+<span class="normal">904</span>
+<span class="normal">905</span>
+<span class="normal">906</span>
+<span class="normal">907</span>
+<span class="normal">908</span>
+<span class="normal">909</span>
+<span class="normal">910</span>
+<span class="normal">911</span>
+<span class="normal">912</span>
+<span class="normal">913</span>
+<span class="normal">914</span>
+<span class="normal">915</span>
+<span class="normal">916</span>
+<span class="normal">917</span>
+<span class="normal">918</span>
+<span class="normal">919</span>
+<span class="normal">920</span>
+<span class="normal">921</span>
+<span class="normal">922</span>
+<span class="normal">923</span>
+<span class="normal">924</span>
+<span class="normal">925</span>
+<span class="normal">926</span>
+<span class="normal">927</span>
+<span class="normal">928</span>
+<span class="normal">929</span>
+<span class="normal">930</span>
+<span class="normal">931</span>
+<span class="normal">932</span>
+<span class="normal">933</span>
+<span class="normal">934</span>
+<span class="normal">935</span>
+<span class="normal">936</span>
+<span class="normal">937</span>
+<span class="normal">938</span>
+<span class="normal">939</span>
+<span class="normal">940</span>
+<span class="normal">941</span>
+<span class="normal">942</span>
+<span class="normal">943</span>
+<span class="normal">944</span>
+<span class="normal">945</span>
+<span class="normal">946</span>
+<span class="normal">947</span>
+<span class="normal">948</span>
+<span class="normal">949</span>
+<span class="normal">950</span>
+<span class="normal">951</span>
+<span class="normal">952</span>
+<span class="normal">953</span>
+<span class="normal">954</span>
+<span class="normal">955</span>
+<span class="normal">956</span>
+<span class="normal">957</span>
+<span class="normal">958</span>
+<span class="normal">959</span>
+<span class="normal">960</span>
+<span class="normal">961</span>
+<span class="normal">962</span>
+<span class="normal">963</span>
+<span class="normal">964</span>
+<span class="normal">965</span>
+<span class="normal">966</span>
+<span class="normal">967</span>
+<span class="normal">968</span>
+<span class="normal">969</span>
+<span class="normal">970</span>
+<span class="normal">971</span>
+<span class="normal">972</span>
+<span class="normal">973</span>
+<span class="normal">974</span>
+<span class="normal">975</span>
+<span class="normal">976</span>
+<span class="normal">977</span>
+<span class="normal">978</span>
+<span class="normal">979</span>
+<span class="normal">980</span>
+<span class="normal">981</span>
+<span class="normal">982</span>
+<span class="normal">983</span>
+<span class="normal">984</span>
+<span class="normal">985</span>
+<span class="normal">986</span>
+<span class="normal">987</span>
+<span class="normal">988</span>
+<span class="normal">989</span>
+<span class="normal">990</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">nodelist_modify</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Adopt or un-adopt a node, then refresh our cached topology.</span>
+
+<span class="sd">    Forwards {'action','value','modify_action'} to cuems-nodeconf over</span>
+<span class="sd">    /tmp/nodeconf.ipc, which flips &lt;adopted&gt; in network_map.xml. On success</span>
+<span class="sd">    we re-read that file, because our own copy was loaded once at startup</span>
+<span class="sd">    (ConfigManager(load_all=True)) and would otherwise keep the GO gate</span>
+<span class="sd">    blind to the change until an engine restart.</span>
+
+<span class="sd">    Returns True only when nodeconf confirmed AND our reload succeeded; the</span>
+<span class="sd">    caller confirms "OK" to the editor on True. Every False path has</span>
+<span class="sd">    already sent an explanatory error.</span>
+<span class="sd">    """</span>
+    <span class="n">node_uuid</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"value"</span><span class="p">)</span>
+    <span class="n">modify_action</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"modify_action"</span><span class="p">)</span>
+    <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"nodelist_modify: </span><span class="si">{</span><span class="n">modify_action</span><span class="si">}</span><span class="s2"> node </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="c1"># Adoption is a setup-time operation. Refuse (never stop anything) when</span>
+    <span class="c1"># a project is running, and also when one is merely loaded: the GO</span>
+    <span class="c1"># gate's _required_nodes snapshot is computed once, in load_project, so</span>
+    <span class="c1"># a REMOVE accepted now would leave it waiting on a node the operator</span>
+    <span class="c1"># just removed until the next load.</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="s2">"Cannot modify the node list while a project is running. "</span>
+            <span class="s2">"Stop playback first."</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="s2">"Cannot modify the node list while a project is loaded. "</span>
+            <span class="s2">"Unload the project first."</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">node_uuid</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node_uuid</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"nodelist_modify needs a node uuid, got </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">modify_action</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"ADD"</span><span class="p">,</span> <span class="s2">"REMOVE"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">"Invalid modify_action: </span><span class="si">{</span><span class="n">modify_action</span><span class="si">!r}</span><span class="s2">. Must be 'ADD' or 'REMOVE'"</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Fail fast when the daemon is not there at all. Measured on the rig:</span>
+    <span class="c1"># with the socket absent, request_to_nodeconf does NOT return quickly —</span>
+    <span class="c1"># it burns the full 15 s IPC timeout and then raises. Editor commands</span>
+    <span class="c1"># are serialized by the engine's single listener, so a second click</span>
+    <span class="c1"># queues behind the first and can blow the editor's own 25 s timeout,</span>
+    <span class="c1"># turning a clear refusal into "Engine did not respond". nodeconf ships</span>
+    <span class="c1"># disabled on most of the fleet, so this is the common path, not a rare</span>
+    <span class="c1"># one.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">NODECONF_IPC_PATH</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="s2">"The node configuration service (cuems-nodeconf) is not "</span>
+            <span class="s2">"running on this controller, so the node list cannot be "</span>
+            <span class="s2">"changed. Enable it with: systemctl enable --now cuems-nodeconf"</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">reply</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">communications_thread</span><span class="o">.</span><span class="n">request_to_nodeconf</span><span class="p">(</span>
+            <span class="n">message</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">NODECONF_TIMEOUT_S</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Could not reach cuems-nodeconf: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Communicator.send_request swallows every exception and returns None —</span>
+    <span class="c1"># an absent socket (nodeconf disabled, which is the fleet default) and a</span>
+    <span class="c1"># peer that never answers both land here.</span>
+    <span class="k">if</span> <span class="n">reply</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="s2">"The node configuration service (cuems-nodeconf) is not "</span>
+            <span class="s2">"responding. Is it enabled on this controller?"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reply</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Unexpected reply from cuems-nodeconf: </span><span class="si">{</span><span class="n">reply</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">reply</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"OK"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error"</span><span class="p">,</span> <span class="s2">"cuems-nodeconf reported an error"</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"nodelist_modify: cuems-nodeconf confirmed </span><span class="si">{</span><span class="n">modify_action</span><span class="si">}</span><span class="s2"> "</span>
+        <span class="sa">f</span><span class="s2">"for node </span><span class="si">{</span><span class="n">node_uuid</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
+
+    <span class="c1"># nodeconf has already rewritten network_map.xml. If we cannot re-read</span>
+    <span class="c1"># it the operation is a PARTIAL success: the map (and so the editor and</span>
+    <span class="c1"># the UI) is correct, only this process is behind. Say exactly that</span>
+    <span class="c1"># instead of confirming OK over a stale topology.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reload_network_map</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> reloading network_map: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodelist_refuse</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">"Node </span><span class="si">{</span><span class="n">modify_action</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="si">}</span><span class="s2">ed, but the engine could not "</span>
+            <span class="sa">f</span><span class="s2">"reload the topology (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">) — restart "</span>
+            <span class="sa">f</span><span class="s2">"cuems-controller-engine before loading a project."</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="kc">True</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4752,20 +6172,20 @@ second.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1024</span>
-<span class="normal">1025</span>
-<span class="normal">1026</span>
-<span class="normal">1027</span>
-<span class="normal">1028</span>
-<span class="normal">1029</span>
-<span class="normal">1030</span>
-<span class="normal">1031</span>
-<span class="normal">1032</span>
-<span class="normal">1033</span>
-<span class="normal">1034</span>
-<span class="normal">1035</span>
-<span class="normal">1036</span>
-<span class="normal">1037</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">on_timecode_change</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1281</span>
+<span class="normal">1282</span>
+<span class="normal">1283</span>
+<span class="normal">1284</span>
+<span class="normal">1285</span>
+<span class="normal">1286</span>
+<span class="normal">1287</span>
+<span class="normal">1288</span>
+<span class="normal">1289</span>
+<span class="normal">1290</span>
+<span class="normal">1291</span>
+<span class="normal">1292</span>
+<span class="normal">1293</span>
+<span class="normal">1294</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">on_timecode_change</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Broadcast timecode to UI as integer ms (whole seconds only), once per</span>
 <span class="sd">    second.</span>
@@ -4803,14 +6223,14 @@ second.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">434</span>
-<span class="normal">435</span>
-<span class="normal">436</span>
-<span class="normal">437</span>
-<span class="normal">438</span>
-<span class="normal">439</span>
-<span class="normal">440</span>
-<span class="normal">441</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">player_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">469</span>
+<span class="normal">470</span>
+<span class="normal">471</span>
+<span class="normal">472</span>
+<span class="normal">473</span>
+<span class="normal">474</span>
+<span class="normal">475</span>
+<span class="normal">476</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">player_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Callback invoked when players are received from nodes.</span>
 
@@ -4842,14 +6262,14 @@ TODO: Implement WebSocket status push if UI needs real-time status.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">809</span>
-<span class="normal">810</span>
-<span class="normal">811</span>
-<span class="normal">812</span>
-<span class="normal">813</span>
-<span class="normal">814</span>
-<span class="normal">815</span>
-<span class="normal">816</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_oscquery_values</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1016</span>
+<span class="normal">1017</span>
+<span class="normal">1018</span>
+<span class="normal">1019</span>
+<span class="normal">1020</span>
+<span class="normal">1021</span>
+<span class="normal">1022</span>
+<span class="normal">1023</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_oscquery_values</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stub for OSCQuery value setting - OSCQuery server has been removed.</span>
 
 <span class="sd">    Status updates are now handled via internal state tracking.</span>
@@ -4879,13 +6299,13 @@ TODO: Implement WebSocket status push if UI needs real-time status.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">139</span>
-<span class="normal">140</span>
-<span class="normal">141</span>
-<span class="normal">142</span>
-<span class="normal">143</span>
-<span class="normal">144</span>
-<span class="normal">145</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Set status and push to UI via WebSocket when running, armed, or load.</span>
 <span class="sd">    """</span>
@@ -4916,42 +6336,7 @@ notifications.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">521</span>
-<span class="normal">522</span>
-<span class="normal">523</span>
-<span class="normal">524</span>
-<span class="normal">525</span>
-<span class="normal">526</span>
-<span class="normal">527</span>
-<span class="normal">528</span>
-<span class="normal">529</span>
-<span class="normal">530</span>
-<span class="normal">531</span>
-<span class="normal">532</span>
-<span class="normal">533</span>
-<span class="normal">534</span>
-<span class="normal">535</span>
-<span class="normal">536</span>
-<span class="normal">537</span>
-<span class="normal">538</span>
-<span class="normal">539</span>
-<span class="normal">540</span>
-<span class="normal">541</span>
-<span class="normal">542</span>
-<span class="normal">543</span>
-<span class="normal">544</span>
-<span class="normal">545</span>
-<span class="normal">546</span>
-<span class="normal">547</span>
-<span class="normal">548</span>
-<span class="normal">549</span>
-<span class="normal">550</span>
-<span class="normal">551</span>
-<span class="normal">552</span>
-<span class="normal">553</span>
-<span class="normal">554</span>
-<span class="normal">555</span>
-<span class="normal">556</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">556</span>
 <span class="normal">557</span>
 <span class="normal">558</span>
 <span class="normal">559</span>
@@ -5033,7 +6418,42 @@ notifications.</p>
 <span class="normal">635</span>
 <span class="normal">636</span>
 <span class="normal">637</span>
-<span class="normal">638</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">status_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
+<span class="normal">638</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span>
+<span class="normal">650</span>
+<span class="normal">651</span>
+<span class="normal">652</span>
+<span class="normal">653</span>
+<span class="normal">654</span>
+<span class="normal">655</span>
+<span class="normal">656</span>
+<span class="normal">657</span>
+<span class="normal">658</span>
+<span class="normal">659</span>
+<span class="normal">660</span>
+<span class="normal">661</span>
+<span class="normal">662</span>
+<span class="normal">663</span>
+<span class="normal">664</span>
+<span class="normal">665</span>
+<span class="normal">666</span>
+<span class="normal">667</span>
+<span class="normal">668</span>
+<span class="normal">669</span>
+<span class="normal">670</span>
+<span class="normal">671</span>
+<span class="normal">672</span>
+<span class="normal">673</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">status_operation_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">NodeOperation</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Callback invoked when status updates are received from nodes.</span>
 
 <span class="sd">    Handles script_finished, armed_ready, nextcue, cue_enabled, and pong</span>
@@ -5174,29 +6594,29 @@ nodes.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1489</span>
-<span class="normal">1490</span>
-<span class="normal">1491</span>
-<span class="normal">1492</span>
-<span class="normal">1493</span>
-<span class="normal">1494</span>
-<span class="normal">1495</span>
-<span class="normal">1496</span>
-<span class="normal">1497</span>
-<span class="normal">1498</span>
-<span class="normal">1499</span>
-<span class="normal">1500</span>
-<span class="normal">1501</span>
-<span class="normal">1502</span>
-<span class="normal">1503</span>
-<span class="normal">1504</span>
-<span class="normal">1505</span>
-<span class="normal">1506</span>
-<span class="normal">1507</span>
-<span class="normal">1508</span>
-<span class="normal">1509</span>
-<span class="normal">1510</span>
-<span class="normal">1511</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1838</span>
+<span class="normal">1839</span>
+<span class="normal">1840</span>
+<span class="normal">1841</span>
+<span class="normal">1842</span>
+<span class="normal">1843</span>
+<span class="normal">1844</span>
+<span class="normal">1845</span>
+<span class="normal">1846</span>
+<span class="normal">1847</span>
+<span class="normal">1848</span>
+<span class="normal">1849</span>
+<span class="normal">1850</span>
+<span class="normal">1851</span>
+<span class="normal">1852</span>
+<span class="normal">1853</span>
+<span class="normal">1854</span>
+<span class="normal">1855</span>
+<span class="normal">1856</span>
+<span class="normal">1857</span>
+<span class="normal">1858</span>
+<span class="normal">1859</span>
+<span class="normal">1860</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Handle STOP command - stop timecode, update status and forward to</span>
 <span class="sd">    nodes.</span>
@@ -5241,26 +6661,27 @@ nodes.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/ControllerEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1521</span>
-<span class="normal">1522</span>
-<span class="normal">1523</span>
-<span class="normal">1524</span>
-<span class="normal">1525</span>
-<span class="normal">1526</span>
-<span class="normal">1527</span>
-<span class="normal">1528</span>
-<span class="normal">1529</span>
-<span class="normal">1530</span>
-<span class="normal">1531</span>
-<span class="normal">1532</span>
-<span class="normal">1533</span>
-<span class="normal">1534</span>
-<span class="normal">1535</span>
-<span class="normal">1536</span>
-<span class="normal">1537</span>
-<span class="normal">1538</span>
-<span class="normal">1539</span>
-<span class="normal">1540</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1968</span>
+<span class="normal">1969</span>
+<span class="normal">1970</span>
+<span class="normal">1971</span>
+<span class="normal">1972</span>
+<span class="normal">1973</span>
+<span class="normal">1974</span>
+<span class="normal">1975</span>
+<span class="normal">1976</span>
+<span class="normal">1977</span>
+<span class="normal">1978</span>
+<span class="normal">1979</span>
+<span class="normal">1980</span>
+<span class="normal">1981</span>
+<span class="normal">1982</span>
+<span class="normal">1983</span>
+<span class="normal">1984</span>
+<span class="normal">1985</span>
+<span class="normal">1986</span>
+<span class="normal">1987</span>
+<span class="normal">1988</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Unload the current project. Rejects if playback is running."""</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"Cannot unload while running. Stop playback first."</span><span class="p">)</span>
@@ -5277,6 +6698,7 @@ nodes.</p>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cluster_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_required_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_clear_load_diagnosis</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/stop"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Project unloaded"</span><span class="p">)</span>
     <span class="k">return</span> <span class="kc">True</span>
