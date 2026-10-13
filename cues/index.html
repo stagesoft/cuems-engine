@@ -12646,19 +12646,19 @@ DMX scenes have ended, actions/CueLists have nothing to hide.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/run_cue.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">632</span>
-<span class="normal">633</span>
-<span class="normal">634</span>
-<span class="normal">635</span>
-<span class="normal">636</span>
-<span class="normal">637</span>
-<span class="normal">638</span>
-<span class="normal">639</span>
-<span class="normal">640</span>
-<span class="normal">641</span>
-<span class="normal">642</span>
-<span class="normal">643</span>
-<span class="normal">644</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@singledispatch</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">653</span>
+<span class="normal">654</span>
+<span class="normal">655</span>
+<span class="normal">656</span>
+<span class="normal">657</span>
+<span class="normal">658</span>
+<span class="normal">659</span>
+<span class="normal">660</span>
+<span class="normal">661</span>
+<span class="normal">662</span>
+<span class="normal">663</span>
+<span class="normal">664</span>
+<span class="normal">665</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@singledispatch</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">blank_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span> <span class="n">mtc</span><span class="p">:</span> <span class="n">MtcListener</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Hide a cue's output at its body end, WITHOUT disarming it.</span>
 
@@ -12693,10 +12693,10 @@ DMX scenes have ended, actions/CueLists have nothing to hide.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/run_cue.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">552</span>
-<span class="normal">553</span>
-<span class="normal">554</span>
-<span class="normal">555</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@singledispatch</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">573</span>
+<span class="normal">574</span>
+<span class="normal">575</span>
+<span class="normal">576</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@singledispatch</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">reveal_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span> <span class="n">mtc</span><span class="p">:</span> <span class="n">MtcListener</span><span class="p">,</span> <span class="n">frozen_mtc_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Reveal a held cue at its start_mtc. Default no-op (DmxCue self-schedules)."""</span>
     <span class="k">pass</span>
@@ -12731,31 +12731,31 @@ than a clean skip.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/run_cue.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">605</span>
-<span class="normal">606</span>
-<span class="normal">607</span>
-<span class="normal">608</span>
-<span class="normal">609</span>
-<span class="normal">610</span>
-<span class="normal">611</span>
-<span class="normal">612</span>
-<span class="normal">613</span>
-<span class="normal">614</span>
-<span class="normal">615</span>
-<span class="normal">616</span>
-<span class="normal">617</span>
-<span class="normal">618</span>
-<span class="normal">619</span>
-<span class="normal">620</span>
-<span class="normal">621</span>
-<span class="normal">622</span>
-<span class="normal">623</span>
-<span class="normal">624</span>
-<span class="normal">625</span>
-<span class="normal">626</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">626</span>
 <span class="normal">627</span>
 <span class="normal">628</span>
-<span class="normal">629</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@reveal_cue</span><span class="o">.</span><span class="n">register</span>
+<span class="normal">629</span>
+<span class="normal">630</span>
+<span class="normal">631</span>
+<span class="normal">632</span>
+<span class="normal">633</span>
+<span class="normal">634</span>
+<span class="normal">635</span>
+<span class="normal">636</span>
+<span class="normal">637</span>
+<span class="normal">638</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span>
+<span class="normal">650</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@reveal_cue</span><span class="o">.</span><span class="n">register</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">reveal_cueList</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">CueList</span><span class="p">,</span> <span class="n">mtc</span><span class="p">,</span> <span class="n">frozen_mtc_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Reveal a CueList target by revealing its first enabled child.</span>
 
@@ -13796,7 +13796,28 @@ via the single VideoClient in cue._osc.</p>
 <span class="normal">539</span>
 <span class="normal">540</span>
 <span class="normal">541</span>
-<span class="normal">542</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@run_cue</span><span class="o">.</span><span class="n">register</span>
+<span class="normal">542</span>
+<span class="normal">543</span>
+<span class="normal">544</span>
+<span class="normal">545</span>
+<span class="normal">546</span>
+<span class="normal">547</span>
+<span class="normal">548</span>
+<span class="normal">549</span>
+<span class="normal">550</span>
+<span class="normal">551</span>
+<span class="normal">552</span>
+<span class="normal">553</span>
+<span class="normal">554</span>
+<span class="normal">555</span>
+<span class="normal">556</span>
+<span class="normal">557</span>
+<span class="normal">558</span>
+<span class="normal">559</span>
+<span class="normal">560</span>
+<span class="normal">561</span>
+<span class="normal">562</span>
+<span class="normal">563</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@run_cue</span><span class="o">.</span><span class="n">register</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">run_videoCue</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">VideoCue</span><span class="p">,</span> <span class="n">mtc</span><span class="p">,</span> <span class="n">frozen_mtc_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Run a VideoCue.</span>
 
@@ -13806,10 +13827,13 @@ via the single VideoClient in cue._osc.</p>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running video cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="n">layer_ids</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_layer_ids"</span><span class="p">,</span> <span class="p">[])</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">layer_ids</span> <span class="ow">or</span> <span class="n">cue</span><span class="o">.</span><span class="n">_osc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Video cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> has no layers or no OSC client"</span><span class="p">)</span>
-        <span class="k">return</span>
 
+    <span class="c1"># The timeline is stamped BEFORE the layer check (869fgq3xv): a cue with</span>
+    <span class="c1"># no layers on this node (every output dark) still has a body. Downstream</span>
+    <span class="c1"># reads _start_mtc/_end_mtc: the Auto-follow instant and its cross-node</span>
+    <span class="c1"># announce (CueHandler._follow_instant_ms), the reveal wait, loop_videoCue.</span>
+    <span class="c1"># Left at their zero defaults, a go_at_end follow fired at start+postwait</span>
+    <span class="c1"># cluster-wide and an infinite loop re-based in a tight loop.</span>
     <span class="k">if</span> <span class="n">frozen_mtc_ms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">mtc_ms</span> <span class="o">=</span> <span class="n">frozen_mtc_ms</span>
         <span class="n">Logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">"VideoCue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> using frozen MTC: </span><span class="si">{</span><span class="n">mtc_ms</span><span class="si">}</span><span class="s2">ms"</span><span class="p">)</span>
@@ -13828,6 +13852,17 @@ via the single VideoClient in cue._osc.</p>
     <span class="p">)</span>
     <span class="n">cue</span><span class="o">.</span><span class="n">_end_mtc</span> <span class="o">=</span> <span class="n">cue</span><span class="o">.</span><span class="n">_start_mtc</span> <span class="o">+</span> <span class="n">duration</span>
     <span class="n">offset_to_go</span> <span class="o">=</span> <span class="o">-</span><span class="n">cue</span><span class="o">.</span><span class="n">_start_mtc</span><span class="o">.</span><span class="n">frame_number</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">layer_ids</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_osc"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">unrouted</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_unrouted_outputs"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">layer_ids</span> <span class="ow">and</span> <span class="n">unrouted</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Video cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> is dark on this node (outputs not driven:"</span>
+                <span class="sa">f</span><span class="s2">" </span><span class="si">{</span><span class="n">unrouted</span><span class="si">}</span><span class="s2">); timeline kept, nothing sent"</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Video cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> has no layers or no OSC client"</span><span class="p">)</span>
+        <span class="k">return</span>
 
     <span class="n">client</span> <span class="o">=</span> <span class="n">cue</span><span class="o">.</span><span class="n">_osc</span>
 
@@ -13856,16 +13891,23 @@ via the single VideoClient in cue._osc.</p>
     <span class="n">loop_early</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"loop"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span>
 
     <span class="c1"># Re-apply position for each layer before making visible (layer may not</span>
-    <span class="c1"># have been ready when position was set during arm)</span>
-    <span class="n">output_names</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_all_cue_output_names</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
+    <span class="c1"># have been ready when position was set during arm). Each layer's output</span>
+    <span class="c1"># comes from the arm, by layer id: with an unrouted output skipped, layer</span>
+    <span class="c1"># i is no longer output i (869fgq3xv).</span>
+    <span class="n">layer_outputs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_layer_outputs"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
     <span class="n">media_w</span><span class="p">,</span> <span class="n">media_h</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">cue_media_dimensions</span><span class="p">(</span><span class="n">cue</span><span class="p">)</span>
 
-    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">layer_ids</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">layer_id</span> <span class="ow">in</span> <span class="n">layer_ids</span><span class="p">:</span>
         <span class="n">layer_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"/videocomposer/layer/</span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">"</span>
 
         <span class="c1"># Re-apply canvas position from the output config</span>
-        <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">output_names</span><span class="p">):</span>
-            <span class="n">output_name</span> <span class="o">=</span> <span class="n">output_names</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">output_name</span> <span class="o">=</span> <span class="n">layer_outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">layer_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">output_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Video cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> layer </span><span class="si">{</span><span class="n">layer_id</span><span class="si">}</span><span class="s2">: no output recorded at arm;"</span>
+                <span class="s2">" placement re-apply skipped"</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">output</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">resolve_video_output_for_cue</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">output_name</span><span class="p">)</span>
                 <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get_layer_placement</span><span class="p">()</span>

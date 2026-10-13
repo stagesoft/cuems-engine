@@ -6134,9 +6134,16 @@ canvas_size=5760x1080        # optional, overrides bbox
 canvas_region=0,0,1920,1080
 resolution=1920x1080         # optional
 refresh=60.0                 # optional
+enabled=false                # optional; leaves the output dark
 </code></pre>
-<p>The engine consumes <code>canvas_region</code> and the optional global <code>canvas_size</code>
-override; resolution + refresh are read by the videocomposer directly.</p>
+<p>The engine consumes <code>canvas_region</code>, <code>enabled</code> and the optional global
+<code>canvas_size</code> override; resolution + refresh are read by the videocomposer
+directly.</p>
+<p>An output with <code>enabled</code> set to anything but <code>true</code>/<code>1</code> gets no surface and
+stays out of the videocomposer's canvas even when it keeps a canvas_region, so
+the engine leaves it out too (869fgq3xv). Otherwise the engine would route
+cues to a dark output and compute a wider canvas than the videocomposer's,
+placing every layer wrong.</p>
 
 
 
@@ -6185,8 +6192,8 @@ override; resolution + refresh are read by the videocomposer directly.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/tools/display_conf.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">35</span>
-<span class="normal">36</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DisplayConfNotFoundError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">43</span>
+<span class="normal">44</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DisplayConfNotFoundError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""display.conf is missing, unreadable, or has no [output:*] sections."""</span>
 </code></pre></div></td></tr></table></div>
               </details>
@@ -6225,10 +6232,10 @@ the per-output region bounding box).</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/tools/display_conf.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">39</span>
-<span class="normal">40</span>
-<span class="normal">41</span>
-<span class="normal">42</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DisplayConfValueError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DisplayConfValueError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""display.conf is present but contains an invalid value (e.g. a</span>
 <span class="sd">    canvas_size override that is malformed, non-positive, or smaller than</span>
 <span class="sd">    the per-output region bounding box)."""</span>
@@ -6264,7 +6271,7 @@ the per-output region bounding box).</p>
 <p>Raises:</p>
 <ul>
 <li><code>DisplayConfNotFoundError</code> if the file is missing or has no
-  <code>[output:*]</code> sections.</li>
+  enabled <code>[output:*]</code> section with a valid canvas_region.</li>
 <li><code>DisplayConfValueError</code> if <code>canvas_size=</code> is malformed, has
   non-positive values, or is smaller than the per-region bbox.</li>
 </ul>
@@ -6272,44 +6279,7 @@ the per-output region bounding box).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/tools/display_conf.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 76</span>
-<span class="normal"> 77</span>
-<span class="normal"> 78</span>
-<span class="normal"> 79</span>
-<span class="normal"> 80</span>
-<span class="normal"> 81</span>
-<span class="normal"> 82</span>
-<span class="normal"> 83</span>
-<span class="normal"> 84</span>
-<span class="normal"> 85</span>
-<span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
-<span class="normal"> 90</span>
-<span class="normal"> 91</span>
-<span class="normal"> 92</span>
-<span class="normal"> 93</span>
-<span class="normal"> 94</span>
-<span class="normal"> 95</span>
-<span class="normal"> 96</span>
-<span class="normal"> 97</span>
-<span class="normal"> 98</span>
-<span class="normal"> 99</span>
-<span class="normal">100</span>
-<span class="normal">101</span>
-<span class="normal">102</span>
-<span class="normal">103</span>
-<span class="normal">104</span>
-<span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span>
-<span class="normal">108</span>
-<span class="normal">109</span>
-<span class="normal">110</span>
-<span class="normal">111</span>
-<span class="normal">112</span>
-<span class="normal">113</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">113</span>
 <span class="normal">114</span>
 <span class="normal">115</span>
 <span class="normal">116</span>
@@ -6359,7 +6329,50 @@ the per-output region bounding box).</p>
 <span class="normal">160</span>
 <span class="normal">161</span>
 <span class="normal">162</span>
-<span class="normal">163</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">read_display_conf</span><span class="p">(</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">read_display_conf</span><span class="p">(</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_DISPLAY_CONF</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""Parse display.conf and return ``(regions, canvas_size)``.</span>
@@ -6376,7 +6389,7 @@ the per-output region bounding box).</p>
 <span class="sd">    Raises:</span>
 
 <span class="sd">    - ``DisplayConfNotFoundError`` if the file is missing or has no</span>
-<span class="sd">      ``[output:*]`` sections.</span>
+<span class="sd">      enabled ``[output:*]`` section with a valid canvas_region.</span>
 <span class="sd">    - ``DisplayConfValueError`` if ``canvas_size=`` is malformed, has</span>
 <span class="sd">      non-positive values, or is smaller than the per-region bbox.</span>
 <span class="sd">    """</span>
@@ -6405,8 +6418,12 @@ the per-output region bounding box).</p>
         <span class="n">sectioned</span> <span class="o">=</span> <span class="s2">""</span>
 
     <span class="n">canvas_override</span> <span class="o">=</span> <span class="n">_parse_canvas_size_override</span><span class="p">(</span><span class="n">preamble</span><span class="p">)</span>
+    <span class="n">disabled</span> <span class="o">=</span> <span class="n">_disabled_outputs</span><span class="p">(</span><span class="n">sectioned</span><span class="p">)</span>
 
-    <span class="n">parser</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+    <span class="c1"># strict=False: a repeated key (two `enabled=` lines) is legal for the</span>
+    <span class="c1"># videocomposer, which keeps the last one; strict mode would raise and</span>
+    <span class="c1"># take the whole read down with it.</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">(</span><span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">optionxform</span> <span class="o">=</span> <span class="nb">str</span>  <span class="c1"># preserve key case for forward-compat keys</span>
     <span class="k">if</span> <span class="n">sectioned</span><span class="p">:</span>
         <span class="n">parser</span><span class="o">.</span><span class="n">read_string</span><span class="p">(</span><span class="n">sectioned</span><span class="p">)</span>
@@ -6416,6 +6433,8 @@ the per-output region bounding box).</p>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">section</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"output:"</span><span class="p">):</span>
             <span class="k">continue</span>
         <span class="n">connector</span> <span class="o">=</span> <span class="n">section</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">"output:"</span><span class="p">)</span> <span class="p">:]</span>
+        <span class="k">if</span> <span class="n">connector</span> <span class="ow">in</span> <span class="n">disabled</span><span class="p">:</span>
+            <span class="k">continue</span>
         <span class="n">raw</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">section</span><span class="p">,</span> <span class="s2">"canvas_region"</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">continue</span>
@@ -6431,7 +6450,7 @@ the per-output region bounding box).</p>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">regions</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">DisplayConfNotFoundError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"display.conf at </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> has no [output:*] sections with a "</span>
-            <span class="s2">"valid canvas_region"</span>
+            <span class="s2">"valid canvas_region (disabled outputs do not count)"</span>
         <span class="p">)</span>
 
     <span class="n">bbox_w</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span> <span class="o">+</span> <span class="n">r</span><span class="p">[</span><span class="s2">"width"</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">regions</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>

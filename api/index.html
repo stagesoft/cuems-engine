@@ -503,6 +503,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cuemsengine.NodeEngine.NodeEngine.check_unrouted_video_outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_unrouted_video_outputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#cuemsengine.NodeEngine.NodeEngine.deploy_media" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1144,6 +1155,17 @@
     <span class="md-ellipsis">
       
         check_own_media_sizes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuemsengine.NodeEngine.NodeEngine.check_unrouted_video_outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_unrouted_video_outputs
       
     </span>
   </a>
@@ -8542,7 +8564,80 @@ nodes.</p>
 <span class="normal">1831</span>
 <span class="normal">1832</span>
 <span class="normal">1833</span>
-<span class="normal">1834</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
+<span class="normal">1834</span>
+<span class="normal">1835</span>
+<span class="normal">1836</span>
+<span class="normal">1837</span>
+<span class="normal">1838</span>
+<span class="normal">1839</span>
+<span class="normal">1840</span>
+<span class="normal">1841</span>
+<span class="normal">1842</span>
+<span class="normal">1843</span>
+<span class="normal">1844</span>
+<span class="normal">1845</span>
+<span class="normal">1846</span>
+<span class="normal">1847</span>
+<span class="normal">1848</span>
+<span class="normal">1849</span>
+<span class="normal">1850</span>
+<span class="normal">1851</span>
+<span class="normal">1852</span>
+<span class="normal">1853</span>
+<span class="normal">1854</span>
+<span class="normal">1855</span>
+<span class="normal">1856</span>
+<span class="normal">1857</span>
+<span class="normal">1858</span>
+<span class="normal">1859</span>
+<span class="normal">1860</span>
+<span class="normal">1861</span>
+<span class="normal">1862</span>
+<span class="normal">1863</span>
+<span class="normal">1864</span>
+<span class="normal">1865</span>
+<span class="normal">1866</span>
+<span class="normal">1867</span>
+<span class="normal">1868</span>
+<span class="normal">1869</span>
+<span class="normal">1870</span>
+<span class="normal">1871</span>
+<span class="normal">1872</span>
+<span class="normal">1873</span>
+<span class="normal">1874</span>
+<span class="normal">1875</span>
+<span class="normal">1876</span>
+<span class="normal">1877</span>
+<span class="normal">1878</span>
+<span class="normal">1879</span>
+<span class="normal">1880</span>
+<span class="normal">1881</span>
+<span class="normal">1882</span>
+<span class="normal">1883</span>
+<span class="normal">1884</span>
+<span class="normal">1885</span>
+<span class="normal">1886</span>
+<span class="normal">1887</span>
+<span class="normal">1888</span>
+<span class="normal">1889</span>
+<span class="normal">1890</span>
+<span class="normal">1891</span>
+<span class="normal">1892</span>
+<span class="normal">1893</span>
+<span class="normal">1894</span>
+<span class="normal">1895</span>
+<span class="normal">1896</span>
+<span class="normal">1897</span>
+<span class="normal">1898</span>
+<span class="normal">1899</span>
+<span class="normal">1900</span>
+<span class="normal">1901</span>
+<span class="normal">1902</span>
+<span class="normal">1903</span>
+<span class="normal">1904</span>
+<span class="normal">1905</span>
+<span class="normal">1906</span>
+<span class="normal">1907</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    This engine manages players for each node</span>
 
@@ -9361,6 +9456,11 @@ nodes.</p>
         <span class="c1"># Obtain the project files (this replaces self.script with new project)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ready_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 
+        <span class="c1"># Name the video cues aimed at outputs this node doesn't drive, before</span>
+        <span class="c1"># anything arms. Here and not in ready_project: that one is also the</span>
+        <span class="c1"># `deploy` bus command, which can arrive mid-show.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_unrouted_video_outputs</span><span class="p">()</span>
+
         <span class="c1"># Prepare the script to be played (arms new cues)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ready_script</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"load"</span><span class="p">)</span>
 
@@ -9448,6 +9548,74 @@ nodes.</p>
                     <span class="s2">"stored duration is kept so the nodes stay in step; re-sync it, "</span>
                     <span class="sa">f</span><span class="s2">"or re-upload it in the editor.</span><span class="si">{</span><span class="n">sync</span><span class="si">}</span><span class="s2">"</span>
                 <span class="p">)</span>
+        <span class="k">return</span> <span class="n">found</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_unrouted_video_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Name every enabled video cue of this node that points at an output</span>
+<span class="sd">        this node doesn't drive (869fgq3xv). Log only.</span>
+
+<span class="sd">        Such an output is never loaded (arm_videoCue), so the cue stays dark</span>
+<span class="sd">        there; this says so at load, before the show, instead of on the</span>
+<span class="sd">        screens. Also starts the load's once-only arm errors afresh. Uses the</span>
+<span class="sd">        same PlayerHandler.partition_cue_outputs as the arm, so the two cannot</span>
+<span class="sd">        disagree. Never raises: the previous project is already torn down.</span>
+<span class="sd">        """</span>
+        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">reset_unrouted_warnings</span><span class="p">()</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">video_cues</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">cue_id</span><span class="p">,</span> <span class="n">output_names</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs_map</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">cue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">cue_id</span><span class="p">)</span>
+                <span class="c1"># outputs_map holds every MediaCue of this node, audio and</span>
+                <span class="c1"># disabled cues included.</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">VideoCue</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                    <span class="n">video_cues</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">video_cues</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">found</span>
+
+            <span class="k">if</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_video_client</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># set_video_players returned early: every video cue fails at</span>
+                <span class="c1"># arm ("No video client"), for a reason that is not the cue's.</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"no video stack on this node: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">video_cues</span><span class="p">)</span><span class="si">}</span><span class="s2"> video cue(s)"</span>
+                    <span class="s2">" will not play here"</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">found</span>
+
+            <span class="n">driven</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">driven_video_outputs</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span> <span class="ow">in</span> <span class="n">video_cues</span><span class="p">:</span>
+                <span class="n">_</span><span class="p">,</span> <span class="n">unrouted</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">partition_cue_outputs</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">unrouted</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">"cue_id"</span><span class="p">:</span> <span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                        <span class="s2">"cue_name"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+                        <span class="s2">"outputs"</span><span class="p">:</span> <span class="p">[</span>
+                            <span class="p">{</span><span class="s2">"output"</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="n">reason</span><span class="p">}</span>
+                            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">unrouted</span>
+                        <span class="p">],</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="n">cue_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">output_name</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">unrouted</span><span class="p">:</span>
+                    <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">'UNROUTED_VIDEO_OUTPUT: cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s1"> "</span><span class="si">{</span><span class="n">cue_name</span><span class="si">}</span><span class="s1">"'</span>
+                        <span class="sa">f</span><span class="s1">' → output "</span><span class="si">{</span><span class="n">output_name</span><span class="si">}</span><span class="s1">" not driven by this node (</span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s1">);'</span>
+                        <span class="sa">f</span><span class="s2">" it will stay dark. Driven outputs: </span><span class="si">{</span><span class="n">driven</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="p">)</span>
+            <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span><span class="si">}</span><span class="s2"> video cue(s) point at outputs this node doesn't"</span>
+                    <span class="s2">" drive; see UNROUTED_VIDEO_OUTPUT (and DISPLAY_MISMATCH at"</span>
+                    <span class="s2">" node start)"</span>
+                <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Unrouted video output check skipped (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">);"</span>
+                <span class="s2">" the load goes on"</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="n">found</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">ensure_video_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -10466,12 +10634,7 @@ raises: the previous project is already torn down at this point.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">956</span>
-<span class="normal">957</span>
-<span class="normal">958</span>
-<span class="normal">959</span>
-<span class="normal">960</span>
-<span class="normal">961</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">961</span>
 <span class="normal">962</span>
 <span class="normal">963</span>
 <span class="normal">964</span>
@@ -10502,7 +10665,12 @@ raises: the previous project is already torn down at this point.</p>
 <span class="normal">989</span>
 <span class="normal">990</span>
 <span class="normal">991</span>
-<span class="normal">992</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_own_media_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_synced</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="normal">992</span>
+<span class="normal">993</span>
+<span class="normal">994</span>
+<span class="normal">995</span>
+<span class="normal">996</span>
+<span class="normal">997</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_own_media_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_synced</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Report this node's media files that differ from the project, or</span>
 <span class="sd">    are missing (869fat84r D20, L2).</span>
 
@@ -10548,137 +10716,26 @@ raises: the previous project is already torn down at this point.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="cuemsengine.NodeEngine.NodeEngine.deploy_media" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">deploy_media</span><span class="p">(</span><span class="n">project</span><span class="p">)</span></code>
+<h3 id="cuemsengine.NodeEngine.NodeEngine.check_unrouted_video_outputs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">check_unrouted_video_outputs</span><span class="p">()</span></code>
 
 </h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Deploy the media files (and their .idx sidecar indexes).</p>
-<p>Best-effort: a failure here is recoverable if media is already
-cached on disk. Returns False to surface the failure to logs,
-but the caller continues the load.</p>
+        <p>Name every enabled video cue of this node that points at an output
+this node doesn't drive (869fgq3xv). Log only.</p>
+<p>Such an output is never loaded (arm_videoCue), so the cue stays dark
+there; this says so at load, before the show, instead of on the
+screens. Also starts the load's once-only arm errors afresh. Uses the
+same PlayerHandler.partition_cue_outputs as the arm, so the two cannot
+disagree. Never raises: the previous project is already torn down.</p>
 
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">934</span>
-<span class="normal">935</span>
-<span class="normal">936</span>
-<span class="normal">937</span>
-<span class="normal">938</span>
-<span class="normal">939</span>
-<span class="normal">940</span>
-<span class="normal">941</span>
-<span class="normal">942</span>
-<span class="normal">943</span>
-<span class="normal">944</span>
-<span class="normal">945</span>
-<span class="normal">946</span>
-<span class="normal">947</span>
-<span class="normal">948</span>
-<span class="normal">949</span>
-<span class="normal">950</span>
-<span class="normal">951</span>
-<span class="normal">952</span>
-<span class="normal">953</span>
-<span class="normal">954</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_media</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Deploy the media files (and their .idx sidecar indexes).</span>
-
-<span class="sd">    Best-effort: a failure here is recoverable if media is already</span>
-<span class="sd">    cached on disk. Returns False to surface the failure to logs,</span>
-<span class="sd">    but the caller continues the load.</span>
-<span class="sd">    """</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
-        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"No script loaded"</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="n">bare_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">get_own_media_filenames</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cm</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bare_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"No media files to deploy"</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">deploy_manager</span><span class="o">.</span><span class="n">sync_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="s2">"media"</span><span class="p">,</span> <span class="n">bare_names</span><span class="p">):</span>
-        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"Media deploy failed for </span><span class="si">{</span><span class="n">project</span><span class="si">}</span><span class="s2"> — continuing with cached "</span>
-            <span class="sa">f</span><span class="s2">"files; cues whose media is missing locally will fail on GO"</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">return</span> <span class="kc">True</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="cuemsengine.NodeEngine.NodeEngine.deploy_project" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">deploy_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span></code>
-
-</h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Deploy the project files (script.xml, mappings.xml, settings.xml).</p>
-<p>Critical path: if these fail to sync, the local copy may be stale
-and arming cues against it is unsafe. Caller is expected to abort
-the load on False.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">925</span>
-<span class="normal">926</span>
-<span class="normal">927</span>
-<span class="normal">928</span>
-<span class="normal">929</span>
-<span class="normal">930</span>
-<span class="normal">931</span>
-<span class="normal">932</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Deploy the project files (script.xml, mappings.xml, settings.xml).</span>
-
-<span class="sd">    Critical path: if these fail to sync, the local copy may be stale</span>
-<span class="sd">    and arming cues against it is unsafe. Caller is expected to abort</span>
-<span class="sd">    the load on False.</span>
-<span class="sd">    """</span>
-    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">deploy_manager</span><span class="o">.</span><span class="n">sync_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="s2">"project"</span><span class="p">)</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="cuemsengine.NodeEngine.NodeEngine.ensure_video_indexes" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">ensure_video_indexes</span><span class="p">()</span></code>
-
-</h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Run cuems-videoindexer on any video files that are missing a .idx
-sidecar.</p>
-<p>This is a safety net for files that were copied manually or deployed to
-a
-node that never ran the editor upload hook. For normally-uploaded files
-the
-index was already created by the editor and this is a no-op.</p>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 994</span>
-<span class="normal"> 995</span>
-<span class="normal"> 996</span>
-<span class="normal"> 997</span>
-<span class="normal"> 998</span>
-<span class="normal"> 999</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 999</span>
 <span class="normal">1000</span>
 <span class="normal">1001</span>
 <span class="normal">1002</span>
@@ -10726,7 +10783,279 @@ index was already created by the editor and this is a no-op.</p>
 <span class="normal">1044</span>
 <span class="normal">1045</span>
 <span class="normal">1046</span>
-<span class="normal">1047</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ensure_video_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">1047</span>
+<span class="normal">1048</span>
+<span class="normal">1049</span>
+<span class="normal">1050</span>
+<span class="normal">1051</span>
+<span class="normal">1052</span>
+<span class="normal">1053</span>
+<span class="normal">1054</span>
+<span class="normal">1055</span>
+<span class="normal">1056</span>
+<span class="normal">1057</span>
+<span class="normal">1058</span>
+<span class="normal">1059</span>
+<span class="normal">1060</span>
+<span class="normal">1061</span>
+<span class="normal">1062</span>
+<span class="normal">1063</span>
+<span class="normal">1064</span>
+<span class="normal">1065</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_unrouted_video_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Name every enabled video cue of this node that points at an output</span>
+<span class="sd">    this node doesn't drive (869fgq3xv). Log only.</span>
+
+<span class="sd">    Such an output is never loaded (arm_videoCue), so the cue stays dark</span>
+<span class="sd">    there; this says so at load, before the show, instead of on the</span>
+<span class="sd">    screens. Also starts the load's once-only arm errors afresh. Uses the</span>
+<span class="sd">    same PlayerHandler.partition_cue_outputs as the arm, so the two cannot</span>
+<span class="sd">    disagree. Never raises: the previous project is already torn down.</span>
+<span class="sd">    """</span>
+    <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">reset_unrouted_warnings</span><span class="p">()</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">video_cues</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">cue_id</span><span class="p">,</span> <span class="n">output_names</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs_map</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">cue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">cue_id</span><span class="p">)</span>
+            <span class="c1"># outputs_map holds every MediaCue of this node, audio and</span>
+            <span class="c1"># disabled cues included.</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">VideoCue</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">video_cues</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">video_cues</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">found</span>
+
+        <span class="k">if</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_video_client</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># set_video_players returned early: every video cue fails at</span>
+            <span class="c1"># arm ("No video client"), for a reason that is not the cue's.</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"no video stack on this node: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">video_cues</span><span class="p">)</span><span class="si">}</span><span class="s2"> video cue(s)"</span>
+                <span class="s2">" will not play here"</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">found</span>
+
+        <span class="n">driven</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">driven_video_outputs</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span> <span class="ow">in</span> <span class="n">video_cues</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">unrouted</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">partition_cue_outputs</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">output_names</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">unrouted</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">"cue_id"</span><span class="p">:</span> <span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                    <span class="s2">"cue_name"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+                    <span class="s2">"outputs"</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="p">{</span><span class="s2">"output"</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="n">reason</span><span class="p">}</span>
+                        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">unrouted</span>
+                    <span class="p">],</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="n">cue_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">output_name</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="n">unrouted</span><span class="p">:</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s1">'UNROUTED_VIDEO_OUTPUT: cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s1"> "</span><span class="si">{</span><span class="n">cue_name</span><span class="si">}</span><span class="s1">"'</span>
+                    <span class="sa">f</span><span class="s1">' → output "</span><span class="si">{</span><span class="n">output_name</span><span class="si">}</span><span class="s1">" not driven by this node (</span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s1">);'</span>
+                    <span class="sa">f</span><span class="s2">" it will stay dark. Driven outputs: </span><span class="si">{</span><span class="n">driven</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span><span class="si">}</span><span class="s2"> video cue(s) point at outputs this node doesn't"</span>
+                <span class="s2">" drive; see UNROUTED_VIDEO_OUTPUT (and DISPLAY_MISMATCH at"</span>
+                <span class="s2">" node start)"</span>
+            <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Unrouted video output check skipped (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">);"</span>
+            <span class="s2">" the load goes on"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="n">found</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.NodeEngine.NodeEngine.deploy_media" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">deploy_media</span><span class="p">(</span><span class="n">project</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Deploy the media files (and their .idx sidecar indexes).</p>
+<p>Best-effort: a failure here is recoverable if media is already
+cached on disk. Returns False to surface the failure to logs,
+but the caller continues the load.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">939</span>
+<span class="normal">940</span>
+<span class="normal">941</span>
+<span class="normal">942</span>
+<span class="normal">943</span>
+<span class="normal">944</span>
+<span class="normal">945</span>
+<span class="normal">946</span>
+<span class="normal">947</span>
+<span class="normal">948</span>
+<span class="normal">949</span>
+<span class="normal">950</span>
+<span class="normal">951</span>
+<span class="normal">952</span>
+<span class="normal">953</span>
+<span class="normal">954</span>
+<span class="normal">955</span>
+<span class="normal">956</span>
+<span class="normal">957</span>
+<span class="normal">958</span>
+<span class="normal">959</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_media</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Deploy the media files (and their .idx sidecar indexes).</span>
+
+<span class="sd">    Best-effort: a failure here is recoverable if media is already</span>
+<span class="sd">    cached on disk. Returns False to surface the failure to logs,</span>
+<span class="sd">    but the caller continues the load.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">:</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"No script loaded"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">bare_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="o">.</span><span class="n">get_own_media_filenames</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cm</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bare_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"No media files to deploy"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">deploy_manager</span><span class="o">.</span><span class="n">sync_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="s2">"media"</span><span class="p">,</span> <span class="n">bare_names</span><span class="p">):</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Media deploy failed for </span><span class="si">{</span><span class="n">project</span><span class="si">}</span><span class="s2"> — continuing with cached "</span>
+            <span class="sa">f</span><span class="s2">"files; cues whose media is missing locally will fail on GO"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">True</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.NodeEngine.NodeEngine.deploy_project" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">deploy_project</span><span class="p">(</span><span class="n">project</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Deploy the project files (script.xml, mappings.xml, settings.xml).</p>
+<p>Critical path: if these fail to sync, the local copy may be stale
+and arming cues against it is unsafe. Caller is expected to abort
+the load on False.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">930</span>
+<span class="normal">931</span>
+<span class="normal">932</span>
+<span class="normal">933</span>
+<span class="normal">934</span>
+<span class="normal">935</span>
+<span class="normal">936</span>
+<span class="normal">937</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Deploy the project files (script.xml, mappings.xml, settings.xml).</span>
+
+<span class="sd">    Critical path: if these fail to sync, the local copy may be stale</span>
+<span class="sd">    and arming cues against it is unsafe. Caller is expected to abort</span>
+<span class="sd">    the load on False.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">deploy_manager</span><span class="o">.</span><span class="n">sync_files</span><span class="p">(</span><span class="n">project</span><span class="p">,</span> <span class="s2">"project"</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.NodeEngine.NodeEngine.ensure_video_indexes" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">ensure_video_indexes</span><span class="p">()</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run cuems-videoindexer on any video files that are missing a .idx
+sidecar.</p>
+<p>This is a safety net for files that were copied manually or deployed to
+a
+node that never ran the editor upload hook. For normally-uploaded files
+the
+index was already created by the editor and this is a no-op.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1067</span>
+<span class="normal">1068</span>
+<span class="normal">1069</span>
+<span class="normal">1070</span>
+<span class="normal">1071</span>
+<span class="normal">1072</span>
+<span class="normal">1073</span>
+<span class="normal">1074</span>
+<span class="normal">1075</span>
+<span class="normal">1076</span>
+<span class="normal">1077</span>
+<span class="normal">1078</span>
+<span class="normal">1079</span>
+<span class="normal">1080</span>
+<span class="normal">1081</span>
+<span class="normal">1082</span>
+<span class="normal">1083</span>
+<span class="normal">1084</span>
+<span class="normal">1085</span>
+<span class="normal">1086</span>
+<span class="normal">1087</span>
+<span class="normal">1088</span>
+<span class="normal">1089</span>
+<span class="normal">1090</span>
+<span class="normal">1091</span>
+<span class="normal">1092</span>
+<span class="normal">1093</span>
+<span class="normal">1094</span>
+<span class="normal">1095</span>
+<span class="normal">1096</span>
+<span class="normal">1097</span>
+<span class="normal">1098</span>
+<span class="normal">1099</span>
+<span class="normal">1100</span>
+<span class="normal">1101</span>
+<span class="normal">1102</span>
+<span class="normal">1103</span>
+<span class="normal">1104</span>
+<span class="normal">1105</span>
+<span class="normal">1106</span>
+<span class="normal">1107</span>
+<span class="normal">1108</span>
+<span class="normal">1109</span>
+<span class="normal">1110</span>
+<span class="normal">1111</span>
+<span class="normal">1112</span>
+<span class="normal">1113</span>
+<span class="normal">1114</span>
+<span class="normal">1115</span>
+<span class="normal">1116</span>
+<span class="normal">1117</span>
+<span class="normal">1118</span>
+<span class="normal">1119</span>
+<span class="normal">1120</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ensure_video_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Run cuems-videoindexer on any video files that are missing a .idx</span>
 <span class="sd">    sidecar.</span>
@@ -11023,44 +11352,44 @@ logs but does not abort (cached media may already be on disk).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1520</span>
-<span class="normal">1521</span>
-<span class="normal">1522</span>
-<span class="normal">1523</span>
-<span class="normal">1524</span>
-<span class="normal">1525</span>
-<span class="normal">1526</span>
-<span class="normal">1527</span>
-<span class="normal">1528</span>
-<span class="normal">1529</span>
-<span class="normal">1530</span>
-<span class="normal">1531</span>
-<span class="normal">1532</span>
-<span class="normal">1533</span>
-<span class="normal">1534</span>
-<span class="normal">1535</span>
-<span class="normal">1536</span>
-<span class="normal">1537</span>
-<span class="normal">1538</span>
-<span class="normal">1539</span>
-<span class="normal">1540</span>
-<span class="normal">1541</span>
-<span class="normal">1542</span>
-<span class="normal">1543</span>
-<span class="normal">1544</span>
-<span class="normal">1545</span>
-<span class="normal">1546</span>
-<span class="normal">1547</span>
-<span class="normal">1548</span>
-<span class="normal">1549</span>
-<span class="normal">1550</span>
-<span class="normal">1551</span>
-<span class="normal">1552</span>
-<span class="normal">1553</span>
-<span class="normal">1554</span>
-<span class="normal">1555</span>
-<span class="normal">1556</span>
-<span class="normal">1557</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1593</span>
+<span class="normal">1594</span>
+<span class="normal">1595</span>
+<span class="normal">1596</span>
+<span class="normal">1597</span>
+<span class="normal">1598</span>
+<span class="normal">1599</span>
+<span class="normal">1600</span>
+<span class="normal">1601</span>
+<span class="normal">1602</span>
+<span class="normal">1603</span>
+<span class="normal">1604</span>
+<span class="normal">1605</span>
+<span class="normal">1606</span>
+<span class="normal">1607</span>
+<span class="normal">1608</span>
+<span class="normal">1609</span>
+<span class="normal">1610</span>
+<span class="normal">1611</span>
+<span class="normal">1612</span>
+<span class="normal">1613</span>
+<span class="normal">1614</span>
+<span class="normal">1615</span>
+<span class="normal">1616</span>
+<span class="normal">1617</span>
+<span class="normal">1618</span>
+<span class="normal">1619</span>
+<span class="normal">1620</span>
+<span class="normal">1621</span>
+<span class="normal">1622</span>
+<span class="normal">1623</span>
+<span class="normal">1624</span>
+<span class="normal">1625</span>
+<span class="normal">1626</span>
+<span class="normal">1627</span>
+<span class="normal">1628</span>
+<span class="normal">1629</span>
+<span class="normal">1630</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Check if the script is ready to be played.</span>
 
 <span class="sd">    ``reason`` is passed to disarm_all so its log names the caller</span>
@@ -11445,52 +11774,52 @@ half that stops the delay from happening in the first place.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1228</span>
-<span class="normal">1229</span>
-<span class="normal">1230</span>
-<span class="normal">1231</span>
-<span class="normal">1232</span>
-<span class="normal">1233</span>
-<span class="normal">1234</span>
-<span class="normal">1235</span>
-<span class="normal">1236</span>
-<span class="normal">1237</span>
-<span class="normal">1238</span>
-<span class="normal">1239</span>
-<span class="normal">1240</span>
-<span class="normal">1241</span>
-<span class="normal">1242</span>
-<span class="normal">1243</span>
-<span class="normal">1244</span>
-<span class="normal">1245</span>
-<span class="normal">1246</span>
-<span class="normal">1247</span>
-<span class="normal">1248</span>
-<span class="normal">1249</span>
-<span class="normal">1250</span>
-<span class="normal">1251</span>
-<span class="normal">1252</span>
-<span class="normal">1253</span>
-<span class="normal">1254</span>
-<span class="normal">1255</span>
-<span class="normal">1256</span>
-<span class="normal">1257</span>
-<span class="normal">1258</span>
-<span class="normal">1259</span>
-<span class="normal">1260</span>
-<span class="normal">1261</span>
-<span class="normal">1262</span>
-<span class="normal">1263</span>
-<span class="normal">1264</span>
-<span class="normal">1265</span>
-<span class="normal">1266</span>
-<span class="normal">1267</span>
-<span class="normal">1268</span>
-<span class="normal">1269</span>
-<span class="normal">1270</span>
-<span class="normal">1271</span>
-<span class="normal">1272</span>
-<span class="normal">1273</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_next_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1301</span>
+<span class="normal">1302</span>
+<span class="normal">1303</span>
+<span class="normal">1304</span>
+<span class="normal">1305</span>
+<span class="normal">1306</span>
+<span class="normal">1307</span>
+<span class="normal">1308</span>
+<span class="normal">1309</span>
+<span class="normal">1310</span>
+<span class="normal">1311</span>
+<span class="normal">1312</span>
+<span class="normal">1313</span>
+<span class="normal">1314</span>
+<span class="normal">1315</span>
+<span class="normal">1316</span>
+<span class="normal">1317</span>
+<span class="normal">1318</span>
+<span class="normal">1319</span>
+<span class="normal">1320</span>
+<span class="normal">1321</span>
+<span class="normal">1322</span>
+<span class="normal">1323</span>
+<span class="normal">1324</span>
+<span class="normal">1325</span>
+<span class="normal">1326</span>
+<span class="normal">1327</span>
+<span class="normal">1328</span>
+<span class="normal">1329</span>
+<span class="normal">1330</span>
+<span class="normal">1331</span>
+<span class="normal">1332</span>
+<span class="normal">1333</span>
+<span class="normal">1334</span>
+<span class="normal">1335</span>
+<span class="normal">1336</span>
+<span class="normal">1337</span>
+<span class="normal">1338</span>
+<span class="normal">1339</span>
+<span class="normal">1340</span>
+<span class="normal">1341</span>
+<span class="normal">1342</span>
+<span class="normal">1343</span>
+<span class="normal">1344</span>
+<span class="normal">1345</span>
+<span class="normal">1346</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_next_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Handle setnextcue command from the UI — override next_cue_pointer.</span>
 
@@ -11874,51 +12203,51 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1790</span>
-<span class="normal">1791</span>
-<span class="normal">1792</span>
-<span class="normal">1793</span>
-<span class="normal">1794</span>
-<span class="normal">1795</span>
-<span class="normal">1796</span>
-<span class="normal">1797</span>
-<span class="normal">1798</span>
-<span class="normal">1799</span>
-<span class="normal">1800</span>
-<span class="normal">1801</span>
-<span class="normal">1802</span>
-<span class="normal">1803</span>
-<span class="normal">1804</span>
-<span class="normal">1805</span>
-<span class="normal">1806</span>
-<span class="normal">1807</span>
-<span class="normal">1808</span>
-<span class="normal">1809</span>
-<span class="normal">1810</span>
-<span class="normal">1811</span>
-<span class="normal">1812</span>
-<span class="normal">1813</span>
-<span class="normal">1814</span>
-<span class="normal">1815</span>
-<span class="normal">1816</span>
-<span class="normal">1817</span>
-<span class="normal">1818</span>
-<span class="normal">1819</span>
-<span class="normal">1820</span>
-<span class="normal">1821</span>
-<span class="normal">1822</span>
-<span class="normal">1823</span>
-<span class="normal">1824</span>
-<span class="normal">1825</span>
-<span class="normal">1826</span>
-<span class="normal">1827</span>
-<span class="normal">1828</span>
-<span class="normal">1829</span>
-<span class="normal">1830</span>
-<span class="normal">1831</span>
-<span class="normal">1832</span>
-<span class="normal">1833</span>
-<span class="normal">1834</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1863</span>
+<span class="normal">1864</span>
+<span class="normal">1865</span>
+<span class="normal">1866</span>
+<span class="normal">1867</span>
+<span class="normal">1868</span>
+<span class="normal">1869</span>
+<span class="normal">1870</span>
+<span class="normal">1871</span>
+<span class="normal">1872</span>
+<span class="normal">1873</span>
+<span class="normal">1874</span>
+<span class="normal">1875</span>
+<span class="normal">1876</span>
+<span class="normal">1877</span>
+<span class="normal">1878</span>
+<span class="normal">1879</span>
+<span class="normal">1880</span>
+<span class="normal">1881</span>
+<span class="normal">1882</span>
+<span class="normal">1883</span>
+<span class="normal">1884</span>
+<span class="normal">1885</span>
+<span class="normal">1886</span>
+<span class="normal">1887</span>
+<span class="normal">1888</span>
+<span class="normal">1889</span>
+<span class="normal">1890</span>
+<span class="normal">1891</span>
+<span class="normal">1892</span>
+<span class="normal">1893</span>
+<span class="normal">1894</span>
+<span class="normal">1895</span>
+<span class="normal">1896</span>
+<span class="normal">1897</span>
+<span class="normal">1898</span>
+<span class="normal">1899</span>
+<span class="normal">1900</span>
+<span class="normal">1901</span>
+<span class="normal">1902</span>
+<span class="normal">1903</span>
+<span class="normal">1904</span>
+<span class="normal">1905</span>
+<span class="normal">1906</span>
+<span class="normal">1907</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stop playback, full cleanup, then re-arm so GO is available again.</span>
 
 <span class="sd">    Does the cleanup that ready_script() doesn't handle (DMX blackout,</span>
@@ -12080,15 +12409,15 @@ nothing.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1845</span>
-<span class="normal">1846</span>
-<span class="normal">1847</span>
-<span class="normal">1848</span>
-<span class="normal">1849</span>
-<span class="normal">1850</span>
-<span class="normal">1851</span>
-<span class="normal">1852</span>
-<span class="normal">1853</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1918</span>
+<span class="normal">1919</span>
+<span class="normal">1920</span>
+<span class="normal">1921</span>
+<span class="normal">1922</span>
+<span class="normal">1923</span>
+<span class="normal">1924</span>
+<span class="normal">1925</span>
+<span class="normal">1926</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio command to the audio player"""</span>
     <span class="k">if</span> <span class="n">path_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"mixer"</span><span class="p">:</span>
         <span class="n">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">value</span><span class="p">)</span>
@@ -12127,20 +12456,20 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1856</span>
-<span class="normal">1857</span>
-<span class="normal">1858</span>
-<span class="normal">1859</span>
-<span class="normal">1860</span>
-<span class="normal">1861</span>
-<span class="normal">1862</span>
-<span class="normal">1863</span>
-<span class="normal">1864</span>
-<span class="normal">1865</span>
-<span class="normal">1866</span>
-<span class="normal">1867</span>
-<span class="normal">1868</span>
-<span class="normal">1869</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1929</span>
+<span class="normal">1930</span>
+<span class="normal">1931</span>
+<span class="normal">1932</span>
+<span class="normal">1933</span>
+<span class="normal">1934</span>
+<span class="normal">1935</span>
+<span class="normal">1936</span>
+<span class="normal">1937</span>
+<span class="normal">1938</span>
+<span class="normal">1939</span>
+<span class="normal">1940</span>
+<span class="normal">1941</span>
+<span class="normal">1942</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;output_index&gt;/master/volume -&gt; /audiomixer/0_mixer/master</span>
@@ -12228,26 +12557,26 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1872</span>
-<span class="normal">1873</span>
-<span class="normal">1874</span>
-<span class="normal">1875</span>
-<span class="normal">1876</span>
-<span class="normal">1877</span>
-<span class="normal">1878</span>
-<span class="normal">1879</span>
-<span class="normal">1880</span>
-<span class="normal">1881</span>
-<span class="normal">1882</span>
-<span class="normal">1883</span>
-<span class="normal">1884</span>
-<span class="normal">1885</span>
-<span class="normal">1886</span>
-<span class="normal">1887</span>
-<span class="normal">1888</span>
-<span class="normal">1889</span>
-<span class="normal">1890</span>
-<span class="normal">1891</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1945</span>
+<span class="normal">1946</span>
+<span class="normal">1947</span>
+<span class="normal">1948</span>
+<span class="normal">1949</span>
+<span class="normal">1950</span>
+<span class="normal">1951</span>
+<span class="normal">1952</span>
+<span class="normal">1953</span>
+<span class="normal">1954</span>
+<span class="normal">1955</span>
+<span class="normal">1956</span>
+<span class="normal">1957</span>
+<span class="normal">1958</span>
+<span class="normal">1959</span>
+<span class="normal">1960</span>
+<span class="normal">1961</span>
+<span class="normal">1962</span>
+<span class="normal">1963</span>
+<span class="normal">1964</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;cue_uuid&gt;/master/volume -&gt; /volmaster</span>
@@ -12289,12 +12618,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1894</span>
-<span class="normal">1895</span>
-<span class="normal">1896</span>
-<span class="normal">1897</span>
-<span class="normal">1898</span>
-<span class="normal">1899</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1967</span>
+<span class="normal">1968</span>
+<span class="normal">1969</span>
+<span class="normal">1970</span>
+<span class="normal">1971</span>
+<span class="normal">1972</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the DMX command to the DMX player"""</span>
     <span class="n">dmx_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"mixer"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 to skip the 'mixer' keyword</span>
     <span class="n">dmx_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">dmx_index</span><span class="p">:])</span>
@@ -12322,12 +12651,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1902</span>
-<span class="normal">1903</span>
-<span class="normal">1904</span>
-<span class="normal">1905</span>
-<span class="normal">1906</span>
-<span class="normal">1907</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1975</span>
+<span class="normal">1976</span>
+<span class="normal">1977</span>
+<span class="normal">1978</span>
+<span class="normal">1979</span>
+<span class="normal">1980</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the video command to the video client"""</span>
     <span class="n">videocomposer_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"videocomposer"</span><span class="p">)</span>
     <span class="n">videocomposer_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">videocomposer_index</span><span class="p">:])</span>
