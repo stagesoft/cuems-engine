@@ -208,6 +208,7 @@ class PlayerHandler:
     _media_folder: str
     _node_uuid: str | None
     _media_dims_cache: dict
+    _unrouted_warned: set
 
     def __new__(cls, *args, **kwargs):
         """Singleton pattern: Ensure only one instance is created"""
@@ -235,6 +236,9 @@ class PlayerHandler:
             # Files whose stored dimensions were missing or stale, already
             # warned about once (cue_media_dimensions).
             cls._instance._media_dims_warned = set()
+            # (cue id, output name) pairs whose "output not driven" error was
+            # already logged in this load (869fgq3xv); cleared at each load.
+            cls._instance._unrouted_warned = set()
         return cls._instance
 
     # ---------------------------
@@ -290,6 +294,7 @@ class PlayerHandler:
             self._loaded_layer_ids.clear()
             self._media_dims_cache = {}
             self._media_dims_warned = set()
+            self._unrouted_warned = set()
 
     # ---------------------------
     # Audio Player Management
@@ -900,6 +905,67 @@ class PlayerHandler:
                 raise KeyError(f"No VideoCueOutput match for {full}")
             return self.make_custom_video_output(cue_output)
         return self._video_outputs[output_name]
+
+    def partition_cue_outputs(
+        self, cue, output_names: list
+    ) -> tuple[list[tuple[int, str, VideoOutput]], list[tuple[str, str]]]:
+        """Split a video cue's outputs into the ones this node drives and the
+        ones it doesn't (869fgq3xv).
+
+        Returns ``(routed, unrouted)``: ``routed`` holds ``(index, output_name,
+        VideoOutput)`` with the output's position in ``output_names`` (layer
+        ids are built from it), ``unrouted`` holds ``(output_name, reason)``.
+
+        An output is unrouted when it does not resolve: an alias this node
+        dropped at start (no region in display.conf, DISPLAY_MISMATCH), a
+        custom region with no VideoCueOutput, no canvas at all. Anything else
+        the resolver raises (a malformed custom region, cue.outputs None) is
+        unrouted too, with its traceback: with no resolved output there is no
+        right place to paint the layer, and the videocomposer's default
+        placement is the whole canvas, i.e. the other screens.
+
+        The one function behind both the arm and the load-time preflight, so
+        the two can never disagree. Never raises.
+        """
+        routed, unrouted = [], []
+        for index, output_name in enumerate(output_names):
+            try:
+                output = self.resolve_video_output_for_cue(cue, output_name)
+            except (KeyError, RuntimeError) as e:
+                unrouted.append((output_name, f"{type(e).__name__}: {e}"))
+                continue
+            except Exception as e:
+                Logger.exception(
+                    f'Unexpected error resolving output "{output_name}" of video'
+                    f" cue {cue.id}; treated as not driven by this node"
+                )
+                unrouted.append((output_name, f"unexpected {type(e).__name__}: {e}"))
+                continue
+            routed.append((index, output_name, output))
+        return routed, unrouted
+
+    def driven_video_outputs(self) -> list[str]:
+        """The outputs this node drives, as ``id=connector``, for log lines."""
+        return [
+            f"{name}={getattr(output, 'mapped_to', '?')}"
+            for name, output in sorted(self._video_outputs.items())
+        ]
+
+    def first_unrouted_report(self, cue_id, output_name) -> bool:
+        """True the first time a (cue, output) is reported unrouted in this
+        load, so the arm logs it at ERROR once and every re-arm (STOP, loop,
+        enable, go() fallback) at DEBUG."""
+        key = (str(cue_id), output_name)
+        with self._lock:
+            if key in self._unrouted_warned:
+                return False
+            self._unrouted_warned.add(key)
+            return True
+
+    def reset_unrouted_warnings(self) -> None:
+        """Forget which unrouted outputs were reported (called at each load)."""
+        with self._lock:
+            self._unrouted_warned = set()
 
     def register_layer(self, layer_id: str) -> None:
         """Track a layer as active in the videocomposer."""

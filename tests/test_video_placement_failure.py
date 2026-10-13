@@ -8,6 +8,11 @@ The cue still arms and plays (a wrong-sized video beats no video in a live
 show), but the failure is logged at ERROR naming the cue, the layer and the
 output, and recorded in cue._placement_failed, which every arm resets
 (869f8hfra).
+
+This covers outputs that RESOLVE but whose position/scale send fails. An
+output that does not resolve at all ("no output match") is no longer loaded:
+its default placement lands on the other screens (869fgq3xv, see
+tests/test_video_unrouted_output.py).
 """
 
 from __future__ import annotations
@@ -68,6 +73,15 @@ def _error_messages(logger):
 NO_OUTPUT = {"side_effect": KeyError("No VideoCueOutput match for output-0")}
 
 
+def _failing_placement():
+    """An output that resolves, but whose placement raises (e.g. a
+    canvas_region missing a key)."""
+    output = MagicMock()
+    output.get_layer_placement.side_effect = KeyError("width")
+    output.get_layer_scale.return_value = (0.5, 0.5)
+    return {"return_value": output}
+
+
 def _working_output():
     output = MagicMock()
     output.get_layer_placement.return_value = (0, 0)
@@ -78,7 +92,7 @@ def _working_output():
 class TestArmPlacementFailure:
     def test_failure_is_logged_at_error_with_cue_layer_and_output(self):
         cue = _make_video_cue()
-        _, logger = _arm(cue, NO_OUTPUT)
+        _, logger = _arm(cue, _failing_placement())
         layer_id = cue._layer_ids[0]
         errors = [m for m in _error_messages(logger) if "NOT applied" in m]
         assert len(errors) == 1
@@ -89,7 +103,7 @@ class TestArmPlacementFailure:
 
     def test_failure_is_recorded_on_the_cue_and_the_cue_still_arms(self):
         cue = _make_video_cue()
-        _arm(cue, NO_OUTPUT)
+        _arm(cue, _failing_placement())
         assert cue._placement_failed == [cue._layer_ids[0]]
         assert len(cue._layer_ids) == 1
 
@@ -105,6 +119,7 @@ class TestRunPlacementFailure:
     def test_reapply_failure_is_logged_at_error_and_recorded(self):
         cue = _make_video_cue()
         cue._layer_ids = ["layer_0"]
+        cue._layer_outputs = {"layer_0": "output-0"}
         cue._osc = MagicMock()
         cue._placement_failed = []
         logger = _run(cue, NO_OUTPUT)
@@ -117,6 +132,7 @@ class TestRunPlacementFailure:
     def test_reapply_failure_without_a_prior_arm_record_does_not_crash(self):
         cue = _make_video_cue()
         cue._layer_ids = ["layer_0"]
+        cue._layer_outputs = {"layer_0": "output-0"}
         cue._osc = MagicMock()
         _run(cue, NO_OUTPUT)
         assert cue._placement_failed == ["layer_0"]
@@ -124,6 +140,7 @@ class TestRunPlacementFailure:
     def test_successful_reapply_clears_the_arm_failure(self):
         cue = _make_video_cue()
         cue._layer_ids = ["layer_0"]
+        cue._layer_outputs = {"layer_0": "output-0"}
         cue._osc = MagicMock()
         cue._placement_failed = ["layer_0"]
         _run(cue, _working_output())

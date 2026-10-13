@@ -8,7 +8,7 @@ import subprocess
 import threading
 from time import sleep
 
-from cuemsutils.cues import CueList
+from cuemsutils.cues import CueList, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
@@ -902,6 +902,11 @@ class NodeEngine(BaseEngine):
         # Obtain the project files (this replaces self.script with new project)
         self.ready_project(project)
 
+        # Name the video cues aimed at outputs this node doesn't drive, before
+        # anything arms. Here and not in ready_project: that one is also the
+        # `deploy` bus command, which can arrive mid-show.
+        self.check_unrouted_video_outputs()
+
         # Prepare the script to be played (arms new cues)
         self.ready_script(reason="load")
 
@@ -989,6 +994,74 @@ class NodeEngine(BaseEngine):
                     "stored duration is kept so the nodes stay in step; re-sync it, "
                     f"or re-upload it in the editor.{sync}"
                 )
+        return found
+
+    def check_unrouted_video_outputs(self) -> list:
+        """Name every enabled video cue of this node that points at an output
+        this node doesn't drive (869fgq3xv). Log only.
+
+        Such an output is never loaded (arm_videoCue), so the cue stays dark
+        there; this says so at load, before the show, instead of on the
+        screens. Also starts the load's once-only arm errors afresh. Uses the
+        same PlayerHandler.partition_cue_outputs as the arm, so the two cannot
+        disagree. Never raises: the previous project is already torn down.
+        """
+        PLAYER_HANDLER.reset_unrouted_warnings()
+        found = []
+        try:
+            video_cues = []
+            for cue_id, output_names in (self.outputs_map or {}).items():
+                cue = self.script.find(cue_id)
+                # outputs_map holds every MediaCue of this node, audio and
+                # disabled cues included.
+                if isinstance(cue, VideoCue) and getattr(cue, "enabled", True):
+                    video_cues.append((cue, output_names))
+            if not video_cues:
+                return found
+
+            if PLAYER_HANDLER.get_video_client() is None:
+                # set_video_players returned early: every video cue fails at
+                # arm ("No video client"), for a reason that is not the cue's.
+                Logger.warning(
+                    f"no video stack on this node: {len(video_cues)} video cue(s)"
+                    " will not play here"
+                )
+                return found
+
+            driven = PLAYER_HANDLER.driven_video_outputs()
+            for cue, output_names in video_cues:
+                _, unrouted = PLAYER_HANDLER.partition_cue_outputs(cue, output_names)
+                if not unrouted:
+                    continue
+                found.append(
+                    {
+                        "cue_id": cue.id,
+                        "cue_name": getattr(cue, "name", ""),
+                        "outputs": [
+                            {"output": name, "reason": reason}
+                            for name, reason in unrouted
+                        ],
+                    }
+                )
+                cue_name = getattr(cue, "name", "")
+                for output_name, reason in unrouted:
+                    Logger.warning(
+                        f'UNROUTED_VIDEO_OUTPUT: cue {cue.id} "{cue_name}"'
+                        f' → output "{output_name}" not driven by this node ({reason});'
+                        f" it will stay dark. Driven outputs: {driven}"
+                    )
+            if found:
+                Logger.warning(
+                    f"{len(found)} video cue(s) point at outputs this node doesn't"
+                    " drive; see UNROUTED_VIDEO_OUTPUT (and DISPLAY_MISMATCH at"
+                    " node start)"
+                )
+        except Exception as e:
+            Logger.exception(
+                f"Unrouted video output check skipped ({type(e).__name__}: {e});"
+                " the load goes on"
+            )
+            return []
         return found
 
     def ensure_video_indexes(self):

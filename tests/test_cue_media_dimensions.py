@@ -199,6 +199,7 @@ class TestCallSites:
 
         cue = _cue(pixel_width=3840, pixel_height=2160, file_size=1000)
         cue._layer_ids = [f"{cue.id}_0"]
+        cue._layer_outputs = {f"{cue.id}_0": "output-0"}
         cue._osc = MagicMock()
         cue._placement_failed = []
         output = _working_output()
