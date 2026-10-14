@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """Unit tests for arm_videoCue's opacity deploy step.
 
@@ -28,6 +29,13 @@ def _make_video_cue(opacity: int | None = None) -> VideoCue:
     return cue
 
 
+def _working_output():
+    output = MagicMock()
+    output.get_layer_placement.return_value = (0, 0)
+    output.get_layer_scale.return_value = (0.5, 0.5)
+    return output
+
+
 def _arm(cue, output_names=("output-0",)):
     from cuemsengine.cues.arm_cue import arm_videoCue
     from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
@@ -40,10 +48,12 @@ def _arm(cue, output_names=("output-0",)):
         ),
         patch.object(PLAYER_HANDLER, "media_path", return_value="/media/clip.mp4"),
         patch.object(PLAYER_HANDLER, "media_dimensions", return_value=(1920, 1080)),
+        # A resolvable output: since 869fgq3xv an output that does not
+        # resolve is not loaded at all, and these tests need the layer.
         patch.object(
             PLAYER_HANDLER,
             "resolve_video_output_for_cue",
-            side_effect=RuntimeError("no output mapping in this test"),
+            return_value=_working_output(),
         ),
         patch.object(PLAYER_HANDLER, "register_layer"),
     ):

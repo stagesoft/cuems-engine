@@ -19,9 +19,17 @@ File format is INI-like:
     canvas_region=0,0,1920,1080
     resolution=1920x1080         # optional
     refresh=60.0                 # optional
+    enabled=false                # optional; leaves the output dark
 
-The engine consumes `canvas_region` and the optional global `canvas_size`
-override; resolution + refresh are read by the videocomposer directly.
+The engine consumes `canvas_region`, `enabled` and the optional global
+`canvas_size` override; resolution + refresh are read by the videocomposer
+directly.
+
+An output with `enabled` set to anything but `true`/`1` gets no surface and
+stays out of the videocomposer's canvas even when it keeps a canvas_region, so
+the engine leaves it out too (869fgq3xv). Otherwise the engine would route
+cues to a dark output and compute a wider canvas than the videocomposer's,
+placing every layer wrong.
 """
 
 import configparser
@@ -73,6 +81,35 @@ def _parse_canvas_size_override(preamble: str) -> Optional[Tuple[int, int]]:
     return (w, h)
 
 
+def _disabled_outputs(sectioned: str) -> set:
+    """Connectors the videocomposer treats as disabled.
+
+    Read exactly the way DisplayConfigurationManager::loadFromFile reads it,
+    because an engine that disagrees with the videocomposer about which
+    outputs exist is the defect this guards against: no trimming, a line
+    starting with "[output:" opens a section (any other header does not close
+    it), the key is everything before the first '=', and only "true" or "1"
+    keep an output on; the last `enabled=` line wins. So "enabled = false",
+    whose key is "enabled ", is ignored by both, and "enabled=True" disables.
+    """
+    enabled: dict = {}
+    current = None
+    for line in sectioned.split("\n"):
+        if not line or line[0] == "#":
+            continue
+        if line.startswith("[output:"):
+            end = line.find("]")
+            if end != -1:
+                current = line[len("[output:") : end]
+            continue
+        eq = line.find("=")
+        if eq == -1 or current is None:
+            continue
+        if line[:eq] == "enabled":
+            enabled[current] = line[eq + 1 :] in ("true", "1")
+    return {connector for connector, on in enabled.items() if not on}
+
+
 def read_display_conf(
     path: str = DEFAULT_DISPLAY_CONF,
 ) -> Tuple[dict, Tuple[int, int]]:
@@ -90,7 +127,7 @@ def read_display_conf(
     Raises:
 
     - ``DisplayConfNotFoundError`` if the file is missing or has no
-      ``[output:*]`` sections.
+      enabled ``[output:*]`` section with a valid canvas_region.
     - ``DisplayConfValueError`` if ``canvas_size=`` is malformed, has
       non-positive values, or is smaller than the per-region bbox.
     """
@@ -119,8 +156,12 @@ def read_display_conf(
         sectioned = ""
 
     canvas_override = _parse_canvas_size_override(preamble)
+    disabled = _disabled_outputs(sectioned)
 
-    parser = configparser.ConfigParser()
+    # strict=False: a repeated key (two `enabled=` lines) is legal for the
+    # videocomposer, which keeps the last one; strict mode would raise and
+    # take the whole read down with it.
+    parser = configparser.ConfigParser(strict=False)
     parser.optionxform = str  # preserve key case for forward-compat keys
     if sectioned:
         parser.read_string(sectioned)
@@ -130,6 +171,8 @@ def read_display_conf(
         if not section.startswith("output:"):
             continue
         connector = section[len("output:") :]
+        if connector in disabled:
+            continue
         raw = parser.get(section, "canvas_region", fallback=None)
         if raw is None:
             continue
@@ -145,7 +188,7 @@ def read_display_conf(
     if not regions:
         raise DisplayConfNotFoundError(
             f"display.conf at {path} has no [output:*] sections with a "
-            "valid canvas_region"
+            "valid canvas_region (disabled outputs do not count)"
         )
 
     bbox_w = max(r["x"] + r["width"] for r in regions.values())
