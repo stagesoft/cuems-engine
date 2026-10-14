@@ -1,3 +1,29 @@
+cuems-engine (0.1.0rc6-4) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm:
+    - 869ebkkme, 869dr2kzh (#32): node adoption from the UI. The engine
+      relays nodelist_modify to cuems-nodeconf, refusing at once when
+      nodeconf is not running and while a project is running or loaded.
+      /engine/status/cluster_warning tells the UI which project nodes are
+      missing or unreachable at load; it warns and never blocks GO.
+      project_status tells a stopped project from no project and returns
+      its uuid; a failed load no longer leaves the previous project's name
+      on the wire. Pairs with cuems-editor 0.1.0rc1-7.
+    - 869fgq3xv (#33): a video cue aimed at an output the node does not
+      drive (dropped at start: no region in display.conf, or
+      enabled=false) is no longer loaded. It stays dark instead of being
+      letterboxed across the working screens, keeps its place on the
+      timeline (Auto follows, cross-node announces and loops are timed as
+      if it played), and is logged as UNROUTED_VIDEO_OUTPUT at every load.
+      The shared decoder moves to the first output that is driven.
+      display.conf enabled= is read exactly as the videocomposer reads it.
+      Behaviour change: such cues go from mis-placed to dark; grep the
+      node journal for UNROUTED_VIDEO_OUTPUT after the first load. The
+      engine reads display.conf only at start: after a hand edit, restart
+      the videocomposer AND the node engine.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 14 Oct 2026 19:03:55 +0200
+
 cuems-engine (0.1.0rc6-3) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:

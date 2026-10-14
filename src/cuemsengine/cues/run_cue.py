@@ -441,10 +441,13 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     Logger.info(f"Running video cue {cue.id}")
 
     layer_ids = getattr(cue, "_layer_ids", [])
-    if not layer_ids or cue._osc is None:
-        Logger.error(f"Video cue {cue.id} has no layers or no OSC client")
-        return
 
+    # The timeline is stamped BEFORE the layer check (869fgq3xv): a cue with
+    # no layers on this node (every output dark) still has a body. Downstream
+    # reads _start_mtc/_end_mtc: the Auto-follow instant and its cross-node
+    # announce (CueHandler._follow_instant_ms), the reveal wait, loop_videoCue.
+    # Left at their zero defaults, a go_at_end follow fired at start+postwait
+    # cluster-wide and an infinite loop re-based in a tight loop.
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f"VideoCue {cue.id} using frozen MTC: {mtc_ms}ms")
@@ -463,6 +466,17 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     )
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
+
+    if not layer_ids or getattr(cue, "_osc", None) is None:
+        unrouted = getattr(cue, "_unrouted_outputs", None)
+        if not layer_ids and unrouted:
+            Logger.info(
+                f"Video cue {cue.id} is dark on this node (outputs not driven:"
+                f" {unrouted}); timeline kept, nothing sent"
+            )
+        else:
+            Logger.error(f"Video cue {cue.id} has no layers or no OSC client")
+        return
 
     client = cue._osc
 
@@ -491,16 +505,23 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     loop_early = getattr(cue, "loop", 1) < 1
 
     # Re-apply position for each layer before making visible (layer may not
-    # have been ready when position was set during arm)
-    output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
+    # have been ready when position was set during arm). Each layer's output
+    # comes from the arm, by layer id: with an unrouted output skipped, layer
+    # i is no longer output i (869fgq3xv).
+    layer_outputs = getattr(cue, "_layer_outputs", None) or {}
     media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
 
-    for index, layer_id in enumerate(layer_ids):
+    for layer_id in layer_ids:
         layer_path = f"/videocomposer/layer/{layer_id}"
 
         # Re-apply canvas position from the output config
-        if index < len(output_names):
-            output_name = output_names[index]
+        output_name = layer_outputs.get(layer_id)
+        if output_name is None:
+            Logger.warning(
+                f"Video cue {cue.id} layer {layer_id}: no output recorded at arm;"
+                " placement re-apply skipped"
+            )
+        else:
             try:
                 output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()

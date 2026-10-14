@@ -287,3 +287,125 @@ canvas_region=1920,0,1920,1080
     )
     _regions, canvas = read_display_conf(path)
     assert canvas == (3840, 1080)
+
+
+# ---------------------------------------------------------------------------
+# enabled=false (869fgq3xv). The videocomposer leaves a disabled output out of
+# its canvas even when the section keeps its canvas_region
+# (DisplayConfigurationManager::generateOutputRegions), so the engine must too,
+# or it routes cues to a dead output and computes a wider canvas than the VC's.
+# The VC's reader is literal: a line that starts with exactly "enabled=", and
+# only "true" or "1" keeps the output on (DisplayConfigurationManager.cpp
+# loadFromFile). These tests pin the engine to the same reading.
+# ---------------------------------------------------------------------------
+
+_THREE = """\
+canvas_layout=custom
+
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+
+[output:HDMI-A-2]
+canvas_region=1920,0,1920,1080
+{line}
+
+[output:HDMI-A-3]
+canvas_region=3840,0,1920,1080
+"""
+
+
+def test_disabled_output_with_a_region_is_left_out(tmp_path):
+    path = _write(tmp_path, _THREE.format(line="enabled=false"))
+    regions, canvas = read_display_conf(path)
+    assert sorted(regions) == ["HDMI-A-1", "HDMI-A-3"]
+    assert canvas == (5760, 1080)
+
+
+def test_disabled_last_output_shrinks_the_bbox_canvas_like_the_vc(tmp_path):
+    path = _write(
+        tmp_path,
+        """\
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+
+[output:HDMI-A-2]
+canvas_region=1920,0,1920,1080
+enabled=false
+""",
+    )
+    regions, canvas = read_display_conf(path)
+    assert sorted(regions) == ["HDMI-A-1"]
+    assert canvas == (1920, 1080)
+
+
+@pytest.mark.parametrize("value", ["true", "1"])
+def test_enabled_true_or_1_keeps_the_output(tmp_path, value):
+    path = _write(tmp_path, _THREE.format(line=f"enabled={value}"))
+    regions, _ = read_display_conf(path)
+    assert "HDMI-A-2" in regions
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "off", "True", "TRUE", ""])
+def test_any_other_value_disables_the_output_like_the_vc(tmp_path, value):
+    path = _write(tmp_path, _THREE.format(line=f"enabled={value}"))
+    regions, _ = read_display_conf(path)
+    assert "HDMI-A-2" not in regions
+
+
+def test_spaced_enabled_key_is_ignored_like_the_vc(tmp_path):
+    """The VC splits on the first '=' without trimming: "enabled " is not
+    "enabled", so the key is ignored and the output stays on."""
+    path = _write(tmp_path, _THREE.format(line="enabled = false"))
+    regions, _ = read_display_conf(path)
+    assert "HDMI-A-2" in regions
+
+
+def test_last_enabled_line_wins(tmp_path):
+    path = _write(tmp_path, _THREE.format(line="enabled=false\nenabled=true"))
+    regions, _ = read_display_conf(path)
+    assert "HDMI-A-2" in regions
+
+
+def test_enabled_in_another_section_does_not_leak(tmp_path):
+    path = _write(
+        tmp_path,
+        """\
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+enabled=false
+
+[output:HDMI-A-2]
+canvas_region=1920,0,1920,1080
+""",
+    )
+    regions, _ = read_display_conf(path)
+    assert sorted(regions) == ["HDMI-A-2"]
+
+
+def test_disabled_without_a_region_is_still_absent(tmp_path):
+    """The shape on the taller rigs (2026-10-13): enabled=false, no region."""
+    path = _write(
+        tmp_path,
+        """\
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+
+[output:HDMI-A-2]
+enabled=false
+""",
+    )
+    regions, _ = read_display_conf(path)
+    assert sorted(regions) == ["HDMI-A-1"]
+
+
+def test_every_output_disabled_raises_like_an_empty_file(tmp_path):
+    path = _write(
+        tmp_path,
+        """\
+[output:HDMI-A-1]
+canvas_region=0,0,1920,1080
+enabled=false
+""",
+    )
+    with pytest.raises(DisplayConfNotFoundError):
+        read_display_conf(path)
