@@ -7,8 +7,7 @@
 
 Covers:
   - _collect_project_nodes (UUID extraction from cue output_names)
-  - status_operation_callback per-node aggregation (armed_ready +
-    - script_finished)
+  - status_operation_callback per-node aggregation (armed_ready)
   - foreign-sender filter
   - pong handling
   - _clear_playback_state + unload_project clearing
@@ -93,16 +92,6 @@ def _armed_ready_op(sender: str) -> NodeOperation:
         sender=sender,
         target="armed_ready",
         data={"armed": "yes"},
-    )
-
-
-def _script_finished_op(sender: str) -> NodeOperation:
-    return NodeOperation(
-        type=OperationType.STATUS,
-        action=ActionType.UPDATE,
-        sender=sender,
-        target="script_finished",
-        data={"running": "no"},
     )
 
 
@@ -217,27 +206,6 @@ class TestArmedReadyAggregation:
             start_tc.assert_called_once()
 
 
-# ─── status_operation_callback: script_finished aggregation ──────────────
-
-
-class TestScriptFinishedAggregation:
-    def test_running_stays_yes_until_all_required_report(self, controller):
-        controller.set_status("running", "yes")
-
-        controller.status_operation_callback(_script_finished_op(CONTROLLER_UUID))
-        assert controller.get_status("running") == "yes"
-        assert controller._finished_nodes == {CONTROLLER_UUID}
-
-        controller.status_operation_callback(_script_finished_op(SLAVE_UUID))
-        assert controller.get_status("running") == "no"
-
-    def test_foreign_sender_is_ignored(self, controller):
-        controller.set_status("running", "yes")
-        controller.status_operation_callback(_script_finished_op(FOREIGN_UUID))
-        assert controller._finished_nodes == set()
-        assert controller.get_status("running") == "yes"
-
-
 # ─── pong handling ──────────────────────────────────────────────────────
 
 
@@ -302,12 +270,10 @@ def test_adopted_uuids_reader_handles_python_bool(controller):
 # ─── State clearing ─────────────────────────────────────────────────────
 
 
-def test_clear_playback_state_resets_armed_and_finished_sets(controller):
+def test_clear_playback_state_resets_armed_set(controller):
     controller._armed_nodes = {CONTROLLER_UUID, SLAVE_UUID}
-    controller._finished_nodes = {CONTROLLER_UUID}
     controller._clear_playback_state()
     assert controller._armed_nodes == set()
-    assert controller._finished_nodes == set()
     # Required / adopted stay — they belong to the loaded project.
     assert controller._required_nodes == {CONTROLLER_UUID, SLAVE_UUID}
     assert controller._adopted_nodes == {CONTROLLER_UUID, SLAVE_UUID}
@@ -446,7 +412,7 @@ class TestMixerStatusCallback:
         assert f"{SLAVE_UUID}/0/0" not in controller.mixer_status
 
     def test_foreign_sender_ignored(self, controller):
-        # Mirrors armed_ready/script_finished: an unadopted node must not grow
+        # Mirrors armed_ready/stop_project: an unadopted node must not grow
         # the shadow.
         controller.status_operation_callback(
             _mixer_status_op(FOREIGN_UUID, {"master": 0.5})

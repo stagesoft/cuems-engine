@@ -134,6 +134,13 @@ class FollowRelay:
         """A STOP or a load was received and has not run yet on this node."""
         return self._stops_received > self._stops_applied
 
+    @property
+    def stops_received(self) -> int:
+        """STOP and load commands received so far (receive hook, bus order).
+        A sender that must know whether a STOP arrived after it sent something
+        compares this before and after (stop_project's watchdog)."""
+        return self._stops_received
+
     def stop_applied(self) -> None:
         """The node has run a STOP or a load (or refused it)."""
         with self._lock:

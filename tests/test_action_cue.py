@@ -1462,3 +1462,75 @@ class TestPreArmWalkThroughRecursion:
         assert any(x is a for x in armed)
         assert not any(x is b for x in armed), "recursion ran past the checkpoint"
         assert any(x is a for x in newly)
+
+
+# ---------------------------------------------------------------------------
+# stop_project: project scope, no target (ClickUp 869fhjdq5)
+# ---------------------------------------------------------------------------
+
+
+def _make_project_action_cue(action_type: str) -> ActionCue:
+    """An ActionCue with an empty target, as a project-scope cue parses."""
+    cue = ActionCue()
+    cue.action_type = action_type
+    cue.action_target = ""
+    cue._action_target_object = None
+    return cue
+
+
+class TestStopProjectAction:
+    def test_applies_with_no_target_and_names_the_origin_cue(self, handler, mtc):
+        cue = _make_project_action_cue("stop_project")
+
+        with (
+            patch.object(handler, "go") as mock_go,
+            patch.object(handler, "arm") as mock_arm,
+            patch.object(handler, "disarm") as mock_disarm,
+        ):
+            result = handler.execute_action(cue, mtc)
+
+        assert result["status"] == "applied"
+        assert result["action_type"] == "stop_project"
+        assert result["target_id"] is None
+        assert result["origin_cue_id"] == str(cue.id)
+        # Pure: the node stops nothing itself, the controller's STOP does.
+        mock_go.assert_not_called()
+        mock_arm.assert_not_called()
+        mock_disarm.assert_not_called()
+
+    def test_outcome_reaches_the_result_sink(self, handler, mtc):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+
+        seen = []
+        ACTION_HANDLER.set_emit_enabled(True)
+        ACTION_HANDLER.set_result_sink(seen.append)
+        try:
+            handler.execute_action(_make_project_action_cue("stop_project"), mtc)
+        finally:
+            ACTION_HANDLER.set_result_sink(None)
+            ACTION_HANDLER.set_emit_enabled(False)
+
+        assert len(seen) == 1
+        assert seen[0]["action_type"] == "stop_project"
+        assert seen[0]["status"] == "applied"
+        assert seen[0]["origin_cue_id"]
+
+    @pytest.mark.parametrize(
+        "action", ["pause_project", "resume_project", "load", "unload", "wait"]
+    )
+    def test_other_project_actions_are_still_rejected(self, handler, mtc, action):
+        result = handler.execute_action(_make_project_action_cue(action), mtc)
+        assert result["status"] == "rejected"
+        assert "Unsupported" in result["reason"]
+
+    def test_cue_level_actions_still_need_a_target(self, handler, mtc):
+        # A cue-level 'stop' with no target is the pre-existing rejection.
+        result = handler.execute_action(_make_project_action_cue("stop"), mtc)
+        assert result["status"] == "rejected"
+        assert "Missing target" in result["reason"]
+
+    def test_cue_level_results_carry_no_origin_key(self, handler, mtc):
+        target = _make_target(enabled=False)
+        result = handler.execute_action(_make_action_cue("enable", target), mtc)
+        assert result["status"] == "applied"
+        assert "origin_cue_id" not in result
