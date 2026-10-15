@@ -3,13 +3,16 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 Mock jack-volume replacement for headless/cloud deployments.
 
 Accepts the same CLI as jack-volume, starts an OSC UDP server on the
 assigned port, logs all received volume commands, and stays alive until
-SIGTERM.
+SIGTERM. Like jack-volume it opens a JACK client named by -c with ports
+input_1..input_N and output_1..output_N, so the engine can wire players into
+it and it into the playback ports (see mock_jack).
 """
 
 import argparse
@@ -20,6 +23,8 @@ import threading
 from cuemsutils.log import Logger
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
+
+from cuemsengine.scripts.mock_jack import open_jack_client, report_ready
 
 
 def main():
@@ -67,6 +72,14 @@ def main():
     server = BlockingOSCUDPServer(("0.0.0.0", args.port), dispatcher)
     server_ref.append(server)
 
+    # Same port names as jack-volume (jack_volume.cpp): N in, N out.
+    channels = range(1, args.channels + 1)
+    jack_client = open_jack_client(  # noqa: F841 -- keeps the ports alive
+        args.client_name,
+        inputs=[f"input_{i}" for i in channels],
+        outputs=[f"output_{i}" for i in channels],
+    )
+
     def handle_signal(signum, frame):
         Logger.info(f"[mock-jack-volume] signal {signum}, shutting down")
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -75,6 +88,7 @@ def main():
     signal.signal(signal.SIGINT, handle_signal)
 
     Logger.info(f"[mock-jack-volume] listening on port {args.port}")
+    report_ready()
     server.serve_forever()
     Logger.info("[mock-jack-volume] stopped")
     sys.exit(0)
