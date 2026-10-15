@@ -106,6 +106,12 @@ class NodeEngine(BaseEngine):
     # that build the engine without its comms).
     _follow_relay = None
 
+    # stop_project (869fhjdq5): after this node reports an authored end of the
+    # show, how long it waits for the controller's STOP before it logs that
+    # the show is still running. Log only; the node never stops itself.
+    _STOP_PROJECT_WATCHDOG_S = 3.0
+    _stop_project_watchdog: threading.Timer | None = None
+
     # GO anchor tolerance (Badajoz 2026-09-25 fix): how far the controller's
     # shipped GO instant may disagree with this node's own MTC before
     # _resolve_go_anchor distrusts it and falls back to a live local read.
@@ -229,6 +235,8 @@ class NodeEngine(BaseEngine):
             relay.begin_run(value)
         elif command_name in ("stop", "load"):
             relay.end_run(command_name)
+            # The STOP (or load) a stop_project cue was waiting for.
+            self._cancel_stop_project_watchdog()
         return False
 
     def _send_follow(self, data: dict) -> None:
@@ -354,6 +362,7 @@ class NodeEngine(BaseEngine):
     @logged
     def stop(self):
         self.stop_requested = True
+        self._cancel_stop_project_watchdog()
         self.stop_node_engine()
         self.stop_comms()
         super().stop()
@@ -1197,6 +1206,11 @@ class NodeEngine(BaseEngine):
         # idempotent under rapid toggles.
         action_type = outcome.get("action_type")
         status = outcome.get("status")
+        if action_type == "stop_project" and status == "applied":
+            # The authored end of the show (869fhjdq5): tell the controller,
+            # which runs its own STOP path. Nothing is stopped locally.
+            self._notify_stop_project(outcome.get("origin_cue_id"))
+            return
         if action_type in ("enable", "disable") and status == "applied":
             target_id = outcome.get("target_id")
             if target_id:
@@ -1297,6 +1311,97 @@ class NodeEngine(BaseEngine):
             CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
         except Exception as e:
             Logger.warning(f"Could not notify cue_enabled: {e}")
+
+    def _notify_stop_project(self, cue_id):
+        """A stop_project ActionCue was revealed on this node (869fhjdq5).
+
+        Send the controller a STATUS op carrying the cue and the current run;
+        the controller validates it like a follow message (adopted sender,
+        cue in project, running, current run_seq) and runs stop_script, which
+        is the operator STOP. Every node reveals every ActionCue, so the
+        controller gets one message per node and acts on the first; the rest
+        are dropped there at INFO.
+
+        Nothing is stopped here: one stop path, the controller's. If no STOP
+        or load is received within _STOP_PROJECT_WATCHDOG_S the watchdog
+        logs a WARNING and the show keeps running, which is the safe side.
+        Skipped (INFO) when a STOP or load is already pending on this node, or
+        when no run is in progress (run_seq is None between a STOP/load and
+        the next GO): both mean the show is ending or ended anyway.
+        """
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        relay = self._follow_relay
+        if relay is None:
+            Logger.warning(
+                f"stop_project cue {cue_id}: no comms relay on this node, cannot "
+                "notify the controller; the show keeps running"
+            )
+            return
+        if relay.stop_pending:
+            Logger.info(
+                f"stop_project cue {cue_id}: a STOP or load is already pending on "
+                "this node, not sending"
+            )
+            return
+        run_seq = relay.run_seq
+        if run_seq is None:
+            Logger.info(
+                f"stop_project cue {cue_id}: no run in progress (no GO since the "
+                "last STOP or load), not sending"
+            )
+            return
+        stops_at_send = relay.stops_received
+        try:
+            CUE_HANDLER.communications_thread.send_operation_nowait(
+                NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target="stop_project",
+                    data={"cue": str(cue_id), "run_seq": run_seq},
+                )
+            )
+        except Exception as e:
+            Logger.error(
+                f"stop_project cue {cue_id}: could not notify the controller "
+                f"({e}); the show keeps running"
+            )
+            return
+        Logger.info(
+            f"stop_project cue {cue_id}: notified the controller (run {run_seq})"
+        )
+        self._arm_stop_project_watchdog(cue_id, stops_at_send)
+
+    def _arm_stop_project_watchdog(self, cue_id, stops_at_send: int) -> None:
+        self._cancel_stop_project_watchdog()
+        timer = threading.Timer(
+            self._STOP_PROJECT_WATCHDOG_S,
+            self._on_stop_project_watchdog_fire,
+            args=(cue_id, stops_at_send),
+        )
+        timer.daemon = True
+        self._stop_project_watchdog = timer
+        timer.start()
+
+    def _cancel_stop_project_watchdog(self) -> None:
+        timer = self._stop_project_watchdog
+        if timer is not None:
+            timer.cancel()
+            self._stop_project_watchdog = None
+
+    def _on_stop_project_watchdog_fire(self, cue_id, stops_at_send: int) -> None:
+        """Compares STOP/load RECEIPTS, not executions: a STOP queued behind a
+        long command has still been received, and an operator STOP that got in
+        first counts too. Log only."""
+        relay = self._follow_relay
+        if relay is not None and relay.stops_received > stops_at_send:
+            return
+        Logger.warning(
+            f"stop_project cue {cue_id} sent, no STOP received from the "
+            f"controller in {self._STOP_PROJECT_WATCHDOG_S:.0f} s; the show "
+            "keeps running"
+        )
 
     def set_next_cue(self, value):
         """

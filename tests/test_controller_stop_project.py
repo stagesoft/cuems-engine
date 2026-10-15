@@ -1,0 +1,297 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+"""stop_project, controller side (ClickUp 869fhjdq5).
+
+A stop_project ActionCue is the authored end of an unattended show. Every node
+reveals it and sends the controller a STATUS op {cue, run_seq}; the controller
+validates it like a follow message and runs stop_script, i.e. the operator
+STOP. The first valid message wins; the others are expected duplicates and are
+dropped at INFO. Two hardenings travel with it: cue ADD/UPDATE operations are
+ignored while the show is not running (a node's late start report after a
+STOP must not leave a cue at 1 or 100), and STOP restarts the arm watchdog so
+a failed re-arm is logged instead of answering every /go with a silent 409.
+
+Design: cuems-RELATIONS Plans/2026-10-15-engine-stop-project-actioncue.md §4.4.
+"""
+
+from os import environ
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import pytest
+from cuemsutils.cues import ActionCue, AudioCue
+
+from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
+
+STOP_CUE = "11111111-1111-4111-8111-111111111111"
+AUDIO_CUE = "22222222-2222-4222-8222-222222222222"
+
+
+@pytest.fixture(autouse=True)
+def set_config_path():
+    test_conf_path = Path(__file__).parent / ".." / "dev" / "test_xml_files"
+    environ["CUEMS_CONF_PATH"] = str(test_conf_path)
+
+
+@pytest.fixture
+def controller():
+    with (
+        patch("cuemsengine.core.BaseEngine.ConfigManager") as MockCM,
+        patch(
+            "cuemsengine.core.BaseEngine.BaseEngine.get_controller_ip",
+            return_value="localhost",
+        ),
+    ):
+        mock_cm_instance = MockCM.return_value
+        mock_cm_instance.node_conf = {
+            "uuid": "test-controller-uuid",
+            "mtc_port": "MTC_MIDI_PORT",
+        }
+        mock_cm_instance.library_path = str(
+            Path(__file__).parent / ".." / "dev" / "test_xml_files"
+        )
+        mock_cm_instance.tmp_path = "/tmp"
+
+        from cuemsengine.ControllerEngine import ControllerEngine
+
+        engine = ControllerEngine(with_mtc=False)
+        engine.communications_thread = Mock()
+        engine.communications_thread.broadcast_osc = Mock()
+        engine.communications_thread.nng_hub = Mock()
+        yield engine
+        engine._cancel_arm_watchdog()
+        engine.stop()
+
+
+def _stop_cue_object():
+    return ActionCue({"action_target": "", "action_type": "stop_project"})
+
+
+@pytest.fixture
+def running(controller):
+    controller.set_status("running", "yes")
+    controller._adopted_nodes = {"node-a", "node-b"}
+    controller._required_nodes = {"node-a", "node-b"}
+    controller.cue_status = {STOP_CUE: 1, AUDIO_CUE: 100}
+    controller.cue_names = {STOP_CUE: "Fin", AUDIO_CUE: "Audio"}
+    cues = {STOP_CUE: _stop_cue_object(), AUDIO_CUE: AudioCue()}
+    controller.script = SimpleNamespace(find=lambda cid: cues.get(str(cid)), name="p")
+    return controller
+
+
+def _op(sender="node-a", cue=STOP_CUE, run_seq=None, data=None):
+    payload = {"cue": cue, "run_seq": run_seq} if data is None else data
+    return NodeOperation(
+        type=OperationType.STATUS,
+        action=ActionType.UPDATE,
+        sender=sender,
+        target="stop_project",
+        data=payload,
+    )
+
+
+def _stops(fwd):
+    return [c for c in fwd.call_args_list if c.args[0] == "/engine/command/stop"]
+
+
+def _logged(log_method, needle):
+    return any(needle in str(c.args[0]) for c in log_method.call_args_list)
+
+
+class TestStopProjectRelay:
+    def test_stops_the_show_once(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(_op(run_seq=running._run_seq))
+        assert running.get_status("running") == "no"
+        assert len(_stops(fwd)) == 1
+        assert _logged(log.info, "stopping the show")
+        # The operator STOP's reset: every cue back to 0.
+        assert all(v == 0 for v in running.cue_status.values())
+
+    def test_the_other_nodes_messages_are_dropped_at_info(self, running):
+        seq = running._run_seq
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(_op(sender="node-a", run_seq=seq))
+            running.status_operation_callback(_op(sender="node-b", run_seq=seq))
+        assert len(_stops(fwd)) == 1
+        assert _logged(log.info, "not part of the current run")
+        assert not log.warning.called
+
+    def test_drops_a_stale_run_seq(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(_op(run_seq=running._run_seq - 1))
+        assert not _stops(fwd)
+        assert running.get_status("running") == "yes"
+        assert _logged(log.info, "not part of the current run")
+
+    def test_drops_when_not_running(self, running):
+        running.set_status("running", "no")
+        with patch.object(running, "_forward_command_to_nodes") as fwd:
+            running.status_operation_callback(_op(run_seq=running._run_seq))
+        assert not _stops(fwd)
+
+    def test_drops_a_non_adopted_sender_with_a_warning(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(
+                _op(sender="stranger", run_seq=running._run_seq)
+            )
+        assert not _stops(fwd)
+        assert _logged(log.warning, "not an adopted node")
+        assert running.get_status("running") == "yes"
+
+    def test_drops_an_unknown_cue_with_a_warning(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(
+                _op(cue="not-in-project", run_seq=running._run_seq)
+            )
+        assert not _stops(fwd)
+        assert _logged(log.warning, "not in the loaded project")
+
+    def test_drops_a_cue_that_is_not_a_stop_project_with_a_warning(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(
+                _op(cue=AUDIO_CUE, run_seq=running._run_seq)
+            )
+        assert not _stops(fwd)
+        assert _logged(log.warning, "not a stop_project ActionCue")
+
+    def test_drops_a_message_without_a_cue_with_a_warning(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes") as fwd,
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            running.status_operation_callback(_op(data={}))
+        assert not _stops(fwd)
+        assert log.warning.called
+
+    def test_releases_the_run_seq_lock(self, running):
+        with patch.object(running, "_forward_command_to_nodes"):
+            running.status_operation_callback(_op(run_seq=running._run_seq))
+        # stop_script takes the lock in _bump_run_seq; the handler must have
+        # released it before the call and left it free after.
+        assert running._run_seq_lock.acquire(blocking=False)
+        running._run_seq_lock.release()
+
+
+def _cue_op(action, cue, **extra):
+    data = {"id": cue, "offset": 0}
+    data.update(extra)
+    return NodeOperation(
+        type=OperationType.CUE,
+        action=action,
+        sender="node-a",
+        target=cue,
+        data=data,
+    )
+
+
+class TestCueAddGate:
+    def test_add_while_running_lights_the_cue(self, running):
+        running.cue_status[AUDIO_CUE] = 0
+        running.cue_operation_callback(_cue_op(ActionType.ADD, AUDIO_CUE))
+        assert running.cue_status[AUDIO_CUE] == 1
+
+    def test_add_while_not_running_is_ignored(self, running):
+        running.set_status("running", "no")
+        running.cue_status[STOP_CUE] = 0
+        with patch.object(running, "_broadcast_cue_status") as bc:
+            running.cue_operation_callback(_cue_op(ActionType.ADD, STOP_CUE))
+        assert running.cue_status[STOP_CUE] == 0
+        bc.assert_not_called()
+
+    def test_update_while_not_running_is_ignored(self, running):
+        running.set_status("running", "no")
+        running.cue_status[AUDIO_CUE] = 0
+        with patch.object(running, "_broadcast_cue_status") as bc:
+            running.cue_operation_callback(
+                _cue_op(ActionType.UPDATE, AUDIO_CUE, percentage=50)
+            )
+        assert running.cue_status[AUDIO_CUE] == 0
+        bc.assert_not_called()
+
+    def test_remove_is_not_gated(self, running):
+        # A REMOVE that reaches a cue still at 1 while not running keeps its
+        # pre-existing meaning (1 -> 100); after a STOP every cue is 0, so the
+        # existing stale-REMOVE rule drops it anyway.
+        running.set_status("running", "no")
+        running.cue_status[AUDIO_CUE] = 1
+        running.cue_operation_callback(_cue_op(ActionType.REMOVE, AUDIO_CUE))
+        assert running.cue_status[AUDIO_CUE] == 100
+
+    def test_late_start_after_an_authored_stop_cannot_reach_100(self, running):
+        """The multi-node race the gate exists for: node-b dispatched the stop
+        cue just before the STOP reached it, so its ADD and then its disarm's
+        REMOVE arrive after the controller's reset."""
+        with patch.object(running, "_forward_command_to_nodes"):
+            running.status_operation_callback(_op(run_seq=running._run_seq))
+        assert running.cue_status[STOP_CUE] == 0
+        running.cue_operation_callback(_cue_op(ActionType.ADD, STOP_CUE))
+        running.cue_operation_callback(_cue_op(ActionType.REMOVE, STOP_CUE))
+        assert running.cue_status[STOP_CUE] == 0
+
+
+def _armed_ready(sender):
+    return NodeOperation(
+        type=OperationType.STATUS,
+        action=ActionType.UPDATE,
+        sender=sender,
+        target="armed_ready",
+        data={"armed": "yes"},
+    )
+
+
+class TestArmWatchdogAfterStop:
+    def test_stop_starts_the_watchdog(self, running):
+        with patch.object(running, "_forward_command_to_nodes"):
+            running.stop_script(None)
+        assert running._arm_watchdog is not None
+        assert running._arm_watchdog_what == "Re-arm after STOP"
+
+    def test_every_node_re_armed_cancels_it(self, running):
+        with (
+            patch.object(running, "_forward_command_to_nodes"),
+            patch.object(running, "start_timecode"),
+        ):
+            running.stop_script(None)
+            running.status_operation_callback(_armed_ready("node-a"))
+            assert running._arm_watchdog is not None
+            running.status_operation_callback(_armed_ready("node-b"))
+        assert running.get_status("armed") == "yes"
+        assert running._arm_watchdog is None
+
+    def test_fire_names_the_operation_and_the_pending_nodes(self, running):
+        running._arm_watchdog_what = "Re-arm after STOP"
+        running._armed_nodes = {"node-a"}
+        with patch("cuemsengine.ControllerEngine.Logger") as log:
+            running._on_arm_watchdog_fire()
+        msg = str(log.error.call_args.args[0])
+        assert msg.startswith("Re-arm after STOP stalled")
+        assert "node-b" in msg
+
+    def test_load_keeps_its_wording(self, running):
+        running._arm_arm_watchdog()
+        running._cancel_arm_watchdog()
+        running._armed_nodes = set()
+        with patch("cuemsengine.ControllerEngine.Logger") as log:
+            running._on_arm_watchdog_fire()
+        assert str(log.error.call_args.args[0]).startswith("Load stalled")

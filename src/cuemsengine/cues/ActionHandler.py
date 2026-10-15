@@ -38,8 +38,16 @@ SUPPORTED_CUE_ACTIONS = frozenset(
         "fade_in",
         "fade_out",
         "go_to",
+        "stop_project",
     }
 )
+
+# Project-scope actions act on the whole loaded project and carry no target
+# (action_target is empty in the XML and None after parse). stop_project is
+# the authored end of an unattended show (ClickUp 869fhjdq5): the handler is
+# pure, NodeEngine._action_result_sink reports it to the controller, and the
+# controller runs its own STOP path.
+PROJECT_SCOPE_ACTIONS = frozenset({"stop_project"})
 
 HookPhase = Literal["before_dispatch", "after_dispatch", "wrap_dispatch"]
 RegistrationLayer = Literal["cue_layer", "node_layer"]
@@ -250,7 +258,7 @@ class ActionHandler:
             self._emit_outcome(out)
             return out
 
-        if target is None:
+        if target is None and action_type not in PROJECT_SCOPE_ACTIONS:
             reason = (
                 f"Missing target for {action_type} "
                 f"(action_target={cue.action_target!r})"
@@ -347,8 +355,9 @@ class ActionHandler:
                     )
                     ctx.outcome = result
                     break
+            scope = target_id if target_id is not None else "project"
             Logger.info(
-                f'Action {action_type} on {target_id}: {result["status"]}'
+                f'Action {action_type} on {scope}: {result["status"]}'
                 + (f' ({result["reason"]})' if result.get("reason") else "")
             )
 
@@ -361,13 +370,19 @@ class ActionHandler:
         action_type: str,
         target_id: str | None,
         reason: str | None = None,
+        origin_cue_id: str | None = None,
     ) -> dict:
-        return {
+        out = {
             "status": status,
             "action_type": action_type,
             "target_id": target_id,
             "reason": reason,
         }
+        if origin_cue_id is not None:
+            # Project-scope actions have no target; the sink needs to know
+            # WHICH cue fired (the controller names it in its journal line).
+            out["origin_cue_id"] = origin_cue_id
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +614,30 @@ def _handle_go_to(
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
+def _handle_stop_project(
+    ch: CueOrchestrator,
+    action_cue: Any,
+    _target: Cue | None,
+    mtc: MtcListener,
+    frozen_mtc_ms: float | None = None,
+) -> dict:
+    """The authored end of the show (ClickUp 869fhjdq5). Project scope: no
+    target.
+
+    Pure on purpose: nothing is stopped here and nothing is sent. The node
+    must not stop itself, or two stop paths would race (its own, and the
+    controller's STOP that follows). NodeEngine._action_result_sink reacts to
+    this 'applied' outcome by sending the controller a STATUS op; the
+    controller validates it (adopted sender, cue in project, current run) and
+    runs stop_script, which is the operator STOP: running=no, every cue reset,
+    nodes re-armed. The origin cue id travels in the outcome so the sink and
+    the controller can name the cue.
+    """
+    return ActionHandler._action_result(
+        "applied", "stop_project", None, origin_cue_id=str(action_cue.id)
+    )
+
+
 def _handle_fade_action(
     ch: CueOrchestrator,
     action_cue: Any,
@@ -810,6 +849,7 @@ _ACTION_HANDLERS: dict[
     "fade_in": _handle_fade_in,
     "fade_out": _handle_fade_out,
     "go_to": _handle_go_to,
+    "stop_project": _handle_stop_project,
 }
 
 ACTION_HANDLER = ActionHandler()
