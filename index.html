@@ -430,6 +430,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#unattended-playback-authored-end-of-show-loop-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unattended playback: authored end of show, loop-back
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fadecue-and-gradient-motiond-integration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -653,6 +664,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="unattended-playback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unattended playback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -830,6 +868,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#unattended-playback-authored-end-of-show-loop-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unattended playback: authored end of show, loop-back
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fadecue-and-gradient-motiond-integration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -927,7 +976,7 @@ OSCQuery lifecycle, MTC listener integration, and the ongoing/next cue pointers.
 <li><strong>Controller</strong> resolves the current cue pointer, verifies all required nodes are armed, and broadcasts a <code>COMMAND/GO</code>.</li>
 <li><strong>Node Engine</strong> receives the command, identifies the first local cue in the <code>post_go='go'</code> chain, and fires it with a frozen MTC timestamp.</li>
 <li><strong>Player subprocesses</strong> start their media aligned to that MTC snapshot; all nodes play in sync regardless of network latency.</li>
-<li><strong>Status</strong> flows back over NNG (<code>armed_ready</code>, <code>script_finished</code>, cue-level events) to update the controller's state machine and the editor UI.</li>
+<li><strong>Status</strong> flows back over NNG (<code>armed_ready</code>, <code>stop_project</code>, <code>follow</code>, cue-level events) to update the controller's state machine and the editor UI.</li>
 </ol>
 <hr />
 <h2 id="architecture">Architecture</h2>
@@ -1017,6 +1066,8 @@ submits an asyncio coroutine to the engine's shared event loop via
 <code>run_coroutine_threadsafe</code>. The caller blocks on <code>.result()</code>; the loop stays
 free for NNG heartbeats throughout. An SC-001 integration test verifies ≤ ±20 %
 heartbeat jitter during a concurrent multi-GB transfer.</p>
+<h3 id="unattended-playback-authored-end-of-show-loop-back">Unattended playback: authored end of show, loop-back</h3>
+<p>After the last cue the engine keeps <code>running = yes</code> by design: the operator decides when a show is over. A show that must end without an operator says so in its script with a project-scope <strong><code>stop_project</code></strong> ActionCue, which the controller turns into its own STOP (every node reports the cue, the first valid report wins); a show that must loop uses an ActionCue <code>play</code> aimed at its first cue. Recipes, journal lines and version requirements: <a href="unattended-playback/">Unattended playback</a>.</p>
 <h3 id="fadecue-and-gradient-motiond-integration">FadeCue and gradient-motiond integration</h3>
 <p><code>FadeCue</code> dispatches a <code>/gradient/start_fade</code> UDP OSC datagram to
 <code>gradient-motiond</code> via <code>GradientClient</code> (direct localhost UDP, not NNG).

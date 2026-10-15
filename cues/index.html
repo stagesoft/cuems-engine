@@ -1194,6 +1194,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../unattended-playback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unattended playback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -2021,15 +2048,7 @@
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 89</span>
-<span class="normal"> 90</span>
-<span class="normal"> 91</span>
-<span class="normal"> 92</span>
-<span class="normal"> 93</span>
-<span class="normal"> 94</span>
-<span class="normal"> 95</span>
-<span class="normal"> 96</span>
-<span class="normal"> 97</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 97</span>
 <span class="normal"> 98</span>
 <span class="normal"> 99</span>
 <span class="normal">100</span>
@@ -2302,7 +2321,22 @@
 <span class="normal">367</span>
 <span class="normal">368</span>
 <span class="normal">369</span>
-<span class="normal">370</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ActionHandler</span><span class="p">:</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span>
+<span class="normal">378</span>
+<span class="normal">379</span>
+<span class="normal">380</span>
+<span class="normal">381</span>
+<span class="normal">382</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ActionHandler</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Owns ActionCue validation, default handlers, hooks, and result delivery.</span>
 <span class="sd">    """</span>
@@ -2466,7 +2500,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_emit_outcome</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">out</span>
 
-        <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">action_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PROJECT_SCOPE_ACTIONS</span><span class="p">:</span>
             <span class="n">reason</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"Missing target for </span><span class="si">{</span><span class="n">action_type</span><span class="si">}</span><span class="s2"> "</span>
                 <span class="sa">f</span><span class="s2">"(action_target=</span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">action_target</span><span class="si">!r}</span><span class="s2">)"</span>
@@ -2563,8 +2597,9 @@
                     <span class="p">)</span>
                     <span class="n">ctx</span><span class="o">.</span><span class="n">outcome</span> <span class="o">=</span> <span class="n">result</span>
                     <span class="k">break</span>
+            <span class="n">scope</span> <span class="o">=</span> <span class="n">target_id</span> <span class="k">if</span> <span class="n">target_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"project"</span>
             <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s1">'Action </span><span class="si">{</span><span class="n">action_type</span><span class="si">}</span><span class="s1"> on </span><span class="si">{</span><span class="n">target_id</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span>
+                <span class="sa">f</span><span class="s1">'Action </span><span class="si">{</span><span class="n">action_type</span><span class="si">}</span><span class="s1"> on </span><span class="si">{</span><span class="n">scope</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span>
                 <span class="o">+</span> <span class="p">(</span><span class="sa">f</span><span class="s1">' (</span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s2">"reason"</span><span class="p">]</span><span class="si">}</span><span class="s1">)'</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"reason"</span><span class="p">)</span> <span class="k">else</span> <span class="s2">""</span><span class="p">)</span>
             <span class="p">)</span>
 
@@ -2577,13 +2612,19 @@
         <span class="n">action_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">target_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">origin_cue_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span>
             <span class="s2">"action_type"</span><span class="p">:</span> <span class="n">action_type</span><span class="p">,</span>
             <span class="s2">"target_id"</span><span class="p">:</span> <span class="n">target_id</span><span class="p">,</span>
             <span class="s2">"reason"</span><span class="p">:</span> <span class="n">reason</span><span class="p">,</span>
         <span class="p">}</span>
+        <span class="k">if</span> <span class="n">origin_cue_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Project-scope actions have no target; the sink needs to know</span>
+            <span class="c1"># WHICH cue fired (the controller names it in its journal line).</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">"origin_cue_id"</span><span class="p">]</span> <span class="o">=</span> <span class="n">origin_cue_id</span>
+        <span class="k">return</span> <span class="n">out</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -2616,9 +2657,9 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind_cue_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_handler</span><span class="p">:</span> <span class="n">CueOrchestrator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind_cue_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_handler</span><span class="p">:</span> <span class="n">CueOrchestrator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Bind the singleton cue orchestrator (arm, go, armed lookups)."""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_cue_handler</span> <span class="o">=</span> <span class="n">cue_handler</span>
 </code></pre></div></td></tr></table></div>
@@ -2643,12 +2684,12 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">121</span>
-<span class="normal">122</span>
-<span class="normal">123</span>
-<span class="normal">124</span>
-<span class="normal">125</span>
-<span class="normal">126</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">clear_action_extensions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">clear_action_extensions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Remove all hooks and custom sink (for isolated tests)."""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_hooks</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
@@ -2677,12 +2718,12 @@ no-op).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">159</span>
-<span class="normal">160</span>
-<span class="normal">161</span>
-<span class="normal">162</span>
-<span class="normal">163</span>
-<span class="normal">164</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">finalize_node_layer_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">finalize_node_layer_bindings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Call from NodeEngine after comms are ready (extension point; default</span>
 <span class="sd">    no-op).</span>
@@ -2711,22 +2752,22 @@ filter).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
-<span class="normal">138</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">138</span>
 <span class="normal">139</span>
 <span class="normal">140</span>
 <span class="normal">141</span>
 <span class="normal">142</span>
 <span class="normal">143</span>
 <span class="normal">144</span>
-<span class="normal">145</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_action_hook</span><span class="p">(</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_action_hook</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">phase</span><span class="p">:</span> <span class="n">HookPhase</span><span class="p">,</span>
     <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">ActionHookContext</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span>
@@ -2764,10 +2805,10 @@ filter).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">116</span>
-<span class="normal">117</span>
-<span class="normal">118</span>
-<span class="normal">119</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_emit_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_emit_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""When False, suppress outcome emission (useful in tests)."""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_emit_enabled</span> <span class="o">=</span> <span class="n">enabled</span>
@@ -2793,12 +2834,12 @@ filter).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">109</span>
-<span class="normal">110</span>
-<span class="normal">111</span>
-<span class="normal">112</span>
-<span class="normal">113</span>
-<span class="normal">114</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_result_sink</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sink</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_result_sink</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sink</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Replace result delivery; None restores default (NNG via comms thread).</span>
 <span class="sd">    """</span>
@@ -2848,20 +2889,20 @@ filter).</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">73</span>
-<span class="normal">74</span>
-<span class="normal">75</span>
-<span class="normal">76</span>
-<span class="normal">77</span>
-<span class="normal">78</span>
-<span class="normal">79</span>
-<span class="normal">80</span>
-<span class="normal">81</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">81</span>
 <span class="normal">82</span>
 <span class="normal">83</span>
 <span class="normal">84</span>
 <span class="normal">85</span>
-<span class="normal">86</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span>
+<span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span>
+<span class="normal">89</span>
+<span class="normal">90</span>
+<span class="normal">91</span>
+<span class="normal">92</span>
+<span class="normal">93</span>
+<span class="normal">94</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ActionHookContext</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Context passed to extension hooks (stable field names for integrators).</span>
@@ -2927,21 +2968,21 @@ filter).</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/cues/ActionHandler.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">50</span>
-<span class="normal">51</span>
-<span class="normal">52</span>
-<span class="normal">53</span>
-<span class="normal">54</span>
-<span class="normal">55</span>
-<span class="normal">56</span>
-<span class="normal">57</span>
-<span class="normal">58</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">58</span>
 <span class="normal">59</span>
 <span class="normal">60</span>
 <span class="normal">61</span>
 <span class="normal">62</span>
 <span class="normal">63</span>
-<span class="normal">64</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CueOrchestrator</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CueOrchestrator</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Subset of CueHandler needed by action dispatch (avoids circular import)."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">arm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span> <span class="n">init</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
@@ -5368,7 +5409,30 @@ Thread-safe: internal state mutations are guarded by a Lock.</p>
 <span class="normal">2402</span>
 <span class="normal">2403</span>
 <span class="normal">2404</span>
-<span class="normal">2405</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CueHandler</span><span class="p">:</span>
+<span class="normal">2405</span>
+<span class="normal">2406</span>
+<span class="normal">2407</span>
+<span class="normal">2408</span>
+<span class="normal">2409</span>
+<span class="normal">2410</span>
+<span class="normal">2411</span>
+<span class="normal">2412</span>
+<span class="normal">2413</span>
+<span class="normal">2414</span>
+<span class="normal">2415</span>
+<span class="normal">2416</span>
+<span class="normal">2417</span>
+<span class="normal">2418</span>
+<span class="normal">2419</span>
+<span class="normal">2420</span>
+<span class="normal">2421</span>
+<span class="normal">2422</span>
+<span class="normal">2423</span>
+<span class="normal">2424</span>
+<span class="normal">2425</span>
+<span class="normal">2426</span>
+<span class="normal">2427</span>
+<span class="normal">2428</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CueHandler</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Singleton class responsible for handling Cue objects.</span>
 
@@ -6992,7 +7056,12 @@ Thread-safe: internal state mutations are guarded by a Lock.</p>
         <span class="c1"># Every cue of the pass carries the same chain_epoch, so a stale cascade</span>
         <span class="c1"># (loop-back) and a cycle are both refused in go().</span>
         <span class="n">post_go_thread</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="p">(</span>
+        <span class="k">if</span> <span class="n">unroll</span> <span class="ow">and</span> <span class="n">cue</span><span class="o">.</span><span class="n">post_go</span> <span class="o">==</span> <span class="s2">"go"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_chain_continues</span><span class="p">(</span><span class="n">cue</span><span class="p">):</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"stop_project cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">: chain break, the cues after it "</span>
+                <span class="s2">"are not dispatched"</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span>
             <span class="n">unroll</span>
             <span class="ow">and</span> <span class="n">cue</span><span class="o">.</span><span class="n">post_go</span> <span class="o">==</span> <span class="s2">"go"</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">cue</span><span class="o">.</span><span class="n">_stop_requested</span>
@@ -7269,7 +7338,12 @@ Thread-safe: internal state mutations are guarded by a Lock.</p>
                 <span class="k">pass</span>
 
         <span class="n">go_at_end_thread</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="p">(</span>
+        <span class="k">if</span> <span class="n">cue</span><span class="o">.</span><span class="n">post_go</span> <span class="o">==</span> <span class="s2">"go_at_end"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_chain_continues</span><span class="p">(</span><span class="n">cue</span><span class="p">):</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"stop_project cue </span><span class="si">{</span><span class="n">cue</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">: chain break, its go_at_end follow "</span>
+                <span class="s2">"is not fired"</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span>
             <span class="n">cue</span><span class="o">.</span><span class="n">post_go</span> <span class="o">==</span> <span class="s2">"go_at_end"</span>
             <span class="ow">and</span> <span class="n">cue</span><span class="o">.</span><span class="n">_target_object</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">cue</span><span class="o">.</span><span class="n">_stop_requested</span>
@@ -7321,6 +7395,19 @@ Thread-safe: internal state mutations are guarded by a Lock.</p>
         <span class="k">if</span> <span class="n">base_end_ms</span> <span class="o">&lt;</span> <span class="n">start_ms</span><span class="p">:</span>
             <span class="n">base_end_ms</span> <span class="o">=</span> <span class="n">start_ms</span>  <span class="c1"># stale from a previous run</span>
         <span class="k">return</span> <span class="n">base_end_ms</span> <span class="o">+</span> <span class="n">cue</span><span class="o">.</span><span class="n">postwait</span><span class="o">.</span><span class="n">milliseconds_exact</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_chain_continues</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""False for a stop_project ActionCue (ClickUp 869fhjdq5): the authored</span>
+<span class="sd">        end of the show is a hard chain break on every node. Nothing after it</span>
+<span class="sd">        is unrolled at its arrival and no go_at_end follow fires from it, so no</span>
+<span class="sd">        cue can start in the milliseconds before the controller's STOP lands.</span>
+<span class="sd">        A DISABLED stop cue never gets here: disabled cues are transparent to</span>
+<span class="sd">        the chain walk (rehearsal mode)."""</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="n">ActionCue</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"action_type"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"stop_project"</span>
+        <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_follows_out</span><span class="p">(</span><span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -8862,30 +8949,7 @@ if it disarmed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2220</span>
-<span class="normal">2221</span>
-<span class="normal">2222</span>
-<span class="normal">2223</span>
-<span class="normal">2224</span>
-<span class="normal">2225</span>
-<span class="normal">2226</span>
-<span class="normal">2227</span>
-<span class="normal">2228</span>
-<span class="normal">2229</span>
-<span class="normal">2230</span>
-<span class="normal">2231</span>
-<span class="normal">2232</span>
-<span class="normal">2233</span>
-<span class="normal">2234</span>
-<span class="normal">2235</span>
-<span class="normal">2236</span>
-<span class="normal">2237</span>
-<span class="normal">2238</span>
-<span class="normal">2239</span>
-<span class="normal">2240</span>
-<span class="normal">2241</span>
-<span class="normal">2242</span>
-<span class="normal">2243</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2243</span>
 <span class="normal">2244</span>
 <span class="normal">2245</span>
 <span class="normal">2246</span>
@@ -8913,7 +8977,30 @@ if it disarmed.</p>
 <span class="normal">2268</span>
 <span class="normal">2269</span>
 <span class="normal">2270</span>
-<span class="normal">2271</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">disarm_if_unchanged</span><span class="p">(</span>
+<span class="normal">2271</span>
+<span class="normal">2272</span>
+<span class="normal">2273</span>
+<span class="normal">2274</span>
+<span class="normal">2275</span>
+<span class="normal">2276</span>
+<span class="normal">2277</span>
+<span class="normal">2278</span>
+<span class="normal">2279</span>
+<span class="normal">2280</span>
+<span class="normal">2281</span>
+<span class="normal">2282</span>
+<span class="normal">2283</span>
+<span class="normal">2284</span>
+<span class="normal">2285</span>
+<span class="normal">2286</span>
+<span class="normal">2287</span>
+<span class="normal">2288</span>
+<span class="normal">2289</span>
+<span class="normal">2290</span>
+<span class="normal">2291</span>
+<span class="normal">2292</span>
+<span class="normal">2293</span>
+<span class="normal">2294</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">disarm_if_unchanged</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span>
     <span class="n">gen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -8987,18 +9074,18 @@ if it disarmed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2286</span>
-<span class="normal">2287</span>
-<span class="normal">2288</span>
-<span class="normal">2289</span>
-<span class="normal">2290</span>
-<span class="normal">2291</span>
-<span class="normal">2292</span>
-<span class="normal">2293</span>
-<span class="normal">2294</span>
-<span class="normal">2295</span>
-<span class="normal">2296</span>
-<span class="normal">2297</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">execute_action</span><span class="p">(</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2309</span>
+<span class="normal">2310</span>
+<span class="normal">2311</span>
+<span class="normal">2312</span>
+<span class="normal">2313</span>
+<span class="normal">2314</span>
+<span class="normal">2315</span>
+<span class="normal">2316</span>
+<span class="normal">2317</span>
+<span class="normal">2318</span>
+<span class="normal">2319</span>
+<span class="normal">2320</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">execute_action</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">cue</span><span class="p">:</span> <span class="n">ActionCue</span><span class="p">,</span>
     <span class="n">mtc</span><span class="p">:</span> <span class="n">MtcListener</span><span class="p">,</span>
@@ -9094,13 +9181,13 @@ if it disarmed.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2399</span>
-<span class="normal">2400</span>
-<span class="normal">2401</span>
-<span class="normal">2402</span>
-<span class="normal">2403</span>
-<span class="normal">2404</span>
-<span class="normal">2405</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_armed_cue_by_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Cue</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2422</span>
+<span class="normal">2423</span>
+<span class="normal">2424</span>
+<span class="normal">2425</span>
+<span class="normal">2426</span>
+<span class="normal">2427</span>
+<span class="normal">2428</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_armed_cue_by_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cue_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Cue</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Returns the armed cue with the given uuid string."""</span>
     <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">cue</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_armed_cues</span><span class="p">:</span>
@@ -10386,21 +10473,21 @@ log line.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2299</span>
-<span class="normal">2300</span>
-<span class="normal">2301</span>
-<span class="normal">2302</span>
-<span class="normal">2303</span>
-<span class="normal">2304</span>
-<span class="normal">2305</span>
-<span class="normal">2306</span>
-<span class="normal">2307</span>
-<span class="normal">2308</span>
-<span class="normal">2309</span>
-<span class="normal">2310</span>
-<span class="normal">2311</span>
-<span class="normal">2312</span>
-<span class="normal">2313</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_action_hook</span><span class="p">(</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2322</span>
+<span class="normal">2323</span>
+<span class="normal">2324</span>
+<span class="normal">2325</span>
+<span class="normal">2326</span>
+<span class="normal">2327</span>
+<span class="normal">2328</span>
+<span class="normal">2329</span>
+<span class="normal">2330</span>
+<span class="normal">2331</span>
+<span class="normal">2332</span>
+<span class="normal">2333</span>
+<span class="normal">2334</span>
+<span class="normal">2335</span>
+<span class="normal">2336</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_action_hook</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">phase</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">fn</span><span class="p">,</span>
@@ -10674,30 +10761,7 @@ running, and re-dispatching it would churn cues that are on stage.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2319</span>
-<span class="normal">2320</span>
-<span class="normal">2321</span>
-<span class="normal">2322</span>
-<span class="normal">2323</span>
-<span class="normal">2324</span>
-<span class="normal">2325</span>
-<span class="normal">2326</span>
-<span class="normal">2327</span>
-<span class="normal">2328</span>
-<span class="normal">2329</span>
-<span class="normal">2330</span>
-<span class="normal">2331</span>
-<span class="normal">2332</span>
-<span class="normal">2333</span>
-<span class="normal">2334</span>
-<span class="normal">2335</span>
-<span class="normal">2336</span>
-<span class="normal">2337</span>
-<span class="normal">2338</span>
-<span class="normal">2339</span>
-<span class="normal">2340</span>
-<span class="normal">2341</span>
-<span class="normal">2342</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2342</span>
 <span class="normal">2343</span>
 <span class="normal">2344</span>
 <span class="normal">2345</span>
@@ -10724,7 +10788,30 @@ running, and re-dispatching it would churn cues that are on stage.</p>
 <span class="normal">2366</span>
 <span class="normal">2367</span>
 <span class="normal">2368</span>
-<span class="normal">2369</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">route_audio_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">2369</span>
+<span class="normal">2370</span>
+<span class="normal">2371</span>
+<span class="normal">2372</span>
+<span class="normal">2373</span>
+<span class="normal">2374</span>
+<span class="normal">2375</span>
+<span class="normal">2376</span>
+<span class="normal">2377</span>
+<span class="normal">2378</span>
+<span class="normal">2379</span>
+<span class="normal">2380</span>
+<span class="normal">2381</span>
+<span class="normal">2382</span>
+<span class="normal">2383</span>
+<span class="normal">2384</span>
+<span class="normal">2385</span>
+<span class="normal">2386</span>
+<span class="normal">2387</span>
+<span class="normal">2388</span>
+<span class="normal">2389</span>
+<span class="normal">2390</span>
+<span class="normal">2391</span>
+<span class="normal">2392</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">route_audio_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Route audio OSCQuery message to the appropriate handler.</span>
 
 <span class="sd">    Args:</span>
@@ -10843,33 +10930,33 @@ running, and re-dispatching it would churn cues that are on stage.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2371</span>
-<span class="normal">2372</span>
-<span class="normal">2373</span>
-<span class="normal">2374</span>
-<span class="normal">2375</span>
-<span class="normal">2376</span>
-<span class="normal">2377</span>
-<span class="normal">2378</span>
-<span class="normal">2379</span>
-<span class="normal">2380</span>
-<span class="normal">2381</span>
-<span class="normal">2382</span>
-<span class="normal">2383</span>
-<span class="normal">2384</span>
-<span class="normal">2385</span>
-<span class="normal">2386</span>
-<span class="normal">2387</span>
-<span class="normal">2388</span>
-<span class="normal">2389</span>
-<span class="normal">2390</span>
-<span class="normal">2391</span>
-<span class="normal">2392</span>
-<span class="normal">2393</span>
-<span class="normal">2394</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2394</span>
 <span class="normal">2395</span>
 <span class="normal">2396</span>
-<span class="normal">2397</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">route_dmx_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">2397</span>
+<span class="normal">2398</span>
+<span class="normal">2399</span>
+<span class="normal">2400</span>
+<span class="normal">2401</span>
+<span class="normal">2402</span>
+<span class="normal">2403</span>
+<span class="normal">2404</span>
+<span class="normal">2405</span>
+<span class="normal">2406</span>
+<span class="normal">2407</span>
+<span class="normal">2408</span>
+<span class="normal">2409</span>
+<span class="normal">2410</span>
+<span class="normal">2411</span>
+<span class="normal">2412</span>
+<span class="normal">2413</span>
+<span class="normal">2414</span>
+<span class="normal">2415</span>
+<span class="normal">2416</span>
+<span class="normal">2417</span>
+<span class="normal">2418</span>
+<span class="normal">2419</span>
+<span class="normal">2420</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">route_dmx_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Route DMX OSCQuery message to the DMX player.</span>
 
 <span class="sd">    Args:</span>
@@ -11133,30 +11220,7 @@ guarded again (disarm_if_unchanged).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2166</span>
-<span class="normal">2167</span>
-<span class="normal">2168</span>
-<span class="normal">2169</span>
-<span class="normal">2170</span>
-<span class="normal">2171</span>
-<span class="normal">2172</span>
-<span class="normal">2173</span>
-<span class="normal">2174</span>
-<span class="normal">2175</span>
-<span class="normal">2176</span>
-<span class="normal">2177</span>
-<span class="normal">2178</span>
-<span class="normal">2179</span>
-<span class="normal">2180</span>
-<span class="normal">2181</span>
-<span class="normal">2182</span>
-<span class="normal">2183</span>
-<span class="normal">2184</span>
-<span class="normal">2185</span>
-<span class="normal">2186</span>
-<span class="normal">2187</span>
-<span class="normal">2188</span>
-<span class="normal">2189</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2189</span>
 <span class="normal">2190</span>
 <span class="normal">2191</span>
 <span class="normal">2192</span>
@@ -11185,7 +11249,30 @@ guarded again (disarm_if_unchanged).</p>
 <span class="normal">2215</span>
 <span class="normal">2216</span>
 <span class="normal">2217</span>
-<span class="normal">2218</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_dispatched_follow</span><span class="p">(</span>
+<span class="normal">2218</span>
+<span class="normal">2219</span>
+<span class="normal">2220</span>
+<span class="normal">2221</span>
+<span class="normal">2222</span>
+<span class="normal">2223</span>
+<span class="normal">2224</span>
+<span class="normal">2225</span>
+<span class="normal">2226</span>
+<span class="normal">2227</span>
+<span class="normal">2228</span>
+<span class="normal">2229</span>
+<span class="normal">2230</span>
+<span class="normal">2231</span>
+<span class="normal">2232</span>
+<span class="normal">2233</span>
+<span class="normal">2234</span>
+<span class="normal">2235</span>
+<span class="normal">2236</span>
+<span class="normal">2237</span>
+<span class="normal">2238</span>
+<span class="normal">2239</span>
+<span class="normal">2240</span>
+<span class="normal">2241</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_dispatched_follow</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">cue</span><span class="p">:</span> <span class="n">Cue</span><span class="p">,</span>
     <span class="n">gen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -11260,13 +11347,13 @@ guarded again (disarm_if_unchanged).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/cues/CueHandler.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2273</span>
-<span class="normal">2274</span>
-<span class="normal">2275</span>
-<span class="normal">2276</span>
-<span class="normal">2277</span>
-<span class="normal">2278</span>
-<span class="normal">2279</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">wait_for_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">thread</span><span class="p">:</span> <span class="n">Thread</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2296</span>
+<span class="normal">2297</span>
+<span class="normal">2298</span>
+<span class="normal">2299</span>
+<span class="normal">2300</span>
+<span class="normal">2301</span>
+<span class="normal">2302</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">wait_for_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">thread</span><span class="p">:</span> <span class="n">Thread</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Waits for a cue to finish."""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Waiting for </span><span class="si">{</span><span class="n">thread</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> to finish"</span><span class="p">)</span>
     <span class="k">while</span> <span class="n">thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
