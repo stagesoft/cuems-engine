@@ -1701,7 +1701,12 @@ class CueHandler:
         # Every cue of the pass carries the same chain_epoch, so a stale cascade
         # (loop-back) and a cycle are both refused in go().
         post_go_thread = None
-        if (
+        if unroll and cue.post_go == "go" and not self._chain_continues(cue):
+            Logger.info(
+                f"stop_project cue {cue.id}: chain break, the cues after it "
+                "are not dispatched"
+            )
+        elif (
             unroll
             and cue.post_go == "go"
             and not cue._stop_requested
@@ -1978,7 +1983,12 @@ class CueHandler:
                 pass
 
         go_at_end_thread = None
-        if (
+        if cue.post_go == "go_at_end" and not self._chain_continues(cue):
+            Logger.info(
+                f"stop_project cue {cue.id}: chain break, its go_at_end follow "
+                "is not fired"
+            )
+        elif (
             cue.post_go == "go_at_end"
             and cue._target_object
             and not cue._stop_requested
@@ -2030,6 +2040,19 @@ class CueHandler:
         if base_end_ms < start_ms:
             base_end_ms = start_ms  # stale from a previous run
         return base_end_ms + cue.postwait.milliseconds_exact
+
+    @staticmethod
+    def _chain_continues(cue: Cue) -> bool:
+        """False for a stop_project ActionCue (ClickUp 869fhjdq5): the authored
+        end of the show is a hard chain break on every node. Nothing after it
+        is unrolled at its arrival and no go_at_end follow fires from it, so no
+        cue can start in the milliseconds before the controller's STOP lands.
+        A DISABLED stop cue never gets here: disabled cues are transparent to
+        the chain walk (rehearsal mode)."""
+        return not (
+            isinstance(cue, ActionCue)
+            and getattr(cue, "action_type", None) == "stop_project"
+        )
 
     @staticmethod
     def _follows_out(cue: Cue) -> bool:

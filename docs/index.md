@@ -47,7 +47,7 @@ A single `GO` press:
 1. **Controller** resolves the current cue pointer, verifies all required nodes are armed, and broadcasts a `COMMAND/GO`.
 2. **Node Engine** receives the command, identifies the first local cue in the `post_go='go'` chain, and fires it with a frozen MTC timestamp.
 3. **Player subprocesses** start their media aligned to that MTC snapshot; all nodes play in sync regardless of network latency.
-4. **Status** flows back over NNG (`armed_ready`, `script_finished`, cue-level events) to update the controller's state machine and the editor UI.
+4. **Status** flows back over NNG (`armed_ready`, `stop_project`, `follow`, cue-level events) to update the controller's state machine and the editor UI.
 
 ---
 

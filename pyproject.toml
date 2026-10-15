@@ -45,7 +45,7 @@ python = "^3.11"
 # >=rc13: AudioCue.master_vol defaults to 100 (0-100 scale) there, which
 # FadeActionHandler divides by 100; rc11 still defaulted it to 1 (a fade
 # from a fresh AudioCue started at 1%).
-cuemsutils = ">=0.1.0rc13"
+cuemsutils = ">=0.1.0rc17"
 mido = "1.3.3"
 packaging = "*"
 python-rtmidi = "*"
