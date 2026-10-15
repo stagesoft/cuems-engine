@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 set -e
 
 case "$1" in
@@ -6,6 +9,9 @@ case "$1" in
         # Remove the cuems-node-engine PATH drop-in for the mock rsync shim
         rm -f /etc/systemd/system/cuems-node-engine.service.d/10-mock-rsync.conf
         rmdir --ignore-fail-on-non-empty /etc/systemd/system/cuems-node-engine.service.d 2>/dev/null || true
+        # Remove the cuems-nodeconf drop-in that runs the mock nodeconf
+        rm -f /etc/systemd/system/cuems-nodeconf.service.d/10-mock-nodeconf.conf
+        rmdir --ignore-fail-on-non-empty /etc/systemd/system/cuems-nodeconf.service.d 2>/dev/null || true
         if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
             systemctl daemon-reload || true
         fi

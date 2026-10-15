@@ -1,10 +1,17 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 set -e
 
 case "$1" in
     configure)
         if command -v systemctl >/dev/null 2>&1; then
             systemctl daemon-reload || true
+
+            # A running cuems-nodeconf picks up the mock drop-in only on
+            # restart; one that is stopped or disabled is left alone.
+            systemctl try-restart cuems-nodeconf || true
 
             if systemctl is-enabled cuems-mock-videocomposer >/dev/null 2>&1; then
                 echo "Service cuems-mock-videocomposer is already enabled."
