@@ -1,3 +1,24 @@
+cuems-engine (0.1.0rc6-5) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm:
+    - 869fhjdq5 (#35): stop_project ActionCue, the authored end of an
+      unattended show. Every node reveals it and reports it to the
+      controller, which runs its own STOP (running no, every cue 0, nodes
+      re-armed); the first valid report wins, the others are dropped at
+      INFO. The node never stops itself; a 3 s watchdog only logs. The cue
+      is a hard chain break on the node; disabled, it is transparent
+      (rehearsal mode). After the last cue the engine still keeps
+      running=yes by design. Operator recipes in docs/unattended-playback.md.
+    - Cue ADD/UPDATE reports are ignored while not running (a late start
+      report after a STOP no longer leaves a cue at 1 or 100), and STOP
+      restarts the arm watchdog ("Re-arm after STOP stalled").
+    - 869fhjdp8: the dead script_finished aggregator is removed.
+  * Depends on cuems-utils (>= 0.1.0rc17) for the schema value. The whole
+    cluster must run this engine. Pairs with cuems-frontend PR #15 and
+    cuems-power-bridge 0.3.1-2.
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 15 Oct 2026 18:42:29 +0200
+
 cuems-engine (0.1.0rc6-4) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:
