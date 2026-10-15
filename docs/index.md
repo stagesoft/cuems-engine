@@ -153,6 +153,10 @@ submits an asyncio coroutine to the engine's shared event loop via
 free for NNG heartbeats throughout. An SC-001 integration test verifies ≤ ±20 %
 heartbeat jitter during a concurrent multi-GB transfer.
 
+### Unattended playback: authored end of show, loop-back
+
+After the last cue the engine keeps `running = yes` by design: the operator decides when a show is over. A show that must end without an operator says so in its script with a project-scope **`stop_project`** ActionCue, which the controller turns into its own STOP (every node reports the cue, the first valid report wins); a show that must loop uses an ActionCue `play` aimed at its first cue. Recipes, journal lines and version requirements: [Unattended playback](unattended-playback.md).
+
 ### FadeCue and gradient-motiond integration
 
 `FadeCue` dispatches a `/gradient/start_fade` UDP OSC datagram to
