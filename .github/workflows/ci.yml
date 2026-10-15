@@ -52,66 +52,74 @@ jobs:
 
   test:
     name: Tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    # Debian 12 is the production OS: its python3 is the 3.11 the engine
+    # targets, and the pyossia wheel / libmtcmaster / librtpmidid builds are
+    # made for it. The job runs as root inside the container (no sudo).
+    container: debian:bookworm
     needs: lint
     permissions:
       contents: write   # required to push the coverage badge to gh-pages
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11 (deadsnakes)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends software-properties-common
-          sudo add-apt-repository -y ppa:deadsnakes/ppa
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            python3.11 \
-            python3.11-dev \
-            python3.11-venv \
-            python3.11-distutils
-
+      # Before checkout: without git, actions/checkout falls back to a
+      # tarball, and the badge deploy needs git + rsync. The slim image also
+      # lacks tools the engine shells out to: ss (iproute2, PortHandler port
+      # scan) and pgrep (procps, PlayerHandler orphan detection).
       - name: Install system packages
         run: |
-          sudo apt-get install -y --no-install-recommends \
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git rsync wget zstd \
+            python3 python3-dev python3-venv pipx \
+            iproute2 procps \
             libjack-jackd2-dev \
             libsystemd-dev \
             gcc \
             pkg-config \
             libavahi-client-dev \
-            librtmidi6 \
-            wget
-          wget https://github.com/stagesoft/libossia/releases/download/v2.0.0rc6/python3-pyossia_2.0.0-rc6+124+cuems2_amd64.deb -O python3-pyossia.deb
-          wget https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O libmtcmaster.deb
-          wget https://github.com/stagesoft/rtpmidid/releases/download/v26.06-1stagelab1/librtpmidid0_26.01.1.g7f552_amd64.deb -O librtpmidid0.deb
-          # jammy's python3 metapackage is 3.10; pyossia requires >= 3.11.
-          # --unpack skips postinst (py3compile needs a registered python3 >= 3.11).
-          sudo dpkg --force-depends --unpack "$(realpath python3-pyossia.deb)"
-          # --force-depends skips libmtcmaster's own Depends, so librtmidi6
-          # (librtmidi.so.6, jammy universe 5.0.0-2) is installed above; without
-          # it every test that imports cuemsengine errored on
-          # "libmtcmaster import error: librtmidi.so.6" and CI ran 0 tests.
-          sudo dpkg --force-depends --unpack "$(realpath libmtcmaster.deb)"
-          sudo dpkg --force-depends --unpack "$(realpath librtpmidid0.deb)"
+            librtmidi6
 
+      - uses: actions/checkout@v4
+
+      - name: Trust the workspace for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install CUEMS native libraries
+        run: |
+          # pyossia is not installed here: it comes from the wheel pinned in
+          # pyproject.toml's dev group (same libossia release as the .deb).
+          wget -q https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O /tmp/libmtcmaster.deb
+          wget -q https://github.com/stagesoft/rtpmidid/releases/download/v26.06-1stagelab1/librtpmidid0_26.01.1.g7f552_amd64.deb -O /tmp/librtpmidid0.deb
+          apt-get install -y --no-install-recommends /tmp/librtpmidid0.deb
+          # libmtcmaster Depends on cuems-utils, which is not a Debian package
+          # (the engine gets it from PyPI), so it cannot be apt-installed.
+          # Its real library dependency, librtmidi6, is installed above;
+          # without it every test that imports cuemsengine errors on
+          # "libmtcmaster import error: librtmidi.so.6" and CI runs 0 tests.
+          dpkg --force-depends --unpack /tmp/libmtcmaster.deb
+
+      # Pinned: the lock file is written by this Poetry version.
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+        run: |
+          pipx install poetry==2.4.1
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Configure Poetry for Python 3.11
-        run: |
-          poetry config virtualenvs.options.system-site-packages true
-          poetry env use python3.11
+        run: poetry env use python3
 
+      # The key carries the venv layout: venvs cached under the old
+      # ubuntu/deadsnakes keys were built for another OS and must not be
+      # restored into this one.
       - name: Load cached virtualenv
         id: cache-venv
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-3.11-deadsnakes-systemd-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-bookworm-3.11-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
@@ -157,9 +165,8 @@ jobs:
       - name: Generate coverage badge
         if: github.event_name == 'push'
         run: |
-          pip install "genbadge[coverage]"
           mkdir -p _badge
-          genbadge coverage -i coverage.xml -o _badge/coverage.svg
+          pipx run --spec "genbadge[coverage]" genbadge coverage -i coverage.xml -o _badge/coverage.svg
 
       - name: Deploy coverage badge to GitHub Pages
         if: github.event_name == 'push'
