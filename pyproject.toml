@@ -54,7 +54,9 @@ python-rtmidi = "*"
 python-osc = "1.9.3"
 JACK-Client = ">=0.5.4"
 # systemd-python is provided by python3-systemd Debian package (see debian/control)
-# pyossia is provided by python3-pyossia Debian package (see debian/control)
+# pyossia is provided at runtime by the python3-pyossia Debian package (see
+# debian/control); development and CI install the wheel from the same
+# stagesoft/libossia release, pinned in the dev group below.
 
 [tool.poetry.group.dev.dependencies]
 psutil = "*"
@@ -74,6 +76,12 @@ isort = "*"
 flake8 = "*"
 autopep8 = "^2.3.2"
 flake8-pyproject = "^1.2.4"
+# The CUEMS pyossia fork is not on PyPI. This wheel and the python3-pyossia
+# .deb that production runs are built together, from one commit, on Debian 12
+# (libossia tools/build-pyossia-release.sh), so tests exercise the same binary
+# the controllers and nodes load. Bump it together with the python3-pyossia
+# floor in debian/control. linux/x86_64 + CPython 3.11 only (cp311 wheel).
+pyossia = { url = "https://github.com/stagesoft/libossia/releases/download/v2.0.0-rc6%2B124%2Bcuems3/pyossia-2.0.0rc6+124.cuems.3-cp311-cp311-linux_x86_64.whl", markers = "sys_platform == 'linux' and platform_machine == 'x86_64'" }
 
 [tool.poetry.scripts]
 controller-engine = "cuemsengine.scripts.controller_engine:main"

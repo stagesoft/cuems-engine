@@ -14,16 +14,16 @@ from cuemsengine.tools.PortHandler import PORT_HANDLER
 from .fixtures import _ossia_release, ossia_client_factory, ossia_server_factory
 from .helpers import free_udp_port
 
-# pyossia is neither pinned nor vendored: it comes from the system
-# dist-packages (the shared venv sets include-system-site-packages), and every
-# build reports itself as "0+unknown", so there is no version to compare
-# against. Older libossia builds have no Node.remove_child at all, which is
-# what node removal is implemented on. Probe the capability instead of the
-# version, and skip loudly rather than assert against an API the installed
-# build does not have.
+# Dev and CI install pyossia from the wheel pinned in pyproject.toml's dev
+# group (libossia 2.0.0-rc6+124+cuems3 or later), which has Node.remove_child.
+# Hosts that run the suite against the system python3-pyossia .deb may carry
+# an older build without it; builds before cuems3 also report
+# pyossia.__version__ as "0+unknown" (and one version number, cuems2, names
+# two different binaries), so probe the capability instead of the version and
+# skip loudly rather than assert against an API the installed build lacks.
 #
-# A current build (verified on the test2 cluster) does export it, so a skip
-# here means the HOST needs a newer pyossia — not that the test is wrong.
+# A skip here means the HOST needs a newer pyossia — not that the test is
+# wrong. It never skips in dev or CI unless the pinned wheel regresses.
 requires_node_removal = mark.skipif(
     not hasattr(pyossia.Node, "remove_child"),
     reason=(

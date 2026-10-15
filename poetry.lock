@@ -344,14 +344,14 @@ toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
 name = "cuemsutils"
-version = "0.1.0rc14"
+version = "0.1.0rc16"
 description = "Reusable classes and methods for CueMS system"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "cuemsutils-0.1.0rc14-py3-none-any.whl", hash = "sha256:56b7ee57421ba809168f9379597bb150fe72a718529b705135327bda758c2a3b"},
-    {file = "cuemsutils-0.1.0rc14.tar.gz", hash = "sha256:142a9fcefd33329f42aebdcead86b6b1e1112b9a62b61b2e2d56df7b0e9be5b4"},
+    {file = "cuemsutils-0.1.0rc16-py3-none-any.whl", hash = "sha256:1e9e78be1d423f477a6d925edc124cc56e30f1f05c86ea35a16905cd841c8730"},
+    {file = "cuemsutils-0.1.0rc16.tar.gz", hash = "sha256:900d724c1a63ff339410c62059f728452c803962eb8cb090486885064a4cc863"},
 ]
 
 [package.dependencies]
@@ -958,6 +958,22 @@ dev = ["pytest", "pytest-asyncio", "pytest-trio", "trio"]
 docs = ["sphinx", "sphinx-rtd-theme", "sphinxcontrib-trio"]
 
 [[package]]
+name = "pyossia"
+version = "2.0.0rc6+124.cuems.3"
+description = "libossia is a modern C++, cross-environment distributed object model for creative coding and interaction scoring Edit"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+markers = "sys_platform == \"linux\" and platform_machine == \"x86_64\""
+files = [
+    {file = "pyossia-2.0.0rc6+124.cuems.3-cp311-cp311-linux_x86_64.whl", hash = "sha256:d7b3118ccf25dba5088eb2341ceb27b35971ce67a12def736522630a1bd7d76f"},
+]
+
+[package.source]
+type = "url"
+url = "https://github.com/stagesoft/libossia/releases/download/v2.0.0-rc6%2B124%2Bcuems3/pyossia-2.0.0rc6+124.cuems.3-cp311-cp311-linux_x86_64.whl"
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 description = "pytest: simple powerful testing with Python"
@@ -1370,4 +1386,4 @@ docs = ["Sphinx", "elementpath (>=4.4.0,<5.0.0)", "jinja2", "sphinx-rtd-theme"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "e541d52d0a9be96d7e2fd9ae3f6564e2e31f9c23cc0bab08dd80bf3c1aa06cec"
+content-hash = "c067a3fbcaf40d0b5d99e31659e9dde948971055643e44e50ebe753ba1a84bf0"

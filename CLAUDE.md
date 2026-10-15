@@ -25,6 +25,8 @@ Role is decided **only** by `<node_role>` in `/etc/cuems/network_map.xml` (`cont
 cd <this repo> && poetry install
 ```
 
+**pyossia in dev/CI comes from a pinned wheel, not the system.** `poetry install` pulls the CUEMS libossia release wheel from the dev group (`pyproject.toml`, url + hash in `poetry.lock`); the venv is isolated (no system site-packages, also in CI). Production loads the `python3-pyossia` .deb built from the same libossia commit. **Bump the wheel URL and the `python3-pyossia` floor in `debian/control` together** (versioning scheme: libossia `src/ossia-python/README.md`).
+
 Runs as the two systemd services above. On the dev/deploy boxes the engine often runs **editable from source** via a `cuemsengine.pth` overlay rather than the `.deb` — so a `.deb X.Y` version label can be misleading; patch = edit the working tree + restart both engines.
 
 **Commits must be GPG-signed** (`commit.gpgsign=true`; the repo enforces it). On a "gpg failed to sign" error, retry the commit — never `--no-gpg-sign`.

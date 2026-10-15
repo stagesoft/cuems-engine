@@ -226,12 +226,16 @@ Binaries are installed to `/usr/lib/cuems/bin/`; systemd service files are provi
 
 * Python 3.11 (managed via pyenv)
 * Poetry
-* System packages: `python3-pyossia`, `python3-systemd`, `libjack-jackd2-dev`
+* System packages: `python3-systemd`, `libjack-jackd2-dev`
+* linux/x86_64: pyossia is installed by Poetry from the CUEMS libossia release
+  wheel pinned in the dev group (`cp311`, built on Debian 12 together with the
+  `python3-pyossia` .deb production runs). No system pyossia is needed, and
+  the venv does not use system site-packages.
 
 ### Editable install
 
 ```bash
-# From the repo root
+# From the repo root (installs the dev group, pyossia included)
 poetry install
 
 # Or, when the package is already installed system-wide under /usr/lib/cuems,
@@ -243,18 +247,20 @@ Restart the `controller-engine` and `node-engine` services after symlinking to p
 
 ### Run tests
 
+From the repo root, the same two passes CI runs:
+
 ```bash
-cd src
-pytest
+poetry run pytest -m "not integration" -n auto     # unit tests, parallel
+poetry run pytest -m "integration and not slow"    # fast integration tests
 ```
 
 Useful markers:
 
 ```bash
-pytest -m unit                  # fast unit tests only
-pytest -m "not slow"            # skip long-running tests
-pytest -m integration           # integration tests (requires hardware or mocks)
-pytest --cov=cuemsengine        # with coverage report
+poetry run pytest -m unit                  # fast unit tests only
+poetry run pytest -m "not slow"            # skip long-running tests
+poetry run pytest -m integration           # integration tests (requires hardware or mocks)
+poetry run pytest --cov=src                # with coverage report
 ```
 
 ### Code style
