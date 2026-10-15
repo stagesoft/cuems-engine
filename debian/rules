@@ -46,6 +46,9 @@ override_dh_install:
 	install -m 755 debian/mock-scripts/rsync debian/cuems-engine-mock/usr/lib/cuems/mock-bin/rsync
 	install -d debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d
 	install -m 644 debian/mock-rsync-dropin.conf debian/cuems-engine-mock/etc/systemd/system/cuems-node-engine.service.d/10-mock-rsync.conf
+	# Stage cuems-nodeconf drop-in: mock nodeconf (adoption without discovery)
+	install -d debian/cuems-engine-mock/etc/systemd/system/cuems-nodeconf.service.d
+	install -m 644 debian/mock-nodeconf-dropin.conf debian/cuems-engine-mock/etc/systemd/system/cuems-nodeconf.service.d/10-mock-nodeconf.conf
 
 override_dh_auto_clean:
 	rm -rf build *.egg-info src/*.egg-info
