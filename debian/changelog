@@ -1,3 +1,30 @@
+cuems-engine (0.1.1-1) UNRELEASED; urgency=medium
+
+  * Coordinated xml-refactor landing (cuems-utils feature 016): every CUEMS
+    repository moves to its own next stable minor. The released 0.1.0rc2-3
+    entry below is kept as it shipped.
+  * Version sites agree on 0.1.1. This changelog said 0.1.0rc2-3 while
+    pyproject.toml and cuemsengine.__version__ said 0.1.0rc7; the package
+    and the module had never agreed.
+  * Depends: cuems-utils (>= 0.1.1), cuems-utils (<< 0.1.2~); was
+    (>= 0.1.0rc16), (<< 0.1.1~). cuems-common (>= 1.3.1~), was
+    (>= 1.3.0-23~), which the released 1.3.0-23..-25 satisfied without the
+    node_role vocabulary. cuems-engine-mock: cuems-engine (>= 0.1.1), was
+    (>= 0.1.0rc2). pyproject: cuemsutils >=0.1.1,<0.1.2.
+  * Depends: libmtcmaster (>= 0.0.2-0), new. The engine loads
+    libmtcmaster.so.0 (src/cuemsengine/core/libmtc.py) and nothing declared
+    it. 0.0.2-0 is the published release (GitHub v0.0.2-0), not bumped.
+  * poetry.lock is NOT relocked: cuemsutils 0.1.1 is unresolvable until it is
+    published. tests/test_lock_is_current.py (strict xfail) turns red the day
+    the lock is regenerated, so the obligation cannot be forgotten.
+  * NOT YET RECONCILED: the release line debian/bookworm (0.1.0rc3-1 ..
+    0.1.0rc6-5) is 119 commits ahead and not absorbed. That includes the
+    stop_project ActionCue, which needs cuemsutils' stop_project
+    (0.1.0rc17). Do not publish until it is reconciled and relocked, then
+    re-verify the package relations.
+
+ -- Adrià Masip <adria@stagelab.coop>  Fri, 16 Oct 2026 19:00:00 +0200
+
 cuems-engine (0.1.0rc2-3) bookworm; urgency=medium
 
   * cuems-engine-mock: ship no-op rsync shim (/usr/lib/cuems/mock-

@@ -1,8 +1,16 @@
 # Changelog
 
-## v0.1.0rc7 — UNRELEASED
+## v0.1.1 — UNRELEASED
 
-Moves the engine onto `cuems-utils` 0.1.0rc16's public API. Nodes are identified by
+Coordinated `xml-refactor` landing (cuems-utils feature 016): every CUEMS repository moves to its own
+next stable minor, and this section (written as `v0.1.0rc7`, never released) is that version. The
+package declares `libmtcmaster (>= 0.0.2-0)`, which it always loaded but never declared, and bounds
+the library `>= 0.1.1`, `<< 0.1.2~`. **Not yet reconciled** with the `debian/bookworm` release line
+(0.1.0rc3-1 … 0.1.0rc6-5, including the `stop_project` ActionCue). `poetry.lock` is relocked at
+publication.
+
+Moves the engine onto `cuems-utils` 0.1.1's public API (developed against `0.1.0rc16`, which was
+since released without it). Nodes are identified by
 `node_role` (not `node_type`), shows load through `CuemsScript.load` — so version-1 `script.xml`
 files load again, converted in memory — and node and cue ids are handled as the library delivers
 them, which removes a `cluster_status` crash on any node map the current library loads. Ships

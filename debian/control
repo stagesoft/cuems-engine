@@ -16,18 +16,23 @@ Architecture: all
 # cuems-utils is the release gate (C7): the floor is the release whose public
 # surface this engine reads (node_role/NodeIndex, CuemsScript.load converting
 # version-1 scripts, the versioned schemas), and the ceiling sits below every
-# 0.1.1 pre-release and release, which removes the deprecated surface.
-# cuems-common (>= 1.3.0-23~) is here to inherit its
-# Breaks: cuems-nodeconf (<< 0.1.0-8): this engine reads <node_role>, and an
+# 0.1.2 pre-release and release, which removes the deprecated surface (moved
+# from 0.1.0rc16 / 0.1.1 by cuems-utils feature 016, the coordinated bump).
+# cuems-common (>= 1.3.1~) is here to inherit its
+# Breaks: cuems-nodeconf (<< 0.1.1~): this engine reads <node_role>, and an
 # older nodeconf still writes <node_type>. The engine declares no Breaks: of
 # its own.
+# libmtcmaster: src/cuemsengine/core/libmtc.py loads libmtcmaster.so.0 and the
+# controller imports it; it was never declared (016, FR-023). 0.0.2-0 is the
+# published release (GitHub v0.0.2-0), which the engine CI also installs.
 Depends: ${misc:Depends},
          ${python3:Depends},
-         cuems-utils (>= 0.1.0rc16),
-         cuems-utils (<< 0.1.1~),
-         cuems-common (>= 1.3.0-23~),
+         cuems-utils (>= 0.1.1),
+         cuems-utils (<< 0.1.2~),
+         cuems-common (>= 1.3.1~),
          python3 (>= 3.11),
          python3-pyossia (>= 2.0.0-rc6+124+cuems3),
+         libmtcmaster (>= 0.0.2-0),
          python3-systemd (>= 235),
          python3-packaging
 Description: CUEMS Engine - Engine infrastructure of the CueMS system
@@ -46,7 +51,7 @@ Description: CUEMS Engine - Engine infrastructure of the CueMS system
 Package: cuems-engine-mock
 Architecture: all
 Depends: ${misc:Depends},
-         cuems-engine (>= 0.1.0rc2)
+         cuems-engine (>= 0.1.1)
 Conflicts: cuems-audioplayer
 Description: CUEMS Engine Mock Players
  Mock replacement binaries for audioplayer-cuems, jack-volume,
