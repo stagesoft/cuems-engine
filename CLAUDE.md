@@ -126,3 +126,7 @@ Engine → VideoComposer and engine → DmxPlayer are inter-component protocols 
 - **Single-box controller won't arm if `network_map.xml`'s controller `<ip>` isn't locally reachable.** node-engine dials `tcp://<controller-ip>:9093` for the NNG hub; a dead/absent `<ip>` leaves it in TCP SYN-SENT forever with no error log → never receives `load` → never arms (`409 not_armed`). Diagnose: `ss -tnp | grep :9093` (SYN-SENT from node-engine). Fix for single-box: set controller `<ip>` to `127.0.0.1` (hub listens on 0.0.0.0). Only valid with no real remote nodes; if nodeconf is enabled it re-owns `<ip>` and writes a real assigned local addr (also fine).
 - **Isolated MTC-harness injection on a live host is polluted by the engine's own MtcMaster** (ALSA client 130 emits periodic resync full-frames at position 0 even with no project loaded → interleaves with harness frames → spurious +24h wraps). Stop the whole stack first: `systemctl stop cuems-controller-engine cuems-node-engine cuems-midiconnector rtpmidid cuems-videocomposer`. Run MTC tools as root (`/dev/snd/seq` is `root:audio`).
 - Engine canvas (bbox of ALL `display.conf` `[output:*]` regions) vs videocomposer canvas (connected DRM connectors only) can diverge on partially-cabled rigs — a **known accepted limitation**, don't ad-hoc fix. See the videocomposer CLAUDE.md.
+
+<!-- SPECKIT START -->
+Active feature plan: [specs/009-release-line-reconciliation/plan.md](specs/009-release-line-reconciliation/plan.md)
+<!-- SPECKIT END -->
