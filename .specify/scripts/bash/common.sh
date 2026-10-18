@@ -249,6 +249,29 @@ json_escape() {
     done
 }
 
+# Succeed when .specify/feature.json pins an existing feature directory equal to $2.
+# Used to skip branch-name validation when the feature is selected by feature.json.
+# Usage: feature_json_matches_feature_dir <repo_root> <feature_dir>
+feature_json_matches_feature_dir() {
+    local repo_root="$1"
+    local feature_dir="$2"
+    local feature_json="$repo_root/.specify/feature.json"
+    [[ -f "$feature_json" ]] || return 1
+
+    local pinned=""
+    if has_jq; then
+        pinned=$(jq -r '.feature_directory // empty' "$feature_json" 2>/dev/null) || return 1
+    else
+        pinned=$(sed -n 's/.*"feature_directory"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$feature_json" | head -n 1)
+    fi
+    [[ -n "$pinned" ]] || return 1
+    [[ "$pinned" = /* ]] || pinned="$repo_root/$pinned"
+
+    # Compare canonical paths; both must be existing directories.
+    [[ -d "$pinned" && -d "$feature_dir" ]] || return 1
+    [[ "$(cd "$pinned" && pwd -P)" == "$(cd "$feature_dir" && pwd -P)" ]]
+}
+
 check_file() { [[ -f "$1" ]] && echo "  ✓ $2" || echo "  ✗ $2"; }
 check_dir() { [[ -d "$1" && -n $(ls -A "$1" 2>/dev/null) ]] && echo "  ✓ $2" || echo "  ✗ $2"; }
 
