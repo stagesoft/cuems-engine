@@ -2041,6 +2041,11 @@ class ControllerEngine(BaseEngine):
             self._required_nodes.clear()
             self._adopted_nodes.clear()
         self._clear_load_diagnosis()
-        self._forward_command_to_nodes("/engine/command/stop", value)
+        self.remove_show_lock_file()
+        # A real unload, not a STOP: a node's STOP re-arms the project it
+        # still holds (869fh8kef). The whole cluster must run this engine; an
+        # older node has no unload handler and keeps the project armed until
+        # the next load.
+        self._forward_command_to_nodes("/engine/command/unload", value)
         Logger.info("Project unloaded")
         return True
