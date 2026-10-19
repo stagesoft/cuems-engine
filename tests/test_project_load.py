@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import inspect
 from logging import DEBUG, INFO
@@ -534,7 +535,14 @@ class TestSharedTeardownRearmHelpers:
         reimplement the logic inline."""
         node_engine = NodeEngine(with_mtc=False)
 
-        load_src = inspect.getsource(node_engine._load_project_inner)
+        # The load's teardown lives in _teardown_project, shared with the
+        # unload (869fh8kef).
+        load_src = inspect.getsource(
+            node_engine._load_project_inner
+        ) + inspect.getsource(node_engine._teardown_project)
+        assert "self._teardown_project(" in inspect.getsource(
+            node_engine._load_project_inner
+        )
         stop_src = inspect.getsource(node_engine.stop_playback)
         for helper in ("_gradient_cancel_all", "_dmx_reset", "_notify_armed_ready"):
             assert f"self.{helper}(" in load_src, f"{helper} missing from load path"
