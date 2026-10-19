@@ -700,6 +700,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#cuemsengine.NodeEngine.NodeEngine.unload_project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unload_project
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1380,6 +1391,17 @@
     <span class="md-ellipsis">
       
         stop_playback
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cuemsengine.NodeEngine.NodeEngine.unload_project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unload_project
       
     </span>
   </a>
@@ -3570,7 +3592,12 @@ with:
 <span class="normal">2043</span>
 <span class="normal">2044</span>
 <span class="normal">2045</span>
-<span class="normal">2046</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ControllerEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
+<span class="normal">2046</span>
+<span class="normal">2047</span>
+<span class="normal">2048</span>
+<span class="normal">2049</span>
+<span class="normal">2050</span>
+<span class="normal">2051</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ControllerEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    The main engine class for the CUEMS system.</span>
 
@@ -5581,7 +5608,12 @@ with:
             <span class="bp">self</span><span class="o">.</span><span class="n">_required_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_load_diagnosis</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/stop"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remove_show_lock_file</span><span class="p">()</span>
+        <span class="c1"># A real unload, not a STOP: a node's STOP re-arms the project it</span>
+        <span class="c1"># still holds (869fh8kef). The whole cluster must run this engine; an</span>
+        <span class="c1"># older node has no unload handler and keeps the project armed until</span>
+        <span class="c1"># the next load.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/unload"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Project unloaded"</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
 </code></pre></div></td></tr></table></div>
@@ -6844,7 +6876,12 @@ nodes.</p>
 <span class="normal">2043</span>
 <span class="normal">2044</span>
 <span class="normal">2045</span>
-<span class="normal">2046</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">2046</span>
+<span class="normal">2047</span>
+<span class="normal">2048</span>
+<span class="normal">2049</span>
+<span class="normal">2050</span>
+<span class="normal">2051</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Unload the current project. Rejects if playback is running."""</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"Cannot unload while running. Stop playback first."</span><span class="p">)</span>
@@ -6862,7 +6899,12 @@ nodes.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_required_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_adopted_nodes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_clear_load_diagnosis</span><span class="p">()</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/stop"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">remove_show_lock_file</span><span class="p">()</span>
+    <span class="c1"># A real unload, not a STOP: a node's STOP re-arms the project it</span>
+    <span class="c1"># still holds (869fh8kef). The whole cluster must run this engine; an</span>
+    <span class="c1"># older node has no unload handler and keeps the project armed until</span>
+    <span class="c1"># the next load.</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_forward_command_to_nodes</span><span class="p">(</span><span class="s2">"/engine/command/unload"</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Project unloaded"</span><span class="p">)</span>
     <span class="k">return</span> <span class="kc">True</span>
 </code></pre></div></td></tr></table></div>
@@ -8883,7 +8925,43 @@ nodes.</p>
 <span class="normal">2009</span>
 <span class="normal">2010</span>
 <span class="normal">2011</span>
-<span class="normal">2012</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
+<span class="normal">2012</span>
+<span class="normal">2013</span>
+<span class="normal">2014</span>
+<span class="normal">2015</span>
+<span class="normal">2016</span>
+<span class="normal">2017</span>
+<span class="normal">2018</span>
+<span class="normal">2019</span>
+<span class="normal">2020</span>
+<span class="normal">2021</span>
+<span class="normal">2022</span>
+<span class="normal">2023</span>
+<span class="normal">2024</span>
+<span class="normal">2025</span>
+<span class="normal">2026</span>
+<span class="normal">2027</span>
+<span class="normal">2028</span>
+<span class="normal">2029</span>
+<span class="normal">2030</span>
+<span class="normal">2031</span>
+<span class="normal">2032</span>
+<span class="normal">2033</span>
+<span class="normal">2034</span>
+<span class="normal">2035</span>
+<span class="normal">2036</span>
+<span class="normal">2037</span>
+<span class="normal">2038</span>
+<span class="normal">2039</span>
+<span class="normal">2040</span>
+<span class="normal">2041</span>
+<span class="normal">2042</span>
+<span class="normal">2043</span>
+<span class="normal">2044</span>
+<span class="normal">2045</span>
+<span class="normal">2046</span>
+<span class="normal">2047</span>
+<span class="normal">2048</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NodeEngine</span><span class="p">(</span><span class="n">BaseEngine</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    This engine manages players for each node</span>
 
@@ -9033,7 +9111,7 @@ nodes.</p>
             <span class="k">return</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="n">command_name</span> <span class="o">==</span> <span class="s2">"go"</span><span class="p">:</span>
             <span class="n">relay</span><span class="o">.</span><span class="n">begin_run</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">command_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"stop"</span><span class="p">,</span> <span class="s2">"load"</span><span class="p">):</span>
+        <span class="k">elif</span> <span class="n">command_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"stop"</span><span class="p">,</span> <span class="s2">"load"</span><span class="p">,</span> <span class="s2">"unload"</span><span class="p">):</span>
             <span class="n">relay</span><span class="o">.</span><span class="n">end_run</span><span class="p">(</span><span class="n">command_name</span><span class="p">)</span>
             <span class="c1"># The STOP (or load) a stop_project cue was waiting for.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cancel_stop_project_watchdog</span><span class="p">()</span>
@@ -9270,7 +9348,7 @@ nodes.</p>
             <span class="s2">"setnextcue"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_next_cue</span><span class="p">,</span>
             <span class="s2">"cue_enabled"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_cue_enabled</span><span class="p">,</span>
             <span class="s2">"test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="s2">"unload"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">"unload"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">unload_project</span><span class="p">,</span>
             <span class="s2">"update"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">}</span>
 
@@ -9308,7 +9386,7 @@ nodes.</p>
                     <span class="k">try</span><span class="p">:</span>
                         <span class="n">handler</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
                     <span class="k">finally</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="n">command</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"stop"</span><span class="p">,</span> <span class="s2">"load"</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_follow_relay</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">command</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"stop"</span><span class="p">,</span> <span class="s2">"load"</span><span class="p">,</span> <span class="s2">"unload"</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_follow_relay</span><span class="p">:</span>
                             <span class="c1"># The receive hook counted it received; until</span>
                             <span class="c1"># here this node's epochs still belonged to the</span>
                             <span class="c1"># run it ends (869fc8ytz).</span>
@@ -9669,35 +9747,7 @@ nodes.</p>
             <span class="p">)</span>
             <span class="k">return</span> <span class="kc">False</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_gradient_cancel_all</span><span class="p">(</span><span class="s2">"project load"</span><span class="p">)</span>
-
-        <span class="c1"># Stop any running cue threads from the previous project first,</span>
-        <span class="c1"># so they can't interfere with cleanup (same logic as stop_playback).</span>
-        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">stop_all_cues</span><span class="p">()</span>
-
-        <span class="c1"># DMX: stop following MTC, blackout all universes.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dmx_reset</span><span class="p">()</span>
-
-        <span class="c1"># Video: reset videocomposer (remove all layers, cancel loads, reset</span>
-        <span class="c1"># master).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">unload_video_devs</span><span class="p">()</span>
-
-        <span class="c1"># Audio: reset mixer volumes, kill all players, clean up JACK.</span>
-        <span class="n">mixer_client</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_audio_mixer_client</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">mixer_client</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">mixer_client</span><span class="o">.</span><span class="n">reset_volumes</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"JACK volume reset failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-            <span class="c1"># Report the reset so the UI reflects real (unity) gain, not the</span>
-            <span class="c1"># stale value it may have shown from a previous UI write.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_report_mixer_status</span><span class="p">()</span>
-        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">kill_all_audio_players</span><span class="p">()</span>
-        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">kill_orphaned_audio_processes</span><span class="p">()</span>
-        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">cleanup_zombie_jack_clients</span><span class="p">()</span>
-
-        <span class="c1"># Disarm all cues from the previous project.</span>
-        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">"load"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_teardown_project</span><span class="p">(</span><span class="s2">"load"</span><span class="p">)</span>
 
         <span class="c1"># Clear the engine's 24h MTC wrap accumulator on this project transition,</span>
         <span class="c1"># co-orchestrated with the DMX blackout + videocomposer reset above (which</span>
@@ -9735,6 +9785,70 @@ nodes.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_nextcue</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Unload the project: the teardown of a load, and nothing armed after.</span>
+
+<span class="sd">        The controller sends this on project_unload. It used to send a STOP,</span>
+<span class="sd">        and stop_playback re-arms the script this node still holds, so every</span>
+<span class="sd">        node spawned new players for a project that was no longer loaded</span>
+<span class="sd">        (869fh8kef).</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
+            <span class="c1"># The controller refuses an unload while running; a node that</span>
+            <span class="c1"># still thinks it is running does not tear down under the show.</span>
+            <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Cannot unload while the script is running. Stop first."</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"UNLOAD command received. Unloading project </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="c1"># Abort in-flight ReArm/PreArm threads: on a STOP or a load,</span>
+        <span class="c1"># ready_script bumps this, and nothing here calls ready_script.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_project_generation</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_teardown_project</span><span class="p">(</span><span class="s2">"unload"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset_script</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remove_show_lock_file</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_nextcue</span><span class="p">()</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Project </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> unloaded"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_teardown_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Release everything the current project holds on this node:</span>
+<span class="sd">        cue threads, DMX, video layers, mixer gains, audio players, armed cues.</span>
+
+<span class="sd">        Shared by a load (before the new project arms) and an unload.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_gradient_cancel_all</span><span class="p">(</span><span class="sa">f</span><span class="s2">"project </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="c1"># Stop any running cue threads from the previous project first,</span>
+        <span class="c1"># so they can't interfere with cleanup (same logic as stop_playback).</span>
+        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">stop_all_cues</span><span class="p">()</span>
+
+        <span class="c1"># DMX: stop following MTC, blackout all universes.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dmx_reset</span><span class="p">()</span>
+
+        <span class="c1"># Video: reset videocomposer (remove all layers, cancel loads, reset</span>
+        <span class="c1"># master).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">unload_video_devs</span><span class="p">()</span>
+
+        <span class="c1"># Audio: reset mixer volumes, kill all players, clean up JACK.</span>
+        <span class="n">mixer_client</span> <span class="o">=</span> <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">get_audio_mixer_client</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">mixer_client</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">mixer_client</span><span class="o">.</span><span class="n">reset_volumes</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">"JACK volume reset failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="c1"># Report the reset so the UI reflects real (unity) gain, not the</span>
+            <span class="c1"># stale value it may have shown from a previous UI write.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_report_mixer_status</span><span class="p">()</span>
+        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">kill_all_audio_players</span><span class="p">()</span>
+        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">kill_orphaned_audio_processes</span><span class="p">()</span>
+        <span class="n">PLAYER_HANDLER</span><span class="o">.</span><span class="n">cleanup_zombie_jack_clients</span><span class="p">()</span>
+
+        <span class="c1"># Disarm all cues from the previous project.</span>
+        <span class="n">CUE_HANDLER</span><span class="o">.</span><span class="n">disarm_all</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">deploy_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Deploy the project files (script.xml, mappings.xml, settings.xml).</span>
@@ -10985,43 +11099,43 @@ raises: the previous project is already torn down at this point.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 970</span>
-<span class="normal"> 971</span>
-<span class="normal"> 972</span>
-<span class="normal"> 973</span>
-<span class="normal"> 974</span>
-<span class="normal"> 975</span>
-<span class="normal"> 976</span>
-<span class="normal"> 977</span>
-<span class="normal"> 978</span>
-<span class="normal"> 979</span>
-<span class="normal"> 980</span>
-<span class="normal"> 981</span>
-<span class="normal"> 982</span>
-<span class="normal"> 983</span>
-<span class="normal"> 984</span>
-<span class="normal"> 985</span>
-<span class="normal"> 986</span>
-<span class="normal"> 987</span>
-<span class="normal"> 988</span>
-<span class="normal"> 989</span>
-<span class="normal"> 990</span>
-<span class="normal"> 991</span>
-<span class="normal"> 992</span>
-<span class="normal"> 993</span>
-<span class="normal"> 994</span>
-<span class="normal"> 995</span>
-<span class="normal"> 996</span>
-<span class="normal"> 997</span>
-<span class="normal"> 998</span>
-<span class="normal"> 999</span>
-<span class="normal">1000</span>
-<span class="normal">1001</span>
-<span class="normal">1002</span>
-<span class="normal">1003</span>
-<span class="normal">1004</span>
-<span class="normal">1005</span>
-<span class="normal">1006</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_own_media_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_synced</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1006</span>
+<span class="normal">1007</span>
+<span class="normal">1008</span>
+<span class="normal">1009</span>
+<span class="normal">1010</span>
+<span class="normal">1011</span>
+<span class="normal">1012</span>
+<span class="normal">1013</span>
+<span class="normal">1014</span>
+<span class="normal">1015</span>
+<span class="normal">1016</span>
+<span class="normal">1017</span>
+<span class="normal">1018</span>
+<span class="normal">1019</span>
+<span class="normal">1020</span>
+<span class="normal">1021</span>
+<span class="normal">1022</span>
+<span class="normal">1023</span>
+<span class="normal">1024</span>
+<span class="normal">1025</span>
+<span class="normal">1026</span>
+<span class="normal">1027</span>
+<span class="normal">1028</span>
+<span class="normal">1029</span>
+<span class="normal">1030</span>
+<span class="normal">1031</span>
+<span class="normal">1032</span>
+<span class="normal">1033</span>
+<span class="normal">1034</span>
+<span class="normal">1035</span>
+<span class="normal">1036</span>
+<span class="normal">1037</span>
+<span class="normal">1038</span>
+<span class="normal">1039</span>
+<span class="normal">1040</span>
+<span class="normal">1041</span>
+<span class="normal">1042</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_own_media_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_synced</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Report this node's media files that differ from the project, or</span>
 <span class="sd">    are missing (869fat84r D20, L2).</span>
 
@@ -11086,43 +11200,7 @@ disagree. Never raises: the previous project is already torn down.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1008</span>
-<span class="normal">1009</span>
-<span class="normal">1010</span>
-<span class="normal">1011</span>
-<span class="normal">1012</span>
-<span class="normal">1013</span>
-<span class="normal">1014</span>
-<span class="normal">1015</span>
-<span class="normal">1016</span>
-<span class="normal">1017</span>
-<span class="normal">1018</span>
-<span class="normal">1019</span>
-<span class="normal">1020</span>
-<span class="normal">1021</span>
-<span class="normal">1022</span>
-<span class="normal">1023</span>
-<span class="normal">1024</span>
-<span class="normal">1025</span>
-<span class="normal">1026</span>
-<span class="normal">1027</span>
-<span class="normal">1028</span>
-<span class="normal">1029</span>
-<span class="normal">1030</span>
-<span class="normal">1031</span>
-<span class="normal">1032</span>
-<span class="normal">1033</span>
-<span class="normal">1034</span>
-<span class="normal">1035</span>
-<span class="normal">1036</span>
-<span class="normal">1037</span>
-<span class="normal">1038</span>
-<span class="normal">1039</span>
-<span class="normal">1040</span>
-<span class="normal">1041</span>
-<span class="normal">1042</span>
-<span class="normal">1043</span>
-<span class="normal">1044</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1044</span>
 <span class="normal">1045</span>
 <span class="normal">1046</span>
 <span class="normal">1047</span>
@@ -11152,7 +11230,43 @@ disagree. Never raises: the previous project is already torn down.</p>
 <span class="normal">1071</span>
 <span class="normal">1072</span>
 <span class="normal">1073</span>
-<span class="normal">1074</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_unrouted_video_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="normal">1074</span>
+<span class="normal">1075</span>
+<span class="normal">1076</span>
+<span class="normal">1077</span>
+<span class="normal">1078</span>
+<span class="normal">1079</span>
+<span class="normal">1080</span>
+<span class="normal">1081</span>
+<span class="normal">1082</span>
+<span class="normal">1083</span>
+<span class="normal">1084</span>
+<span class="normal">1085</span>
+<span class="normal">1086</span>
+<span class="normal">1087</span>
+<span class="normal">1088</span>
+<span class="normal">1089</span>
+<span class="normal">1090</span>
+<span class="normal">1091</span>
+<span class="normal">1092</span>
+<span class="normal">1093</span>
+<span class="normal">1094</span>
+<span class="normal">1095</span>
+<span class="normal">1096</span>
+<span class="normal">1097</span>
+<span class="normal">1098</span>
+<span class="normal">1099</span>
+<span class="normal">1100</span>
+<span class="normal">1101</span>
+<span class="normal">1102</span>
+<span class="normal">1103</span>
+<span class="normal">1104</span>
+<span class="normal">1105</span>
+<span class="normal">1106</span>
+<span class="normal">1107</span>
+<span class="normal">1108</span>
+<span class="normal">1109</span>
+<span class="normal">1110</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_unrouted_video_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Name every enabled video cue of this node that points at an output</span>
 <span class="sd">    this node doesn't drive (869fgq3xv). Log only.</span>
 
@@ -11244,27 +11358,27 @@ but the caller continues the load.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">948</span>
-<span class="normal">949</span>
-<span class="normal">950</span>
-<span class="normal">951</span>
-<span class="normal">952</span>
-<span class="normal">953</span>
-<span class="normal">954</span>
-<span class="normal">955</span>
-<span class="normal">956</span>
-<span class="normal">957</span>
-<span class="normal">958</span>
-<span class="normal">959</span>
-<span class="normal">960</span>
-<span class="normal">961</span>
-<span class="normal">962</span>
-<span class="normal">963</span>
-<span class="normal">964</span>
-<span class="normal">965</span>
-<span class="normal">966</span>
-<span class="normal">967</span>
-<span class="normal">968</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_media</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 984</span>
+<span class="normal"> 985</span>
+<span class="normal"> 986</span>
+<span class="normal"> 987</span>
+<span class="normal"> 988</span>
+<span class="normal"> 989</span>
+<span class="normal"> 990</span>
+<span class="normal"> 991</span>
+<span class="normal"> 992</span>
+<span class="normal"> 993</span>
+<span class="normal"> 994</span>
+<span class="normal"> 995</span>
+<span class="normal"> 996</span>
+<span class="normal"> 997</span>
+<span class="normal"> 998</span>
+<span class="normal"> 999</span>
+<span class="normal">1000</span>
+<span class="normal">1001</span>
+<span class="normal">1002</span>
+<span class="normal">1003</span>
+<span class="normal">1004</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_media</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Deploy the media files (and their .idx sidecar indexes).</span>
 
 <span class="sd">    Best-effort: a failure here is recoverable if media is already</span>
@@ -11310,14 +11424,14 @@ the load on False.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">939</span>
-<span class="normal">940</span>
-<span class="normal">941</span>
-<span class="normal">942</span>
-<span class="normal">943</span>
-<span class="normal">944</span>
-<span class="normal">945</span>
-<span class="normal">946</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">975</span>
+<span class="normal">976</span>
+<span class="normal">977</span>
+<span class="normal">978</span>
+<span class="normal">979</span>
+<span class="normal">980</span>
+<span class="normal">981</span>
+<span class="normal">982</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">deploy_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Deploy the project files (script.xml, mappings.xml, settings.xml).</span>
 
 <span class="sd">    Critical path: if these fail to sync, the local copy may be stale</span>
@@ -11353,43 +11467,7 @@ index was already created by the editor and this is a no-op.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1076</span>
-<span class="normal">1077</span>
-<span class="normal">1078</span>
-<span class="normal">1079</span>
-<span class="normal">1080</span>
-<span class="normal">1081</span>
-<span class="normal">1082</span>
-<span class="normal">1083</span>
-<span class="normal">1084</span>
-<span class="normal">1085</span>
-<span class="normal">1086</span>
-<span class="normal">1087</span>
-<span class="normal">1088</span>
-<span class="normal">1089</span>
-<span class="normal">1090</span>
-<span class="normal">1091</span>
-<span class="normal">1092</span>
-<span class="normal">1093</span>
-<span class="normal">1094</span>
-<span class="normal">1095</span>
-<span class="normal">1096</span>
-<span class="normal">1097</span>
-<span class="normal">1098</span>
-<span class="normal">1099</span>
-<span class="normal">1100</span>
-<span class="normal">1101</span>
-<span class="normal">1102</span>
-<span class="normal">1103</span>
-<span class="normal">1104</span>
-<span class="normal">1105</span>
-<span class="normal">1106</span>
-<span class="normal">1107</span>
-<span class="normal">1108</span>
-<span class="normal">1109</span>
-<span class="normal">1110</span>
-<span class="normal">1111</span>
-<span class="normal">1112</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1112</span>
 <span class="normal">1113</span>
 <span class="normal">1114</span>
 <span class="normal">1115</span>
@@ -11406,7 +11484,43 @@ index was already created by the editor and this is a no-op.</p>
 <span class="normal">1126</span>
 <span class="normal">1127</span>
 <span class="normal">1128</span>
-<span class="normal">1129</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ensure_video_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">1129</span>
+<span class="normal">1130</span>
+<span class="normal">1131</span>
+<span class="normal">1132</span>
+<span class="normal">1133</span>
+<span class="normal">1134</span>
+<span class="normal">1135</span>
+<span class="normal">1136</span>
+<span class="normal">1137</span>
+<span class="normal">1138</span>
+<span class="normal">1139</span>
+<span class="normal">1140</span>
+<span class="normal">1141</span>
+<span class="normal">1142</span>
+<span class="normal">1143</span>
+<span class="normal">1144</span>
+<span class="normal">1145</span>
+<span class="normal">1146</span>
+<span class="normal">1147</span>
+<span class="normal">1148</span>
+<span class="normal">1149</span>
+<span class="normal">1150</span>
+<span class="normal">1151</span>
+<span class="normal">1152</span>
+<span class="normal">1153</span>
+<span class="normal">1154</span>
+<span class="normal">1155</span>
+<span class="normal">1156</span>
+<span class="normal">1157</span>
+<span class="normal">1158</span>
+<span class="normal">1159</span>
+<span class="normal">1160</span>
+<span class="normal">1161</span>
+<span class="normal">1162</span>
+<span class="normal">1163</span>
+<span class="normal">1164</span>
+<span class="normal">1165</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ensure_video_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Run cuems-videoindexer on any video files that are missing a .idx</span>
 <span class="sd">    sidecar.</span>
@@ -11703,44 +11817,44 @@ logs but does not abort (cached media may already be on disk).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1698</span>
-<span class="normal">1699</span>
-<span class="normal">1700</span>
-<span class="normal">1701</span>
-<span class="normal">1702</span>
-<span class="normal">1703</span>
-<span class="normal">1704</span>
-<span class="normal">1705</span>
-<span class="normal">1706</span>
-<span class="normal">1707</span>
-<span class="normal">1708</span>
-<span class="normal">1709</span>
-<span class="normal">1710</span>
-<span class="normal">1711</span>
-<span class="normal">1712</span>
-<span class="normal">1713</span>
-<span class="normal">1714</span>
-<span class="normal">1715</span>
-<span class="normal">1716</span>
-<span class="normal">1717</span>
-<span class="normal">1718</span>
-<span class="normal">1719</span>
-<span class="normal">1720</span>
-<span class="normal">1721</span>
-<span class="normal">1722</span>
-<span class="normal">1723</span>
-<span class="normal">1724</span>
-<span class="normal">1725</span>
-<span class="normal">1726</span>
-<span class="normal">1727</span>
-<span class="normal">1728</span>
-<span class="normal">1729</span>
-<span class="normal">1730</span>
-<span class="normal">1731</span>
-<span class="normal">1732</span>
-<span class="normal">1733</span>
-<span class="normal">1734</span>
-<span class="normal">1735</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1734</span>
+<span class="normal">1735</span>
+<span class="normal">1736</span>
+<span class="normal">1737</span>
+<span class="normal">1738</span>
+<span class="normal">1739</span>
+<span class="normal">1740</span>
+<span class="normal">1741</span>
+<span class="normal">1742</span>
+<span class="normal">1743</span>
+<span class="normal">1744</span>
+<span class="normal">1745</span>
+<span class="normal">1746</span>
+<span class="normal">1747</span>
+<span class="normal">1748</span>
+<span class="normal">1749</span>
+<span class="normal">1750</span>
+<span class="normal">1751</span>
+<span class="normal">1752</span>
+<span class="normal">1753</span>
+<span class="normal">1754</span>
+<span class="normal">1755</span>
+<span class="normal">1756</span>
+<span class="normal">1757</span>
+<span class="normal">1758</span>
+<span class="normal">1759</span>
+<span class="normal">1760</span>
+<span class="normal">1761</span>
+<span class="normal">1762</span>
+<span class="normal">1763</span>
+<span class="normal">1764</span>
+<span class="normal">1765</span>
+<span class="normal">1766</span>
+<span class="normal">1767</span>
+<span class="normal">1768</span>
+<span class="normal">1769</span>
+<span class="normal">1770</span>
+<span class="normal">1771</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">ready_script</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ready_script"</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Check if the script is ready to be played.</span>
 
 <span class="sd">    ``reason`` is passed to disarm_all so its log names the caller</span>
@@ -12125,43 +12239,7 @@ half that stops the delay from happening in the first place.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1406</span>
-<span class="normal">1407</span>
-<span class="normal">1408</span>
-<span class="normal">1409</span>
-<span class="normal">1410</span>
-<span class="normal">1411</span>
-<span class="normal">1412</span>
-<span class="normal">1413</span>
-<span class="normal">1414</span>
-<span class="normal">1415</span>
-<span class="normal">1416</span>
-<span class="normal">1417</span>
-<span class="normal">1418</span>
-<span class="normal">1419</span>
-<span class="normal">1420</span>
-<span class="normal">1421</span>
-<span class="normal">1422</span>
-<span class="normal">1423</span>
-<span class="normal">1424</span>
-<span class="normal">1425</span>
-<span class="normal">1426</span>
-<span class="normal">1427</span>
-<span class="normal">1428</span>
-<span class="normal">1429</span>
-<span class="normal">1430</span>
-<span class="normal">1431</span>
-<span class="normal">1432</span>
-<span class="normal">1433</span>
-<span class="normal">1434</span>
-<span class="normal">1435</span>
-<span class="normal">1436</span>
-<span class="normal">1437</span>
-<span class="normal">1438</span>
-<span class="normal">1439</span>
-<span class="normal">1440</span>
-<span class="normal">1441</span>
-<span class="normal">1442</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1442</span>
 <span class="normal">1443</span>
 <span class="normal">1444</span>
 <span class="normal">1445</span>
@@ -12170,7 +12248,43 @@ half that stops the delay from happening in the first place.</p>
 <span class="normal">1448</span>
 <span class="normal">1449</span>
 <span class="normal">1450</span>
-<span class="normal">1451</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_next_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="normal">1451</span>
+<span class="normal">1452</span>
+<span class="normal">1453</span>
+<span class="normal">1454</span>
+<span class="normal">1455</span>
+<span class="normal">1456</span>
+<span class="normal">1457</span>
+<span class="normal">1458</span>
+<span class="normal">1459</span>
+<span class="normal">1460</span>
+<span class="normal">1461</span>
+<span class="normal">1462</span>
+<span class="normal">1463</span>
+<span class="normal">1464</span>
+<span class="normal">1465</span>
+<span class="normal">1466</span>
+<span class="normal">1467</span>
+<span class="normal">1468</span>
+<span class="normal">1469</span>
+<span class="normal">1470</span>
+<span class="normal">1471</span>
+<span class="normal">1472</span>
+<span class="normal">1473</span>
+<span class="normal">1474</span>
+<span class="normal">1475</span>
+<span class="normal">1476</span>
+<span class="normal">1477</span>
+<span class="normal">1478</span>
+<span class="normal">1479</span>
+<span class="normal">1480</span>
+<span class="normal">1481</span>
+<span class="normal">1482</span>
+<span class="normal">1483</span>
+<span class="normal">1484</span>
+<span class="normal">1485</span>
+<span class="normal">1486</span>
+<span class="normal">1487</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_next_cue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Handle setnextcue command from the UI — override next_cue_pointer.</span>
 
@@ -12278,7 +12392,7 @@ OSCQuery client is no longer used since pyossia server was removed.</p>
         <span class="s2">"setnextcue"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_next_cue</span><span class="p">,</span>
         <span class="s2">"cue_enabled"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_cue_enabled</span><span class="p">,</span>
         <span class="s2">"test"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="s2">"unload"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"unload"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">unload_project</span><span class="p">,</span>
         <span class="s2">"update"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">}</span>
 </code></pre></div></td></tr></table></div>
@@ -12554,43 +12668,7 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1968</span>
-<span class="normal">1969</span>
-<span class="normal">1970</span>
-<span class="normal">1971</span>
-<span class="normal">1972</span>
-<span class="normal">1973</span>
-<span class="normal">1974</span>
-<span class="normal">1975</span>
-<span class="normal">1976</span>
-<span class="normal">1977</span>
-<span class="normal">1978</span>
-<span class="normal">1979</span>
-<span class="normal">1980</span>
-<span class="normal">1981</span>
-<span class="normal">1982</span>
-<span class="normal">1983</span>
-<span class="normal">1984</span>
-<span class="normal">1985</span>
-<span class="normal">1986</span>
-<span class="normal">1987</span>
-<span class="normal">1988</span>
-<span class="normal">1989</span>
-<span class="normal">1990</span>
-<span class="normal">1991</span>
-<span class="normal">1992</span>
-<span class="normal">1993</span>
-<span class="normal">1994</span>
-<span class="normal">1995</span>
-<span class="normal">1996</span>
-<span class="normal">1997</span>
-<span class="normal">1998</span>
-<span class="normal">1999</span>
-<span class="normal">2000</span>
-<span class="normal">2001</span>
-<span class="normal">2002</span>
-<span class="normal">2003</span>
-<span class="normal">2004</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2004</span>
 <span class="normal">2005</span>
 <span class="normal">2006</span>
 <span class="normal">2007</span>
@@ -12598,7 +12676,43 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
 <span class="normal">2009</span>
 <span class="normal">2010</span>
 <span class="normal">2011</span>
-<span class="normal">2012</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">2012</span>
+<span class="normal">2013</span>
+<span class="normal">2014</span>
+<span class="normal">2015</span>
+<span class="normal">2016</span>
+<span class="normal">2017</span>
+<span class="normal">2018</span>
+<span class="normal">2019</span>
+<span class="normal">2020</span>
+<span class="normal">2021</span>
+<span class="normal">2022</span>
+<span class="normal">2023</span>
+<span class="normal">2024</span>
+<span class="normal">2025</span>
+<span class="normal">2026</span>
+<span class="normal">2027</span>
+<span class="normal">2028</span>
+<span class="normal">2029</span>
+<span class="normal">2030</span>
+<span class="normal">2031</span>
+<span class="normal">2032</span>
+<span class="normal">2033</span>
+<span class="normal">2034</span>
+<span class="normal">2035</span>
+<span class="normal">2036</span>
+<span class="normal">2037</span>
+<span class="normal">2038</span>
+<span class="normal">2039</span>
+<span class="normal">2040</span>
+<span class="normal">2041</span>
+<span class="normal">2042</span>
+<span class="normal">2043</span>
+<span class="normal">2044</span>
+<span class="normal">2045</span>
+<span class="normal">2046</span>
+<span class="normal">2047</span>
+<span class="normal">2048</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">stop_playback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stop playback, full cleanup, then re-arm so GO is available again.</span>
 
 <span class="sd">    Does the cleanup that ready_script() doesn't handle (DMX blackout,</span>
@@ -12643,6 +12757,85 @@ ready_script(). Notifies Controller when armed (GO button green).</p>
         <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Playback stopped (no script loaded)."</span><span class="p">)</span>
 
     <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Playback stopped."</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="cuemsengine.NodeEngine.NodeEngine.unload_project" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">unload_project</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Unload the project: the teardown of a load, and nothing armed after.</p>
+<p>The controller sends this on project_unload. It used to send a STOP,
+and stop_playback re-arms the script this node still holds, so every
+node spawned new players for a project that was no longer loaded
+(869fh8kef).</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">911</span>
+<span class="normal">912</span>
+<span class="normal">913</span>
+<span class="normal">914</span>
+<span class="normal">915</span>
+<span class="normal">916</span>
+<span class="normal">917</span>
+<span class="normal">918</span>
+<span class="normal">919</span>
+<span class="normal">920</span>
+<span class="normal">921</span>
+<span class="normal">922</span>
+<span class="normal">923</span>
+<span class="normal">924</span>
+<span class="normal">925</span>
+<span class="normal">926</span>
+<span class="normal">927</span>
+<span class="normal">928</span>
+<span class="normal">929</span>
+<span class="normal">930</span>
+<span class="normal">931</span>
+<span class="normal">932</span>
+<span class="normal">933</span>
+<span class="normal">934</span>
+<span class="normal">935</span>
+<span class="normal">936</span>
+<span class="normal">937</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">unload_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Unload the project: the teardown of a load, and nothing armed after.</span>
+
+<span class="sd">    The controller sends this on project_unload. It used to send a STOP,</span>
+<span class="sd">    and stop_playback re-arms the script this node still holds, so every</span>
+<span class="sd">    node spawned new players for a project that was no longer loaded</span>
+<span class="sd">    (869fh8kef).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_status</span><span class="p">(</span><span class="s2">"running"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"yes"</span><span class="p">:</span>
+        <span class="c1"># The controller refuses an unload while running; a node that</span>
+        <span class="c1"># still thinks it is running does not tear down under the show.</span>
+        <span class="n">Logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Cannot unload while the script is running. Stop first."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"UNLOAD command received. Unloading project </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+    <span class="c1"># Abort in-flight ReArm/PreArm threads: on a STOP or a load,</span>
+    <span class="c1"># ready_script bumps this, and nothing here calls ready_script.</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_project_generation</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_teardown_project</span><span class="p">(</span><span class="s2">"unload"</span><span class="p">)</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">reset_script</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="s2">"load"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">remove_show_lock_file</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_broadcast_nextcue</span><span class="p">()</span>
+    <span class="n">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Project </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> unloaded"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">True</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -12760,15 +12953,15 @@ nothing.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2023</span>
-<span class="normal">2024</span>
-<span class="normal">2025</span>
-<span class="normal">2026</span>
-<span class="normal">2027</span>
-<span class="normal">2028</span>
-<span class="normal">2029</span>
-<span class="normal">2030</span>
-<span class="normal">2031</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2059</span>
+<span class="normal">2060</span>
+<span class="normal">2061</span>
+<span class="normal">2062</span>
+<span class="normal">2063</span>
+<span class="normal">2064</span>
+<span class="normal">2065</span>
+<span class="normal">2066</span>
+<span class="normal">2067</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio command to the audio player"""</span>
     <span class="k">if</span> <span class="n">path_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"mixer"</span><span class="p">:</span>
         <span class="n">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">value</span><span class="p">)</span>
@@ -12807,20 +13000,20 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2034</span>
-<span class="normal">2035</span>
-<span class="normal">2036</span>
-<span class="normal">2037</span>
-<span class="normal">2038</span>
-<span class="normal">2039</span>
-<span class="normal">2040</span>
-<span class="normal">2041</span>
-<span class="normal">2042</span>
-<span class="normal">2043</span>
-<span class="normal">2044</span>
-<span class="normal">2045</span>
-<span class="normal">2046</span>
-<span class="normal">2047</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2070</span>
+<span class="normal">2071</span>
+<span class="normal">2072</span>
+<span class="normal">2073</span>
+<span class="normal">2074</span>
+<span class="normal">2075</span>
+<span class="normal">2076</span>
+<span class="normal">2077</span>
+<span class="normal">2078</span>
+<span class="normal">2079</span>
+<span class="normal">2080</span>
+<span class="normal">2081</span>
+<span class="normal">2082</span>
+<span class="normal">2083</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_mixer_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;output_index&gt;/master/volume -&gt; /audiomixer/0_mixer/master</span>
@@ -12908,26 +13101,26 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2050</span>
-<span class="normal">2051</span>
-<span class="normal">2052</span>
-<span class="normal">2053</span>
-<span class="normal">2054</span>
-<span class="normal">2055</span>
-<span class="normal">2056</span>
-<span class="normal">2057</span>
-<span class="normal">2058</span>
-<span class="normal">2059</span>
-<span class="normal">2060</span>
-<span class="normal">2061</span>
-<span class="normal">2062</span>
-<span class="normal">2063</span>
-<span class="normal">2064</span>
-<span class="normal">2065</span>
-<span class="normal">2066</span>
-<span class="normal">2067</span>
-<span class="normal">2068</span>
-<span class="normal">2069</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2086</span>
+<span class="normal">2087</span>
+<span class="normal">2088</span>
+<span class="normal">2089</span>
+<span class="normal">2090</span>
+<span class="normal">2091</span>
+<span class="normal">2092</span>
+<span class="normal">2093</span>
+<span class="normal">2094</span>
+<span class="normal">2095</span>
+<span class="normal">2096</span>
+<span class="normal">2097</span>
+<span class="normal">2098</span>
+<span class="normal">2099</span>
+<span class="normal">2100</span>
+<span class="normal">2101</span>
+<span class="normal">2102</span>
+<span class="normal">2103</span>
+<span class="normal">2104</span>
+<span class="normal">2105</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_audio_player_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the audio mixer command to the audio mixer</span>
 <span class="sd">     Follows the logic:</span>
 <span class="sd">     &lt;cue_uuid&gt;/master/volume -&gt; /volmaster</span>
@@ -12969,12 +13162,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2072</span>
-<span class="normal">2073</span>
-<span class="normal">2074</span>
-<span class="normal">2075</span>
-<span class="normal">2076</span>
-<span class="normal">2077</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2108</span>
+<span class="normal">2109</span>
+<span class="normal">2110</span>
+<span class="normal">2111</span>
+<span class="normal">2112</span>
+<span class="normal">2113</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_dmx_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the DMX command to the DMX player"""</span>
     <span class="n">dmx_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"mixer"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 to skip the 'mixer' keyword</span>
     <span class="n">dmx_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">dmx_index</span><span class="p">:])</span>
@@ -13002,12 +13195,12 @@ Args:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/NodeEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2080</span>
-<span class="normal">2081</span>
-<span class="normal">2082</span>
-<span class="normal">2083</span>
-<span class="normal">2084</span>
-<span class="normal">2085</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2116</span>
+<span class="normal">2117</span>
+<span class="normal">2118</span>
+<span class="normal">2119</span>
+<span class="normal">2120</span>
+<span class="normal">2121</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">redirect_video_cmd</span><span class="p">(</span><span class="n">path_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Redirect the video command to the video client"""</span>
     <span class="n">videocomposer_index</span> <span class="o">=</span> <span class="n">path_parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"videocomposer"</span><span class="p">)</span>
     <span class="n">videocomposer_cmd</span> <span class="o">=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path_parts</span><span class="p">[</span><span class="n">videocomposer_index</span><span class="p">:])</span>
