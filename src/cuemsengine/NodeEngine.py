@@ -233,7 +233,7 @@ class NodeEngine(BaseEngine):
             return True
         if command_name == "go":
             relay.begin_run(value)
-        elif command_name in ("stop", "load"):
+        elif command_name in ("stop", "load", "unload"):
             relay.end_run(command_name)
             # The STOP (or load) a stop_project cue was waiting for.
             self._cancel_stop_project_watchdog()
@@ -470,7 +470,7 @@ class NodeEngine(BaseEngine):
             "setnextcue": self.set_next_cue,
             "cue_enabled": self._handle_cue_enabled,
             "test": None,
-            "unload": None,
+            "unload": self.unload_project,
             "update": None,
         }
 
@@ -508,7 +508,7 @@ class NodeEngine(BaseEngine):
                     try:
                         handler(value)
                     finally:
-                        if command in ("stop", "load") and self._follow_relay:
+                        if command in ("stop", "load", "unload") and self._follow_relay:
                             # The receive hook counted it received; until
                             # here this node's epochs still belonged to the
                             # run it ends (869fc8ytz).
@@ -869,35 +869,7 @@ class NodeEngine(BaseEngine):
             )
             return False
 
-        self._gradient_cancel_all("project load")
-
-        # Stop any running cue threads from the previous project first,
-        # so they can't interfere with cleanup (same logic as stop_playback).
-        CUE_HANDLER.stop_all_cues()
-
-        # DMX: stop following MTC, blackout all universes.
-        self._dmx_reset()
-
-        # Video: reset videocomposer (remove all layers, cancel loads, reset
-        # master).
-        self.unload_video_devs()
-
-        # Audio: reset mixer volumes, kill all players, clean up JACK.
-        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
-        if mixer_client:
-            try:
-                mixer_client.reset_volumes()
-            except Exception as e:
-                Logger.warning(f"JACK volume reset failed: {e}")
-            # Report the reset so the UI reflects real (unity) gain, not the
-            # stale value it may have shown from a previous UI write.
-            self._report_mixer_status()
-        PLAYER_HANDLER.kill_all_audio_players()
-        PLAYER_HANDLER.kill_orphaned_audio_processes()
-        PLAYER_HANDLER.cleanup_zombie_jack_clients()
-
-        # Disarm all cues from the previous project.
-        CUE_HANDLER.disarm_all(reason="load")
+        self._teardown_project("load")
 
         # Clear the engine's 24h MTC wrap accumulator on this project transition,
         # co-orchestrated with the DMX blackout + videocomposer reset above (which
@@ -935,6 +907,70 @@ class NodeEngine(BaseEngine):
         self._broadcast_nextcue()
 
         return True
+
+    def unload_project(self, value=None):
+        """Unload the project: the teardown of a load, and nothing armed after.
+
+        The controller sends this on project_unload. It used to send a STOP,
+        and stop_playback re-arms the script this node still holds, so every
+        node spawned new players for a project that was no longer loaded
+        (869fh8kef).
+        """
+        if self.get_status("running") == "yes":
+            # The controller refuses an unload while running; a node that
+            # still thinks it is running does not tear down under the show.
+            Logger.warning("Cannot unload while the script is running. Stop first.")
+            return False
+
+        name = getattr(self.script, "name", None)
+        Logger.info(f"UNLOAD command received. Unloading project {name}.")
+        # Abort in-flight ReArm/PreArm threads: on a STOP or a load,
+        # ready_script bumps this, and nothing here calls ready_script.
+        self._project_generation += 1
+        self._teardown_project("unload")
+
+        self.reset_script()
+        self.set_status("load", "")
+        self.remove_show_lock_file()
+        self._broadcast_nextcue()
+        Logger.info(f"Project {name} unloaded")
+        return True
+
+    def _teardown_project(self, reason: str):
+        """Release everything the current project holds on this node:
+        cue threads, DMX, video layers, mixer gains, audio players, armed cues.
+
+        Shared by a load (before the new project arms) and an unload.
+        """
+        self._gradient_cancel_all(f"project {reason}")
+
+        # Stop any running cue threads from the previous project first,
+        # so they can't interfere with cleanup (same logic as stop_playback).
+        CUE_HANDLER.stop_all_cues()
+
+        # DMX: stop following MTC, blackout all universes.
+        self._dmx_reset()
+
+        # Video: reset videocomposer (remove all layers, cancel loads, reset
+        # master).
+        self.unload_video_devs()
+
+        # Audio: reset mixer volumes, kill all players, clean up JACK.
+        mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
+        if mixer_client:
+            try:
+                mixer_client.reset_volumes()
+            except Exception as e:
+                Logger.warning(f"JACK volume reset failed: {e}")
+            # Report the reset so the UI reflects real (unity) gain, not the
+            # stale value it may have shown from a previous UI write.
+            self._report_mixer_status()
+        PLAYER_HANDLER.kill_all_audio_players()
+        PLAYER_HANDLER.kill_orphaned_audio_processes()
+        PLAYER_HANDLER.cleanup_zombie_jack_clients()
+
+        # Disarm all cues from the previous project.
+        CUE_HANDLER.disarm_all(reason=reason)
 
     def deploy_project(self, project):
         """Deploy the project files (script.xml, mappings.xml, settings.xml).

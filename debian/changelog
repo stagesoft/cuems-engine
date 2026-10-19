@@ -1,3 +1,25 @@
+cuems-engine (0.1.0rc6-6) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm:
+    - 869fh8kef (#41): a project unload reaches the nodes as an unload. The
+      controller used to forward it as a STOP, and a node's STOP re-arms the
+      project it still holds, so every node killed its players and started
+      new ones for a project that was no longer loaded, and kept its
+      script, load status and /tmp/cuems.show.lock. The controller now
+      removes its show lock and forwards /engine/command/unload; the node
+      tears the project down as a load does (now shared as
+      _teardown_project: cue threads, DMX blackout, video layers, mixer,
+      audio players, disarm), aborts in-flight arms, forgets the script,
+      sets load="", removes the lock and arms nothing. Refused while
+      running. Ends the run for the cross-node follow relay like STOP and
+      load.
+    - Docs: the A/V loop sync guarantee (README, CLAUDE.md).
+  * No dependency change (cuems-utils >= 0.1.0rc17). The whole cluster must
+    run this engine: an older node has no unload handler and keeps the
+    project armed until the next load.
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 19 Oct 2026 20:00:13 +0200
+
 cuems-engine (0.1.0rc6-5) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:

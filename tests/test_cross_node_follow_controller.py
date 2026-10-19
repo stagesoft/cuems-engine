@@ -99,7 +99,8 @@ class TestRunSeq:
     def test_unload_bumps_it_before_forwarding(self, controller):
         controller.set_status("running", "no")
         before = controller._run_seq
-        seen, p = _seq_at_forward(controller, "/engine/command/stop")
+        # Nodes get an unload, not a STOP (869fh8kef).
+        seen, p = _seq_at_forward(controller, "/engine/command/unload")
         with p, patch.object(controller, "reset_script"):
             controller.unload_project(None)
         assert seen == [before + 1]
