@@ -390,11 +390,22 @@ class TestUnloadProject:
             controller.unload_project(None)
         assert controller.get_status("load") == ""
 
-    def test_forwards_stop_to_nodes(self, controller):
+    def test_forwards_unload_to_nodes(self, controller):
+        """Nodes get a real unload, not a STOP: a STOP re-arms the project
+        they still hold (869fh8kef)."""
         controller.set_status("running", "no")
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.unload_project(None)
-            mock_fwd.assert_called_once_with("/engine/command/stop", None)
+            mock_fwd.assert_called_once_with("/engine/command/unload", None)
+
+    def test_removes_show_lock(self, controller):
+        controller.set_status("running", "no")
+        with (
+            patch.object(controller, "_forward_command_to_nodes"),
+            patch.object(controller, "remove_show_lock_file") as mock_rm,
+        ):
+            controller.unload_project(None)
+            mock_rm.assert_called_once()
 
     def test_returns_true(self, controller):
         controller.set_status("running", "no")
