@@ -66,6 +66,10 @@ override_dh_fixperms:
 	# it), and shipping its script too made every utils upgrade fail with
 	# "trying to overwrite /usr/lib/cuems/bin/cffi-gen-src". Nothing runs it.
 	find debian/cuems-engine/usr/lib/cuems/bin -name "cffi-gen-src" -delete
+	# cuems-utils' own console script (869ejxng3: cuems-loop-period) comes in with
+	# cuemsutils, which is stripped below: shipping it here too would make dpkg
+	# refuse the engine over cuems-utils ("trying to overwrite").
+	find debian/cuems-engine/usr/lib/cuems/bin -name "cuems-loop-period" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "pwiz.py" -delete
 	# Remove mido console scripts (not needed)
 	find debian/cuems-engine/usr/lib/cuems/bin -name "mido-*" -delete
