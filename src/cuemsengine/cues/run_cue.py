@@ -4,6 +4,7 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
+from time import monotonic
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -12,6 +13,7 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+from . import loop_mode
 
 
 @singledispatch
@@ -110,6 +112,9 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
         return
     if not _ensure_child_loaded(cue, child):
         return  # re-arm failed (already logged loudly) — don't dispatch
+    # A CueList child plays once (869ejxng3 Q2): the load walk marks it too;
+    # this covers a child reached without one (defensive, I11).
+    child._in_cuelist = True
     run_cue(child, mtc, frozen_mtc_ms)
 
 
@@ -196,6 +201,17 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     # / JACK ports missing), reveal_audioCue sees this False and no-ops instead of
     # asserting mtcfollow on a player that never got set up.
     cue._reveal_ready = False
+    # Wrap mode (869ejxng3, plan §4.5), all reset per GO: _player_wraps is set
+    # only by the player's wrap ack, so an abort below leaves it False; the
+    # fallback is latched for this GO only (M6).
+    cue._player_wraps = False
+    cue._wrap_requested = False
+    cue._wrap_fallback = False
+    cue._wrap_reveal_t = None
+    player = PLAYER_HANDLER.audio_player(cue)
+    capable = loop_mode.player_capable(player)
+    cue._audio_capable = capable
+    period = loop_mode.period_of(cue)
 
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
     # chains)
@@ -217,11 +233,18 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
-    # Convert duration to MTC framerate to prevent drift when looping
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
-    cue._end_mtc = cue._start_mtc + duration
+    if period is not None:
+        # The pass ends on the file's real length P (one rounding, from the
+        # absolute instant, G20), not on the stored duration rounded to frames.
+        cue._end_mtc = loop_mode.tc_at(
+            mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + period.ms
+        )
+    else:
+        # Convert duration to MTC framerate to prevent drift when looping
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(
+            mtc.main_tc.framerate
+        )
+        cue._end_mtc = cue._start_mtc + duration
 
     # Audio player formula: file_position = MTC + offset
     # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
@@ -272,7 +295,11 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
 
     # Define the offset - use MTC framerate for consistent timing with video
     try:
-        key = "/offset"
+        if capable:
+            # whole ms as int32 for a capable player (G1b); Float otherwise
+            key, offset_to_go = "/offset_i", round(offset_to_go)
+        else:
+            key = "/offset"
 
         cue._osc.set_value(key, offset_to_go)
         Logger.info(
@@ -288,6 +315,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     else:
         # Setup reached the offset send → safe for reveal_cue to start following.
         cue._reveal_ready = True
+        _send_loop_mode(cue, capable, period)
 
     # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). The offset above
     # is harmless while not following; reveal_cue turns following on at
@@ -317,6 +345,35 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             f"Error setting master volume in run_audioCue: {e}",
             extra={"caller": cue.__class__.__name__},
         )
+
+
+def _send_loop_mode(cue, capable: bool, period) -> None:
+    """After the offset: ``/loop [passes, num, den]`` for a wrap-eligible cue,
+    ``/loop [1]`` for every other cue on a capable player; nothing to an old
+    player. One INFO line per GO naming the mode."""
+    if not capable:
+        Logger.info(f"Audio cue {cue.id} loop mode: legacy (player without CAPS loop)")
+        return
+    wrap = period is not None and cue.loop != 1 and not loop_mode.in_cuelist(cue)
+    args = loop_mode.loop_args(cue, period) if wrap else [1]
+    try:
+        cue._osc.set_value("/loop", args)
+    except Exception as e:
+        Logger.warning(f"Error sending /loop {args} in run_audioCue: {e}")
+        wrap = False
+    cue._wrap_requested = wrap
+    if wrap:
+        Logger.info(
+            f"Audio cue {cue.id} loop mode: wrap+varispeed, passes {cue.loop}, "
+            f"P = {period.num}/{period.den} = {period.ms:.3f} ms"
+        )
+    else:
+        why = (
+            "plays once"
+            if cue.loop == 1 or loop_mode.in_cuelist(cue)
+            else "no loop period"
+        )
+        Logger.info(f"Audio cue {cue.id} loop mode: legacy ({why})")
 
 
 @run_cue.register
@@ -604,9 +661,21 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     try:
         start = getattr(cue, "_start_mtc", None)
         if start is not None:
-            cue._osc.set_value("/offset", -start.milliseconds_exact)
+            if getattr(cue, "_audio_capable", False) is True:
+                cue._osc.set_value("/offset_i", round(-start.milliseconds_exact))
+            else:
+                cue._osc.set_value("/offset", -start.milliseconds_exact)
     except Exception as e:
         Logger.warning(f"reveal_audioCue: /offset failed: {e}")
+    if loop_mode.wrap_active(cue):
+        # re-sent at the reveal (idempotent); the 1 s ack check starts here
+        try:
+            cue._osc.set_value(
+                "/loop", loop_mode.loop_args(cue, loop_mode.period_of(cue))
+            )
+        except Exception as e:
+            Logger.warning(f"reveal_audioCue: /loop failed: {e}")
+        cue._wrap_reveal_t = monotonic()
     try:
         cue._osc.set_value("/mtcfollow", 1)
     except Exception as e:
@@ -659,7 +728,8 @@ def blank_cue(cue: Cue, mtc: MtcListener):
     blank_cue hides it while the cue stays in _armed_cues (STOP-reachable
     through the whole tail; disarming here instead would make the tail
     unreachable by stop_all_cues → ghost fire after STOP). Default no-op:
-    audio is already silent (loop_audioCue sends /mtcfollow 0 at loop end),
+    audio is already silent (legacy: loop_audioCue sends /mtcfollow 0 at loop
+    end; wrap mode, 869ejxng3: the player ends by itself after its last pass),
     DMX scenes have ended, actions/CueLists have nothing to hide.
     """
     pass

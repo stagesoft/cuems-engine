@@ -4,25 +4,31 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
+import shutil
 import subprocess
 import threading
-from time import sleep
+from threading import Event, Thread
+from time import monotonic, sleep
 
-from cuemsutils.cues import CueList, VideoCue
+from cuemsutils.cues import AudioCue, CueList, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
+from cuemsutils.tools import media_sidecars
 
 from .core.BaseEngine import BaseEngine
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
+from .players.LoopPeriods import LOAD_BUDGET_S as LOOP_PERIOD_LOAD_BUDGET_S
+from .players.LoopPeriods import probe_loop_periods
 from .players.PlayerHandler import (
     PLAYER_HANDLER,
     _positive_int,
     check_orphan_binary_names,
 )
+from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
@@ -133,6 +139,9 @@ class NodeEngine(BaseEngine):
         # selection landed and stop advancing its own (now stale) walk —
         # 869f79ecc.
         self._selection_epoch: int = 0
+        # Cue ids that loop in legacy mode on this node for the loaded project
+        # (no loop period in time, 869ejxng3); reported in every armed_ready.
+        self._legacy_period: list[str] = []
         # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
         if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
             self.nng_hub_address = (
@@ -156,6 +165,7 @@ class NodeEngine(BaseEngine):
             self.deploy_manager = None
 
     def start(self):
+        self._log_versions()
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
         self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         # Creates command dictionary and OSCQuery client
@@ -167,6 +177,37 @@ class NodeEngine(BaseEngine):
         if self.mtc_listener is not None:
             self.mtc_listener.start()
         super().start()
+
+    @staticmethod
+    def _log_versions() -> None:
+        """The engine's own Debian package version (every rc6-N tag says
+        0.1.0rc6 to importlib, I8), and whether ffprobe is there for the loop
+        periods (869ejxng3 §4.5): the only version visibility there is (G15)."""
+        version = None
+        try:
+            r = subprocess.run(
+                ["dpkg-query", "-W", "-f=${Version}", "cuems-engine"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            version = r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            pass
+        if not version:
+            try:
+                from importlib.metadata import version as _v
+
+                version = f"{_v('cuemsengine')} (python package)"
+            except Exception:
+                version = "unknown"
+        Logger.info(f"node engine: cuems-engine {version}")
+        test_knobs.announce()
+        if shutil.which("ffprobe") is None:
+            Logger.warning(
+                "ffprobe not found: looping cues without a .period sidecar run "
+                "in legacy mode (a gap per pass)"
+            )
 
     def _setup_nng_command_callback(self):
         """
@@ -888,8 +929,14 @@ class NodeEngine(BaseEngine):
         # `deploy` bus command, which can arrive mid-show.
         self.check_unrouted_video_outputs()
 
+        # Loop periods (869ejxng3 §4.1, D12): read or probed beside the arm,
+        # waited for before armed_ready, so GO is enabled only when every node
+        # knows each looping cue's mode.
+        period_probe = self._start_loop_period_probe()
+
         # Prepare the script to be played (arms new cues)
         self.ready_script(reason="load")
+        self._finish_loop_period_probe(period_probe)
 
         # Start cue dependencies
         # self.set_players()
@@ -930,6 +977,7 @@ class NodeEngine(BaseEngine):
         self._teardown_project("unload")
 
         self.reset_script()
+        self._legacy_period = []
         self.set_status("load", "")
         self.remove_show_lock_file()
         self._broadcast_nextcue()
@@ -1111,58 +1159,89 @@ class NodeEngine(BaseEngine):
 
     def ensure_video_indexes(self):
         """
-        Run cuems-videoindexer on any video files that are missing a .idx
-        sidecar.
+        Run cuems-videoindexer on any video files whose .idx sidecar is missing
+        or stale.
 
         This is a safety net for files that were copied manually or deployed to
-        a
-        node that never ran the editor upload hook. For normally-uploaded files
-        the
-        index was already created by the editor and this is a no-op.
+        a node that never ran the editor upload hook. For normally-uploaded
+        files the index was already created by the editor and this is a no-op.
+        The caller is shared with the editor
+        (``cuemsutils.tools.media_sidecars.ensure_video_index``, 869ejxng3).
         """
         if not self.script:
             return
         file_names = self.script.get_own_media_filenames(config=self.cm)
         video_exts = {".mp4", ".mov", ".avi", ".mkv", ".mpg"}
-        unindexed = []
-        for name in file_names:
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in video_exts:
-                continue
-            full_path = PLAYER_HANDLER.media_path(name)
-            idx_dir = os.path.join(os.path.dirname(full_path), "indexes")
-            idx_path = os.path.join(idx_dir, os.path.basename(full_path) + ".idx")
-            if not os.path.exists(idx_path):
-                unindexed.append(full_path)
-        if unindexed:
-            Logger.info(
-                f"ensure_video_indexes: indexing {len(unindexed)} video(s)"
-                f"missing .idx: "
-                f"{[os.path.basename(p) for p in unindexed]}"
+        videos = [
+            PLAYER_HANDLER.media_path(name)
+            for name in file_names
+            if os.path.splitext(name)[1].lower() in video_exts
+        ]
+        if videos:
+            media_sidecars.ensure_video_index(videos, timeout_s=600)
+
+    def _loop_period_cues(self) -> list:
+        """Mark every CueList child ``_in_cuelist`` (they play once, Q2, I11) and
+        return the local looping AudioCues whose period the load needs: loop != 1,
+        enabled or not (a cue enabled at runtime then has its period, I16i), not
+        inside a CueList. VideoCues join in Phase B (their realFrames)."""
+        found = []
+
+        def walk(cuelist, inside):
+            for cue in cuelist.contents or []:
+                cue._in_cuelist = inside
+                if isinstance(cue, CueList):
+                    walk(cue, True)
+                elif (
+                    isinstance(cue, AudioCue)
+                    and not inside
+                    and getattr(cue, "_local", False) is True
+                    and cue.loop != 1
+                ):
+                    found.append(cue)
+
+        if self.script and self.script.cuelist:
+            walk(self.script.cuelist, False)
+        return found
+
+    def _start_loop_period_probe(self):
+        """Give the looping cues their period beside the arm (§4.1): from the
+        editor's sidecar, this node's cache, or a probe within the budget."""
+        self._legacy_period = []
+        cues = self._loop_period_cues()
+        if not cues:
+            return None
+        cancel = Event()
+        result = {}
+
+        def run():
+            result["legacy"] = probe_loop_periods(
+                cues,
+                PLAYER_HANDLER.media_path,
+                PLAYER_HANDLER.loop_period_cache,
+                cancel=cancel,
             )
-            try:
-                result = subprocess.run(
-                    ["cuems-videoindexer"] + unindexed,
-                    timeout=600,
-                    capture_output=True,
-                    text=True,
-                )
-            except Exception as e:
-                Logger.warning(f"ensure_video_indexes: indexer failed: {e}")
-                return
-            if result.returncode == 0:
-                Logger.info("ensure_video_indexes: indexer ok (rc=0)")
-                if result.stdout:
-                    Logger.debug(
-                        f"ensure_video_indexes stdout: {result.stdout.strip()}"
-                    )
-            else:
-                Logger.warning(
-                    "ensure_video_indexes: indexer returned"
-                    f"rc={result.returncode}. "
-                    f"stdout={result.stdout.strip()!r}"
-                    f"stderr={result.stderr.strip()!r}"
-                )
+
+        t = Thread(target=run, name="loop-period-probe", daemon=True)
+        t.start()
+        return (t, cancel, result, cues, monotonic())
+
+    def _finish_loop_period_probe(self, probe) -> None:
+        if probe is None:
+            return
+        t, cancel, result, cues, started = probe
+        budget = test_knobs.probe_budget_s(LOOP_PERIOD_LOAD_BUDGET_S)
+        t.join(max(0.0, budget + 2.0 - (monotonic() - started)))
+        cancel.set()  # the modes are fixed from here on (reported in armed_ready)
+        if t.is_alive():
+            Logger.warning("loop period probe still running after the load budget")
+        self._legacy_period = [
+            str(c.id) for c in cues if getattr(c, "_loop_period", None) is None
+        ]
+        Logger.info(
+            f"loop periods: {len(cues) - len(self._legacy_period)} of {len(cues)} "
+            f"looping audio cue(s) can wrap; legacy: {self._legacy_period or 'none'}"
+        )
 
     #########################
     # Nextcue
@@ -1318,12 +1397,19 @@ class NodeEngine(BaseEngine):
         from .comms.NodesHub import ActionType, NodeOperation, OperationType
 
         try:
+            data = {"armed": "yes"}
+            # The cues that loop in legacy mode on this node for this load
+            # (869ejxng3 §4.2): repeated as is by the re-arm after STOP. An old
+            # controller reads only "armed".
+            legacy = list(getattr(self, "_legacy_period", None) or [])
+            if legacy:
+                data["legacy_period"] = legacy
             operation = NodeOperation(
                 type=OperationType.STATUS,
                 action=ActionType.UPDATE,
                 sender=self.cm.node_uuid,
                 target="armed_ready",
-                data={"armed": "yes"},
+                data=data,
             )
             CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
             Logger.debug(f"Notified Controller that {context} is complete")

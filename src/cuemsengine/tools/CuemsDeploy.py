@@ -656,7 +656,10 @@ class CuemsDeploy:
         Expand bare media filenames to rsync-relative paths for --files-from.
 
         Every file gets a media/<name> entry. Video files (.mp4 .mov .avi
-        .mkv .mpg) also get a media/indexes/<name>.idx sidecar entry.
+        .mkv .mpg) also get a media/indexes/<name>.idx sidecar entry, and every
+        file its loop period sidecar media/indexes/<name>.period (869ejxng3
+        D14: written by the editor at upload; --ignore-missing-args makes an
+        absent one harmless, and -t keeps the mtime its size+mtime check needs).
         """
         _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mpg"}
         result = []
@@ -664,4 +667,5 @@ class CuemsDeploy:
             result.append(f"media/{name}")
             if os.path.splitext(name)[1].lower() in _VIDEO_EXTS:
                 result.append(f"media/indexes/{name}.idx")
+            result.append(f"media/indexes/{name}.period")
         return result

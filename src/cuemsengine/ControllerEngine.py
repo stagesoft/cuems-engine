@@ -604,6 +604,15 @@ class ControllerEngine(BaseEngine):
                     armed_now = set(self._armed_nodes)
                     required = set(self._required_nodes)
                 Logger.info(f"Node {sender} armed ({len(armed_now)}/{len(required)})")
+                legacy = operation.data.get("legacy_period")
+                if legacy:
+                    # 869ejxng3 §4.2: the operator sees a mixed-mode cluster
+                    # before GO (a loop period missed the node's load budget).
+                    Logger.warning(
+                        f"Node {sender}: {len(legacy)} looping audio cue(s) "
+                        f"without a loop period, legacy loop (a gap per pass) on "
+                        f"that node for this load: {legacy}"
+                    )
                 if armed_now >= required and self.get_status("armed") != "yes":
                     if self.go_offset is None:
                         Logger.info(

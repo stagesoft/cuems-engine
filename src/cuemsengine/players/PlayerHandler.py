@@ -22,6 +22,7 @@ from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
 from .AudioPlayer import AudioClient, AudioPlayer, start_audio_output
 from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
 from .GradientClient import GradientClient
+from .LoopPeriods import LoopPeriodCache
 from .Player import Player
 from .VideoPlayer import VideoClient, VideoOutput
 
@@ -239,6 +240,9 @@ class PlayerHandler:
             # (cue id, output name) pairs whose "output not driven" error was
             # already logged in this load (869fgq3xv); cleared at each load.
             cls._instance._unrouted_warned = set()
+            # Loop periods probed on this node (869ejxng3 D14): on disk, never
+            # cleared on unload; the sidecar from the editor comes first.
+            cls._instance._loop_period_cache = LoopPeriodCache()
         return cls._instance
 
     # ---------------------------
@@ -254,6 +258,22 @@ class PlayerHandler:
         """Gets a cue player"""
         with self._lock:
             return self._cue_players[cue]
+
+    def audio_player(self, cue: Cue) -> AudioPlayer | None:
+        """The cue's running audio player, or None (no player, not an audio
+        player, or not started yet). Its ``caps`` and ``loop_ack`` are what the
+        cuems-audioplayer announced on stdout (869ejxng3, plan §4.2)."""
+        try:
+            player = self.get_cue_player(cue)
+        except (KeyError, TypeError):
+            return None
+        if not isinstance(player, AudioPlayer) or not player.ready.is_set():
+            return None
+        return player
+
+    @property
+    def loop_period_cache(self) -> LoopPeriodCache:
+        return self._loop_period_cache
 
     def remove_cue_player(self, cue: Cue):
         """Removes a cue player"""

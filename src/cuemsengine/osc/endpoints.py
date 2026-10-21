@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from pyossia import ValueType
 
@@ -16,6 +17,13 @@ OSC_AUDIOPLAYER_CONF = {
     "/mtcfollow": [ValueType.Int, None],
     "/offset": [ValueType.Float, None],
     "/check": [ValueType.Impulse, None],
+    # 869ejxng3 + 1amfwm7e6cw (plan §4.2): sent only to a player that printed
+    # "CAPS: loop varispeed". /loop is i:passes [i:period_num i:period_den]
+    # (passes 1 = once, N >= 2 = wrap N-1 times, <= 0 = forever); /offset_i is
+    # the offset in whole ms as int32 (/offset stays Float for old players).
+    # Both with the repetition filter OFF: the same value is re-sent per pass.
+    "/loop": [ValueType.List, None, None, False],
+    "/offset_i": [ValueType.Int, None, None, False],
 }
 
 OSC_AUDIOMIXER_CONF = {
