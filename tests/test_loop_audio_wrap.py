@@ -13,6 +13,7 @@ state the stdout reader keeps.
 import threading
 import time
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -40,16 +41,31 @@ class FakeMtc:
 
 
 class FakeOsc:
+    """Records set_value per phase (run / reveal / loop). get_node mirrors the
+    OssiaClient read-back run_audioCue logs after the offset send."""
+
     def __init__(self, fail=()):
-        self.sent, self.fail = [], set(fail)
+        self.sent, self.fail, self.phase = [], set(fail), None
 
     def set_value(self, path, value):
         if path in self.fail:
             raise ValueError("boom")
-        self.sent.append((path, value))
+        self.sent.append((self.phase, path, value))
 
-    def paths(self):
-        return [p for p, _ in self.sent]
+    def get_node(self, path):
+        last = [v for _, p, v in self.sent if p == path]
+        return SimpleNamespace(
+            parameter=SimpleNamespace(value=last[-1] if last else None)
+        )
+
+    def in_phase(self, phase):
+        return [(p, v) for ph, p, v in self.sent if ph == phase]
+
+    def paths(self, phase=None):
+        return [p for ph, p, _ in self.sent if phase is None or ph == phase]
+
+    def values(self, path):
+        return [v for _, p, v in self.sent if p == path]
 
 
 class FakePlayer:
@@ -59,9 +75,11 @@ class FakePlayer:
         self.last_wrap_ver = -1
 
     def ack(self, mode, ver):
+        """As Player.note_line: the line with the highest ver wins."""
         if mode == "wrap":
             self.last_wrap_ver = max(self.last_wrap_ver, ver)
-        self.loop_ack = LoopAck(ver, 3, 0, 0, mode)
+        if self.loop_ack is None or ver >= self.loop_ack.ver:
+            self.loop_ack = LoopAck(ver, 3, 0, 0, mode)
 
 
 P_MS = 400.0
@@ -98,11 +116,14 @@ def _cue(loop, period=PERIOD, duration="00:00:00.360"):
 def _lifecycle(cue, player, stop_after_ms=None, on_reveal=None):
     """run → wait for the start → reveal → loop, as CueHandler.go_threaded does."""
     mtc = FakeMtc()
+    osc = cue._osc
     with patch.object(PLAYER_HANDLER, "audio_player", lambda c: player):
         start_ms = mtc.main_tc.milliseconds_exact
+        osc.phase = "run"
         run_cue(cue, mtc, start_ms)
         while mtc.main_tc.milliseconds_exact < cue._start_mtc.milliseconds_exact:
             time.sleep(0.01)
+        osc.phase = "reveal"
         reveal_cue(cue, mtc, start_ms)
         if on_reveal:
             on_reveal()
@@ -113,8 +134,15 @@ def _lifecycle(cue, player, stop_after_ms=None, on_reveal=None):
                 cue._stop_requested = True
 
             threading.Thread(target=stop, daemon=True).start()
+        osc.phase = "loop"
         loop_cue(cue, mtc)
     return mtc, start_ms
+
+
+def _before(seq, first, then):
+    """*first* is sent, *then* is sent, and *first* comes before *then*."""
+    assert first in seq and then in seq, (first, then, seq)
+    assert seq.index(first) < seq.index(then), (first, then, seq)
 
 
 # --------------------------------------------------------------------------- wrap
@@ -123,44 +151,39 @@ def _lifecycle(cue, player, stop_after_ms=None, on_reveal=None):
 def test_wrap_mode_sends_loop_and_never_reanchors():
     cue, player = _cue(3), FakePlayer()
     mtc, start = _lifecycle(cue, player, on_reveal=lambda: player.ack("wrap", 1))
-    p = cue._osc.paths()
-    assert cue._osc.sent[0][0] == "/offset_i"
-    assert isinstance(cue._osc.sent[0][1], int)  # whole ms, int32 (G1b)
-    assert cue._osc.sent[1] == ("/loop", [3, 19200, 48000])
-    assert p[2] == "/volmaster"
-    assert p[3:6] == [
-        "/offset_i",
-        "/loop",
-        "/mtcfollow",
-    ]  # reveal: offset, loop, follow
-    assert p[6:] == ["/loop", "/loop"]  # one re-send per later pass
-    assert (
-        "/mtcfollow" not in p[6:] and "/offset" not in p and p.count("/offset_i") == 2
-    )
+    osc = cue._osc
+    run = osc.in_phase("run")
+    offset = [v for p, v in run if p == "/offset_i"]
+    assert len(offset) == 1 and isinstance(offset[0], int)  # whole ms, int32 (G1b)
+    assert ("/loop", [3, 19200, 48000]) in run
+    _before(osc.paths("run"), "/offset_i", "/loop")  # the loop after the offset
+    assert "/offset" not in osc.paths() and "/mtcfollow" not in osc.paths("run")
+    reveal = osc.paths("reveal")
+    _before(reveal, "/offset_i", "/mtcfollow")
+    _before(reveal, "/loop", "/mtcfollow")  # /loop applied before following starts
+    assert ("/mtcfollow", 1) in osc.in_phase("reveal")
+    # the passes: one /loop re-send per later pass, no offset, no /mtcfollow 0
+    assert osc.in_phase("loop") == [("/loop", [3, 19200, 48000])] * 2
     assert cue._player_wraps is True and cue._wrap_fallback is False
     # the timeline on P, from the absolute instants (G20)
     base = loop_mode.tc_at(25, start).milliseconds_exact
     assert abs(cue._end_mtc.milliseconds_exact - (base + 3 * P_MS)) <= 40
 
 
-def test_no_wrap_ack_within_1s_falls_back_to_legacy_on_P():
+def test_no_wrap_ack_within_the_timeout_falls_back_to_legacy_on_P():
     cue, player = _cue(5), FakePlayer()
     with patch.object(loop_mode, "WRAP_ACK_TIMEOUT_S", 0.5):
         _lifecycle(cue, player)
-    p = cue._osc.paths()
     assert cue._wrap_fallback is True and cue._player_wraps is False
-    i = p.index("/loop", 4)  # the first pass re-send …
-    fb = [
-        k for k, (path, v) in enumerate(cue._osc.sent) if path == "/loop" and v == [1]
-    ]
-    assert fb, "the fallback /loop [1]"
-    after = p[fb[0] + 1 :]
-    assert after and set(after) <= {
-        "/offset_i",
-        "/mtcfollow",
-    }  # per-pass re-anchor, then the end
-    assert after[-1] == "/mtcfollow"  # legacy ends with /mtcfollow 0
-    assert i < fb[0]
+    loop = cue._osc.in_phase("loop")
+    paths = [p for p, _ in loop]
+    _before(loop, ("/loop", [1]), ("/offset_i", loop[paths.index("/offset_i")][1]))
+    after = paths[loop.index(("/loop", [1])) + 1 :]
+    assert set(after) <= {"/offset_i", "/mtcfollow"} and "/loop" not in after
+    assert loop[-1] == ("/mtcfollow", 0)  # legacy ends with /mtcfollow 0
+    # the re-anchors after the fallback are one P apart
+    offs = [v for p, v in loop if p == "/offset_i"]
+    assert all(b - a == -400 for a, b in zip(offs, offs[1:]))
 
 
 def test_an_off_ack_newer_than_the_wrap_falls_back():
@@ -172,7 +195,7 @@ def test_an_off_ack_newer_than_the_wrap_falls_back():
 
     _lifecycle(cue, player, on_reveal=acks)
     assert cue._wrap_fallback is True
-    assert ("/loop", [1]) in cue._osc.sent
+    assert ("/loop", [1]) in cue._osc.in_phase("loop")
 
 
 def test_an_old_off_below_the_last_wrap_is_ignored():
@@ -181,10 +204,11 @@ def test_an_old_off_below_the_last_wrap_is_ignored():
     def acks():
         player.ack("off", 1)
         player.ack("wrap", 2)
-        player.loop_ack = LoopAck(1, 3, 0, 0, "off")  # a late receipt line, older ver
+        player.ack("off", 1)  # a receipt line written late, with an older ver
 
     _lifecycle(cue, player, on_reveal=acks)
     assert cue._wrap_fallback is False
+    assert ("/loop", [1]) not in cue._osc.in_phase("loop")
 
 
 def test_the_fallback_is_latched_for_the_go():
@@ -198,6 +222,9 @@ def test_the_fallback_is_latched_for_the_go():
         threading.Thread(target=late, daemon=True).start()
         _lifecycle(cue, player)
     assert cue._wrap_fallback is True and cue._player_wraps is False
+    loop = cue._osc.in_phase("loop")
+    i = loop.index(("/loop", [1]))
+    assert ("/loop", [5, 19200, 48000]) not in loop[i:]  # no wrap re-send after it
 
 
 # --------------------------------------------------------------------------- legacy
@@ -209,22 +236,30 @@ def test_a_capable_player_gets_loop_1_when_not_wrapping(why):
     if why == "cuelist":
         cue._in_cuelist = True
     _lifecycle(cue, FakePlayer())
-    assert cue._osc.sent[1] == ("/loop", [1])
+    osc = cue._osc
+    assert ("/loop", [1]) in osc.in_phase("run")
+    _before(osc.paths("run"), "/offset_i", "/loop")
     assert cue._wrap_requested is False
-    assert cue._osc.paths()[-1] == "/mtcfollow" and cue._osc.sent[-1][1] == 0
-    assert "/offset" not in cue._osc.paths()
+    assert osc.values("/loop") == [[1]]  # never a wrap request, never re-sent
+    assert osc.in_phase("loop")[-1] == ("/mtcfollow", 0)
+    assert "/offset" not in osc.paths()
 
 
 def test_an_old_player_gets_no_loop_and_float_offsets_reanchored_on_P():
     cue = _cue(3)
-    mtc, start = _lifecycle(cue, None)
-    p = cue._osc.paths()
-    assert "/loop" not in p and "/offset_i" not in p
-    offsets = [v for path, v in cue._osc.sent if path == "/offset"]
-    base = offsets[0]
-    assert isinstance(base, float)
-    # run, reveal, then one re-anchor per later pass, each one P further
-    assert [round(o - base) for o in offsets] == [0, 0, -400, -800]
+    _lifecycle(cue, None)
+    osc = cue._osc
+    assert "/loop" not in osc.paths() and "/offset_i" not in osc.paths()
+    run, reveal, loop = (
+        [v for p, v in osc.in_phase(ph) if p == "/offset"]
+        for ph in ("run", "reveal", "loop")
+    )
+    assert len(run) == 1 and isinstance(run[0], float)
+    assert reveal == run  # the reveal re-asserts the same offset
+    # one re-anchor per later pass, each one P further (re-anchored on P, not on
+    # the stored 360 ms duration)
+    assert [round(o - run[0]) for o in loop] == [-400, -800]
+    assert osc.in_phase("loop")[-1] == ("/mtcfollow", 0)
 
 
 def test_an_abort_before_the_offset_leaves_no_wrap():

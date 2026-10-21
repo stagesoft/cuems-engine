@@ -170,21 +170,48 @@ def test_a_budget_miss_is_legacy_and_finished_in_the_background(tmp_path, cache)
     assert cue._loop_period is None  # this load's mode does not change
 
 
+def _costly_probe(now, cost_s, calls):
+    """A probe that takes *cost_s* of the fake clock, and times out (as the real
+    one does through its subprocess timeouts) when its budget is shorter."""
+
+    def probe(path, budget_s=None, low_priority=False):
+        calls.append((os.path.basename(path), budget_s, low_priority))
+        if low_priority:
+            return _period(path)
+        if budget_s is not None and budget_s < cost_s:
+            now[0] += budget_s
+            raise ms.PeriodTimeout("budget")
+        now[0] += cost_s
+        return _period(path)
+
+    return probe
+
+
 def test_the_total_budget_is_shared(tmp_path, cache):
     for n in ("a.wav", "b.wav"):
         _wav(tmp_path / n)
-    now = [0.0]
-
-    def probe(path, budget_s=None, low_priority=False):
-        if low_priority:
-            return _period(path)
-        now[0] += 14.5  # the first file eats the load's 15 s
-        return _period(path)
-
+    now, calls = [0.0], []
     a, b = _cue("a.wav"), _cue("b.wav")
-    with patch.object(ms, "loop_period", side_effect=probe):
+    with patch.object(ms, "loop_period", side_effect=_costly_probe(now, 9.0, calls)):
         legacy = _probe([a, b], tmp_path, cache, clock=lambda: now[0])
-    assert a._loop_period is not None and legacy == [str(b.id)]
+    # a: 10 s per file, takes 9; b: what is left of the 15 s (6) < 9 → a miss
+    assert calls[:2] == [("a.wav", 10.0, False), ("b.wav", 6.0, False)]
+    assert a._loop_period is not None and b._loop_period is None
+    assert legacy == [str(b.id)]
+
+
+def test_an_exhausted_budget_probes_nothing_more(tmp_path, cache):
+    for n in ("a.wav", "b.wav"):
+        _wav(tmp_path / n)
+    now, calls = [0.0], []
+    a, b = _cue("a.wav"), _cue("b.wav")
+    with patch.object(ms, "loop_period", side_effect=_costly_probe(now, 15.0, calls)):
+        legacy = _probe(
+            [a, b], tmp_path, cache, clock=lambda: now[0], file_budget_s=20.0
+        )
+    # a eats the whole 15 s; b is not even started inside the load
+    assert [c for c in calls if not c[2]] == [("a.wav", 15.0, False)]
+    assert legacy == [str(b.id)] and a._loop_period is not None
 
 
 def test_a_period_beyond_int32_is_legacy(tmp_path, cache):
