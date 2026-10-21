@@ -22,6 +22,7 @@ from ..tools import MtcListener
 from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
+from .loop_mode import wrap_active
 from .run_cue import blank_cue, reveal_cue, run_cue
 
 
@@ -336,6 +337,32 @@ class CueHandler:
         "Cue play modes & pre/post-wait semantics".
         """
         return 0.0
+
+    #: An audio player in wrap mode ends its last pass by itself, a few ms
+    #: after the engine's _end_mtc at most; its disarm (the kill) waits this
+    #: many frames past _end_mtc so it never cuts the tail (869ejxng3 §4.5, H17).
+    WRAP_END_MARGIN_FRAMES = 2
+
+    def _wait_wrap_player_end(self, cue: Cue, mtc: MtcListener, go_gen: int) -> None:
+        """Delay only an audio wrap-mode cue's end-of-cue disarm by 2 frames.
+
+        loop_cue already returned at _end_mtc (the follow seeds from it, F8);
+        the video layer of a VideoCue is hidden at _end_mtc as today."""
+        if not isinstance(cue, AudioCue) or getattr(cue, "_stop_requested", False):
+            return
+        end = getattr(cue, "_end_mtc", None)
+        if not wrap_active(cue) or end is None:
+            return
+        try:
+            frame_ms = 1000.0 / float(end.framerate)
+        except (TypeError, ValueError, ZeroDivisionError):
+            frame_ms = 40.0
+        self._wait_mtc(
+            cue,
+            mtc,
+            end.milliseconds_exact + self.WRAP_END_MARGIN_FRAMES * frame_ms,
+            go_gen,
+        )
 
     def _wait_mtc(
         self, cue: Cue, mtc: MtcListener, target_ms: float, go_gen: int = 0
@@ -2014,6 +2041,7 @@ class CueHandler:
                 "target already started by a newer GO"
             )
 
+        self._wait_wrap_player_end(cue, mtc, go_gen)
         self.disarm(cue, reason="cue_end")
 
         if cue.post_go == "go_at_end" and go_at_end_thread:
