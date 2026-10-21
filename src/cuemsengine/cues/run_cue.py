@@ -728,7 +728,8 @@ def blank_cue(cue: Cue, mtc: MtcListener):
     blank_cue hides it while the cue stays in _armed_cues (STOP-reachable
     through the whole tail; disarming here instead would make the tail
     unreachable by stop_all_cues → ghost fire after STOP). Default no-op:
-    audio is already silent (loop_audioCue sends /mtcfollow 0 at loop end),
+    audio is already silent (legacy: loop_audioCue sends /mtcfollow 0 at loop
+    end; wrap mode, 869ejxng3: the player ends by itself after its last pass),
     DMX scenes have ended, actions/CueLists have nothing to hide.
     """
     pass
