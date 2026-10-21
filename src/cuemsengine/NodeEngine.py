@@ -28,6 +28,7 @@ from .players.PlayerHandler import (
     _positive_int,
     check_orphan_binary_names,
 )
+from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
@@ -201,6 +202,7 @@ class NodeEngine(BaseEngine):
             except Exception:
                 version = "unknown"
         Logger.info(f"node engine: cuems-engine {version}")
+        test_knobs.announce()
         if shutil.which("ffprobe") is None:
             Logger.warning(
                 "ffprobe not found: looping cues without a .period sidecar run "
@@ -1228,7 +1230,8 @@ class NodeEngine(BaseEngine):
         if probe is None:
             return
         t, cancel, result, cues, started = probe
-        t.join(max(0.0, LOOP_PERIOD_LOAD_BUDGET_S + 2.0 - (monotonic() - started)))
+        budget = test_knobs.probe_budget_s(LOOP_PERIOD_LOAD_BUDGET_S)
+        t.join(max(0.0, budget + 2.0 - (monotonic() - started)))
         cancel.set()  # the modes are fixed from here on (reported in armed_ready)
         if t.is_alive():
             Logger.warning("loop period probe still running after the load budget")

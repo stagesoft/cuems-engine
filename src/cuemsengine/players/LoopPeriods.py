@@ -20,6 +20,7 @@ Where a node gets P from, in order:
 The engine never writes a sidecar: ``media/indexes/`` mirrors the controller's.
 """
 
+import dataclasses
 import json
 import os
 import tempfile
@@ -29,6 +30,8 @@ from time import monotonic
 from cuemsutils.log import Logger
 from cuemsutils.tools import media_sidecars
 from cuemsutils.tools.media_sidecars import Period, PeriodError, PeriodTimeout
+
+from ..tools import test_knobs
 
 DEFAULT_CACHE_PATH = "/var/cache/cuems/loop-periods.json"
 LOAD_BUDGET_S = 15.0
@@ -178,6 +181,7 @@ def probe_loop_periods(
     Once *cancel* (an ``Event``) is set nothing more is assigned: the load has
     reported its modes in ``armed_ready`` and they never change after it.
     """
+    total_budget_s = test_knobs.probe_budget_s(total_budget_s)
     start = clock()
     legacy, misses, seen = [], [], {}
     for cue in cues:
@@ -199,6 +203,12 @@ def probe_loop_periods(
                 p, source = None, "budget"
                 misses.append(path)
             seen[path] = (p, source)
+        forced = test_knobs.forced_period(cue.id)
+        if forced is not None and p is not None:
+            p = dataclasses.replace(p, num=forced[0], den=forced[1])
+            Logger.warning(
+                f"TEST KNOB: loop period of {cue.id} forced to {forced[0]}/{forced[1]}"
+            )
         if p is not None and p.num > INT32_MAX:
             Logger.error(
                 f"loop period of {name} ({p.num} samples) exceeds the int32 wire "
