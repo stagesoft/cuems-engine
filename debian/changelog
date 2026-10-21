@@ -1,3 +1,17 @@
+cuems-engine (0.1.0rc6-7~pre869ejxng3.1) bookworm; urgency=medium
+
+  * TEST BUILD, not a release: 869ejxng3 + 1amfwm7e6cw Phase A (rig rows on
+    test2 and .111). Merges fix/869ejxng3-loop-varispeed: loop periods from
+    the editor's indexes/<name>.period sidecar (cuems-utils media_sidecars),
+    the on-disk cache and an in-load probe within 15 s / 10 s; armed_ready
+    legacy_period; /loop list and /offset_i to capable players; CAPS and LOOP
+    ack parsing with the latched fallback; the deploy ships .period files;
+    CUEMS_TEST_* rig knobs, inert without CUEMS_TEST_KNOBS=1.
+  * debian/control: Depends cuems-utils (>= 0.1.0rc18~) and ffmpeg.
+  * The package owns /var/cache/cuems (chown cuems:cuems in postinst).
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 21 Oct 2026 17:46:09 +0200
+
 cuems-engine (0.1.0rc6-6) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:
