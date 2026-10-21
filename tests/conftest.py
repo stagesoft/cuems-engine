@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import gc
 import multiprocessing
@@ -162,6 +163,20 @@ def _isolated_runtime_paths(tmp_path_factory):
             str(run_dir / "cuems.show.lock"),
         ),
     ]
+
+    # The node's loop-period cache (869ejxng3 D14) lives in /var/cache/cuems on a
+    # host: a test must neither read a host's entries nor write its own there.
+    try:
+        from cuemsengine.players.LoopPeriods import LoopPeriodCache
+
+        targets.append(
+            (
+                "cuemsengine.players.PlayerHandler.PLAYER_HANDLER._loop_period_cache",
+                LoopPeriodCache(str(run_dir / "loop-periods.json")),
+            )
+        )
+    except ImportError:
+        pass
 
     patchers = []
     for target, replacement in targets:
