@@ -1,0 +1,26 @@
+# failing-first A-4 — merge-induced red on 2e016d1 (arm B: suite-arm-B.txt)
+cuems-utils HEAD: 1c1334c44600c228b9634cc2aab601941d86f7a4
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 6 items
+tests/test_cluster_identity.py ....F.                                    [100%]
+=================================== FAILURES ===================================
+_____________ test_script_finished_from_str_senders_closes_the_run _____________
+tests/test_cluster_identity.py:150: in test_script_finished_from_str_senders_closes_the_run
+    assert len(controller._finished_nodes) == 2
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'ControllerEngine' object has no attribute '_finished_nodes'
+------------------------------ Captured log setup ------------------------------
+------------------------------ Captured log call -------------------------------
+ERROR    cuemsengine.ControllerEngine:test_cluster_identity.py:106 node 5b1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f is used by this project but did not respond to ping; its cues will NOT play. GO is NOT blocked — the node is excluded from the arm gate.
+WARNING  cuemsengine.ControllerEngine:test_cluster_identity.py:106 project references node 7c7c7c7c-0000-4000-8000-000000000007 which is not in the cluster; cues for it will not fire
+WARNING  cuemsengine.ControllerEngine:test_cluster_identity.py:106 project references node 8e8e8e8e-0000-4000-8000-000000000008 which is not in the cluster; cues for it will not fire
+---------------------------- Captured log teardown -----------------------------
+=========================== short test summary info ============================
+FAILED tests/test_cluster_identity.py::test_script_finished_from_str_senders_closes_the_run
+========================= 1 failed, 5 passed in 1.06s ==========================

@@ -18,8 +18,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from cuemsutils.cues import ActionCue
 
 from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
+from cuemsengine.tools.ids import as_id
 
 from .network_map_helpers import controller_with_map, typed_network_map
 
@@ -140,15 +142,73 @@ def test_armed_ready_from_str_senders_opens_the_gate(controller):
     assert controller.get_status("armed") == "yes"
 
 
-def test_script_finished_from_str_senders_closes_the_run(controller):
+STOP_CUE = "11111111-1111-4111-8111-111111111111"
+SOURCE_CUE = "22222222-2222-4222-8222-222222222222"
+TARGET_CUE = "33333333-3333-4333-8333-333333333333"
+
+
+@pytest.fixture
+def running_show(controller):
+    """A resolved cluster with a running show whose cue ids are ``Uuid``."""
     _resolve(controller)
     controller.set_status("running", "yes")
-    for sender in (CONTROLLER, PLAYING):
-        controller.status_operation_callback(
-            _status_op(sender, "script_finished", {"running": "no"})
+    controller.cue_status = {as_id(c): 0 for c in (STOP_CUE, SOURCE_CUE, TARGET_CUE)}
+    stop_cue = ActionCue({"action_target": "", "action_type": "stop_project"})
+    controller.script = SimpleNamespace(
+        find=lambda cue_id: stop_cue if str(cue_id) == STOP_CUE else None
+    )
+    return controller
+
+
+def _stop_project_op(sender, run_seq):
+    return _status_op(sender, "stop_project", {"cue": STOP_CUE, "run_seq": run_seq})
+
+
+def _follow_op(sender, run_seq):
+    return _status_op(
+        sender,
+        "follow",
+        {
+            "op": "announce",
+            "source": SOURCE_CUE,
+            "target": TARGET_CUE,
+            "seed_ms": 0,
+            "run_seq": run_seq,
+        },
+    )
+
+
+def test_stop_project_from_an_adopted_str_sender_stops_the_show(running_show):
+    with patch.object(running_show, "stop_script") as stop_script:
+        running_show.status_operation_callback(
+            _stop_project_op(PLAYING, running_show._run_seq)
         )
-    assert len(controller._finished_nodes) == 2
-    assert controller.get_status("running") == "no"
+    stop_script.assert_called_once()
+
+
+def test_stop_project_from_a_node_that_is_not_adopted_is_refused(running_show):
+    with patch.object(running_show, "stop_script") as stop_script:
+        running_show.status_operation_callback(
+            _stop_project_op(UNADOPTED, running_show._run_seq)
+        )
+    stop_script.assert_not_called()
+
+
+def test_follow_from_an_adopted_str_sender_is_relayed(running_show):
+    with patch.object(running_show, "_forward_command_to_nodes") as forward:
+        running_show.status_operation_callback(
+            _follow_op(PLAYING, running_show._run_seq)
+        )
+    forward.assert_called_once()
+    assert forward.call_args.args[0] == "/engine/command/follow"
+
+
+def test_follow_from_a_node_that_is_not_adopted_is_refused(running_show):
+    with patch.object(running_show, "_forward_command_to_nodes") as forward:
+        running_show.status_operation_callback(
+            _follow_op(UNADOPTED, running_show._run_seq)
+        )
+    forward.assert_not_called()
 
 
 def test_repeated_pongs_count_once(controller):
