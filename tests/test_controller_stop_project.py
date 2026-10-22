@@ -295,3 +295,40 @@ class TestArmWatchdogAfterStop:
         with patch("cuemsengine.ControllerEngine.Logger") as log:
             running._on_arm_watchdog_fire()
         assert str(log.error.call_args.args[0]).startswith("Load stalled")
+
+
+class TestStopProjectBuiltInCode:
+    """R-3 (009): the cue as code builds it, with no target, reaches its handler.
+
+    The action guard rejects a missing target unless the action is project
+    scoped. A ``stop_project`` ActionCue built from a dict, the way the
+    controller tests build one, must get past both the "unsupported" and the
+    "missing target" guards of ``ActionHandler.execute_action``.
+    """
+
+    @pytest.fixture
+    def action_handler(self):
+        from cuemsengine.cues.ActionHandler import ACTION_HANDLER
+        from cuemsengine.cues.CueHandler import CUE_HANDLER
+
+        ACTION_HANDLER.bind_cue_handler(Mock())
+        ACTION_HANDLER.set_emit_enabled(False)
+        yield ACTION_HANDLER
+        ACTION_HANDLER.bind_cue_handler(CUE_HANDLER)
+        ACTION_HANDLER.set_emit_enabled(True)
+
+    def test_a_targetless_stop_project_is_applied_not_rejected(self, action_handler):
+        cue = _stop_cue_object()
+        assert not cue.action_target
+
+        result = action_handler.execute_action(cue, Mock())
+
+        assert result["status"] == "applied"
+        assert result["action_type"] == "stop_project"
+        assert result["target_id"] is None
+
+    def test_other_project_actions_are_still_rejected(self, action_handler):
+        for action_type in ("pause_project", "resume_project", "load", "unload"):
+            cue = ActionCue({"action_target": "", "action_type": action_type})
+            result = action_handler.execute_action(cue, Mock())
+            assert result["status"] == "rejected", action_type
