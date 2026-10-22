@@ -11,6 +11,7 @@ node whose ``settings.xml`` still carries the sentinel uuid is told so,
 instead of failing later with a generic "node not found".
 """
 
+import json
 import logging
 from os import environ
 from pathlib import Path
@@ -218,3 +219,189 @@ def test_gradient_node_name_fallback_is_text_even_for_a_typed_uuid():
     name = NodeEngine._resolve_gradient_node_name(fake)
     assert type(name) is str
     assert name == NODE
+
+
+# ─── 009 A-5: ids that leave the process from the absorbed release line ───
+#
+# The cross-node follow relay, stop_project, cue names, the unrouted-output
+# report and the audio player naming arrived with the release line. Each place
+# below puts an id on the wire, in an OSC address or in a JACK client name;
+# fed a ``Uuid`` (what a loaded script holds), it must emit plain ``str`` text:
+# a ``Uuid`` is not JSON serializable and has no ``split``.
+
+CUE_A = "2c2c2c2c-0000-4000-8000-00000000000a"
+CUE_B = "3d3d3d3d-0000-4000-8000-00000000000b"
+
+
+def _is_text(value, expected):
+    return type(value) is str and value == expected
+
+
+def _relay():
+    from cuemsengine.cues.FollowRelay import FollowRelay
+
+    sent = []
+    relay = FollowRelay(
+        cue_handler=Mock(),
+        node_id=NODE,
+        send=sent.append,
+        get_script=lambda: None,
+        get_mtc=lambda: None,
+        get_project_gen=lambda: 0,
+        first_local=lambda cue: None,
+    )
+    return relay, sent
+
+
+def _follow_cue():
+    return SimpleNamespace(
+        id=as_id(CUE_A), _target_object=SimpleNamespace(id=as_id(CUE_B))
+    )
+
+
+def test_follow_announce_emits_its_cue_ids_as_text():
+    relay, sent = _relay()
+    relay.announce(_follow_cue(), 1500.0, 7)
+
+    (data,) = sent
+    assert _is_text(data["source"], CUE_A)
+    assert _is_text(data["target"], CUE_B)
+    json.dumps(data)
+
+
+def test_follow_cancel_emits_its_cue_ids_as_text():
+    relay, sent = _relay()
+    relay.cancel(_follow_cue(), 1500.0, 7, "stopped")
+
+    (data,) = sent
+    assert data["op"] == "cancel"
+    assert _is_text(data["source"], CUE_A)
+    assert _is_text(data["target"], CUE_B)
+    json.dumps(data)
+
+
+def test_a_follow_announced_with_str_ids_finds_the_scripts_uuid_cues():
+    """Incoming: the controller relays ``str`` ids; the script's cues hold ``Uuid``."""
+    relay, _ = _relay()
+    cues = {as_id(CUE_A): SimpleNamespace(_local=False), as_id(CUE_B): object()}
+    relay._get_script = lambda: SimpleNamespace(find=lambda cue_id: cues.get(cue_id))
+    relay._get_mtc = lambda: object()
+
+    with patch("cuemsengine.cues.FollowRelay.Logger") as log:
+        relay.on_message(
+            {
+                "op": "announce",
+                "origin": "other-node",
+                "source": CUE_A,
+                "target": CUE_B,
+                "seed_ms": 1000,
+                "run_seq": 1,
+            }
+        )
+
+    refusals = [str(c.args[0]) for c in log.warning.call_args_list]
+    assert not any("not in the loaded project" in message for message in refusals)
+
+
+def _stop_project_outcome(cue_id):
+    from cuemsengine.cues.ActionHandler import _handle_stop_project
+
+    cue = SimpleNamespace(id=as_id(cue_id))
+    return _handle_stop_project(Mock(), cue, None, Mock())
+
+
+def test_stop_project_outcome_names_its_origin_cue_as_text():
+    outcome = _stop_project_outcome(CUE_A)
+
+    assert _is_text(outcome["origin_cue_id"], CUE_A)
+    json.dumps(outcome)
+
+
+def test_stop_project_status_op_carries_the_cue_as_text():
+    from cuemsengine.NodeEngine import NodeEngine
+
+    node = object.__new__(NodeEngine)
+    node.cm = SimpleNamespace(node_uuid=NODE)
+    node._follow_relay = SimpleNamespace(
+        run_seq=5, stop_pending=False, stops_received=0
+    )
+    node._stop_project_watchdog = None
+    with (
+        patch("cuemsengine.NodeEngine.CUE_HANDLER") as cue_handler,
+        patch("cuemsengine.NodeEngine.threading.Timer"),
+    ):
+        node._notify_stop_project(as_id(CUE_A))
+
+    (operation,), _ = cue_handler.communications_thread.send_operation_nowait.call_args
+    assert _is_text(operation.data["cue"], CUE_A)
+    json.dumps(operation.data)
+
+
+def test_project_status_reports_the_project_uuid_as_text(controller):
+    controller.set_status("load", "my_show")
+    controller.script = SimpleNamespace(id=as_id(CUE), unix_name="my_show")
+
+    status = controller.get_project_status(None)
+
+    assert _is_text(status["project_uuid"], CUE)
+    json.dumps(status)
+
+
+def test_cue_name_address_carries_the_cue_id_as_text(controller):
+    controller.communications_thread.broadcast_osc.reset_mock()
+
+    controller._broadcast_cue_name(as_id(CUE_A), "Intro")
+
+    controller.communications_thread.broadcast_osc.assert_called_once_with(
+        f"/engine/status/cue_name/{CUE_A}", "Intro"
+    )
+
+
+def test_unrouted_video_report_names_its_cue_as_text():
+    from cuemsutils.cues import VideoCue
+
+    from cuemsengine.NodeEngine import NodeEngine
+
+    cue = VideoCue()
+    cue.name = "Dark"
+    node = object.__new__(NodeEngine)
+    node.script = Mock(find=lambda cue_id: cue)
+    node.outputs_map = {cue.id: ["2"]}
+    with patch("cuemsengine.NodeEngine.PLAYER_HANDLER") as players:
+        players.partition_cue_outputs.return_value = ([], [("2", "not driven")])
+        players.driven_video_outputs.return_value = ["0=HDMI-A-1"]
+        found = node.check_unrouted_video_outputs()
+
+    (report,) = found
+    assert type(report["cue_id"]) is str and report["cue_id"] == str(cue.id)
+    json.dumps(found)
+
+
+def test_audio_player_jack_name_is_the_cue_id_without_hyphens():
+    from threading import RLock
+
+    from cuemsutils.cues import AudioCue
+
+    from cuemsengine.players.PlayerHandler import PlayerHandler
+
+    handler = object.__new__(PlayerHandler)
+    handler._lock = RLock()
+    handler._cue_players = {}
+    handler._audio_players_by_id = {}
+    handler._audio_output_generator = Mock(return_value=(Mock(p=None), Mock()))
+    handler._player_endpoints_generator = Mock()
+    handler._audio_mixer = Mock()
+    handler._audio_outputs = {"6": {"mapped_to": "system:playback_1"}}
+    handler._media_folder = "/tmp"
+    cue = AudioCue()
+    cue.media = {"file_name": "a.wav"}
+    cue.outputs = [{"output_name": f"{NODE}_6"}]
+
+    with patch("cuemsengine.players.PlayerHandler.PORT_HANDLER") as ports:
+        ports.assign_ports.return_value = {"audio_output": 9999}
+        handler.new_audio_output(cue)
+
+    name = handler._audio_mixer.connect_player_to_outputs.call_args.kwargs[
+        "player_name"
+    ]
+    assert name == "Audio_Player-" + str(cue.id).replace("-", "")

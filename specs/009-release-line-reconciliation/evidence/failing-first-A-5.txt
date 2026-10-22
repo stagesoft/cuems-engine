@@ -1,0 +1,37 @@
+# failing-first A-5 (T034) — HEAD f5c3c24
+cuems-utils HEAD: b592a5779d102280f6d9fa775553399c3ae4a58f
+cuemsutils.__version__: 0.1.1
+
+tests/test_identity_sweep.py::test_node_name_is_the_own_uuid_as_text PASSED [  5%]
+tests/test_identity_sweep.py::test_dmx_player_is_named_after_the_own_uuid PASSED [ 11%]
+tests/test_identity_sweep.py::test_direct_player_route_forwards_a_str_uuid_address PASSED [ 17%]
+tests/test_identity_sweep.py::test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id PASSED [ 23%]
+tests/test_identity_sweep.py::test_an_editor_cue_add_is_ignored_while_not_running PASSED [ 29%]
+tests/test_identity_sweep.py::test_a_cue_enabled_update_as_str_matches_the_scripts_uuid_cue_id PASSED [ 35%]
+tests/test_identity_sweep.py::test_an_unprovisioned_node_is_named_as_such_and_exits_before_loading PASSED [ 41%]
+tests/test_identity_sweep.py::test_gradient_node_name_fallback_is_text_even_for_a_typed_uuid PASSED [ 47%]
+tests/test_identity_sweep.py::test_follow_announce_emits_its_cue_ids_as_text PASSED [ 52%]
+tests/test_identity_sweep.py::test_follow_cancel_emits_its_cue_ids_as_text PASSED [ 58%]
+tests/test_identity_sweep.py::test_a_follow_announced_with_str_ids_finds_the_scripts_uuid_cues PASSED [ 64%]
+tests/test_identity_sweep.py::test_stop_project_outcome_names_its_origin_cue_as_text PASSED [ 70%]
+tests/test_identity_sweep.py::test_stop_project_status_op_carries_the_cue_as_text PASSED [ 76%]
+tests/test_identity_sweep.py::test_project_status_reports_the_project_uuid_as_text PASSED [ 82%]
+tests/test_identity_sweep.py::test_cue_name_address_carries_the_cue_id_as_text PASSED [ 88%]
+tests/test_identity_sweep.py::test_unrouted_video_report_names_its_cue_as_text FAILED [ 94%]
+tests/test_identity_sweep.py::test_audio_player_jack_name_is_the_cue_id_without_hyphens PASSED [100%]
+    assert type(report["cue_id"]) is str and report["cue_id"] == str(cue.id)
+E   AssertionError: assert (<class 'cuemsutils.tools.Uuid.Uuid'> is str)
+E    +  where <class 'cuemsutils.tools.Uuid.Uuid'> = type(8bd499c1-53ce-4501-91eb-4b96714862c4)
+FAILED tests/test_identity_sweep.py::test_unrouted_video_report_names_its_cue_as_text
+========================= 1 failed, 16 passed in 1.30s =========================
+
+## Reading the result
+
+Of the nine new cases (eight wire-leaving sites plus the incoming `follow` one), **one is red** for the stated
+reason and eight pass first time:
+
+- **Red**: `test_unrouted_video_report_names_its_cue_as_text`. `NodeEngine.check_unrouted_video_outputs` puts the raw
+  `cue.id` (a `Uuid`) into its report as `"cue_id"`; a `Uuid` is not JSON serializable and is not text.
+- **Characterization (green before the change)**: every other site already applies `str(...)` to the id, and
+  `id_str` is `str(...)` with `None` rendered as `""`. For a `Uuid` the converted code emits the same text.
+  The tests pin that behaviour so the conversions of T035-T040 (the refactor step) cannot move it.
