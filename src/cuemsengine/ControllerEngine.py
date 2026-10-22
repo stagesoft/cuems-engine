@@ -11,6 +11,7 @@ import threading
 import time
 from functools import partial
 
+from cuemsutils.cues import ActionCue
 from cuemsutils.log import Logger, logged
 
 from .comms.ControllerCommunications import ControllerCommunications
@@ -94,6 +95,12 @@ class ControllerEngine(BaseEngine):
         # so no lock is needed — keep it that way.
         self.mixer_status: dict[str, float] = {}
 
+        # Per-cue names of the loaded script, {uuid: name}. Rebuilt at every
+        # load and broadcast AFTER the load status, replayed to late joiners,
+        # emptied on unload. The late-join dump reads it before the first load,
+        # so it must exist from __init__.
+        self.cue_names: dict[str, str] = {}
+
         # Cluster-state tracking. Populated at load time by
         # _resolve_cluster_state
         # (chunk 3); used to gate the armed=yes flip on all required nodes
@@ -106,7 +113,6 @@ class ControllerEngine(BaseEngine):
         self._adopted_nodes: set[str] = set()
         self._required_nodes: set[str] = set()
         self._armed_nodes: set[str] = set()
-        self._finished_nodes: set[str] = set()
         self._pong_responses: set[str] = set()
         self._pong_expected: set[str] = set()
         self._pong_event = threading.Event()
@@ -126,6 +132,17 @@ class ControllerEngine(BaseEngine):
         # alive but then died mid-rsync). Logs an error listing the pending
         # nodes. Does NOT force armed=yes — operator decides.
         self._arm_watchdog: threading.Timer | None = None
+
+        # Run counter for cross-node Auto follows (869fc8ytz). Every GO ships
+        # it; STOP, load and unload bump it BEFORE they forward anything; a
+        # node's follow message is relayed only if it carries the current
+        # value. Started from the clock so a restarted controller never
+        # reuses a value a node still holds. The lock makes "bump" and
+        # "check, then forward a follow" atomic, so a relayed follow is
+        # always queued to the nodes ahead of the STOP that ends its run.
+        # Never held across a wait or the cluster probe.
+        self._run_seq: int = time.time_ns() // 1_000_000
+        self._run_seq_lock = threading.Lock()
 
         super().__init__(**kwargs)
         self.set_editor_request("")
@@ -468,6 +485,22 @@ class ControllerEngine(BaseEngine):
             )
             return
 
+        # No cue starts while the show is not running: go_script sets running
+        # before it forwards the GO. An ADD here is a node reporting a start it
+        # dispatched just before a STOP reached it (a stop_project cue on a
+        # multi-node cluster, 869fhjdq5); without this gate it would show the
+        # cue at 1 after the reset and its disarm's REMOVE would then make it
+        # 100, with a spurious cue_started/cue_ended for the Companion relay.
+        if (
+            operation.action in (ActionType.ADD, ActionType.UPDATE)
+            and self.get_status("running") != "yes"
+        ):
+            Logger.debug(
+                f"Ignoring cue {operation.action} for {cue_id}: not running "
+                "(a late start report after a STOP)"
+            )
+            return
+
         if operation.action == ActionType.ADD:
             # Cue started playing: mark as playing (1) and broadcast
             # immediately.
@@ -525,8 +558,8 @@ class ControllerEngine(BaseEngine):
     def status_operation_callback(self, operation: NodeOperation):
         """Callback invoked when status updates are received from nodes.
 
-        Handles script_finished, armed_ready, nextcue, cue_enabled, and pong
-        notifications.
+        Handles stop_project, armed_ready, nextcue, cue_enabled, follow and
+        pong notifications.
         """
         Logger.info(f"Status operation received: {operation}")
         if operation.target == "pong":
@@ -539,28 +572,10 @@ class ControllerEngine(BaseEngine):
                     self._pong_event.set()
             Logger.debug(f"Pong from {operation.sender}")
             return
-        if operation.target == "script_finished":
-            if operation.data and operation.data.get("running") == "no":
-                # Aggregate per-node: only flip running=no when all required
-                # nodes have reported. Filter foreign senders to keep the
-                # tracker bounded.
-                sender = as_id(operation.sender)
-                if sender not in self._adopted_nodes:
-                    Logger.debug(
-                        f"Ignoring script_finished from non-adopted node {sender}"
-                    )
-                    return
-                with self._cluster_lock:
-                    self._finished_nodes.add(sender)
-                    finished_now = set(self._finished_nodes)
-                    required = set(self._required_nodes)
-                Logger.info(
-                    f"Node {sender} script_finished "
-                    f"({len(finished_now)}/{len(required)})"
-                )
-                if finished_now >= required and self.get_status("running") == "yes":
-                    Logger.info("All required nodes finished — updating running status")
-                    self.set_status("running", "no")
+        if operation.target == "stop_project":
+            # The authored end of the show (869fhjdq5): a node revealed a
+            # stop_project ActionCue. First valid message wins; see the handler.
+            self._handle_stop_project(operation)
         elif operation.target == "armed_ready":
             if operation.data and operation.data.get("armed") == "yes":
                 # Aggregate per-node: only flip armed=yes when all required
@@ -607,7 +622,7 @@ class ControllerEngine(BaseEngine):
             # "{node_uuid}/{output_index}/{channel}".
             node_uuid = operation.sender
             # Filter foreign/unadopted senders (mirrors armed_ready /
-            # script_finished) so the shadow can't grow from nodes the cluster
+            # stop_project) so the shadow can't grow from nodes the cluster
             # never adopted. A pre-load startup snapshot from a not-yet-adopted
             # node is dropped, but the UI's unity default matches the post-reset
             # state, and the load-time reset snapshot (node adopted by then)
@@ -636,8 +651,110 @@ class ControllerEngine(BaseEngine):
                 )
                 updated += 1
             Logger.info(f"Mixer status from {node_uuid}: {updated} channel(s) updated")
+        elif operation.target == "follow":
+            self._relay_follow(operation)
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
+
+    def _bump_run_seq(self, why: str) -> None:
+        """A run ends here (STOP, load, unload): follow messages sent for it
+        are no longer relayed. Call BEFORE forwarding the command."""
+        with self._run_seq_lock:
+            self._run_seq += 1
+            seq = self._run_seq
+        Logger.debug(f"run_seq -> {seq} ({why})")
+
+    def _relay_follow(self, operation: NodeOperation) -> None:
+        """Relay a cross-node Auto follow message (announce or cancel) to
+        every node (869fc8ytz). The controller keeps no follow state: the
+        node that owns the source decides, the others act. Dropped when the
+        sender is not adopted, a cue is not in the loaded project, the show
+        is not running, or the message belongs to an earlier run."""
+        data = operation.data if isinstance(operation.data, dict) else None
+        if data is None:
+            Logger.warning(f"Follow message without data from {operation.sender}")
+            return
+        what = (
+            f"follow {data.get('op')} {data.get('source')} -> {data.get('target')}"
+            f" at {data.get('seed_ms')} from {operation.sender}"
+        )
+        if operation.sender not in self._adopted_nodes:
+            Logger.warning(f"Dropping {what}: sender is not an adopted node")
+            return
+        if (
+            data.get("source") not in self.cue_status
+            or data.get("target") not in self.cue_status
+        ):
+            Logger.warning(f"Dropping {what}: cue not in the loaded project")
+            return
+        with self._run_seq_lock:
+            if (
+                self.get_status("running") != "yes"
+                or data.get("run_seq") != self._run_seq
+            ):
+                Logger.info(
+                    f"Dropping {what}: not part of the current run "
+                    f"(run_seq {data.get('run_seq')}, current {self._run_seq}, "
+                    f"running={self.get_status('running')})"
+                )
+                return
+            self._forward_command_to_nodes("/engine/command/follow", data)
+        Logger.info(f"Relayed {what}")
+
+    def _handle_stop_project(self, operation: NodeOperation) -> None:
+        """A node revealed a stop_project ActionCue, the authored end of the
+        show (ClickUp 869fhjdq5). Run the operator STOP for it.
+
+        Validated like a follow message (_relay_follow): adopted sender, cue in
+        the loaded project and of the right type, show running, current
+        run_seq. ActionCues are local on every node, so every node sends one
+        of these; the first valid one runs stop_script, which bumps run_seq,
+        and the others are then dropped at INFO as expected duplicates.
+
+        The lock is released BEFORE stop_script: it takes _run_seq_lock itself
+        in _bump_run_seq. The check-then-call window is closed because this
+        callback and the WebSocket STOP handler run on the same event loop,
+        and stop_script's own `running != yes` guard covers either order.
+        """
+        data = operation.data if isinstance(operation.data, dict) else None
+        if data is None:
+            Logger.warning(f"stop_project message without data from {operation.sender}")
+            return
+        cue_id = str(data.get("cue", ""))
+        sender = operation.sender
+        what = (
+            f"stop_project from {sender} (cue {cue_id}, run_seq {data.get('run_seq')})"
+        )
+        if sender not in self._adopted_nodes:
+            Logger.warning(f"Dropping {what}: sender is not an adopted node")
+            return
+        if cue_id not in self.cue_status:
+            Logger.warning(f"Dropping {what}: cue not in the loaded project")
+            return
+        cue = self.script.find(cue_id) if self.script is not None else None
+        if not (
+            isinstance(cue, ActionCue)
+            and getattr(cue, "action_type", None) == "stop_project"
+        ):
+            Logger.warning(f"Dropping {what}: the cue is not a stop_project ActionCue")
+            return
+        with self._run_seq_lock:
+            if (
+                self.get_status("running") != "yes"
+                or data.get("run_seq") != self._run_seq
+            ):
+                Logger.info(
+                    f"Dropping {what}: not part of the current run "
+                    f"(run_seq {data.get('run_seq')}, current {self._run_seq}, "
+                    f"running={self.get_status('running')})"
+                )
+                return
+        name = self.cue_names.get(cue_id, "")
+        Logger.info(
+            f'stop_project cue {cue_id} ("{name}") from node {sender}: '
+            "stopping the show"
+        )
+        self.stop_script(None)
 
     #########################
     # Editor commands
@@ -996,6 +1113,28 @@ class ControllerEngine(BaseEngine):
                     ids.extend(self._collect_cue_ids(item))
         return ids
 
+    def _collect_cue_names(self, cuelist) -> dict[str, str]:
+        """Recursively collect cue names from a cuelist, same walk as
+        _collect_cue_ids (nested CueLists included, as items and recursed).
+
+        Reads the name as a dict item, not through the Cue.name property: the
+        property raises KeyError on a cue that has no name key. None becomes
+        "" and anything else is str()-ed as is (never `or ""`, so a name an
+        old cuems-utils coerced to 0/False still prints).
+        """
+        from cuemsutils.cues import CueList
+
+        names = {}
+        if hasattr(cuelist, "contents") and cuelist.contents:
+            for item in cuelist.contents:
+                if item is None:
+                    continue
+                name = item.get("name")
+                names[item.id] = "" if name is None else str(name)
+                if isinstance(item, CueList):
+                    names.update(self._collect_cue_names(item))
+        return names
+
     def _collect_cue_enabled(self, cuelist) -> dict[str, bool]:
         """Recursively collect cue enabled states from a cuelist."""
         from cuemsutils.cues import CueList
@@ -1009,6 +1148,20 @@ class ControllerEngine(BaseEngine):
                 if isinstance(item, CueList):
                     result.update(self._collect_cue_enabled(item))
         return result
+
+    def _broadcast_cue_name(self, cue_id: str, name: str) -> None:
+        """
+        Broadcast a cue's name to UI at /engine/status/cue_name/{uuid}.
+        Sent once per load (no throttle), like cue_enabled.
+        """
+        if (
+            hasattr(self, "communications_thread")
+            and self.communications_thread
+            and hasattr(self.communications_thread, "broadcast_osc")
+        ):
+            self.communications_thread.broadcast_osc(
+                f"/engine/status/cue_name/{cue_id}", name
+            )
 
     def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
         """
@@ -1143,6 +1296,12 @@ class ControllerEngine(BaseEngine):
             if data:
                 await websocket.send(data)
 
+        # Per-cue names (after `load` above, like the live burst)
+        for cid, name in self.cue_names.items():
+            data = build_osc_message(f"/engine/status/cue_name/{cid}", name)
+            if data:
+                await websocket.send(data)
+
         # Per-mixer-channel volume status.
         # Scale note: each entry is one ~80-byte WS message. Acceptable up to
         # ~500 entries (~40 KB / ~500 ms over LAN). If a deployment ever
@@ -1174,7 +1333,7 @@ class ControllerEngine(BaseEngine):
         """
         Clear runtime playback tracking: timestamps, timecode, armed, nextcue.
 
-        Also clears the per-node armed/finished accumulators. The
+        Also clears the per-node armed accumulator. The
         _required_nodes / _adopted_nodes snapshots stay — they belong to
         the loaded project, not playback state, and get recomputed on the
         next load_project. unload_project clears them explicitly.
@@ -1193,7 +1352,6 @@ class ControllerEngine(BaseEngine):
             self.mtc_listener.reset_24h_state()
         with self._cluster_lock:
             self._armed_nodes.clear()
-            self._finished_nodes.clear()
         self._cancel_arm_watchdog()
 
     #########################
@@ -1210,6 +1368,7 @@ class ControllerEngine(BaseEngine):
             return False
 
         Logger.info(f"Loading project {project_name}")
+        self._bump_run_seq("load")
         self._clear_playback_state()
         self.reset_script()
         # Before anything can fail. load_project_config() and read_script()
@@ -1218,6 +1377,17 @@ class ControllerEngine(BaseEngine):
         # operator, just failed to load. A successful _resolve_cluster_state
         # overwrites it a few lines later.
         self._clear_load_diagnosis()
+        # The same argument, applied to the load status. reset_script() drops
+        # self.script, but nothing dropped `load`, so a failed load left the
+        # engine holding no project while still broadcasting the PREVIOUS
+        # project's name on /engine/status/load. That lie reached the transport
+        # bar and power-bridge alike — project_loaded() stayed True, so
+        # /setnextcue and /gocue were accepted against a project the engine no
+        # longer had. The two signals now die together, which is what lets
+        # get_project_status() trust either of them.
+        # Deliberate cost: during a *successful* load the transport bar shows
+        # "—" until the new name arrives, instead of the stale previous one.
+        self.set_status("load", "")
 
         if deploy_only:
             Logger.info(f"Deploy only requested for {project_name}")
@@ -1273,10 +1443,23 @@ class ControllerEngine(BaseEngine):
             f"Cue enabled status initialised for {len(self.cue_enabled_status)} cues"
         )
 
-        # Update internal status
-        # TODO: send project UUID instead of name for robustness (would break
-        # UI contract)
+        # Update internal status.
+        # This broadcast carries the project's unix_name, NOT its uuid, and
+        # that is a decision rather than a leftover: the frontend prints this
+        # string in the transport bar and matches it against project.unix_name,
+        # so switching it to a uuid shows the operator a raw uuid and breaks
+        # that match. Consumers that need the uuid ask project_status, which
+        # returns both (869dr2k2h, closed the additive way).
         self.set_status("load", project_name)
+
+        # Per-cue names, deliberately AFTER the load status (unlike cue_status
+        # and cue_enabled above): duplicated projects share cue uuids, so a
+        # client treats a change of `load` as "new table" and refills it from
+        # this burst. Keep this order.
+        self.cue_names = self._collect_cue_names(self.script.cuelist)
+        for cid, name in self.cue_names.items():
+            self._broadcast_cue_name(cid, name)
+        Logger.info(f"Cue names initialised for {len(self.cue_names)} cues")
 
         # Probe cluster, derive _required_nodes for GO gating, refresh <online>
         # in network_map. Done BEFORE _forward_load_to_nodes so the gating set
@@ -1331,10 +1514,13 @@ class ControllerEngine(BaseEngine):
         # every node fire 4.48s late on test2 (2026-09-25). Without a live
         # reading, send the GO without an anchor -- each node falls back to
         # its own MTC, exactly as before this fix.
-        go_value = value
+        # Always a dict (869fc8ytz): it carries the run counter that
+        # cross-node follow messages are checked against. Nodes read nothing
+        # else from the GO value, so the caller's own `value` is not passed on.
+        go_value = {"run_seq": self._run_seq}
         if self.mtc_listener is not None:
             if self.mtc_listener.is_receiving():
-                go_value = {"go_mtc_ms": self.mtc_listener.main_tc.milliseconds_exact}
+                go_value["go_mtc_ms"] = self.mtc_listener.main_tc.milliseconds_exact
             else:
                 Logger.error(
                     "GO: controller MTC listener is not receiving -- sending GO "
@@ -1550,7 +1736,7 @@ class ControllerEngine(BaseEngine):
         flipping armed=yes before any node has loaded).
 
         Categorizes each adopted node and logs info / warning / error.
-        Resets _armed_nodes / _finished_nodes for the new project.
+        Resets _armed_nodes for the new project.
         """
         controller_uuid = self._controller_uuid()
         adopted = set(self._adopted_node_uuids())
@@ -1617,7 +1803,6 @@ class ControllerEngine(BaseEngine):
             self._adopted_nodes = set(adopted)
             self._required_nodes = required
             self._armed_nodes.clear()
-            self._finished_nodes.clear()
             self._load_id += 1
             self._load_diagnosis = {
                 "load_id": self._load_id,
@@ -1649,14 +1834,18 @@ class ControllerEngine(BaseEngine):
 
     _ARM_WATCHDOG_S = 120.0
 
-    def _arm_arm_watchdog(self) -> None:
-        """(Re)start the watchdog timer that surfaces a stalled load.
+    def _arm_arm_watchdog(self, what: str = "Load") -> None:
+        """(Re)start the watchdog timer that surfaces a stalled (re-)arm.
 
-        Fires _ARM_WATCHDOG_S seconds after a load if not all required nodes
-        have reported armed_ready by then. Logs an error naming the
-        still-pending UUIDs so operator sees what's wedged.
+        Fires _ARM_WATCHDOG_S seconds after a load, or after a STOP (869fhjdq5:
+        an unattended show that fails to re-arm would otherwise answer every
+        /go with a silent 409), if not all required nodes have reported
+        armed_ready by then. Logs an error naming the still-pending UUIDs so
+        the operator sees what's wedged. `what` names the operation in that
+        line: "Load stalled" or "Re-arm after STOP stalled".
         """
         self._cancel_arm_watchdog()
+        self._arm_watchdog_what = what
         timer = threading.Timer(self._ARM_WATCHDOG_S, self._on_arm_watchdog_fire)
         timer.daemon = True
         self._arm_watchdog = timer
@@ -1675,8 +1864,9 @@ class ControllerEngine(BaseEngine):
         pending = required - armed
         if not pending:
             return
+        what = getattr(self, "_arm_watchdog_what", "Load")
         Logger.error(
-            f"Load stalled: nodes still pending armed_ready after "
+            f"{what} stalled: nodes still pending armed_ready after "
             f"{self._ARM_WATCHDOG_S:.0f}s: {_sorted_ids(pending)}"
         )
 
@@ -1689,9 +1879,12 @@ class ControllerEngine(BaseEngine):
             Logger.info("Script not running, nothing to stop.")
             return
 
+        self._bump_run_seq("stop")
         self.go_offset = None
         self.set_status("running", "no")
         self._clear_playback_state()
+        # The nodes re-arm now; watch it as a load is watched (869fhjdq5).
+        self._arm_arm_watchdog(what="Re-arm after STOP")
 
         # Reset all cue statuses to unplayed (0) and broadcast to UI.
         for cid in self.cue_status:
@@ -1704,11 +1897,57 @@ class ControllerEngine(BaseEngine):
         return True
 
     def get_project_status(self, value, context=None):
-        """Return current project playback status."""
+        """Return the current project load/playback state.
+
+        Three states, deliberately distinct:
+
+        * `running` — a project is loaded AND playing.
+        * `loaded`  — a project is loaded and NOT playing. This is the state
+          the reply used to collapse into `none`, which made a loaded-but-
+          stopped project indistinguishable from no project at all — and left
+          this reply contradicting /engine/status/load, which kept naming the
+          project all along.
+        * `none`    — no project.
+
+        `loaded` says nothing about readiness: the GO gate waits on `armed`,
+        published separately on /engine/status/armed. A project whose nodes
+        never answer sits in `loaded` for the whole 120 s arm watchdog and
+        never becomes GO-able. Do not treat this field as a GO gate.
+
+        `project_uuid` is populated in both `running` and `loaded`, and the
+        invariant is one-way: **a status other than `none` always carries a
+        non-empty uuid**. That is why `running` with no script — which the
+        guards in load_project/unload_project should make unreachable —
+        degrades to `none` here rather than to a `running` a client cannot
+        act on.
+
+        `project_unix_name` is the same string /engine/status/load broadcasts,
+        returned here so a consumer that needs the uuid never has to make that
+        broadcast carry one (869dr2k2h).
+
+        The load state is read from two attributes that another thread can be
+        mutating mid-load. They are ANDed, so a torn read falls to `none` —
+        never to a `loaded` naming a project the engine does not hold.
+        """
         running = self.get_status("running") == "yes"
+        loaded = self.script is not None and bool(self.get_status("load"))
+
+        if running:
+            status = "running"
+        elif loaded:
+            status = "loaded"
+        else:
+            status = "none"
+
+        if status == "none" or self.script is None:
+            return {"status": "none", "project_uuid": "", "project_unix_name": ""}
+
+        # unix_name is not a CuemsScript field — load_project attaches it by
+        # hand — so any script built by another path simply lacks it.
         return {
-            "status": "running" if running else "none",
-            "project_uuid": (str(self.script.id) if running and self.script else ""),
+            "status": status,
+            "project_uuid": str(self.script.id),
+            "project_unix_name": str(getattr(self.script, "unix_name", "") or ""),
         }
 
     def get_cluster_status(self, value, context=None) -> dict:
@@ -1767,10 +2006,12 @@ class ControllerEngine(BaseEngine):
         """Unload the current project. Rejects if playback is running."""
         if self.get_status("running") == "yes":
             raise RuntimeError("Cannot unload while running. Stop playback first.")
+        self._bump_run_seq("unload")
         self._clear_playback_state()
         self.reset_script()
         self.cue_status = {}
         self.cue_enabled_status = {}
+        self.cue_names = {}
         self.set_status("load", "")
         # No project loaded → no required/adopted snapshot. Without this, a
         # late armed_ready from a slow node could flip armed=yes on an
@@ -1779,6 +2020,11 @@ class ControllerEngine(BaseEngine):
             self._required_nodes.clear()
             self._adopted_nodes.clear()
         self._clear_load_diagnosis()
-        self._forward_command_to_nodes("/engine/command/stop", value)
+        self.remove_show_lock_file()
+        # A real unload, not a STOP: a node's STOP re-arms the project it
+        # still holds (869fh8kef). The whole cluster must run this engine; an
+        # older node has no unload handler and keeps the project armed until
+        # the next load.
+        self._forward_command_to_nodes("/engine/command/unload", value)
         Logger.info("Project unloaded")
         return True

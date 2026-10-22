@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
@@ -289,6 +290,8 @@ def mock_player_subprocess():
         self.pid = id(self)
         self.status = "running"
         self.error = None
+        # A real player reports itself started on stdout (Player.ready).
+        self.ready.set()
 
     with patch(
         "cuemsengine.players.Player.Player.call_subprocess",
@@ -406,6 +409,8 @@ def mock_player_clients():
         self.pid = id(self)
         self.status = "running"
         self.error = None
+        # A real player reports itself started on stdout (Player.ready).
+        self.ready.set()
 
     # Patch all PlayerClient subclasses AND Player.call_subprocess
     with (

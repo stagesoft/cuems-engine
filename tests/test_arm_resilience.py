@@ -29,7 +29,6 @@ def _armable_cue() -> AudioCue:
     cue.enabled = True
     cue.loaded = False
     cue._local = True
-    cue._loading = None
     cue._target_object = None
     cue._osc = MagicMock()
     return cue
@@ -51,7 +50,7 @@ def test_arm_returns_false_when_port_allocation_fails(caplog):
     CUE_HANDLER.disarm(cue)
 
 
-def test_arm_failure_clears_the_loading_sentinel():
+def test_arm_failure_frees_the_arm_claim():
     """The finally block must still run, or concurrent arms deadlock on the
     Event that is never set."""
     cue = _armable_cue()
@@ -62,7 +61,7 @@ def test_arm_failure_clears_the_loading_sentinel():
     ):
         CUE_HANDLER.arm(cue, init=True)
 
-    assert cue._loading is None, "loading sentinel leaked — next arm would hang"
+    assert cue.id not in CUE_HANDLER._arming, "arm claim leaked — next arm would hang"
     CUE_HANDLER.disarm(cue)
 
 

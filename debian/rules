@@ -1,6 +1,19 @@
 #!/usr/bin/make -f
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 export DH_VIRTUALENV_INSTALL_ROOT=/usr/lib
+
+# The build venv needs --use-system-packages (pyossia and systemd come from
+# Debian), but that also lets pip treat anything installed on the BUILD HOST
+# as satisfied and skip vendoring it. On jump, the system python3-rtmidi
+# 1.4.7 made the deb ship without python-rtmidi; installing it removed
+# rtmidi/ and killed MTC (test2, 2026-09-25, ClickUp 869f79ecc). Make pip
+# ignore host-installed packages and the builder's ~/.local; the system
+# packages stay importable at runtime.
+export PIP_IGNORE_INSTALLED=1
+export PYTHONNOUSERSITE=1
 
 %:
 	dh $@ --with python-virtualenv
@@ -12,17 +25,22 @@ override_dh_virtualenv:
 		--use-system-packages
 	# Ensure packaging is installed in venv (mido requires it)
 	/usr/lib/cuems/bin/pip install --force-reinstall packaging || true
+	# Fail the build rather than ship a deb whose MTC listener cannot work:
+	# the python-rtmidi package must be vendored (its compiled module comes
+	# from cuems-utils; the .so is stripped below). See the export above.
+	test -f debian/cuems-engine/usr/lib/cuems/lib/python3.11/site-packages/rtmidi/__init__.py \
+		|| { echo "ERROR: python-rtmidi was not vendored into the venv"; exit 1; }
 
 override_dh_install:
 	dh_install
 	# Stage mock wrapper scripts for cuems-engine-mock package
 	install -d debian/cuems-engine-mock/usr/bin
-	install -m 755 debian/mock-scripts/audioplayer-cuems \
-	    debian/cuems-engine-mock/usr/bin/audioplayer-cuems
+	install -m 755 debian/mock-scripts/cuems-audioplayer \
+	    debian/cuems-engine-mock/usr/bin/cuems-audioplayer
 	install -m 755 debian/mock-scripts/jack-volume \
 	    debian/cuems-engine-mock/usr/bin/jack-volume
-	install -m 755 debian/mock-scripts/dmxplayer-cuems \
-	    debian/cuems-engine-mock/usr/bin/dmxplayer-cuems
+	install -m 755 debian/mock-scripts/cuems-dmxplayer \
+	    debian/cuems-engine-mock/usr/bin/cuems-dmxplayer
 	# Stage no-op rsync shim + node-engine PATH drop-in (mock deploy bypass)
 	install -d debian/cuems-engine-mock/usr/lib/cuems/mock-bin
 	install -m 755 debian/mock-scripts/rsync debian/cuems-engine-mock/usr/lib/cuems/mock-bin/rsync
@@ -44,6 +62,10 @@ override_dh_fixperms:
 	find debian/cuems-engine/usr/lib/cuems/bin -name "python*" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "wheel*" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "xmlschema-*" -delete
+	# cffi's console script: cffi itself is stripped below (cuems-utils provides
+	# it), and shipping its script too made every utils upgrade fail with
+	# "trying to overwrite /usr/lib/cuems/bin/cffi-gen-src". Nothing runs it.
+	find debian/cuems-engine/usr/lib/cuems/bin -name "cffi-gen-src" -delete
 	find debian/cuems-engine/usr/lib/cuems/bin -name "pwiz.py" -delete
 	# Remove mido console scripts (not needed)
 	find debian/cuems-engine/usr/lib/cuems/bin -name "mido-*" -delete

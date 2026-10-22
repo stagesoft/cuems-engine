@@ -174,6 +174,7 @@ Operational utilities used by both engines:
 * **Deploy** — the rsync-based transfer of project assets to a node before playback begins
 * **OSCQuery** — the bidirectional device-tree protocol used for live parameter exposure and editor control
 * **NNG** — the low-latency message transport between the controller and node engines
+* **Loop** — a cue with `loop ≠ 1` repeats its media on the file's own period; audio and video of a loop stay in sync across passes only if their durations are exactly the same or they are in one container (see `CLAUDE.md`, "Looping audio with video")
 
 ---
 

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
 
@@ -137,6 +138,50 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     return
 
 
+def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: list):
+    """Check a player's mixer wiring at GO and fix it edge by edge.
+
+    Never a full rewire (869fbyjzx): a GO can reach this while the cue is
+    audible (a fresh GO, or a 'play' action, on a cue that is still
+    playing), and connect_player_to_outputs disconnects every edge first —
+    it would cut the healthy channels too. Strays (RtAudio's auto-connect to
+    system:playback that an early arm-time wiring missed, 869fcvz85) are
+    removed one by one; missing mixer edges are added one by one.
+    """
+    diff = mixer.player_connection_diff(
+        player_name=player_name,
+        player_output_prefix="outport",
+        selected_outputs=selected_outputs,
+    )
+    if diff is None:
+        Logger.error(
+            f"Audio cue {cue.id}: no mixer input for its outputs at GO "
+            f"({selected_outputs}) — cue will be SILENT despite showing "
+            f"armed (mixer inputs unavailable)."
+        )
+        return
+    missing, stray = diff
+    if not missing and not stray:
+        Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
+        return
+    Logger.warning(
+        f"Audio cue {cue.id}: graph not wired correctly at GO "
+        f"(missing: {missing}; stray: {stray}); repairing edge by edge"
+    )
+    connected_ok, strays_left = mixer.repair_player_connections(missing, stray)
+    if not connected_ok:
+        Logger.error(
+            f"Audio cue {cue.id}: mixer repair failed at GO — cue will be "
+            f"SILENT despite showing armed (a mixer connection could not be "
+            f"made)."
+        )
+    if strays_left:
+        Logger.error(
+            f"Audio cue {cue.id}: stray edge(s) still connected after repair: "
+            f"{strays_left} — the cue may sound doubled and outside the mixer."
+        )
+
+
 @run_cue.register
 def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     """
@@ -220,30 +265,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
                 )
                 return
 
-            if mixer.player_connections_correct(
-                player_name=player_name,
-                player_output_prefix="outport",
-                selected_outputs=selected_outputs,
-            ):
-                Logger.debug(
-                    f"Audio cue {cue.id}: graph already wired, skipping connect"
-                )
-            else:
-                Logger.warning(
-                    f"Audio cue {cue.id}: graph not wired correctly at GO; "
-                    f"repairing via connect_player_to_outputs"
-                )
-                repaired = mixer.connect_player_to_outputs(
-                    player_name=player_name,
-                    player_output_prefix="outport",
-                    selected_outputs=selected_outputs,
-                )
-                if repaired is False:
-                    Logger.error(
-                        f"Audio cue {cue.id}: mixer repair failed at GO — "
-                        f"cue will be SILENT despite showing armed (player "
-                        f"ports missing or mixer inputs unavailable)."
-                    )
+            _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
 
@@ -399,6 +421,15 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         Logger.exception(e)
 
 
+def _record_placement_failure(cue: VideoCue, layer_id: str) -> None:
+    """Add layer_id to cue._placement_failed (reset by every arm)."""
+    failed = getattr(cue, "_placement_failed", None)
+    if failed is None:
+        failed = cue._placement_failed = []
+    if layer_id not in failed:
+        failed.append(layer_id)
+
+
 @run_cue.register
 def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     """Run a VideoCue.
@@ -409,10 +440,13 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     Logger.info(f"Running video cue {cue.id}")
 
     layer_ids = getattr(cue, "_layer_ids", [])
-    if not layer_ids or cue._osc is None:
-        Logger.error(f"Video cue {cue.id} has no layers or no OSC client")
-        return
 
+    # The timeline is stamped BEFORE the layer check (869fgq3xv): a cue with
+    # no layers on this node (every output dark) still has a body. Downstream
+    # reads _start_mtc/_end_mtc: the Auto-follow instant and its cross-node
+    # announce (CueHandler._follow_instant_ms), the reveal wait, loop_videoCue.
+    # Left at their zero defaults, a go_at_end follow fired at start+postwait
+    # cluster-wide and an infinite loop re-based in a tight loop.
     if frozen_mtc_ms is not None:
         mtc_ms = frozen_mtc_ms
         Logger.debug(f"VideoCue {cue.id} using frozen MTC: {mtc_ms}ms")
@@ -429,6 +463,17 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     duration = media_duration(cue).return_in_other_framerate(mtc.main_tc.framerate)
     cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
+
+    if not layer_ids or getattr(cue, "_osc", None) is None:
+        unrouted = getattr(cue, "_unrouted_outputs", None)
+        if not layer_ids and unrouted:
+            Logger.info(
+                f"Video cue {cue.id} is dark on this node (outputs not driven:"
+                f" {unrouted}); timeline kept, nothing sent"
+            )
+        else:
+            Logger.error(f"Video cue {cue.id} has no layers or no OSC client")
+        return
 
     client = cue._osc
 
@@ -457,28 +502,45 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     loop_early = getattr(cue, "loop", 1) < 1
 
     # Re-apply position for each layer before making visible (layer may not
-    # have been ready when position was set during arm)
-    output_names = PLAYER_HANDLER.get_all_cue_output_names(cue)
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media.file_name)
+    # have been ready when position was set during arm). Each layer's output
+    # comes from the arm, by layer id: with an unrouted output skipped, layer
+    # i is no longer output i (869fgq3xv).
+    layer_outputs = getattr(cue, "_layer_outputs", None) or {}
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
 
-    for index, layer_id in enumerate(layer_ids):
+    for layer_id in layer_ids:
         layer_path = f"/videocomposer/layer/{layer_id}"
 
         # Re-apply canvas position from the output config
-        if index < len(output_names):
-            output_name = output_names[index]
+        output_name = layer_outputs.get(layer_id)
+        if output_name is None:
+            Logger.warning(
+                f"Video cue {cue.id} layer {layer_id}: no output recorded at arm;"
+                " placement re-apply skipped"
+            )
+        else:
             try:
                 output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
                 x, y = output.get_layer_placement()
                 client.set_value(f"{layer_path}/position", [x, y])
                 sx, sy = output.get_layer_scale(media_w, media_h)
                 client.set_value(f"{layer_path}/scale", [sx, sy])
+                # Applied now: clear a failure recorded at arm.
+                failed = getattr(cue, "_placement_failed", None)
+                if failed and layer_id in failed:
+                    failed.remove(layer_id)
             except (KeyError, RuntimeError, ValueError) as e:
-                Logger.warning(f"Could not re-apply position for layer {layer_id}: {e}")
+                _record_placement_failure(cue, layer_id)
+                Logger.error(
+                    f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
+                    f" position/scale re-apply at GO NOT applied, either may be"
+                    f" left at its default ({type(e).__name__}: {e})"
+                )
             except Exception:
+                _record_placement_failure(cue, layer_id)
                 Logger.exception(
                     f"Unexpected error re-applying position for layer"
-                    f'{layer_id} (output "{output_name}")'
+                    f' {layer_id} (output "{output_name}"): NOT applied'
                 )
 
         client.set_value(f"{layer_path}/offset", int(offset_to_go))

@@ -821,13 +821,11 @@ class TestArmFadeCuePreArmsTarget:
     def _make_local_fade_cue(self, target_cue, target_value=80):
         cue = _make_fade_cue(target_cue, target_value=target_value)
         cue._local = True
-        cue._loading = None
         return cue
 
     def _make_local_audio_cue(self):
         cue = _make_audio_cue()
         cue._local = True
-        cue._loading = None
         cue.post_go = "pause"
         cue._target_object = None
         return cue
@@ -856,9 +854,9 @@ class TestArmFadeCuePreArmsTarget:
             armed_ids = []
             real_arm = ch.arm
 
-            def spy_arm(cue, init=False):
+            def spy_arm(cue, init=False, **kwargs):
                 armed_ids.append(getattr(cue, "id", None))
-                return real_arm(cue, init)
+                return real_arm(cue, init, **kwargs)
 
             ch.arm = spy_arm
             ch.arm(fade_cue, init=True)
@@ -883,9 +881,9 @@ class TestArmFadeCuePreArmsTarget:
             armed_ids = []
             real_arm = ch.arm
 
-            def spy_arm(cue, init=False):
+            def spy_arm(cue, init=False, **kwargs):
                 armed_ids.append(getattr(cue, "id", None))
-                return real_arm(cue, init)
+                return real_arm(cue, init, **kwargs)
 
             ch.arm = spy_arm
             ch.arm(fade_cue, init=True)

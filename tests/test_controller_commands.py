@@ -151,37 +151,202 @@ class TestStopScriptRefactored:
 # ─── get_project_status ──────────────────────────────────────────────────
 
 
+UUID_A = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+
+def _loaded_script(uuid=UUID_A, unix_name="my_show"):
+    """A script mock standing in for a loaded project.
+
+    unix_name is always set explicitly: a bare Mock auto-vivifies the
+    attribute into a truthy Mock, so str(...) would yield a repr instead of
+    the empty string the code is supposed to produce when it is absent.
+    """
+    script = Mock()
+    script.id = uuid
+    script.unix_name = unix_name
+    return script
+
+
 class TestGetProjectStatus:
     def test_returns_none_when_not_running(self, controller):
         controller.set_status("running", "no")
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
 
     def test_returns_none_when_no_script(self, controller):
         controller.set_status("running", "no")
         controller.script = None
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
 
     def test_returns_running_with_uuid(self, controller):
         controller.set_status("running", "yes")
-        mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-        controller.script = mock_script
+        controller.script = _loaded_script()
         result = controller.get_project_status(None)
         assert result == {
             "status": "running",
-            "project_uuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            "project_uuid": UUID_A,
+            "project_unix_name": "my_show",
         }
 
-    def test_loaded_but_not_playing_returns_none(self, controller):
-        """A loaded but not playing project should report status 'none'."""
+    def test_loaded_but_not_playing_returns_loaded(self, controller):
+        """A loaded, stopped project is 'loaded' — not 'none'.
+
+        This is the whole point of 869dr2kzh: before it, this case was
+        indistinguishable from having no project at all, while
+        /engine/status/load went on naming the project.
+        """
         controller.set_status("running", "no")
-        mock_script = Mock()
-        mock_script.id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-        controller.script = mock_script
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script()
         result = controller.get_project_status(None)
-        assert result == {"status": "none", "project_uuid": ""}
+        assert result == {
+            "status": "loaded",
+            "project_uuid": UUID_A,
+            "project_unix_name": "my_show",
+        }
+
+    def test_script_without_load_status_is_none(self, controller):
+        """Window 1: mid-load, the script is gone but `load` may lag."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "")
+        controller.script = _loaded_script()
+        result = controller.get_project_status(None)
+        assert result["status"] == "none"
+
+    def test_load_status_without_script_is_none(self, controller):
+        """Window 2: a failed load leaves no script; never claim 'loaded'."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        controller.script = None
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
+
+    def test_running_wins_over_loaded(self, controller):
+        controller.set_status("running", "yes")
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script()
+        assert controller.get_project_status(None)["status"] == "running"
+
+    def test_script_without_unix_name_does_not_break_status(self, controller):
+        """unix_name is bolted on by load_project, not a CuemsScript field."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        script = Mock(spec=["id"])
+        script.id = UUID_A
+        controller.script = script
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "loaded",
+            "project_uuid": UUID_A,
+            "project_unix_name": "",
+        }
+
+    def test_running_without_script_degrades_to_none(self, controller):
+        """A status other than 'none' must always carry a uuid.
+
+        running=yes with no script should be unreachable — load and unload
+        both refuse while running — but if it happens, the reply must not
+        offer a 'running' the client cannot act on.
+        """
+        controller.set_status("running", "yes")
+        controller.script = None
+        result = controller.get_project_status(None)
+        assert result == {
+            "status": "none",
+            "project_uuid": "",
+            "project_unix_name": "",
+        }
+
+    def test_uuid_is_coerced_to_str(self, controller):
+        """CuemsScript.id is a Uuid, and the editor serialises this to JSON."""
+
+        class FakeUuid:
+            def __str__(self):
+                return UUID_A
+
+        controller.set_status("running", "no")
+        controller.set_status("load", "my_show")
+        controller.script = _loaded_script(uuid=FakeUuid())
+        result = controller.get_project_status(None)
+        assert result["project_uuid"] == UUID_A
+        assert isinstance(result["project_uuid"], str)
+
+
+# ─── load_project clears the load status ────────────────────────────────
+
+
+class TestLoadProjectClearsLoadStatus:
+    """`load` must die with self.script, not survive it.
+
+    Until 869dr2kzh, load_project dropped the script before validating the
+    new project but never touched `load`, so a failed load left the engine
+    holding no project while /engine/status/load still named the previous
+    one — a lie the transport bar printed and power-bridge's project_loaded()
+    believed.
+    """
+
+    def test_failed_config_load_clears_load_status(self, controller):
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+        controller.cm.load_project_config.side_effect = Exception("boom")
+
+        with patch.object(controller, "error_to_editor"):
+            assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_failed_script_read_clears_load_status(self, controller):
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+
+        with (
+            patch.object(controller, "read_script", side_effect=Exception("boom")),
+            patch.object(controller, "error_to_editor"),
+        ):
+            assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_deploy_only_clears_load_status(self, controller):
+        """deploy_only drops the script too, so it must drop the name."""
+        controller.set_status("running", "no")
+        controller.set_status("load", "previous_show")
+        controller.script = _loaded_script(unix_name="previous_show")
+
+        assert controller.load_project("new_show", deploy_only=True) is True
+
+        assert controller.get_status("load") == ""
+        assert controller.get_project_status(None)["status"] == "none"
+
+    def test_refused_load_while_running_leaves_load_status_alone(self, controller):
+        """The running guard returns before anything is cleared.
+
+        Never auto-stop a running project — and never quietly forget which
+        project is playing either.
+        """
+        controller.set_status("running", "yes")
+        controller.set_status("load", "playing_show")
+
+        assert controller.load_project("new_show") is False
+
+        assert controller.get_status("load") == "playing_show"
 
 
 # ─── unload_project ─────────────────────────────────────────────────────
@@ -225,11 +390,22 @@ class TestUnloadProject:
             controller.unload_project(None)
         assert controller.get_status("load") == ""
 
-    def test_forwards_stop_to_nodes(self, controller):
+    def test_forwards_unload_to_nodes(self, controller):
+        """Nodes get a real unload, not a STOP: a STOP re-arms the project
+        they still hold (869fh8kef)."""
         controller.set_status("running", "no")
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.unload_project(None)
-            mock_fwd.assert_called_once_with("/engine/command/stop", None)
+            mock_fwd.assert_called_once_with("/engine/command/unload", None)
+
+    def test_removes_show_lock(self, controller):
+        controller.set_status("running", "no")
+        with (
+            patch.object(controller, "_forward_command_to_nodes"),
+            patch.object(controller, "remove_show_lock_file") as mock_rm,
+        ):
+            controller.unload_project(None)
+            mock_rm.assert_called_once()
 
     def test_returns_true(self, controller):
         controller.set_status("running", "no")
@@ -333,26 +509,36 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"go_mtc_ms": 79240.0}
+                "/engine/command/go",
+                {"go_mtc_ms": 79240.0, "run_seq": controller._run_seq},
             )
 
-    def test_forwards_original_string_value_when_mtc_listener_is_none(self, controller):
+    def test_forwards_only_run_seq_when_mtc_listener_is_none(self, controller):
         """The `controller` fixture builds with_mtc=False -- mtc_listener is
         None, the only reachable no-MTC case in production (go_script already
         refuses unless armed=="yes", and MTC runs by the time a project can be
-        armed)."""
+        armed).
+
+        The GO value is always a dict now (869fc8ytz): it carries the run
+        counter that cross-node follows are checked against. The caller's
+        own value is dropped -- nodes never read it; they only read the
+        anchor, and fall back to their own MTC when it is absent."""
         self._armed(controller)
         assert controller.mtc_listener is None
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script("complex_test")
-            mock_fwd.assert_called_once_with("/engine/command/go", "complex_test")
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
 
-    def test_forwards_none_value_unchanged_when_mtc_listener_is_none(self, controller):
+    def test_forwards_only_run_seq_for_none_value_without_mtc(self, controller):
         self._armed(controller)
         assert controller.mtc_listener is None
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
-            mock_fwd.assert_called_once_with("/engine/command/go", None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )
 
     def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
         """test2, 2026-09-25: the controller's listener never opened a port
@@ -360,11 +546,13 @@ class TestGoScriptAnchor:
         node accepted 0.0 as the anchor -- 4.48s late. A listener that is
         present but not receiving must not be trusted: send the GO without
         an anchor, so each node falls back to its own MTC (pre-fix
-        behaviour)."""
+        behaviour). The run counter still goes out (869fc8ytz)."""
         self._armed(controller)
         controller.mtc_listener = Mock()
         controller.mtc_listener.main_tc.milliseconds_exact = 0.0
         controller.mtc_listener.is_receiving.return_value = False
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
-            mock_fwd.assert_called_once_with("/engine/command/go", None)
+            mock_fwd.assert_called_once_with(
+                "/engine/command/go", {"run_seq": controller._run_seq}
+            )

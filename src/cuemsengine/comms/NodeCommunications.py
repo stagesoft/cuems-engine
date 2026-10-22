@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import asyncio
 from typing import Any, Callable, Optional
@@ -37,6 +38,9 @@ class NodeCommunications(AsyncCommsThread):
         self.nng_hub = NodesHub(hub_address, mode=NodesHub.Mode.DIALER)
         self.node_id = node_id
         self._command_callback = command_callback
+        # Called synchronously, in bus order, before a command thread is
+        # started; returning True consumes the message (869fc8ytz).
+        self._receive_hook: Optional[Callable[[str, Any], bool]] = None
 
         self.nng_hub.set_receive_callbacks(
             {
@@ -53,6 +57,17 @@ class NodeCommunications(AsyncCommsThread):
         """
         self._command_callback = callback
         Logger.debug("Command callback set in NodeCommunications")
+
+    def set_receive_hook(self, hook: Callable[[str, Any], bool]) -> None:
+        """Set a hook called for every command in BUS order, on the receiver,
+        before its command thread is started (869fc8ytz).
+
+        The command threads then race for the engine's command lock, so only
+        here is the order the controller sent things in still known. The hook
+        must not block. Returning True consumes the message (no command
+        thread); an exception is logged and the command still runs.
+        """
+        self._receive_hook = hook
 
     def create_all_tasks(self):
         """Create async tasks for node communications."""
@@ -107,6 +122,14 @@ class NodeCommunications(AsyncCommsThread):
 
         Logger.info(f"Received command via NNG: {command_name} = {repr(value)}")
 
+        if self._receive_hook is not None:
+            try:
+                if self._receive_hook(command_name, value):
+                    return
+            except Exception as e:
+                # Never lose a GO, a STOP or a load to a bug in the hook.
+                Logger.error(f"Receive hook failed for {command_name}: {e}")
+
         if self._command_callback:
             # Execute command in a separate thread to avoid blocking the NNG
             # receiver
@@ -118,8 +141,12 @@ class NodeCommunications(AsyncCommsThread):
                 try:
                     self._command_callback(command_name, value, address)
                 except Exception as e:
+                    # With the traceback: the message alone ("[Errno 1]
+                    # Operation not permitted") does not say which step of
+                    # the command failed (869evtdf7).
                     Logger.error(
-                        f"Error executing command callback for {command_name}: {e}"
+                        f"Error executing command callback for {command_name}: {e}",
+                        exc_info=True,
                     )
 
             thread = threading.Thread(
@@ -144,6 +171,18 @@ class NodeCommunications(AsyncCommsThread):
         - timeout: Optional timeout in seconds (defaults to `self.timeout`)
         """
         return self.run_coroutine(self.nng_hub.send_operation, operation, timeout)
+
+    def send_operation_nowait(self, operation: NodeOperation) -> None:
+        """Queue a NodeOperation to the controller without waiting for it.
+
+        For senders that must never block: a cue's own thread, or a caller
+        holding a lock. Raises if the comms loop is not running.
+        """
+        if not self.event_loop:
+            raise AttributeError(f"{self.name} event loop is not initialized")
+        asyncio.run_coroutine_threadsafe(
+            self.nng_hub.send_operation(operation), self.event_loop
+        )
 
     def add_player(self, player_id: str, data: dict, timeout: Optional[float] = None):
         """

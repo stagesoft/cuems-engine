@@ -12,6 +12,7 @@ the new mixer spawns. Called on `self`, it only reads `self._audio_mixer` and
 shells out to pgrep / os.kill, so a lightweight stand-in is enough.
 """
 
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -33,8 +34,11 @@ def _run_kill(fake_self, stdout, returncode=0):
 def test_kills_all_untracked_when_no_mixer():
     fake = SimpleNamespace(_audio_mixer=None)
     run, kill = _run_kill(fake, "111\n222\n")
+    # Own user only (869evtdf7): another user's process is not ours to kill.
     run.assert_called_once_with(
-        ["pgrep", "-f", "jack-volume -c"], capture_output=True, text=True
+        ["pgrep", "-u", str(os.geteuid()), "-f", "jack-volume -c"],
+        capture_output=True,
+        text=True,
     )
     assert sorted(c.args[0] for c in kill.call_args_list) == [111, 222]
 
