@@ -2,14 +2,37 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+# The pre-publication gate (feature 009, contract C1).
+#
+# One dispatch answers "may 0.1.1 be published?": lint, then the unit+contract
+# and integration jobs in parallel against a cuems-utils git ref, a combined
+# coverage check, and a summary that records exactly what ran. Dispatch it on
+# the post-merge head with `cuemsutils_ref` set to cuems-utils' reconciled tag.
+#
+# The file name stays `ci.yml`: workflow_dispatch resolves the file on the
+# default branch, then runs the dispatched ref's version of it.
+
 name: CI
 
 on:
   push:
-    branches: [main, rc_1]
+    branches: [main, rc_1, feat/xml-refactor]
   pull_request:
-    branches: [main, rc_1]
+    branches: [main, rc_1, feat/xml-refactor]
   workflow_dispatch:
+    inputs:
+      cuemsutils_ref:
+        description: "cuems-utils git ref (tag/branch/sha) to install cuemsutils from"
+        required: false
+        default: "xml-refactor-merge-candidate"
+
+env:
+  CUEMSUTILS_REF: ${{ inputs.cuemsutils_ref || 'xml-refactor-merge-candidate' }}
+  # Poetry in a headless job has no usable keyring backend.
+  PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -50,30 +73,31 @@ jobs:
       - name: flake8
         run: poetry run flake8 src/ # PEP8 compliance for shipped code
 
-  test:
-    name: Tests
+  unit:
+    name: Unit + contract tests
     runs-on: ubuntu-latest
     # Debian 12 is the production OS: its python3 is the 3.11 the engine
     # targets, and the pyossia wheel / libmtcmaster / librtpmidid builds are
     # made for it. The job runs as root inside the container (no sudo).
     container: debian:bookworm
     needs: lint
-    permissions:
-      contents: write   # required to push the coverage badge to gh-pages
     env:
       DEBIAN_FRONTEND: noninteractive
       POETRY_VIRTUALENVS_IN_PROJECT: "true"
+    outputs:
+      cuemsutils_commit: ${{ steps.utils.outputs.commit }}
+      cuemsutils_version: ${{ steps.utils.outputs.version }}
 
     steps:
       # Before checkout: without git, actions/checkout falls back to a
-      # tarball, and the badge deploy needs git + rsync. The slim image also
-      # lacks tools the engine shells out to: ss (iproute2, PortHandler port
-      # scan) and pgrep (procps, PlayerHandler orphan detection).
+      # tarball. The slim image also lacks tools the engine shells out to: ss
+      # (iproute2, PortHandler port scan) and pgrep (procps, PlayerHandler
+      # orphan detection).
       - name: Install system packages
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates git rsync wget zstd \
+            ca-certificates git wget zstd \
             python3 python3-dev python3-venv pipx \
             iproute2 procps \
             libjack-jackd2-dev \
@@ -83,10 +107,22 @@ jobs:
             libavahi-client-dev \
             librtmidi6
 
+      # Full history: tests/contract/test_changelog_complete.py reads
+      # origin/debian/bookworm, origin/rc_1 and the v0.1.0* tags, and skips
+      # (loudly) when one is missing.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Trust the workspace for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Fetch the release line the changelog test compares with
+        run: |
+          git fetch origin \
+            +refs/heads/debian/bookworm:refs/remotes/origin/debian/bookworm \
+            +refs/heads/rc_1:refs/remotes/origin/rc_1 \
+            --tags
 
       - name: Install CUEMS native libraries
         run: |
@@ -111,15 +147,22 @@ jobs:
       - name: Configure Poetry for Python 3.11
         run: poetry env use python3
 
-      # The key carries the venv layout: venvs cached under the old
-      # ubuntu/deadsnakes keys were built for another OS and must not be
-      # restored into this one.
+      # poetry.lock is stale on purpose (cuemsutils 0.1.1 is unpublished), and
+      # Poetry 2.4.1 refuses every install on a stale lock. So the JOB relocks
+      # against the cuems-utils git ref; that changes cuemsutils and nothing
+      # else. The committed pyproject.toml and poetry.lock are restored below,
+      # so test_lock_is_current stays the strict xfail it is meant to be.
+      - name: Relock against the cuems-utils ref
+        run: poetry add --lock "git+https://github.com/stagesoft/cuems-utils.git#${CUEMSUTILS_REF}"
+
+      # The key is computed from the relocked lock plus the ref, so a restored
+      # venv can never carry another ref's cuemsutils.
       - name: Load cached virtualenv
         id: cache-venv
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-bookworm-3.11-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-bookworm-3.11-${{ env.CUEMSUTILS_REF }}-${{ hashFiles('poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
@@ -128,50 +171,270 @@ jobs:
       - name: Install Python 3.11 systemd bindings
         run: poetry run pip install systemd-python==235
 
-      - name: Unit tests
+      - name: Record the cuemsutils that was installed
+        id: utils
         run: |
-          poetry run pytest \
-            -m "not integration" \
-            -n auto \
-            --cov=src \
-            --cov-report=term-missing \
-            --cov-fail-under=45
+          commit=$(python3 - <<'PY'
+          import tomllib
+          lock = tomllib.load(open("poetry.lock", "rb"))
+          pkg = next(p for p in lock["package"] if p["name"] == "cuemsutils")
+          print(pkg.get("source", {}).get("resolved_reference", "unknown"))
+          PY
+          )
+          version=$(poetry run python -c "import cuemsutils; print(cuemsutils.__version__)")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "cuemsutils ${CUEMSUTILS_REF} -> ${commit} (${version})" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Integration fast tests
+      # Tests run against the COMMITTED pyproject.toml and poetry.lock.
+      - name: Restore the committed pyproject.toml and poetry.lock
         run: |
-          poetry run pytest \
-            -m "integration and not slow" \
-            --cov=src \
-            --cov-append \
-            --cov-report=term-missing
+          git checkout -- pyproject.toml poetry.lock
+          git diff --exit-code
 
-      # No "Integration slow tests" step: the only two tests currently
-      # marked @pytest.mark.slow (test_cpu_usage.py, test_project_go.py) are
-      # both unreliable on a CI runner and are run manually/locally instead.
-      # See specs/planning/integration-slow-tests-investigation.md.
+      # --dist loadfile: tests/unit/test_port_handler.py picks real ports, and
+      # two of its tests on different workers collide.
+      - name: Unit and contract tests
+        env:
+          COVERAGE_FILE: .coverage.unit
+        run: |
+          poetry run pytest tests/unit tests/contract \
+            -n auto --dist loadfile \
+            --cov=src --cov-report= \
+            -rxXs --junitxml=junit-unit.xml
 
-      - name: Generate XML coverage report
-        run: poetry run coverage xml -o coverage.xml
-
-      - name: Upload coverage artifacts
+      - name: Upload coverage data and results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
+          name: unit
           path: |
-            .coverage
-            coverage.xml
+            .coverage.unit
+            junit-unit.xml
+          include-hidden-files: true
 
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    needs: lint
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+
+    steps:
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git wget zstd \
+            python3 python3-dev python3-venv pipx \
+            iproute2 procps \
+            libjack-jackd2-dev \
+            libsystemd-dev \
+            gcc \
+            pkg-config \
+            libavahi-client-dev \
+            librtmidi6
+
+      - uses: actions/checkout@v4
+
+      - name: Trust the workspace for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install CUEMS native libraries
+        run: |
+          wget -q https://github.com/stagesoft/libmtcmaster/releases/download/v0.0.2-0/libmtcmaster_0.0.2-0_amd64.deb -O /tmp/libmtcmaster.deb
+          wget -q https://github.com/stagesoft/rtpmidid/releases/download/v26.06-1stagelab1/librtpmidid0_26.01.1.g7f552_amd64.deb -O /tmp/librtpmidid0.deb
+          apt-get install -y --no-install-recommends /tmp/librtpmidid0.deb
+          dpkg --force-depends --unpack /tmp/libmtcmaster.deb
+
+      - name: Install Poetry
+        run: |
+          pipx install poetry==2.4.1
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Poetry for Python 3.11
+        run: poetry env use python3
+
+      - name: Relock against the cuems-utils ref
+        run: poetry add --lock "git+https://github.com/stagesoft/cuems-utils.git#${CUEMSUTILS_REF}"
+
+      - name: Load cached virtualenv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-bookworm-3.11-${{ env.CUEMSUTILS_REF }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: poetry install --with dev --no-interaction
+
+      - name: Install Python 3.11 systemd bindings
+        run: poetry run pip install systemd-python==235
+
+      - name: Restore the committed pyproject.toml and poetry.lock
+        run: |
+          git checkout -- pyproject.toml poetry.lock
+          git diff --exit-code
+
+      # No `slow` tests here: the ones marked @pytest.mark.slow
+      # (test_cpu_usage.py, test_project_go.py) are unreliable on a CI runner
+      # and are run by hand on a rig instead.
+      # See specs/planning/integration-slow-tests-investigation.md.
+      - name: Integration tests (fast)
+        env:
+          COVERAGE_FILE: .coverage.integration
+        run: |
+          poetry run pytest tests/integration -m "not slow" \
+            --dist loadfile \
+            --cov=src --cov-report= \
+            -rxXs --junitxml=junit-integration.xml
+
+      - name: Upload coverage data and results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration
+          path: |
+            .coverage.integration
+            junit-integration.xml
+          include-hidden-files: true
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    needs: [unit, integration]
+    permissions:
+      contents: write # pushes the coverage badge to gh-pages, on main/rc_1 only
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    outputs:
+      percent: ${{ steps.report.outputs.percent }}
+
+    steps:
+      # git + rsync: the badge deploy action needs both.
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git rsync python3 python3-venv pipx
+
+      - uses: actions/checkout@v4
+
+      - name: Trust the workspace for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "{unit,integration}"
+          merge-multiple: true
+
+      - name: Combine and report
+        id: report
+        run: |
+          pipx install coverage
+          export PATH="$HOME/.local/bin:$PATH"
+          coverage combine
+          coverage report --fail-under=45
+          coverage xml -o coverage.xml
+          echo "percent=$(coverage report --format=total)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      # A dispatch, a PR and any other branch never publish a badge.
       - name: Generate coverage badge
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rc_1')
         run: |
           mkdir -p _badge
           pipx run --spec "genbadge[coverage]" genbadge coverage -i coverage.xml -o _badge/coverage.svg
 
       - name: Deploy coverage badge to GitHub Pages
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rc_1')
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: _badge
           target-folder: badges
           clean: false
+
+  gate-summary:
+    name: Gate summary
+    runs-on: ubuntu-latest
+    needs: [lint, unit, integration, coverage]
+    if: always()
+
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: "{unit,integration}"
+          merge-multiple: true
+
+      - name: Write the gate summary
+        env:
+          ENGINE_REF: ${{ github.ref }}
+          ENGINE_SHA: ${{ github.sha }}
+          UTILS_COMMIT: ${{ needs.unit.outputs.cuemsutils_commit }}
+          UTILS_VERSION: ${{ needs.unit.outputs.cuemsutils_version }}
+          COVERAGE_PERCENT: ${{ needs.coverage.outputs.percent }}
+          RESULTS: "lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} integration=${{ needs.integration.result }} coverage=${{ needs.coverage.result }}"
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          print("## Pre-publication gate\n")
+          print(f"- engine: `{os.environ['ENGINE_REF']}` @ `{os.environ['ENGINE_SHA']}`")
+          print(
+              f"- cuemsutils ref: `{os.environ['CUEMSUTILS_REF']}` -> "
+              f"`{os.environ['UTILS_COMMIT'] or 'n/a'}` "
+              f"(version `{os.environ['UTILS_VERSION'] or 'n/a'}`)"
+          )
+          print(f"- jobs: {os.environ['RESULTS']}")
+          print(f"- combined coverage: {os.environ['COVERAGE_PERCENT'] or 'n/a'} %\n")
+
+          print("| job | passed | failed | skipped | xfailed | xpassed |")
+          print("|---|---|---|---|---|---|")
+          xfails, skips = [], []
+          for name in ("unit", "integration"):
+              path = Path(f"junit-{name}.xml")
+              if not path.exists():
+                  print(f"| {name} | no results | | | | |")
+                  continue
+              root = ET.parse(path).getroot()
+              passed = failed = skipped = xfailed = xpassed = 0
+              for case in root.iter("testcase"):
+                  node = f"{case.get('classname')}::{case.get('name')}"
+                  skip = case.find("skipped")
+                  failure = case.find("failure")
+                  error = case.find("error")
+                  if skip is not None:
+                      if skip.get("type") == "pytest.xfail":
+                          xfailed += 1
+                          xfails.append((node, skip.get("message") or ""))
+                      else:
+                          skipped += 1
+                          skips.append((node, skip.get("message") or ""))
+                  elif failure is not None or error is not None:
+                      el = failure if failure is not None else error
+                      if "XPASS(strict)" in (el.get("message") or ""):
+                          xpassed += 1
+                      failed += 1
+                  else:
+                      passed += 1
+              print(f"| {name} | {passed} | {failed} | {skipped} | {xfailed} | {xpassed} |")
+
+          print("\n### Expected failures (xfail)\n")
+          for node, reason in xfails or [("none", "")]:
+              print(f"- `{node}` {reason}")
+          print("\n### Skipped (the changelog test must not be here)\n")
+          for node, reason in skips or [("none", "")]:
+              print(f"- `{node}` {reason}")
+          PY

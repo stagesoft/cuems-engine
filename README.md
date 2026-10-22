@@ -134,7 +134,7 @@ Player subprocess management and hardware I/O:
 * **`AudioMixer`** — JACK-based audio mixing and routing
 * **`JackConnectionManager`** — JACK port connection management
 * **`AudioPlayer`** — audio client subprocess wrapper
-* **`VideoPlayer`** — video client subprocess wrapper (delegates to `gradient-motiond`)
+* **`VideoClient`** / **`VideoOutput`** — the OSC client of the videocomposer and a display output it drives
 * **`DmxPlayer`** — DMX output subprocess wrapper
 * **`GradientClient`** — OSC client for communicating with `gradient-motiond`
 * **`Player`** — abstract base player interface
@@ -174,6 +174,7 @@ Operational utilities used by both engines:
 * **Deploy** — the rsync-based transfer of project assets to a node before playback begins
 * **OSCQuery** — the bidirectional device-tree protocol used for live parameter exposure and editor control
 * **NNG** — the low-latency message transport between the controller and node engines
+* **Loop** — a cue with `loop ≠ 1` repeats its media on the file's own period; audio and video of a loop stay in sync across passes only if their durations are exactly the same or they are in one container (see `CLAUDE.md`, "Looping audio with video")
 
 ---
 
@@ -240,26 +241,26 @@ poetry install
 
 # Or, when the package is already installed system-wide under /usr/lib/cuems,
 # replace it with a symlink to this source tree:
-./scripts/link-dev.sh
+./dev/scripts/link-dev.sh
 ```
 
 Restart the `controller-engine` and `node-engine` services after symlinking to pick up source changes. To restore the installed package, reinstall the Debian package.
 
 ### Run tests
 
-From the repo root, the same two passes CI runs:
+From the repo root, the same two passes CI runs (see [tests/README.md](tests/README.md) for the layout):
 
 ```bash
-poetry run pytest -m "not integration" -n auto     # unit tests, parallel
-poetry run pytest -m "integration and not slow"    # fast integration tests
+poetry run pytest tests/unit tests/contract -n auto --dist loadfile   # unit + contract, parallel
+poetry run pytest tests/integration -m "not slow" --dist loadfile     # fast integration tests
 ```
 
-Useful markers:
+Useful selections (the directory decides the marker, so `-m unit` and `tests/unit` agree):
 
 ```bash
 poetry run pytest -m unit                  # fast unit tests only
 poetry run pytest -m "not slow"            # skip long-running tests
-poetry run pytest -m integration           # integration tests (requires hardware or mocks)
+poetry run pytest tests/integration -m slow  # long integration tests, on a rig
 poetry run pytest --cov=src                # with coverage report
 ```
 

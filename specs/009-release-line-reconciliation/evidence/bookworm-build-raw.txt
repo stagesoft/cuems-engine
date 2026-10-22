@@ -1,0 +1,32 @@
+# 016 bookworm build — cuems-engine (mmdebstrap --mode=unshare; tools/bookworm-build.sh)
+date: 2026-10-22T14:22:14+02:00
+host: Debian GNU/Linux 13 (trixie), mmdebstrap 1.5.7
+repo: cuems-engine @ 3ada95d8e2c53083626832fd9ec6d1cf0f2f8f63, changelog version 0.1.1-1
+cuemsutils wheel: cuemsutils-0.1.1-py3-none-any.whl from <scratch clone of ../cuems-utils at 4b336cd> @ 4b336cd07d6b957e20b655effbca767713564d8b (clean)
+
+## chroot
+os: Debian GNU/Linux 12 (bookworm)
+python3: /usr/bin/python3 -> /usr/bin/python3.11 Python 3.11.2
+dh-virtualenv 1.2.2-1.3
+debhelper 13.11.4
+
+## result
+pass1 OK
+build OK
+
+## packages
+cuems-engine_0.1.1-1_all.deb  sha256 c03a7e155a63f1805239b6b2c4f86e343ed98c5ae8d2f998f18b6522d461f5df
+  Package: cuems-engine
+  Version: 0.1.1-1
+  Architecture: all
+  Depends: cuems-utils (>= 0.1.1), cuems-utils (<< 0.1.2~), cuems-common (>= 1.3.1~), python3 (>= 3.11), python3-pyossia (>= 2.0.0-rc6+124+cuems3), libmtcmaster (>= 0.0.2-0), python3-systemd (>= 235), python3-packaging
+cuems-engine-mock_0.1.1-1_all.deb  sha256 6eb625327eb5c7f18177ce0c55516953a6543faa61a2ec7816d03fdf17152e03
+  Package: cuems-engine-mock
+  Version: 0.1.1-1
+  Architecture: all
+  Depends: cuems-engine (>= 0.1.1)
+
+## venv interpreter
+pyvenv.cfg: home = /usr/bin
+
+## verdict: OK

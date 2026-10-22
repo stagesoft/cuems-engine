@@ -8,22 +8,46 @@ import subprocess
 import threading
 from time import sleep
 
-from cuemsutils.cues import CueList
+from cuemsutils.cues import CueList, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
 from .core.BaseEngine import BaseEngine
-from .cues.CueHandler import CUE_HANDLER
+from .cues.CueHandler import CUE_HANDLER, _ArmWalk
+from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
-from .players.PlayerHandler import PLAYER_HANDLER
+from .players.PlayerHandler import (
+    PLAYER_HANDLER,
+    _positive_int,
+    check_orphan_binary_names,
+)
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.ids import id_str
 from .tools.PortHandler import PORT_HANDLER
 
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
+
+
+def _output_ports(device) -> list:
+    """The ``<output>`` entries of one device of the node's mappings.
+
+    *device* is what ``cm.node_mappings.get("audio" | "video")`` returns: a
+    typed device holding port groups (``outputs`` -> groups -> ports ->
+    ``output``). Outputs only. Inputs reuse the outputs' ``<id>`` numbering
+    and come after them, so a lookup that read both let input 0 overwrite
+    output 0: an audio cue on output ``<node>_0`` was routed to
+    ``system:capture_1`` and played silent (35cbe78).
+    """
+    ports = []
+    for group in (device or {}).get("outputs") or []:
+        for port in group:
+            output = port.get("output")
+            if output:
+                ports.append(output)
+    return ports
 
 
 def _append_output_latency_flag(args, player_conf: dict) -> str:
@@ -48,6 +72,37 @@ def _append_output_latency_flag(args, player_conf: dict) -> str:
     return args
 
 
+def own_media_size_mismatches(own_media: dict, find_cue, media_path) -> list:
+    """This node's media files that differ from the project (869fat84r D20, L2).
+
+    *own_media* is ``{cue_id: file_name}`` (``CuemsScript.get_own_media``),
+    *find_cue* maps a cue id to its cue, *media_path* a file name to this
+    node's path. Returns ``[(file_name, stored_size, actual_size)]``, once
+    per file: ``actual_size`` is ``None`` for a missing file, and
+    ``stored_size`` is ``None`` when the project stores none. A file whose
+    project has no stored size (an older editor wrote it) is compared with
+    nothing.
+    """
+    found = []
+    seen = set()
+    for cue_id, file_name in own_media.items():
+        if not file_name or file_name in seen:
+            continue
+        seen.add(file_name)
+        media = getattr(find_cue(cue_id), "media", None)
+        stored = media.get("file_size") if hasattr(media, "get") else None
+        if not _positive_int(stored):
+            stored = None
+        try:
+            actual = os.stat(media_path(file_name)).st_size
+        except OSError:
+            found.append((file_name, stored, None))
+            continue
+        if stored is not None and actual != stored:
+            found.append((file_name, stored, actual))
+    return found
+
+
 class NodeEngine(BaseEngine):
     """
     This engine manages players for each node
@@ -66,6 +121,16 @@ class NodeEngine(BaseEngine):
       - Providing a clean interface for monitoring player status
 
     """
+
+    # Set in _setup_nng_command_callback; None until then (and in unit tests
+    # that build the engine without its comms).
+    _follow_relay = None
+
+    # stop_project (869fhjdq5): after this node reports an authored end of the
+    # show, how long it waits for the controller's STOP before it logs that
+    # the show is still running. Log only; the node never stops itself.
+    _STOP_PROJECT_WATCHDOG_S = 3.0
+    _stop_project_watchdog: threading.Timer | None = None
 
     # GO anchor tolerance (Badajoz 2026-09-25 fix): how far the controller's
     # shipped GO instant may disagree with this node's own MTC before
@@ -141,6 +206,21 @@ class NodeEngine(BaseEngine):
                 self._handle_nng_command
             )
             Logger.info("NNG command callback registered for NodeEngine")
+            # Cross-node Auto follow (869fc8ytz): announce this node's
+            # follows, apply the ones relayed from other nodes, in bus order.
+            self._follow_relay = FollowRelay(
+                CUE_HANDLER,
+                node_id=self.cm.node_uuid,
+                send=self._send_follow,
+                get_script=lambda: self.script,
+                get_mtc=lambda: getattr(self, "mtc_listener", None),
+                get_project_gen=lambda: self._project_generation,
+                first_local=self._first_local_enabled_in_go_chain,
+            )
+            CUE_HANDLER._follow = self._follow_relay
+            CUE_HANDLER.communications_thread.set_receive_hook(
+                self._on_command_received
+            )
         else:
             Logger.warning(
                 "CUE_HANDLER communications thread: "
@@ -151,6 +231,48 @@ class NodeEngine(BaseEngine):
 
         ACTION_HANDLER.finalize_node_layer_bindings()
         ACTION_HANDLER.set_result_sink(self._action_result_sink)
+
+    def _on_command_received(self, command_name: str, value) -> bool:
+        """Receive hook: runs for every command in BUS order, before its
+        command thread races the others for the command lock (869fc8ytz).
+
+        A follow message is applied here and consumed. GO records the
+        controller's run counter, STOP and load clear it and every pending
+        follow -- here, so a follow relayed before a STOP can never be applied
+        after it. Must not block."""
+        relay = self._follow_relay
+        if relay is None:
+            return False
+        if command_name == "follow":
+            try:
+                relay.on_message(value)
+            except Exception as e:
+                # Consumed anyway: a follow message must never reach the
+                # command lock.
+                Logger.error(f"Follow message failed: {e}")
+            return True
+        if command_name == "go":
+            relay.begin_run(value)
+        elif command_name in ("stop", "load", "unload"):
+            relay.end_run(command_name)
+            # The STOP (or load) a stop_project cue was waiting for.
+            self._cancel_stop_project_watchdog()
+        return False
+
+    def _send_follow(self, data: dict) -> None:
+        """Queue a follow message (announce or cancel) to the controller,
+        which relays it to every node. Never waits."""
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        CUE_HANDLER.communications_thread.send_operation_nowait(
+            NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=self.cm.node_uuid,
+                target="follow",
+                data=data,
+            )
+        )
 
     def _handle_nng_command(self, command_name: str, value, address: str = None):
         """Handle a command received via NNG from ControllerEngine.
@@ -260,6 +382,7 @@ class NodeEngine(BaseEngine):
     @logged
     def stop(self):
         self.stop_requested = True
+        self._cancel_stop_project_watchdog()
         self.stop_node_engine()
         self.stop_comms()
         super().stop()
@@ -287,7 +410,7 @@ class NodeEngine(BaseEngine):
 
     def stop_node_engine(self):
         """Stop the NodeEngine elements"""
-        CUE_HANDLER.disarm_all()
+        CUE_HANDLER.disarm_all(reason="shutdown")
         self.stop_video_devs()
 
     def stop_video_devs(self):
@@ -367,7 +490,7 @@ class NodeEngine(BaseEngine):
             "setnextcue": self.set_next_cue,
             "cue_enabled": self._handle_cue_enabled,
             "test": None,
-            "unload": None,
+            "unload": self.unload_project,
             "update": None,
         }
 
@@ -402,7 +525,14 @@ class NodeEngine(BaseEngine):
             if command in self.commands_dict.keys():
                 handler = self.commands_dict[command]
                 if handler is not None:
-                    handler(value)
+                    try:
+                        handler(value)
+                    finally:
+                        if command in ("stop", "load", "unload") and self._follow_relay:
+                            # The receive hook counted it received; until
+                            # here this node's epochs still belonged to the
+                            # run it ends (869fc8ytz).
+                            self._follow_relay.stop_applied()
                     return True
                 else:
                     Logger.warning(f"Command {command} has no handler")
@@ -415,6 +545,9 @@ class NodeEngine(BaseEngine):
     # Player logic
     #########################
     def set_players(self):
+        # A player binary the orphan cleanups do not know by name escapes them
+        # all; say so at start (869evtdf7).
+        check_orphan_binary_names(self.cm.node_conf)
         self.set_video_players()
         self.set_audio_players()
         self.set_dmx_players()
@@ -505,21 +638,14 @@ class NodeEngine(BaseEngine):
         # Build audio output lookup keyed by <id> (mirrors video output
         # pattern)
         audio_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get("audio", []):
-            for port_type_list in port_type_dict.values():
-                for port in port_type_list:
-                    for _, output_data in port.items():
-                        output_id = str(output_data.get("id", output_data["name"]))
-                        mappings = output_data.get("mappings", [])
-                        mapped_to = (
-                            mappings[0]["mapped_to"]
-                            if mappings
-                            else output_data["name"]
-                        )
-                        audio_outputs[output_id] = {
-                            "name": output_data["name"],
-                            "mapped_to": mapped_to,
-                        }
+        for output_data in _output_ports(self.cm.node_mappings.get("audio")):
+            output_id = str(output_data.get("id", output_data["name"]))
+            mappings = output_data.get("mappings", [])
+            mapped_to = mappings[0]["mapped_to"] if mappings else output_data["name"]
+            audio_outputs[output_id] = {
+                "name": output_data["name"],
+                "mapped_to": mapped_to,
+            }
         PLAYER_HANDLER.set_audio_outputs(audio_outputs)
 
         # Set the audio player generator. Append --output-latency-ms
@@ -595,33 +721,30 @@ class NodeEngine(BaseEngine):
         display_regions, (canvas_w, canvas_h) = read_display_conf()
 
         video_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get("video", []):
-            for port_type_list in port_type_dict.values():
-                for port in port_type_list:
-                    for _, output_data in port.items():
-                        output_id = str(output_data.get("id", output_data["name"]))
-                        name = output_data["name"]
-                        mappings = output_data.get("mappings", [])
-                        mapped_to = mappings[0]["mapped_to"] if mappings else name
-                        region = display_regions.get(mapped_to)
-                        if region is None:
-                            Logger.warning(
-                                f"DISPLAY_MISMATCH: XML output id={output_id} "
-                                f"name={name!r} maps to {mapped_to!r} which"
-                                f"is "
-                                f"not in display.conf; skipping. Available: "
-                                f"{sorted(display_regions.keys())}"
-                            )
-                            continue
-                        video_outputs[output_id] = {
-                            "name": name,
-                            "mapped_to": mapped_to,
-                            "x": region["x"],
-                            "y": region["y"],
-                            "width": region["width"],
-                            "height": region["height"],
-                            "canvas_region": dict(region),
-                        }
+        for output_data in _output_ports(self.cm.node_mappings.get("video")):
+            output_id = str(output_data.get("id", output_data["name"]))
+            name = output_data["name"]
+            mappings = output_data.get("mappings", [])
+            mapped_to = mappings[0]["mapped_to"] if mappings else name
+            region = display_regions.get(mapped_to)
+            if region is None:
+                Logger.warning(
+                    f"DISPLAY_MISMATCH: XML output id={output_id} "
+                    f"name={name!r} maps to {mapped_to!r} which"
+                    f"is "
+                    f"not in display.conf; skipping. Available: "
+                    f"{sorted(display_regions.keys())}"
+                )
+                continue
+            video_outputs[output_id] = {
+                "name": name,
+                "mapped_to": mapped_to,
+                "x": region["x"],
+                "y": region["y"],
+                "width": region["width"],
+                "height": region["height"],
+                "canvas_region": dict(region),
+            }
         PLAYER_HANDLER.start_video_outputs(
             video_outputs, canvas_override=(canvas_w, canvas_h)
         )
@@ -689,7 +812,8 @@ class NodeEngine(BaseEngine):
         """
         self.cm.load_project_config(project)
         self.read_script(project)
-        self.deploy_media(project)
+        media_synced = self.deploy_media(project)
+        self.check_own_media_sizes(media_synced)
         self.ensure_video_indexes()
         self.outputs_map = self.map_cue_outputs()
         PLAYER_HANDLER.set_outputs_map(self.outputs_map)
@@ -755,7 +879,80 @@ class NodeEngine(BaseEngine):
             )
             return False
 
-        self._gradient_cancel_all("project load")
+        self._teardown_project("load")
+
+        # Clear the engine's 24h MTC wrap accumulator on this project transition,
+        # co-orchestrated with the DMX blackout + videocomposer reset above (which
+        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
+        # reload's small backward wire delta can't trip the wire-driven reset, so
+        # do it explicitly here — else a project loaded after a >24h run starts
+        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
+        if self.mtc_listener is not None:
+            self.mtc_listener.reset_24h_state()
+
+        # Obtain the project files (this replaces self.script with new project)
+        self.ready_project(project)
+
+        # Name the video cues aimed at outputs this node doesn't drive, before
+        # anything arms. Here and not in ready_project: that one is also the
+        # `deploy` bus command, which can arrive mid-show.
+        self.check_unrouted_video_outputs()
+
+        # Prepare the script to be played (arms new cues)
+        self.ready_script(reason="load")
+
+        # Start cue dependencies
+        # self.set_players()
+
+        # Confirm the project is loaded
+        self.set_show_lock_file()
+        self.script.unix_name = project
+        self.set_status("load", project)
+        Logger.info(f"Project {project} loaded")
+
+        # Notify Controller that arming is complete (GO button can go green)
+        self._notify_armed_ready("arming after load")
+
+        # Broadcast initial nextcue to UI
+        self._broadcast_nextcue()
+
+        return True
+
+    def unload_project(self, value=None):
+        """Unload the project: the teardown of a load, and nothing armed after.
+
+        The controller sends this on project_unload. It used to send a STOP,
+        and stop_playback re-arms the script this node still holds, so every
+        node spawned new players for a project that was no longer loaded
+        (869fh8kef).
+        """
+        if self.get_status("running") == "yes":
+            # The controller refuses an unload while running; a node that
+            # still thinks it is running does not tear down under the show.
+            Logger.warning("Cannot unload while the script is running. Stop first.")
+            return False
+
+        name = getattr(self.script, "name", None)
+        Logger.info(f"UNLOAD command received. Unloading project {name}.")
+        # Abort in-flight ReArm/PreArm threads: on a STOP or a load,
+        # ready_script bumps this, and nothing here calls ready_script.
+        self._project_generation += 1
+        self._teardown_project("unload")
+
+        self.reset_script()
+        self.set_status("load", "")
+        self.remove_show_lock_file()
+        self._broadcast_nextcue()
+        Logger.info(f"Project {name} unloaded")
+        return True
+
+    def _teardown_project(self, reason: str):
+        """Release everything the current project holds on this node:
+        cue threads, DMX, video layers, mixer gains, audio players, armed cues.
+
+        Shared by a load (before the new project arms) and an unload.
+        """
+        self._gradient_cancel_all(f"project {reason}")
 
         # Stop any running cue threads from the previous project first,
         # so they can't interfere with cleanup (same logic as stop_playback).
@@ -783,39 +980,7 @@ class NodeEngine(BaseEngine):
         PLAYER_HANDLER.cleanup_zombie_jack_clients()
 
         # Disarm all cues from the previous project.
-        CUE_HANDLER.disarm_all()
-
-        # Clear the engine's 24h MTC wrap accumulator on this project transition,
-        # co-orchestrated with the DMX blackout + videocomposer reset above (which
-        # clear the C++ receivers' offsets via resetWrapOffset). A graceful
-        # reload's small backward wire delta can't trip the wire-driven reset, so
-        # do it explicitly here — else a project loaded after a >24h run starts
-        # at hour 24+ and the reset_callback cascade stays silenced. (Plan 4)
-        if self.mtc_listener is not None:
-            self.mtc_listener.reset_24h_state()
-
-        # Obtain the project files (this replaces self.script with new project)
-        self.ready_project(project)
-
-        # Prepare the script to be played (arms new cues)
-        self.ready_script()
-
-        # Start cue dependencies
-        # self.set_players()
-
-        # Confirm the project is loaded
-        self.set_show_lock_file()
-        self.script.unix_name = project
-        self.set_status("load", project)
-        Logger.info(f"Project {project} loaded")
-
-        # Notify Controller that arming is complete (GO button can go green)
-        self._notify_armed_ready("arming after load")
-
-        # Broadcast initial nextcue to UI
-        self._broadcast_nextcue()
-
-        return True
+        CUE_HANDLER.disarm_all(reason=reason)
 
     def deploy_project(self, project):
         """Deploy the project files (script.xml, mappings.xml, settings.xml).
@@ -847,6 +1012,112 @@ class NodeEngine(BaseEngine):
             )
             return False
         return True
+
+    def check_own_media_sizes(self, media_synced: bool = True) -> list:
+        """Report this node's media files that differ from the project, or
+        are missing (869fat84r D20, L2).
+
+        The editor corrects the project before a load when a file on the
+        controller changed; this is the last defence, for a copy that differs
+        only here (a failed media sync, a file placed on this node only, an
+        OSC load that bypassed the editor). Report only: the cue keeps the
+        stored duration, so this node stays in step with the others. Never
+        raises: the previous project is already torn down at this point.
+        """
+        try:
+            found = own_media_size_mismatches(
+                self.script.get_own_media(config=self.cm),
+                self.script.find,
+                PLAYER_HANDLER.media_path,
+            )
+        except Exception as e:
+            Logger.error(
+                f"Media size check skipped ({type(e).__name__}: {e}); the load goes on"
+            )
+            return []
+        sync = "" if media_synced else " This load's media sync failed."
+        for file_name, stored, actual in found:
+            if actual is None:
+                Logger.error(
+                    f"Media file {file_name} is missing on this node: its cues will "
+                    f"fail.{sync}"
+                )
+            else:
+                Logger.error(
+                    f"Media file {file_name} on this node is {actual} bytes; the "
+                    f"project stores {stored}: it was replaced or not synced. The "
+                    "stored duration is kept so the nodes stay in step; re-sync it, "
+                    f"or re-upload it in the editor.{sync}"
+                )
+        return found
+
+    def check_unrouted_video_outputs(self) -> list:
+        """Name every enabled video cue of this node that points at an output
+        this node doesn't drive (869fgq3xv). Log only.
+
+        Such an output is never loaded (arm_videoCue), so the cue stays dark
+        there; this says so at load, before the show, instead of on the
+        screens. Also starts the load's once-only arm errors afresh. Uses the
+        same PlayerHandler.partition_cue_outputs as the arm, so the two cannot
+        disagree. Never raises: the previous project is already torn down.
+        """
+        PLAYER_HANDLER.reset_unrouted_warnings()
+        found = []
+        try:
+            video_cues = []
+            for cue_id, output_names in (self.outputs_map or {}).items():
+                cue = self.script.find(cue_id)
+                # outputs_map holds every MediaCue of this node, audio and
+                # disabled cues included.
+                if isinstance(cue, VideoCue) and getattr(cue, "enabled", True):
+                    video_cues.append((cue, output_names))
+            if not video_cues:
+                return found
+
+            if PLAYER_HANDLER.get_video_client() is None:
+                # set_video_players returned early: every video cue fails at
+                # arm ("No video client"), for a reason that is not the cue's.
+                Logger.warning(
+                    f"no video stack on this node: {len(video_cues)} video cue(s)"
+                    " will not play here"
+                )
+                return found
+
+            driven = PLAYER_HANDLER.driven_video_outputs()
+            for cue, output_names in video_cues:
+                _, unrouted = PLAYER_HANDLER.partition_cue_outputs(cue, output_names)
+                if not unrouted:
+                    continue
+                found.append(
+                    {
+                        "cue_id": id_str(cue.id),
+                        "cue_name": getattr(cue, "name", ""),
+                        "outputs": [
+                            {"output": name, "reason": reason}
+                            for name, reason in unrouted
+                        ],
+                    }
+                )
+                cue_name = getattr(cue, "name", "")
+                for output_name, reason in unrouted:
+                    Logger.warning(
+                        f'UNROUTED_VIDEO_OUTPUT: cue {cue.id} "{cue_name}"'
+                        f' → output "{output_name}" not driven by this node ({reason});'
+                        f" it will stay dark. Driven outputs: {driven}"
+                    )
+            if found:
+                Logger.warning(
+                    f"{len(found)} video cue(s) point at outputs this node doesn't"
+                    " drive; see UNROUTED_VIDEO_OUTPUT (and DISPLAY_MISMATCH at"
+                    " node start)"
+                )
+        except Exception as e:
+            Logger.exception(
+                f"Unrouted video output check skipped ({type(e).__name__}: {e});"
+                " the load goes on"
+            )
+            return []
+        return found
 
     def ensure_video_indexes(self):
         """
@@ -915,40 +1186,48 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f"Could not broadcast nextcue: {e}")
 
-    def _arm_with_enabled_guard(self, cue, project_gen: int):
+    def _arm_with_enabled_guard(self, cue, project_gen: int, arm_epoch: int = None):
         """
-        Arm a cue and disarm if it was disabled or project changed while
-        arming.
+        Arm a cue, and disarm it if it was disabled while arming.
 
-        Runs in a daemon thread. After arm() completes, re-checks
-        cue.enabled and project generation to handle races where:
-        - A disable command arrived while arm_cue() was loading media
-        - A stop/reload invalidated this project's cues
+        Runs in a daemon thread (ReArm:<id>). `arm_epoch` is the STOP/load
+        epoch captured by whoever spawned it (_apply_cue_enabled_side_effects):
+        the arm belongs to it, so CUE_HANDLER.arm() refuses it if a STOP or a
+        load happened before this thread got to run, and abandons it -- never
+        publishing the cue, releasing the player it spawned -- if one happens
+        while it is arming.
 
-        Bounded post-STOP window: these checks run before/after arm(), not
-        during it — arm() can block up to ~15 s in the JACK port wait, so a
-        stale arm can spawn a player that outlives a STOP by that much until
-        the re-check below disarms it. It is armed but never revealed (no
-        /mtcfollow), so it is inaudible.
+        This method therefore does NOT disarm on a project change any more
+        (869f9wqpn). It used to, after arm() had already published the cue:
+        by then the restarted run could be playing it, and after a reload of
+        the same project the disarm hit the NEW object's player, because Cue
+        equality is by id.
         """
         if self._project_generation != project_gen:
             Logger.info(f"Aborting arm of {cue.id} — project generation changed")
             return
         try:
-            CUE_HANDLER.arm(cue, init=True)
+            CUE_HANDLER.arm(cue, init=True, epoch=arm_epoch)
         except Exception as exc:
             Logger.error(f"Async re-arm of enabled cue {cue.id} failed: {exc}")
             return
-        # If project changed during arm, disarm the stale cue.
         if self._project_generation != project_gen:
-            if CUE_HANDLER.find_armed_cue(cue):
-                CUE_HANDLER.disarm(cue)
-            Logger.info(f"Disarmed cue {cue.id} — project changed during async arm")
+            # A STOP/load landed during the arm. arm() either abandoned it or
+            # published it before the STOP began, in which case the STOP's
+            # own disarm_all took it. Nothing to undo, nothing to rejoin.
+            Logger.info(
+                f"Project changed during the async arm of {cue.id} — left to "
+                "the STOP/load that caused it"
+            )
             return
         # If cue was disabled while we were arming, disarm now.
         if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
-            CUE_HANDLER.disarm(cue)
+            CUE_HANDLER.disarm(cue, reason="disabled")
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
+            return
+        if not CUE_HANDLER.find_armed_cue(cue):
+            # arm() refused it (stale request) or failed. rejoin_chain would
+            # only run go()'s fallback: another wait, another arm.
             return
         # Armed and still enabled: if it belongs to a chain that is running
         # right now, put it back at its own slot. Checked here rather than
@@ -973,6 +1252,11 @@ class NodeEngine(BaseEngine):
         # idempotent under rapid toggles.
         action_type = outcome.get("action_type")
         status = outcome.get("status")
+        if action_type == "stop_project" and status == "applied":
+            # The authored end of the show (869fhjdq5): tell the controller,
+            # which runs its own STOP path. Nothing is stopped locally.
+            self._notify_stop_project(outcome.get("origin_cue_id"))
+            return
         if action_type in ("enable", "disable") and status == "applied":
             target_id = outcome.get("target_id")
             if target_id:
@@ -1074,6 +1358,97 @@ class NodeEngine(BaseEngine):
         except Exception as e:
             Logger.warning(f"Could not notify cue_enabled: {e}")
 
+    def _notify_stop_project(self, cue_id):
+        """A stop_project ActionCue was revealed on this node (869fhjdq5).
+
+        Send the controller a STATUS op carrying the cue and the current run;
+        the controller validates it like a follow message (adopted sender,
+        cue in project, running, current run_seq) and runs stop_script, which
+        is the operator STOP. Every node reveals every ActionCue, so the
+        controller gets one message per node and acts on the first; the rest
+        are dropped there at INFO.
+
+        Nothing is stopped here: one stop path, the controller's. If no STOP
+        or load is received within _STOP_PROJECT_WATCHDOG_S the watchdog
+        logs a WARNING and the show keeps running, which is the safe side.
+        Skipped (INFO) when a STOP or load is already pending on this node, or
+        when no run is in progress (run_seq is None between a STOP/load and
+        the next GO): both mean the show is ending or ended anyway.
+        """
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        relay = self._follow_relay
+        if relay is None:
+            Logger.warning(
+                f"stop_project cue {cue_id}: no comms relay on this node, cannot "
+                "notify the controller; the show keeps running"
+            )
+            return
+        if relay.stop_pending:
+            Logger.info(
+                f"stop_project cue {cue_id}: a STOP or load is already pending on "
+                "this node, not sending"
+            )
+            return
+        run_seq = relay.run_seq
+        if run_seq is None:
+            Logger.info(
+                f"stop_project cue {cue_id}: no run in progress (no GO since the "
+                "last STOP or load), not sending"
+            )
+            return
+        stops_at_send = relay.stops_received
+        try:
+            CUE_HANDLER.communications_thread.send_operation_nowait(
+                NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target="stop_project",
+                    data={"cue": id_str(cue_id), "run_seq": run_seq},
+                )
+            )
+        except Exception as e:
+            Logger.error(
+                f"stop_project cue {cue_id}: could not notify the controller "
+                f"({e}); the show keeps running"
+            )
+            return
+        Logger.info(
+            f"stop_project cue {cue_id}: notified the controller (run {run_seq})"
+        )
+        self._arm_stop_project_watchdog(cue_id, stops_at_send)
+
+    def _arm_stop_project_watchdog(self, cue_id, stops_at_send: int) -> None:
+        self._cancel_stop_project_watchdog()
+        timer = threading.Timer(
+            self._STOP_PROJECT_WATCHDOG_S,
+            self._on_stop_project_watchdog_fire,
+            args=(cue_id, stops_at_send),
+        )
+        timer.daemon = True
+        self._stop_project_watchdog = timer
+        timer.start()
+
+    def _cancel_stop_project_watchdog(self) -> None:
+        timer = self._stop_project_watchdog
+        if timer is not None:
+            timer.cancel()
+            self._stop_project_watchdog = None
+
+    def _on_stop_project_watchdog_fire(self, cue_id, stops_at_send: int) -> None:
+        """Compares STOP/load RECEIPTS, not executions: a STOP queued behind a
+        long command has still been received, and an operator STOP that got in
+        first counts too. Log only."""
+        relay = self._follow_relay
+        if relay is not None and relay.stops_received > stops_at_send:
+            return
+        Logger.warning(
+            f"stop_project cue {cue_id} sent, no STOP received from the "
+            f"controller in {self._STOP_PROJECT_WATCHDOG_S:.0f} s; the show "
+            "keeps running"
+        )
+
     def set_next_cue(self, value):
         """
         Handle setnextcue command from the UI — override next_cue_pointer.
@@ -1098,13 +1473,21 @@ class NodeEngine(BaseEngine):
             self._selection_epoch += 1
             selection_epoch = self._selection_epoch
             project_gen = self._project_generation
-            script = self.script
+            # Captured HERE, on the command thread: the lookahead belongs to
+            # the STOP/load epoch in which it was asked for.
+            arm_epoch = CUE_HANDLER.arm_epoch()
             if not CUE_HANDLER.find_armed_cue(cue):
                 Logger.info(f"Re-arming cue {cue.id} selected as next cue")
                 CUE_HANDLER.arm(cue, init=True)
             threading.Thread(
-                target=self._prearm_lookahead,
-                args=(cue, project_gen, selection_epoch, script),
+                target=self._prearm_thread,
+                args=(
+                    self._prearm_lookahead,
+                    cue,
+                    project_gen,
+                    selection_epoch,
+                    arm_epoch,
+                ),
                 daemon=True,
                 name=f"PreArm:{cue.id}",
             ).start()
@@ -1113,7 +1496,16 @@ class NodeEngine(BaseEngine):
         else:
             Logger.warning(f"setnextcue: cue {value} not found in script")
 
-    def _prearm_lookahead(self, cue, project_gen, selection_epoch, script):
+    def _prearm_thread(self, body, cue, *args):
+        """Body of every PreArm:<id> thread: run `body(cue, *args)`, then log
+        what the node holds armed -- also when the walk was abandoned or
+        failed. Measurement only."""
+        try:
+            body(cue, *args)
+        finally:
+            CUE_HANDLER.log_armed_inventory(f"PreArm:{cue.id}")
+
+    def _prearm_lookahead(self, cue, project_gen, selection_epoch, arm_epoch):
         """Background half of set_next_cue — see its docstring.
 
         should_continue re-checks BOTH the project generation (a STOP/load
@@ -1121,6 +1513,13 @@ class NodeEngine(BaseEngine):
         selection's own epoch (a later set_next_cue call bumps it even if
         it reselects the same cue), so a stale walk stops advancing as
         soon as either happens, without waiting for it to finish.
+
+        arm_epoch is the STOP/load epoch captured by the command that spawned
+        this thread. Every arm the walk makes belongs to it: CUE_HANDLER
+        refuses or abandons an arm whose epoch has moved, so a cue this walk
+        was arming across a STOP or a load is never published. That is why
+        this thread disarms NOTHING afterwards (869f9wqpn) -- it used to, and
+        by then the restarted run could already be playing the cue.
 
         Audio is pre-armed here like any other local cue. It was excluded
         at first (skip_arming_types=(AudioCue,)) for fear of a slow JACK
@@ -1139,17 +1538,84 @@ class NodeEngine(BaseEngine):
                 and self._selection_epoch == selection_epoch
             )
 
-        newly_armed = CUE_HANDLER._arm_ahead(cue, should_continue=should_continue)
-        if newly_armed and self.script is not script:
-            # A different project loaded while this walk was running — its
-            # own reset already handled everything else; undo exactly what
-            # THIS walk armed, not a concurrent call's.
-            for armed_cue in newly_armed:
-                CUE_HANDLER.disarm(armed_cue)
-            Logger.info(
-                f"PreArm from {cue.id}: disarmed {len(newly_armed)} cue(s) "
-                "— project changed underneath the walk"
+        CUE_HANDLER._arm_ahead(
+            cue, should_continue=should_continue, arm_epoch=arm_epoch
+        )
+
+    def _prearm_after_advance(self):
+        """Pre-arm this node's next segment after a GO advanced the pointer
+        with nothing local to play.
+
+        Target = what the NEXT GO will dispatch on this node:
+        `_first_local_enabled_in_go_chain(next_cue_pointer)` -- None when
+        that GO is another node's too, in which case nothing is armed yet
+        (the next advance re-checks), so this never preloads a cue that is
+        many GOs away. The target AND its lookahead are armed on the same
+        PreArm:<id> background thread set_next_cue uses, with the same
+        project-generation / selection-epoch abort guards (a STOP, a load or
+        a later selection abandons it).
+
+        Nothing is armed here, synchronously: this runs inside run_command's
+        _command_lock, and an audio target spawns a player and waits for its
+        JACK ports -- a STOP or the next GO sent meanwhile would wait for the
+        whole arm (869f79ecc removed exactly that from set_next_cue). A GO
+        that lands mid-arm is safe: arm() makes it wait on the in-progress
+        arm instead of arming the cue twice.
+
+        What IS done here, on the command thread, is capturing the STOP/load
+        epoch the arm belongs to. A STOP between this GO and the thread's
+        first step must find the arm stale, not current.
+        """
+        target = self._first_local_enabled_in_go_chain(self.next_cue_pointer)
+        if target is None:
+            return
+        self._selection_epoch += 1
+        Logger.info(
+            "Pointer advanced with no local cue; pre-arming next local cue "
+            f"{target.id} ({type(target).__name__}) + lookahead"
+        )
+        threading.Thread(
+            target=self._prearm_thread,
+            args=(
+                self._prearm_segment,
+                target,
+                self._project_generation,
+                self._selection_epoch,
+                CUE_HANDLER.arm_epoch(),
+            ),
+            daemon=True,
+            name=f"PreArm:{target.id}",
+        ).start()
+
+    def _prearm_segment(self, target, project_gen, selection_epoch, arm_epoch):
+        """PreArm:<id> body for _prearm_after_advance: arm the segment's
+        first cue, then the lookahead from it.
+
+        It never disarms. If a STOP or a load lands while the target is
+        arming, CUE_HANDLER.arm() abandons that arm itself: the cue is never
+        published, so the restarted run's GO arms it fresh and nothing can
+        cut it afterwards (869f9wqpn; see _prearm_lookahead).
+        """
+
+        def should_continue():
+            return (
+                self._project_generation == project_gen
+                and self._selection_epoch == selection_epoch
             )
+
+        if not should_continue():
+            return
+        if not CUE_HANDLER.find_armed_cue(target):
+            # A walk, so arm()'s own post_go / action-target recursion obeys
+            # the same guards and the same epoch (869f79ecc).
+            walk = _ArmWalk(should_continue=should_continue, epoch=arm_epoch)
+            CUE_HANDLER.arm(target, init=True, walk=walk)
+        # The epoch moves when a STOP BEGINS (stop_all_cues), before the
+        # generation does (ready_script): check it too, or the walk would
+        # start inside the teardown.
+        if not should_continue() or CUE_HANDLER.arm_epoch() != arm_epoch:
+            return
+        self._prearm_lookahead(target, project_gen, selection_epoch, arm_epoch)
 
     def _handle_cue_enabled(self, value):
         """Handle cue_enabled toggle from Controller.
@@ -1242,7 +1708,7 @@ class NodeEngine(BaseEngine):
                 and CUE_HANDLER.find_armed_cue(cue)
                 and not getattr(cue, "_playing", False)
             ):
-                CUE_HANDLER.disarm(cue)
+                CUE_HANDLER.disarm(cue, reason="disabled")
                 Logger.info(f"Disarmed disabled cue {cue.id}")
             # Recalculate next_cue_pointer if the disabled cue was next
             if self.next_cue_pointer and self.next_cue_pointer.id == cue.id:
@@ -1255,9 +1721,12 @@ class NodeEngine(BaseEngine):
             # (arm() is slow — media loading, process spawning).
             if cue._local and not CUE_HANDLER.find_armed_cue(cue):
                 gen = self._project_generation
+                # Captured by the spawner -- the command thread, or an
+                # ActionCue's own thread (_action_result_sink) -- not by the
+                # ReArm thread when it gets to run.
                 threading.Thread(
                     target=self._arm_with_enabled_guard,
-                    args=(cue, gen),
+                    args=(cue, gen, CUE_HANDLER.arm_epoch()),
                     daemon=True,
                     name=f"ReArm:{cue.id}",
                 ).start()
@@ -1272,8 +1741,12 @@ class NodeEngine(BaseEngine):
     #########################
     # Script logic
     #########################
-    def ready_script(self):
-        """Check if the script is ready to be played"""
+    def ready_script(self, reason: str = "ready_script"):
+        """Check if the script is ready to be played.
+
+        ``reason`` is passed to disarm_all so its log names the caller
+        (``load``, ``stop``).
+        """
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
             return
@@ -1283,7 +1756,7 @@ class NodeEngine(BaseEngine):
         self.go_offset = 0
         self._project_generation += 1  # Abort in-flight daemon arm threads
         self.unload_video_devs()
-        CUE_HANDLER.disarm_all()
+        CUE_HANDLER.disarm_all(reason=reason)
 
         # Reset mixer volumes to default when preparing script
         mixer_client = PLAYER_HANDLER.get_audio_mixer_client()
@@ -1304,6 +1777,8 @@ class NodeEngine(BaseEngine):
             self.next_cue_pointer = first_enabled
 
         Logger.info(f"Script {self.script.name} loaded and ready to be played")
+        # Measurement only: what the load / STOP re-arm left armed.
+        CUE_HANDLER.log_armed_inventory(reason)
 
     def _resolve_go_anchor(self, value):
         """Resolve the GO_mtc anchor for this GO.
@@ -1340,6 +1815,16 @@ class NodeEngine(BaseEngine):
         return local
 
     def go_script(self, value):
+        try:
+            self._go_script(value)
+        finally:
+            # Measurement only: what this node holds armed once the GO is
+            # done (dispatched, nothing local, or skipped). go()'s own
+            # lookahead is synchronous, so it is included.
+            if self.script:
+                CUE_HANDLER.log_armed_inventory("GO")
+
+    def _go_script(self, value):
         if not self.script:
             Logger.warning("No script loaded, cannot process GO command.")
             return
@@ -1421,6 +1906,12 @@ class NodeEngine(BaseEngine):
                 f"nothing to play on this node. Advanced next cue to "
                 f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
             )
+            # ...and arm what the NEXT GO will dispatch here, now: nothing
+            # else would (load/STOP pre-arm stops at another node's pause,
+            # the controller never forwards setnextcue on an advance, and
+            # the UI / power-bridge GO is a bare GO). Medina sala1,
+            # 2026-09-30: the node's first cue fired 240 ms late otherwise.
+            self._prearm_after_advance()
             return
 
         if walked:
@@ -1431,9 +1922,15 @@ class NodeEngine(BaseEngine):
 
         if not CUE_HANDLER.find_armed_cue(cue_to_go):
             Logger.info(f"Cue {cue_to_go.id} not armed, re-arming before GO")
+            # Asked before the arm: by the time arm() gives up, the arm it
+            # waited on may have finished, and the skip line must not then
+            # call a slow arm a failed one.
+            was_in_flight = CUE_HANDLER.describe_arm_in_flight(cue_to_go)
             CUE_HANDLER.arm(cue_to_go, init=True)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
-                Logger.error(f"Failed to re-arm cue {cue_to_go.id}, cannot GO")
+                self._skip_unarmed_cue(
+                    cue_to_go, skipped_disabled, GO_mtc, was_in_flight
+                )
                 return
 
         # Update state
@@ -1473,6 +1970,47 @@ class NodeEngine(BaseEngine):
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
 
+    def _skip_unarmed_cue(self, cue, skipped_disabled, go_mtc, was_in_flight):
+        """A GO found its cue unarmed and could not get it armed: skip the
+        cue on this node, keep the pointer in lockstep, and say so.
+
+        Decided 2026-09-30 (Ion, 869f9wqpn): arm() waits up to 5 s for an arm
+        another thread holds, and 5 s is plenty for a slow load -- one still
+        in flight after that counts as failed for this GO. Returning here
+        without moving the pointer, as this used to, made the node dispatch
+        this cue on the NEXT GO and run one GO behind the controller until a
+        STOP. Nothing is stopped and the running status is not touched.
+
+        ongoing_cue is set as on the success path: if the pointer becomes
+        None, the next GO must read "No more cues", not "first GO" (which
+        would restart this node from the top of the script).
+        """
+        in_flight = CUE_HANDLER.describe_arm_in_flight(cue)
+        if in_flight:
+            why = f"its arm is still in flight, {in_flight}"
+        elif was_in_flight:
+            why = "the arm it waited on did not deliver the cue in time"
+        else:
+            why = "its arm failed"
+        # Nothing dispatches here, so nothing would mint a pass: stamp the
+        # disabled cues the walk passed, as the no-local branch does, or
+        # enabling one mid-show could never put it back into this GO's chain.
+        if skipped_disabled:
+            CUE_HANDLER.stamp_pass(skipped_disabled, go_mtc)
+        self.ongoing_cue = cue
+        self.next_cue_pointer = cue.get_next_cue()
+        self._broadcast_nextcue()
+        next_id = self.next_cue_pointer.id if self.next_cue_pointer else "none"
+        Logger.error(
+            f"Cue {cue.id} ({type(cue).__name__}, "
+            f'"{getattr(cue, "name", "")}") SKIPPED on this node: it could '
+            f"not be armed in time for this GO ({why}). "
+            f"Pointer advanced to {next_id}."
+        )
+        # The skip never reaches go()'s own lookahead: arm what the next GO
+        # will dispatch here, or it would arm at GO time and start late.
+        self._prearm_after_advance()
+
     def stop_playback(self, value=None):
         """Stop playback, full cleanup, then re-arm so GO is available again.
 
@@ -1505,7 +2043,7 @@ class NodeEngine(BaseEngine):
 
         # Reset state + disarm + volume reset + re-arm cues
         if self.script:
-            self.ready_script()
+            self.ready_script(reason="stop")
             Logger.info(f"Project {self.script.name} reset and ready for GO.")
 
             # Notify Controller that re-arm is complete (GO button can go

@@ -31,7 +31,8 @@ If this file and that document conflict, the planning document wins.
 11. [Review Process](#11-review-process)
 12. [Changelog Line](#12-changelog-line)
 13. [Dependency Governance](#13-dependency-governance)
-14. [License](#14-license)
+14. [Releasing 0.1.1](#14-releasing-011)
+15. [License](#15-license)
 
 ---
 
@@ -66,7 +67,7 @@ pyenv local 3.11
 poetry install
 
 # Link the source tree into your environment for live editing
-bash scripts/link-dev.sh
+bash dev/scripts/link-dev.sh
 
 # Verify the test suite is green before making any changes
 poetry run pytest
@@ -155,20 +156,39 @@ Your git log on the feature branch MUST show this order. The PR template asks fo
 the commit SHA of your failing-test commit. Reviewers will check it.
 
 ```bash
-# Run only unit tests (fast feedback loop)
-poetry run pytest -m "not integration"
+# Fast feedback loop: unit and contract tests, no network needed
+poetry run pytest tests/unit tests/contract -n auto --dist loadfile
 
-# Run the full suite including integration tests
-poetry run pytest
+# Integration tests (real sockets, subprocesses, JACK); `slow` ones are for a rig
+poetry run pytest tests/integration -m "not slow" --dist loadfile
+
+# The full suite
+poetry run pytest -n auto --dist loadfile
 
 # Run with coverage report
 poetry run pytest --cov=src --cov-report=term-missing
 ```
 
-Integration tests (`@pytest.mark.integration`) MUST run against real subsystems —
+**Where a test goes.** Tests live in `tests/unit/`, `tests/integration/` or `tests/contract/`, and the
+directory decides the marker (no hand-written `unit`/`integration` marks; a test file at the root of
+`tests/` is a collection error). A test is integration if it binds or connects a real socket, starts a
+real subprocess or player, touches JACK or ALSA, or relies on a `sleep` ≥ 0.5 s; contract if it asserts a
+repository or packaging invariant; everything else is unit, and mocks what it would otherwise touch.
+Name the file after the source module it covers (`test_<module>.py`). **If you work on `rc_1`**: put new
+tests in those three directories, never in the root of `tests/`. See [`tests/README.md`](tests/README.md).
+
+Integration tests (the `tests/integration/` ones) MUST run against real subsystems —
 no mocks for OSC, NNG, or subprocess boundaries. See
 [`specs/planning/contributor-workflow.md §6`](specs/planning/contributor-workflow.md)
 for the full integration test policy.
+
+**Test cleanup.** `tests/conftest.py` keeps interrupted runs from leaving engines, players or
+threads behind: it registers a `SIGINT` handler (Ctrl+C) that runs every registered cleanup, and
+two fixtures hand resources over to it. Use `engine_cleanup` for any test that starts a
+`ControllerEngine` or `NodeEngine` (`engine = engine_cleanup(ControllerEngine(with_mtc=False))`; no
+manual `stop()`), and `process_cleanup` for any `multiprocessing.Process` a test starts. Run the
+parallel suite with `-n auto --dist loadfile`: `tests/unit/test_port_handler.py` picks real ports and
+two of its tests on different workers collide.
 
 ---
 
@@ -318,7 +338,26 @@ but still require a one-line justification in the PR description.
 
 ---
 
-## 14. License
+## 14. Releasing 0.1.1
+
+0.1.1 is published only after the pre-publication gate (`.github/workflows/ci.yml`) has been green on the
+post-merge `feat/xml-refactor` head. The checklist, in order:
+
+1. **#24 has landed** on the structure in
+   `specs/009-release-line-reconciliation/upstream-reports/rc_1-mock-nodeconf-structure.md`, after
+   cuems-nodeconf's consolidation.
+2. **Dispatch `ci.yml`** on the post-merge `feat/xml-refactor` head with `cuemsutils_ref` set to cuems-utils'
+   reconciled tag, and confirm it is green. The gate summary records the engine SHA, the cuems-utils ref and
+   commit, the counts per job, the strict xfails (they must show only the lock test) and whether the changelog
+   test ran or skipped.
+3. **Only then** publish to PyPI and upload the `.deb`.
+
+Every host in a cluster must be upgraded together: the GO payload carries `run_seq`, and an engine before
+`0.1.0rc6-3` is not wire-compatible with it.
+
+---
+
+## 15. License
 
 cuems-engine is licensed under the GNU General Public License v3.0 (GPL-3.0).
 By contributing, you agree that your contributions will be licensed under GPL-3.0.

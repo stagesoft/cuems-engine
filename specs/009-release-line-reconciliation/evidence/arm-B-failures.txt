@@ -1,0 +1,10 @@
+tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_out_is_stop_and_disarms_its_target
+tests/test_cluster_identity.py::test_script_finished_from_str_senders_closes_the_run
+tests/test_identity_sweep.py::test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id
+tests/test_loop_video_wraparound.py::test_counted_loop_wraps_then_clamps_on_its_last_pass
+tests/test_loop_video_wraparound.py::test_infinite_loop_keeps_wrapping
+tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-25]
+tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-30]
+tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-25]
+tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-30]
+tests/test_media_duration.py::test_run_with_no_duration_is_zero_and_warned[video]

@@ -16,7 +16,7 @@ PATTERNS=(
     "pytest.*cuems"
     "python.*cuems"
     "cuems-audioplayer"
-    "videoplayer-cuems"
+    "cuems-videocomposer"
     "cuems-dmxplayer"
     "ControllerEngine"
     "NodeEngine"

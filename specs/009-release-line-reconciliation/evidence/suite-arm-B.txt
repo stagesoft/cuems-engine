@@ -1,0 +1,80 @@
+# arm B — merge commit 1c12959 (stub applied)
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122
+cuemsutils.__version__: 0.1.1
+
+## pass 1: not integration
+                Logger.info(
+                    f"Video cue {cue.id} is dark on this node (outputs not driven:"
+                    f" {unrouted}); timeline kept, nothing sent"
+                )
+            else:
+                Logger.error(f"Video cue {cue.id} has no layers or no OSC client")
+            return
+    
+        client = cue._osc
+    
+        # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
+        # enabled on the videocomposer BEFORE the layer starts following MTC below.
+        # Otherwise there's a race: the layer follows MTC (mtcfollow=1) from here,
+        # but /loop is only sent later by loop_videoCue() — which go_threaded calls
+        # AFTER the postwait sleep. In that window the VC has wraparound_=false, so
+        # when the media frame overshoots its length it CLAMPS to the last frame
+        # (LayerPlayback: adjustedFrame = totalFrames-1) and the video visibly
+        # freezes on the final frame until loop_videoCue() finally sends /loop.
+        # Sending it here closes the race so the first loop wraps cleanly. Finite
+        # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
+        loop_early = getattr(cue, "loop", 1) < 1
+    
+        # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
+        # enabled on the videocomposer BEFORE the layer starts following MTC below.
+        # Otherwise there's a race: the layer follows MTC (mtcfollow=1) from here,
+        # but /loop is only sent later by loop_videoCue() — which go_threaded calls
+        # AFTER the postwait sleep. In that window the VC has wraparound_=false, so
+        # when the media frame overshoots its length it CLAMPS to the last frame
+        # (LayerPlayback: adjustedFrame = totalFrames-1) and the video visibly
+        # freezes on the final frame until loop_videoCue() finally sends /loop.
+        # Sending it here closes the race so the first loop wraps cleanly. Finite
+        # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
+        loop_early = getattr(cue, "loop", 1) < 1
+    
+        # Re-apply position for each layer before making visible (layer may not
+        # have been ready when position was set during arm). Each layer's output
+        # comes from the arm, by layer id: with an unrouted output skipped, layer
+        # i is no longer output i (869fgq3xv).
+        layer_outputs = getattr(cue, "_layer_outputs", None) or {}
+>       media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
+        ^^^^^^^^^^^^^^^^
+E       ValueError: not enough values to unpack (expected 2, got 0)
+src/cuemsengine/cues/run_cue.py:509: ValueError
+------------------------------ Captured log call -------------------------------
+INFO     cuemsengine.cues.run_cue:test_media_duration.py:72 Running video cue c8e7a017-fe86-4975-a26c-7a34c369b5c5
+WARNING  cuemsengine.cues.helpers:run_cue.py:463 Cue c8e7a017-fe86-4975-a26c-7a34c369b5c5 has no media duration (empty <duration/>); treating it as zero
+=============================== warnings summary ===============================
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cluster_identity.py::test_script_finished_from_str_senders_closes_the_run
+FAILED tests/test_identity_sweep.py::test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id
+FAILED tests/test_loop_video_wraparound.py::test_counted_loop_wraps_then_clamps_on_its_last_pass
+FAILED tests/test_loop_video_wraparound.py::test_infinite_loop_keeps_wrapping
+FAILED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-25]
+FAILED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:00:12.500-30]
+FAILED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-25]
+FAILED tests/test_media_duration.py::test_run_sets_end_to_start_plus_converted_duration[video-00:01:00.000-30]
+FAILED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_out_is_stop_and_disarms_its_target
+FAILED tests/test_media_duration.py::test_run_with_no_duration_is_zero_and_warned[video]
+=========== 10 failed, 1395 passed, 1 xfailed, 46 warnings in 15.91s ===========
+
+## pass 2: integration and not slow
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 1444 items / 1412 deselected / 32 selected
+tests/test_core_baseengine.py .....                                      [ 15%]
+tests/test_cuems_deploy_integration.py .                                 [ 18%]
+tests/test_project_load.py .....................                         [ 84%]
+tests/test_pythonosc.py .....                                            [100%]
+=============================== warnings summary ===============================
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============== 32 passed, 1412 deselected, 46 warnings in 7.69s ===============

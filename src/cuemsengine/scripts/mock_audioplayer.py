@@ -3,13 +3,16 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 Mock cuems-audioplayer replacement for headless/cloud deployments.
 
 Accepts the same CLI as cuems-audioplayer, starts an OSC UDP server on the
 assigned port, logs all received commands, and stays alive until /quit or
-SIGTERM.
+SIGTERM. Like the real player it opens the JACK client Audio_Player-<uuid>
+with ports "outport 0" and "outport 1" and prints "[OK] RUNNING!", so the
+engine wires it into the mixer instead of timing out (see mock_jack).
 """
 
 import argparse
@@ -20,6 +23,8 @@ import threading
 from cuemsutils.log import Logger
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
+
+from cuemsengine.scripts.mock_jack import open_jack_client, report_ready
 
 
 def _make_handler(name: str):
@@ -74,6 +79,12 @@ def main():
     server = BlockingOSCUDPServer(("0.0.0.0", args.port), dispatcher)
     server_ref.append(server)
 
+    # Same client and port names as cuems-audioplayer (main.cpp, RtAudio).
+    client_name = f"Audio_Player-{args.uuid}" if args.uuid else "Audio_Player"
+    jack_client = open_jack_client(  # noqa: F841 -- keeps the ports alive
+        client_name, outputs=("outport 0", "outport 1")
+    )
+
     def handle_signal(signum, frame):
         Logger.info(f"[mock-audioplayer] signal {signum}, shutting down")
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -82,6 +93,7 @@ def main():
     signal.signal(signal.SIGINT, handle_signal)
 
     Logger.info(f"[mock-audioplayer] listening on port {args.port}")
+    report_ready()
     server.serve_forever()
     Logger.info("[mock-audioplayer] stopped")
     sys.exit(0)

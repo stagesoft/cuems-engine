@@ -19,6 +19,28 @@ import pytest
 # Store references to cleanup functions
 _cleanup_functions = []
 
+# The directory decides the marker (contract C2): tests/unit, tests/integration
+# and tests/contract. An item anywhere else is an error naming the file; it never
+# falls back to "unit" silently.
+_KINDS = ("unit", "integration", "contract")
+
+
+def pytest_collection_modifyitems(config, items):
+    root = Path(__file__).resolve().parent
+    for item in items:
+        try:
+            relative = Path(str(item.path)).resolve().relative_to(root)
+        except ValueError:
+            continue  # collected from outside tests/
+        kind = relative.parts[0] if len(relative.parts) > 1 else None
+        if kind not in _KINDS:
+            raise pytest.UsageError(
+                f"{item.path}: tests belong in tests/unit, tests/integration or "
+                f"tests/contract (see tests/README.md)"
+            )
+        item.add_marker(getattr(pytest.mark, kind))
+
+
 # WATCHDOG: last-resort guard against a hang in the cleanup phase.
 #
 # There used to be a second guard here: an absolute 60s wall-clock cap that
@@ -320,7 +342,7 @@ def engine_cleanup():
             # Stop OSCQuery and hand its ports back to PORT_HANDLER
             if hasattr(engine, "oscquery_server"):
                 try:
-                    from .fixtures import _ossia_release
+                    from tests.support.fixtures import _ossia_release
 
                     _ossia_release(engine.oscquery_server)
                 except Exception:

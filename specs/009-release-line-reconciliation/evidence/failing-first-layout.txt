@@ -1,0 +1,28 @@
+# failing-first layout (T089) — HEAD 28bf459
+cuems-utils HEAD: aafb3b9aaafc2caccc4bb85ebce56039eb6b0ce7
+cuemsutils.__version__: 0.1.1
+
+FFF.FF                                                                   [100%]
+=================================== FAILURES ===================================
+E   AssertionError: test files at the root of tests/: ['test_action_cue.py', 'test_arm_inventory.py', 'test_arm_publish_gate.py', 'test_arm_resilience.py', 'test_arm_video_cue_opacity_deploy.py', 'test_arm_wait_messages.py', 'test_chain_anchoring.py', 'test_chain_epoch.py', 'test_changelog_complete.
+    assert not ['test_action_cue.py', 'test_arm_inventory.py', 'test_arm_publish_gate.py', 'test_arm_resilience.py', 'test_arm_video_cue_opacity_deploy.py', 'test_arm_wait_messages.py', ...]
+/disk/Projects/StageLab/cuems-engine/tests/test_layout.py:63: AssertionError: test files at the root of tests/: ['test_action_cue.py', 'test_arm_inventory.py', 'test_arm_publish_gate.py', 'test_arm_resilience.py', 'test_arm_video_cue_opacity_deploy.py', 'test_arm_wait_messages.py', 'test_chain_ancho
+E   AssertionError: unit-marked items outside tests/unit/: ['tests/test_lock_is_current.py::test_poetry_lock_is_current']
+    assert not ['tests/test_lock_is_current.py::test_poetry_lock_is_current']
+/disk/Projects/StageLab/cuems-engine/tests/test_layout.py:70: AssertionError: unit-marked items outside tests/unit/: ['tests/test_lock_is_current.py::test_poetry_lock_is_current']
+E   AssertionError: integration-marked items outside tests/integration/: ['tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_with_all_components', 'tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_without_mtc', 'tests/test_core_baseengine.py
+    assert not ['tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_with_all_components', 'tests/test_cor...y::test_get_status_endpoints', 'tests/test_cpu_usage.py::TestBaseEngineCPUUsage::test_base_engine_idle_cpu_usage', ...]
+/disk/Projects/StageLab/cuems-engine/tests/test_layout.py:70: AssertionError: integration-marked items outside tests/integration/: ['tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_initialization_with_all_components', 'tests/test_core_baseengine.py::TestBaseEngine::test_base_engine_i
+E   AssertionError: items with none of ('unit', 'integration', 'contract'): ['tests/test_action_cue.py::TestPlayAction::test_play_starts_target', 'tests/test_action_cue.py::TestPlayAction::test_play_disabled_target_fails', 'tests/test_action_cue.py::TestPlayAction::test_play_threads_frozen_mtc_ms', 
+    assert not ['tests/test_action_cue.py::TestPlayAction::test_play_starts_target', 'tests/test_action_cue.py::TestPlayAction::test_...t_play_arm_raises_returns_failed', 'tests/test_action_cue.py::TestPlayAction::test_play_go_raises_returns_failed', ...]
+/disk/Projects/StageLab/cuems-engine/tests/test_layout.py:83: AssertionError: items with none of ('unit', 'integration', 'contract'): ['tests/test_action_cue.py::TestPlayAction::test_play_starts_target', 'tests/test_action_cue.py::TestPlayAction::test_play_disabled_target_fails', 'tests/test_action_
+E   AssertionError: hand-built fixture paths: ['fixtures.py: test_xml_files', 'network_map_helpers.py: test_xml_files', 'test_action_cue.py: test_xml_files', 'test_cluster_identity.py: test_xml_files', 'test_cluster_status_contract.py: test_xml_files', 'test_cluster_warning.py: test_xml_files', 'tes
+    assert not ['fixtures.py: test_xml_files', 'network_map_helpers.py: test_xml_files', 'test_action_cue.py: test_xml_files', 'test_...py: test_xml_files', 'test_cluster_status_contract.py: test_xml_files', 'test_cluster_warning.py: test_xml_files', ...]
+/disk/Projects/StageLab/cuems-engine/tests/test_layout.py:96: AssertionError: hand-built fixture paths: ['fixtures.py: test_xml_files', 'network_map_helpers.py: test_xml_files', 'test_action_cue.py: test_xml_files', 'test_cluster_identity.py: test_xml_files', 'test_cluster_status_contract.py: test_x
+=========================== short test summary info ============================
+FAILED tests/test_layout.py::test_no_test_file_sits_at_the_root_of_tests - As...
+FAILED tests/test_layout.py::test_each_directory_holds_only_items_of_its_own_marker[unit]
+FAILED tests/test_layout.py::test_each_directory_holds_only_items_of_its_own_marker[integration]
+FAILED tests/test_layout.py::test_every_item_has_exactly_one_kind - Assertion...
+FAILED tests/test_layout.py::test_the_fixture_directory_is_spelled_only_in_support_paths
+5 failed, 1 passed in 10.22s

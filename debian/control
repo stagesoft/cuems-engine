@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 Source: cuems-engine
 Section: python
 Priority: optional
@@ -42,8 +45,7 @@ Description: CUEMS Engine - Engine infrastructure of the CueMS system
  .
  This package installs into the /usr/lib/cuems/ virtual environment
  provided by cuems-utils. Console scripts are installed to
- /usr/lib/cuems/bin/node-engine, /usr/lib/cuems/bin/controller-engine,
- and /usr/lib/cuems/bin/system-ports.
+ /usr/lib/cuems/bin/node-engine and /usr/lib/cuems/bin/controller-engine.
  .
  The systemd service files are provided by cuems-common and run the
  respective console scripts.
@@ -52,10 +54,10 @@ Package: cuems-engine-mock
 Architecture: all
 Depends: ${misc:Depends},
          cuems-engine (>= 0.1.1)
-Conflicts: cuems-audioplayer
+Conflicts: cuems-audioplayer, cuems-dmxplayer
 Description: CUEMS Engine Mock Players
- Mock replacement binaries for audioplayer-cuems, jack-volume,
- dmxplayer-cuems and videocomposer. Install alongside cuems-engine
+ Mock replacement binaries for cuems-audioplayer, jack-volume,
+ cuems-dmxplayer and videocomposer. Install alongside cuems-engine
  on headless or cloud servers where audio and video hardware is absent.
  .
  Installs log-only OSC services at the binary paths configured in

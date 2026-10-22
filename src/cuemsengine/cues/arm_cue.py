@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
 
@@ -144,19 +145,50 @@ def arm_videoCue(cue: VideoCue):
         return
 
     video_path = PLAYER_HANDLER.media_path(cue.media["file_name"])
-    media_w, media_h = PLAYER_HANDLER.media_dimensions(cue.media["file_name"])
+    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
+    # Every arm starts clean, so a re-arm never carries an earlier arm's
+    # lists. _placement_failed: layers whose placement/scale could not be
+    # applied. _layer_outputs: layer id -> output name, for the GO re-apply.
+    # _unrouted_outputs: outputs this node doesn't drive, never loaded.
     cue._layer_ids = []
+    cue._layer_outputs = {}
+    cue._placement_failed = []
+
+    # An output this node doesn't drive is never loaded (869fgq3xv): with no
+    # position/scale the videocomposer letterboxes a layer onto the whole
+    # canvas, i.e. onto the screens that do work. The cue still arms, so it
+    # neither holds the GO gate nor sends GO into the fallback re-arm, and
+    # run_videoCue keeps its place on the timeline.
+    routed, unrouted = PLAYER_HANDLER.partition_cue_outputs(cue, output_names)
+    cue._unrouted_outputs = [output_name for output_name, _ in unrouted]
+    for output_name, reason in unrouted:
+        _log_unrouted(
+            cue,
+            output_name,
+            f'output "{output_name}" is not driven by this node ({reason}):'
+            " layer NOT loaded, this output stays dark",
+        )
+    if not routed:
+        _log_unrouted(
+            cue,
+            None,
+            "no output of this cue is driven by this node: nothing loaded; the"
+            " cue keeps its place on the timeline",
+        )
+        return
 
     driver_layer_id = None
-    for index, output_name in enumerate(output_names):
+    for index, output_name, output in routed:
+        # The layer id keeps the output's position in the cue, so ids do not
+        # shift when an earlier output is dead.
         layer_id = f"{cue.id}_{index}"
 
-        if index == 0:
-            # First output: normal load (creates decoder)
+        if driver_layer_id is None:
+            # First routed output: normal load (creates decoder)
             client.set_value("/videocomposer/layer/load", [video_path, layer_id])
             driver_layer_id = layer_id
         else:
-            # Subsequent outputs: share decoder from first layer
+            # Subsequent outputs: share decoder from the driver layer
             client.set_value(
                 "/videocomposer/layer/load_shared",
                 [video_path, layer_id, driver_layer_id],
@@ -174,26 +206,43 @@ def arm_videoCue(cue: VideoCue):
         opacity = getattr(cue, "opacity", 100)
         client.set_value(f"{layer_path}/opacity", opacity / 100.0)
 
+        # The output resolved; a failure from here on is a placement failure
+        # and the layer still plays (869f8hfra: a wrong-sized video beats no
+        # video in a live show).
         try:
-            output = PLAYER_HANDLER.resolve_video_output_for_cue(cue, output_name)
             x, y = output.get_layer_placement()
             client.set_value(f"{layer_path}/position", [x, y])
             sx, sy = output.get_layer_scale(media_w, media_h)
             client.set_value(f"{layer_path}/scale", [sx, sy])
         except (KeyError, RuntimeError, ValueError) as e:
-            Logger.warning(
-                f'Video output "{output_name}" placement/scale failed'
-                f"({type(e).__name__}: {e}), skipping for layer {layer_id}"
+            cue._placement_failed.append(layer_id)
+            Logger.error(
+                f'Video cue {cue.id} layer {layer_id} on output "{output_name}":'
+                f" position/scale NOT applied, either may be left at its default"
+                f" ({type(e).__name__}: {e})"
             )
         except Exception:
+            cue._placement_failed.append(layer_id)
             Logger.exception(
                 f"Unexpected error setting placement/scale for layer"
-                f'{layer_id} (output "{output_name}")'
+                f' {layer_id} (output "{output_name}"): NOT applied'
             )
 
         PLAYER_HANDLER.register_layer(layer_id)
         cue._layer_ids.append(layer_id)
+        cue._layer_outputs[layer_id] = output_name
 
+    unrouted_note = f", {len(unrouted)} output(s) unrouted" if unrouted else ""
     Logger.info(
-        f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s) for {video_path}"
+        f"Video cue {cue.id} armed: {len(cue._layer_ids)} layer(s){unrouted_note}"
+        f" for {video_path}"
     )
+
+
+def _log_unrouted(cue: VideoCue, output_name, message: str) -> None:
+    """ERROR the first time in a load, DEBUG on every re-arm after it."""
+    text = f'Video cue {cue.id} "{getattr(cue, "name", "")}": {message}'
+    if PLAYER_HANDLER.first_unrouted_report(cue.id, output_name):
+        Logger.error(text)
+    else:
+        Logger.debug(text)

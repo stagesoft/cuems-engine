@@ -27,7 +27,7 @@ case "$1" in
 
         echo "cuems-engine installed successfully."
         echo "Package: cuemsengine installed to $CUEMS_VENV/lib/python*/site-packages/"
-        echo "Console scripts: $CUEMS_VENV/bin/controller-engine, $CUEMS_VENV/bin/node-engine, $CUEMS_VENV/bin/system-ports"
+        echo "Console scripts: $CUEMS_VENV/bin/controller-engine, $CUEMS_VENV/bin/node-engine"
         echo "Service files provided by cuems-common package."
 
         # Enable and (re)start the services

@@ -1,6 +1,29 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.1.0 → 1.2.0
+Status: MINOR amendment — test layout standard materially expanded; stale path corrected
+(feature 009, FR-046, research R8)
+
+Modified sections:
+  - Technology Standards, Test framework: tests split by kind (unit / integration / contract),
+    with support/ and data/; the directory decides the marker (was: mirror src/cuemsengine/)
+  - Technology Standards, Distribution; Development Workflow §6: scripts/link-dev.sh →
+    dev/scripts/link-dev.sh (path corrected, rule unchanged)
+No principle is touched.
+
+Added sections: none
+Removed sections: none
+
+Templates reviewed:
+  ✅ .specify/templates/plan-template.md — no test-layout statement; no update needed
+  ✅ .specify/templates/spec-template.md — no update needed
+  ✅ .specify/templates/tasks-template.md — no update needed
+  ✅ No command template files found in .specify/templates/commands/
+
+Deferred TODOs: none
+
+--- Previous report (1.0.0 → 1.1.0) ---
 Version change: 1.0.0 → 1.1.0
 Status: MINOR amendment — new mandatory Development Workflow rule added
 
@@ -114,12 +137,15 @@ to a running show.
 
 - **Language**: Python 3.11 (managed via pyenv; virtualenv via Poetry).
 - **Packaging**: Poetry (`pyproject.toml`). No ad-hoc `setup.py` additions.
-- **Test framework**: pytest. Test files live under `tests/` at repository root, mirroring
-  `src/cuemsengine/` structure.
+- **Test framework**: pytest. Test files live under `tests/` at the repository root, split by
+  kind into `tests/unit/`, `tests/integration/` and `tests/contract/`, with helpers in
+  `tests/support/` and fixtures in `tests/data/`. The directory decides the marker, and each
+  module is named after the source module it covers (`test_<module>.py`). The classification
+  rule in `specs/009-release-line-reconciliation/contracts/test-layout.md` is the reference.
 - **Linting / formatting**: Enforced via project toolchain; CI MUST block on lint failures.
 - **Communication**: OSC for real-time engine-to-node messaging; XML (`settings.xml`) for
   static configuration.
-- **Distribution**: Debian package (`cuems-engine` deb). The `scripts/link-dev.sh` symlink
+- **Distribution**: Debian package (`cuems-engine` deb). The `dev/scripts/link-dev.sh` symlink
   workflow MUST remain supported for developer iteration.
 - **License**: GPL-3.0. All new source files MUST carry the appropriate SPDX header.
 
@@ -136,7 +162,7 @@ No new runtime dependency MAY be added without a documented justification and te
    receive at least one peer review.
 5. **Commit hygiene**: Commits MUST be atomic (one logical change), with a conventional-commit
    style message. Force-pushes to `master` are forbidden.
-6. **Dev install**: Use `scripts/link-dev.sh` during development; never commit changes that
+6. **Dev install**: Use `dev/scripts/link-dev.sh` during development; never commit changes that
    only work with the installed deb package.
 7. **Specification & Planning Layout**: Project documentation artifacts MUST be partitioned by
    audience and lifecycle:
@@ -175,4 +201,4 @@ All PRs and code reviews MUST verify compliance with the principles above. Compl
 violations must be documented in the plan's Complexity Tracking table before merging.
 Runtime development guidance lives in `.specify/memory/` and agent configuration files.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-27 | **Last Amended**: 2026-05-14
+**Version**: 1.2.0 | **Ratified**: 2026-04-27 | **Last Amended**: 2026-10-22

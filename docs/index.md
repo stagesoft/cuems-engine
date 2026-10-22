@@ -47,7 +47,7 @@ A single `GO` press:
 1. **Controller** resolves the current cue pointer, verifies all required nodes are armed, and broadcasts a `COMMAND/GO`.
 2. **Node Engine** receives the command, identifies the first local cue in the `post_go='go'` chain, and fires it with a frozen MTC timestamp.
 3. **Player subprocesses** start their media aligned to that MTC snapshot; all nodes play in sync regardless of network latency.
-4. **Status** flows back over NNG (`armed_ready`, `script_finished`, cue-level events) to update the controller's state machine and the editor UI.
+4. **Status** flows back over NNG (`armed_ready`, `stop_project`, `follow`, cue-level events) to update the controller's state machine and the editor UI.
 
 ---
 
@@ -95,7 +95,7 @@ A single `GO` press:
   canvas setup, and OSC communication.
 - **`AudioMixer`** — JACK-based audio mixing, routing, and graph validation.
 - **`JackConnectionManager`** — JACK port management with self-heal on stale clients.
-- **`AudioPlayer`** / **`VideoPlayer`** / **`DmxPlayer`** — subprocess wrappers.
+- **`AudioPlayer`** / **`DmxPlayer`** — subprocess wrappers; **`VideoClient`** / **`VideoOutput`** — the videocomposer's OSC client and its display outputs.
 - **`GradientClient`** — fire-and-forget UDP OSC client for `gradient-motiond`;
   uses explicit `int64` for `start_mtc_ms` to avoid truncation above 2³¹ ms.
 
@@ -152,6 +152,10 @@ submits an asyncio coroutine to the engine's shared event loop via
 `run_coroutine_threadsafe`. The caller blocks on `.result()`; the loop stays
 free for NNG heartbeats throughout. An SC-001 integration test verifies ≤ ±20 %
 heartbeat jitter during a concurrent multi-GB transfer.
+
+### Unattended playback: authored end of show, loop-back
+
+After the last cue the engine keeps `running = yes` by design: the operator decides when a show is over. A show that must end without an operator says so in its script with a project-scope **`stop_project`** ActionCue, which the controller turns into its own STOP (every node reports the cue, the first valid report wins); a show that must loop uses an ActionCue `play` aimed at its first cue. Recipes, journal lines and version requirements: [Unattended playback](unattended-playback.md).
 
 ### FadeCue and gradient-motiond integration
 

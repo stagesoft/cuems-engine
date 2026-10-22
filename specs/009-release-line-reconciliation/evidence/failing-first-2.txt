@@ -1,0 +1,40 @@
+# failing-first #2 (T026a) — worktree at e994a5e (VideoPlayer still present)
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /tmp/claude-1000/-disk-Projects-StageLab-cuems-engine/fb57d86a-231d-4f59-bb70-18714004de2e/scratchpad/tmp.yoGHRadVFf/red2
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 3 items
+tests/test_dead_videoplayer_removed.py FFF                               [100%]
+=================================== FAILURES ===================================
+_______________ test_the_players_package_exports_no_videoplayer ________________
+tests/test_dead_videoplayer_removed.py:28: in test_the_players_package_exports_no_videoplayer
+    assert "VideoPlayer" not in cuemsengine.players.__all__
+E   AssertionError: assert 'VideoPlayer' not in ['AudioClient', 'AudioPlayer', 'DmxClient', 'DmxPlayer', 'VideoClient', 'VideoPlayer']
+E    +  where ['AudioClient', 'AudioPlayer', 'DmxClient', 'DmxPlayer', 'VideoClient', 'VideoPlayer'] = <module 'cuemsengine.players' from '/tmp/claude-1000/-disk-Projects-StageLab-cuems-engine/fb57d86a-231d-4f59-bb70-18714004de2e/scratchpad/tmp.yoGHRadVFf/red2/src/cuemsengine/players/__init__.py'>.__all__
+E    +    where <module 'cuemsengine.players' from '/tmp/claude-1000/-disk-Projects-StageLab-cuems-engine/fb57d86a-231d-4f59-bb70-18714004de2e/scratchpad/tmp.yoGHRadVFf/red2/src/cuemsengine/players/__init__.py'> = cuemsengine.players
+___ test_the_videoplayer_module_keeps_its_clients_and_defines_no_videoplayer ___
+tests/test_dead_videoplayer_removed.py:36: in test_the_videoplayer_module_keeps_its_clients_and_defines_no_videoplayer
+    assert "VideoPlayer" not in classes
+E   AssertionError: assert 'VideoPlayer' not in {'VideoPlayer'}
+_______________ test_the_cue_handler_holds_no_front_video_player _______________
+tests/test_dead_videoplayer_removed.py:41: in test_the_cue_handler_holds_no_front_video_player
+    assert "_front_video_player" not in inspect.getsource(CueHandler)
+E   AssertionError: assert '_front_video_player' not in 'class CueHa...eturn None\n'
+E     
+E     '_front_video_player' is contained here:
+E        dict
+E           _front_video_player: VideoPlayer | None
+E           _lock: Lock
+E           communications_thread: NodeCommunications
+E       ...
+E     
+E     ...Full output truncated (1531 lines hidden), use '-vv' to show
+=========================== short test summary info ============================
+FAILED tests/test_dead_videoplayer_removed.py::test_the_players_package_exports_no_videoplayer
+FAILED tests/test_dead_videoplayer_removed.py::test_the_videoplayer_module_keeps_its_clients_and_defines_no_videoplayer
+FAILED tests/test_dead_videoplayer_removed.py::test_the_cue_handler_holds_no_front_video_player
+============================== 3 failed in 0.85s ===============================

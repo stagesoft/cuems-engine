@@ -1,0 +1,107 @@
+# arm A — unmodified branch @ aa0ffe6 (stub applied)
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122
+cuemsutils.__version__: 0.1.1
+
+## pass 1: not integration
+  <class 'OSError'>: [Errno 39] Directory not empty: 'rootfs'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-ac59846a-6485-4e6c-af4f-bcb48fd6cb56/test_live_defects_resolve0
+  <class 'OSError'>: [Errno 39] Directory not empty: 'test_live_defects_resolve0'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/lib/apt/lists
+  <class 'OSError'>: [Errno 39] Directory not empty: 'lists'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/lib/apt
+  <class 'OSError'>: [Errno 39] Directory not empty: 'apt'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/lib
+  <class 'OSError'>: [Errno 39] Directory not empty: 'lib'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/cache/apt/archives
+  <class 'OSError'>: [Errno 39] Directory not empty: 'archives'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/cache/apt
+  <class 'OSError'>: [Errno 39] Directory not empty: 'apt'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var/cache
+  <class 'OSError'>: [Errno 39] Directory not empty: 'cache'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs/var
+  <class 'OSError'>: [Errno 39] Directory not empty: 'var'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0/rootfs
+  <class 'OSError'>: [Errno 39] Directory not empty: 'rootfs'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853/test_fresh_install_loads_and_i0
+  <class 'OSError'>: [Errno 39] Directory not empty: 'test_fresh_install_loads_and_i0'
+    warnings.warn(
+
+.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95
+  /disk/Projects/StageLab/cuems-engine/.venv-016/lib/python3.11/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853
+  <class 'OSError'>: [Errno 39] Directory not empty: '/tmp/pytest-of-adria/garbage-5f18bd8c-038f-4bba-b37e-fb53e5675853'
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 885 passed, 1 xfailed, 46 warnings in 13.73s =================
+
+## pass 2: integration and not slow
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============== 32 passed, 892 deselected, 46 warnings in 7.69s ================

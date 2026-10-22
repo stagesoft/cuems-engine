@@ -5,9 +5,20 @@
 Coordinated `xml-refactor` landing (cuems-utils feature 016): every CUEMS repository moves to its own
 next stable minor, and this section (written as `v0.1.0rc7`, never released) is that version. The
 package declares `libmtcmaster (>= 0.0.2-0)`, which it always loaded but never declared, and bounds
-the library `>= 0.1.1`, `<< 0.1.2~`. **Not yet reconciled** with the `debian/bookworm` release line
-(0.1.0rc3-1 … 0.1.0rc6-5, including the `stop_project` ActionCue). `poetry.lock` is relocked at
-publication.
+the library `>= 0.1.1`, `<< 0.1.2~`. `poetry.lock` is relocked at publication.
+
+**Contains every change released in 0.1.0rc3-1 … 0.1.0rc6-6** (including the 0.1.0rc5-2 … rc5-6
+hotfix builds), absorbed from `debian/bookworm` at `1c12959` (0.1.0rc6-6): the `v0.1.0rc6` and `v0.1.0rc5`
+sections below list them build by build.
+
+- **`stop_project` needs `cuems-utils` 0.1.1 to carry rc17's schema value.** The ActionCue's
+  `stop_project` action type is a value of `script.xsd` that shipped in `cuems-utils` rc17; a 0.1.1 without it
+  cannot load or save a project containing one. The candidate tag `xml-refactor-merge-candidate` (`4b336cd`)
+  predates it; `feat/xml-refactor` has it since cuems-utils' reconciliation. Tracked by
+  `tests/test_stop_project_xsd.py`; see
+  `specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md`.
+- **Every host in a cluster must be upgraded together**: the GO payload carries `run_seq` (not
+  wire-compatible with engines before 0.1.0rc6-3), and an engine before 0.1.0rc6-6 has no unload handler.
 
 Moves the engine onto `cuems-utils` 0.1.1's public API (developed against `0.1.0rc16`, which was
 since released without it). Nodes are identified by
@@ -84,6 +95,14 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
 ## v0.1.0rc6 — 2026-09-28
 
 <!-- source: git log --no-merges fc8d2bb..956a0f3 (31 commits); debian/bookworm 0.1.0rc6-1 (7f6e475) -->
+<!-- source: debian/bookworm 0.1.0rc6-2 (673df6c) -->
+<!-- source: debian/bookworm 0.1.0rc6-3 (a828db5) -->
+<!-- source: debian/bookworm 0.1.0rc6-4 (bfd1c01) -->
+<!-- source: debian/bookworm 0.1.0rc6-5 (b8431a3) -->
+<!-- source: debian/bookworm 0.1.0rc6-6 (3108b4f) -->
+
+Builds 0.1.0rc6-2 … 0.1.0rc6-6 shipped after the rc6-1 build this section was written for; their
+changes are listed here under the same sub-headers, each marked with its build and date.
 
 Auto continue chains are dispatched at their trigger, the controller ships the GO instant so
 every node anchors its chain on the same MTC value, and the arm-ahead lookahead moves off the
@@ -111,6 +130,33 @@ command lock. Raises the `cuemsutils` floor to rc13.
 - `AudioMixer` logs how long each JACK port took to register on success, to size the 15 s
   ceiling from field data (`2942305`).
 
+#### Builds after rc6-1
+
+- **`stop_project` ActionCue** (869fhjdq5, #35): the authored end of an unattended show. Every node
+  reveals it and reports it to the controller, which runs its own STOP; the first valid report wins.
+  The node never stops itself (a 3 s watchdog only logs); the cue is a hard chain break and, disabled,
+  transparent (rehearsal mode). Operator recipes in `docs/unattended-playback.md`
+  (0.1.0rc6-5, 2026-10-15). **Needs the schema value from `cuems-utils` rc17** — see the v0.1.1 notes.
+- **Cross-node Auto follow** (869fc8ytz, #25): an Auto follow into a cue on another node starts it; the
+  controller relays the follow to the owning node. Every GO value is now a dict carrying `run_seq`,
+  so the whole cluster must run this engine (0.1.0rc6-3, 2026-10-08).
+- Cue names on the `:9190` channel (869fedahu, #28): the controller broadcasts each cue's name after
+  every load (`/engine/status/cue_name/<uuid>`) and replays it to late clients (0.1.0rc6-3, 2026-10-08).
+- **Node adoption from the UI** (869ebkkme, 869dr2kzh, #32): `nodelist_modify` is relayed to
+  cuems-nodeconf, refused at once when nodeconf is not running and while a project is running or loaded;
+  `/engine/status/cluster_warning` tells the UI which project nodes are missing or unreachable and never
+  blocks GO; `project_status` tells a stopped project from no project and returns its uuid
+  (0.1.0rc6-4, 2026-10-14).
+- Each node reports its own media files that differ from the project (869fat84r, #22)
+  (0.1.0rc6-2, 2026-10-06).
+- **A project unload reaches the nodes as an unload** (869fh8kef, #41): the controller used to forward it
+  as a STOP, which re-arms the project the node still holds. It now removes its show lock and forwards
+  `/engine/command/unload`; the node tears the project down as a load does and arms nothing. Refused while
+  running. **An older node has no unload handler** and keeps the project armed until the next load
+  (0.1.0rc6-6, 2026-10-19).
+- Docs: the A/V loop sync guarantee (audio and video stay in sync across loop passes only if their
+  durations are exactly equal or they share one container) (0.1.0rc6-6, 2026-10-19).
+
 ### Changed
 
 #### Arm-ahead lookahead (869f79ecc)
@@ -126,6 +172,28 @@ command lock. Raises the `cuemsutils` floor to rc13.
   divides `AudioCue.master_vol` by 100, and only rc13 moved its default to 100 — on older
   libraries a fade from an AudioCue with no deployed volume started at 1% (`956a0f3`).
 
+#### Builds after rc6-1
+
+- A node pre-arms its next segment when a GO advances its pointer with nothing local to play; arms
+  belong to the STOP/load epoch they were requested in and are abandoned, never undone, if it moved
+  (publish or abandon) (869f9wqpn, #22; 0.1.0rc6-2, 2026-10-06).
+- A video cue takes its pixel size from the project instead of running `ffprobe` while arming; it probes
+  only if the size is missing or the file size differs (869fat84r, #22; 0.1.0rc6-2, 2026-10-06).
+- An audio player is wired to the mixer only once it reports RUNNING, so RtAudio's auto-connect to
+  `system:playback_*` is always removed (no more doubled audio outside mixer volume); the GO-time check
+  repairs the wiring edge by edge, and arm-wait log lines say whether a GO waited or fell back
+  (869fbyjzx, 869fcvz85, #27; 0.1.0rc6-3, 2026-10-08).
+- **Unrouted video outputs stay dark** (869fgq3xv, #33): a video cue aimed at an output the node does not
+  drive (no region in `display.conf`, or `enabled=false`) is no longer loaded. It keeps its place on the
+  timeline and is logged as `UNROUTED_VIDEO_OUTPUT` at every load. **Behaviour change**: such cues go from
+  mis-placed to dark. The engine reads `display.conf` only at start: after a hand edit restart the
+  videocomposer and the node engine (0.1.0rc6-4, 2026-10-14).
+- Cue ADD/UPDATE reports are ignored while not running (a late start report after a STOP no longer
+  leaves a cue at 1 or 100), and STOP restarts the arm watchdog ("Re-arm after STOP stalled")
+  (0.1.0rc6-5, 2026-10-15).
+- Dependency: `cuems-utils (>= 0.1.0rc17)` for the `stop_project` schema value (0.1.0rc6-5); this
+  release line moves to the 0.1.1 bounds, see v0.1.1.
+
 ### Fixed
 
 - The controller ships the GO anchor only while its MTC input is live (any quarter frame or
@@ -139,9 +207,25 @@ command lock. Raises the `cuemsutils` floor to rc13.
   the build fails if `python-rtmidi` was not vendored — a host with `python3-rtmidi` installed
   produced a deb whose MTC read 0.0 forever.
 
+#### Builds after rc6-1
+
+- A play-once video cue no longer wraps to frame 0 at its end: videocomposer wraparound is enabled only for
+  cues that repeat (869fa89uh, #23; 0.1.0rc6-3, 2026-10-08).
+- Orphan sweeps never abort a project load: an orphaned player the node could not kill (EPERM) used to
+  abort the load after the old project was torn down. Both sweeps and the zombie JACK client cleanup now
+  log and go on, match only own-user players, and a failing command callback is logged with its traceback
+  (869evtdf7, #29; 0.1.0rc6-3, 2026-10-08).
+- Packaging: `/usr/lib/cuems/bin/cffi-gen-src` is no longer shipped; `cuems-utils` ships the same file and
+  declares `Replaces: cuems-engine (<< 0.1.0rc6-2~)` (0.1.0rc6-2, 2026-10-06).
+
+### Removed (builds after rc6-1)
+
+- The dead `script_finished` aggregator in the controller (869fhjdp8; 0.1.0rc6-5, 2026-10-15).
+
 ## v0.1.0rc5 — 2026-08-14
 
 <!-- source: git log --no-merges 2abf26d..fc8d2bb (5 commits); debian/bookworm 0.1.0rc5-1 (8b57710) -->
+<!-- source: tag v0.1.0rc5-6 (69e91e4), hotfix line: 0.1.0rc5-2 (9a02a19), 0.1.0rc5-3 (d7e9832), 0.1.0rc5-4 (98e69dc), 0.1.0rc5-5 (9e94da2), 0.1.0rc5-6 (69e91e4) -->
 
 Auto continue triggers the whole chain at one common trigger.
 
@@ -158,6 +242,34 @@ Auto continue triggers the whole chain at one common trigger.
   `go_threaded` now warns "firing LATE" instead of mistiming silently (closed in rc6).
 - ActionHandler architecture analysis and controller-integration contracts documented
   (`be4e4f6`, `3645308`, `afff04a`); CI lint fixed and `poetry.lock` refreshed (`e210b26`).
+
+### Hotfix builds 0.1.0rc5-2 … 0.1.0rc5-6
+
+Released from the `hotfix/rc5-*` branches after the rc6-1 build (30 September – 8 October 2026), on neither
+the `debian/bookworm` nor the `rc_1` line; every code change in them is the same change as an `rc_1`
+commit already in this release. rc5-2 and rc5-3 carry the rc6-era `PreArm` work, so a site on the hotfix
+line already has it.
+
+- **Backport of the Badajoz first-run desync fix** (869f79ecc): the controller ships the GO anchor inside GO
+  and nodes resolve it from a live controller MTC only; `setnextcue`'s lookahead runs on a `PreArm`
+  background thread off the command lock; `_arm_ahead` skips other nodes' cues. The anchor half needs the
+  controller and every node on this version. A node also pre-arms its next segment when a GO advances its
+  pointer with nothing local to play (0.1.0rc5-2, 2026-09-30).
+- **0.1.0rc5-3 supersedes rc5-2, which must not be deployed**: its PreArm cleanup ran after `arm()` had
+  published the cue and could disarm a cue the restarted run was already playing (869f9wqpn). Publish or
+  abandon: an arm belongs to the STOP/load epoch in which it was requested and is abandoned, never
+  undone, if the epoch moved. One arm in flight per cue ID; `go()` no longer wipes a STOP that lands while
+  it re-arms a cue; the JACK port wait ends when the player process has exited; a GO whose cue cannot be
+  armed in time skips it and advances the pointer in lockstep with the controller (0.1.0rc5-3, 2026-09-30).
+- A play-once video cue no longer wraps to frame 0 at the end of the cue (869fa89uh, reported at Medina
+  del Campo sala1); the last pass of a counted loop sends `/loop 0` too (0.1.0rc5-4, 2026-10-01).
+- **Audio ready gate** (869fbyjzx, 869fcvz85): a player is wired to the mixer only once it prints
+  `[OK] RUNNING!`, so RtAudio's auto-connect to `system:playback_*` is always removed. The GO-time wiring
+  check repairs edge by edge. Known limit: an audio arm still takes about 0.47 s cold, so a GO that reaches a
+  node audio cue sooner than that after its arm began is still late (0.1.0rc5-5, 2026-10-07).
+- Orphan sweeps never abort a project load (869evtdf7): an orphan the node could not kill (EPERM)
+  escaped `_load_project_inner` after the old project was torn down. Released together with rc5-5; rc5-5 never
+  shipped on its own (0.1.0rc5-6, 2026-10-08).
 
 ## v0.1.0rc4 — 2026-08-03
 
@@ -273,6 +385,8 @@ release.
 - Arm waits for an in-progress arm instead of failing on concurrent access (`fe9339f`).
 
 ## v0.1.0rc2 — 2026-05-19
+
+<!-- source: debian/bookworm 0.1.0rc2-1 (2026-01-22), 0.1.0rc2-2 (2026-03-11), 0.1.0rc2-3 (2026-06-17; rc_1 packaging only) -->
 
 Major feature release. Adds FadeCue integration with `gradient-motiond`, direct UDP OSC
 gradient transport (replacing NNG), cluster liveness probing, multi-node GO gating,
@@ -557,6 +671,20 @@ MTC-related timing hazards from the rc1 baseline.
   remains untouched — it is now redundant with the `__add__`/`__sub__` fix in cuemsutils,
   but removal is deferred to a focused follow-up alongside a regression test.
 
+Packaging builds of this release (the `cuems-engine-mock` package):
+
+- 0.1.0rc2-2 (2026-03-11): wrapper install path fixed from `/usr/local/bin` to `/usr/bin`; the node engine
+  looks the player paths up under `/usr/bin/` (`/etc/cuems/settings.xml`) and never found the wrappers.
+- 0.1.0rc2-3 (2026-06-17): ships a no-op `rsync` shim (`/usr/lib/cuems/mock-bin/rsync`) and a
+  `cuems-node-engine` PATH drop-in, so the mandatory project deploy is a local no-op on headless mock boxes and
+  the node arms without an rsync daemon; `prerm` cleans the drop-in up.
+
 ---
 
 ## v0.1.0 — Initial release
+
+<!-- source: debian/bookworm 0.1.0rc1-1 (2025-12-11, initial Debian package release) -->
+
+- Initial Debian package: engine infrastructure for CUEMS, controller and node engines for media playback, MIDI
+  and OSC communication, integration with the `cuems-utils` virtual environment, systemd service support, console
+  scripts `node-engine`, `controller-engine`, `system-ports` (0.1.0rc1-1, 2025-12-11).

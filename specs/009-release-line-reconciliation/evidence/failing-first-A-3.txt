@@ -1,0 +1,28 @@
+# failing-first A-3 — merge-induced red on 2e016d1 (arm B: suite-arm-B.txt)
+cuems-utils HEAD: 1c1334c44600c228b9634cc2aab601941d86f7a4
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 3 items
+tests/test_loop_video_wraparound.py .FF                                  [100%]
+=================================== FAILURES ===================================
+_____________ test_counted_loop_wraps_then_clamps_on_its_last_pass _____________
+tests/test_loop_video_wraparound.py:71: in test_counted_loop_wraps_then_clamps_on_its_last_pass
+    assert calls[0] == (LOOP_PATH, 1)
+           ^^^^^^^^
+E   IndexError: list index out of range
+------------------------------ Captured log call -------------------------------
+______________________ test_infinite_loop_keeps_wrapping _______________________
+tests/test_loop_video_wraparound.py:82: in test_infinite_loop_keeps_wrapping
+    assert calls[0] == (LOOP_PATH, 1)
+           ^^^^^^^^
+E   IndexError: list index out of range
+------------------------------ Captured log call -------------------------------
+=========================== short test summary info ============================
+FAILED tests/test_loop_video_wraparound.py::test_counted_loop_wraps_then_clamps_on_its_last_pass
+FAILED tests/test_loop_video_wraparound.py::test_infinite_loop_keeps_wrapping
+========================= 2 failed, 1 passed in 0.78s ==========================
