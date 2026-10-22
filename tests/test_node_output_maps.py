@@ -51,7 +51,9 @@ def node(tmp_path, monkeypatch):
     shutil.copy(FIXTURE_DIR / "network_map.xml", conf / "network_map.xml")
 
     mappings = (FIXTURE_DIR / "default_mappings.xml").read_text()
-    video_outputs_end = mappings.index("</outputs>", mappings.index('<device class="video">'))
+    video_outputs_end = mappings.index(
+        "</outputs>", mappings.index('<device class="video">')
+    )
     video_outputs_end += len("</outputs>")
     (conf / "default_mappings.xml").write_text(
         mappings[:video_outputs_end] + VIDEO_INPUTS + mappings[video_outputs_end:]

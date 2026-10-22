@@ -31,6 +31,25 @@ from .tools.PortHandler import PORT_HANDLER
 VIDEOCOMPOSER_OSC_PORT_DEFAULT = 7000
 
 
+def _output_ports(device) -> list:
+    """The ``<output>`` entries of one device of the node's mappings.
+
+    *device* is what ``cm.node_mappings.get("audio" | "video")`` returns: a
+    typed device holding port groups (``outputs`` -> groups -> ports ->
+    ``output``). Outputs only. Inputs reuse the outputs' ``<id>`` numbering
+    and come after them, so a lookup that read both let input 0 overwrite
+    output 0: an audio cue on output ``<node>_0`` was routed to
+    ``system:capture_1`` and played silent (35cbe78).
+    """
+    ports = []
+    for group in (device or {}).get("outputs") or []:
+        for port in group:
+            output = port.get("output")
+            if output:
+                ports.append(output)
+    return ports
+
+
 def _append_output_latency_flag(args, player_conf: dict) -> str:
     """Append --output-latency-ms <int> to args when the player's
     settings.xml config has an explicit integer value.
@@ -619,21 +638,14 @@ class NodeEngine(BaseEngine):
         # Build audio output lookup keyed by <id> (mirrors video output
         # pattern)
         audio_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get("audio", []):
-            # Outputs only: inputs reuse the same <id> numbering and, read
-            # after the outputs, used to overwrite them (an audio cue on
-            # output 0 was routed to capture input 0 and played silent).
-            for port in port_type_dict.get("outputs", []):
-                for _, output_data in port.items():
-                    output_id = str(output_data.get("id", output_data["name"]))
-                    mappings = output_data.get("mappings", [])
-                    mapped_to = (
-                        mappings[0]["mapped_to"] if mappings else output_data["name"]
-                    )
-                    audio_outputs[output_id] = {
-                        "name": output_data["name"],
-                        "mapped_to": mapped_to,
-                    }
+        for output_data in _output_ports(self.cm.node_mappings.get("audio")):
+            output_id = str(output_data.get("id", output_data["name"]))
+            mappings = output_data.get("mappings", [])
+            mapped_to = mappings[0]["mapped_to"] if mappings else output_data["name"]
+            audio_outputs[output_id] = {
+                "name": output_data["name"],
+                "mapped_to": mapped_to,
+            }
         PLAYER_HANDLER.set_audio_outputs(audio_outputs)
 
         # Set the audio player generator. Append --output-latency-ms
@@ -709,34 +721,30 @@ class NodeEngine(BaseEngine):
         display_regions, (canvas_w, canvas_h) = read_display_conf()
 
         video_outputs = {}
-        for port_type_dict in self.cm.node_mappings.get("video", []):
-            # Outputs only, as for audio above: an input with the same <id>
-            # would overwrite the output.
-            for port in port_type_dict.get("outputs", []):
-                for _, output_data in port.items():
-                    output_id = str(output_data.get("id", output_data["name"]))
-                    name = output_data["name"]
-                    mappings = output_data.get("mappings", [])
-                    mapped_to = mappings[0]["mapped_to"] if mappings else name
-                    region = display_regions.get(mapped_to)
-                    if region is None:
-                        Logger.warning(
-                            f"DISPLAY_MISMATCH: XML output id={output_id} "
-                            f"name={name!r} maps to {mapped_to!r} which"
-                            f"is "
-                            f"not in display.conf; skipping. Available: "
-                            f"{sorted(display_regions.keys())}"
-                        )
-                        continue
-                    video_outputs[output_id] = {
-                        "name": name,
-                        "mapped_to": mapped_to,
-                        "x": region["x"],
-                        "y": region["y"],
-                        "width": region["width"],
-                        "height": region["height"],
-                        "canvas_region": dict(region),
-                    }
+        for output_data in _output_ports(self.cm.node_mappings.get("video")):
+            output_id = str(output_data.get("id", output_data["name"]))
+            name = output_data["name"]
+            mappings = output_data.get("mappings", [])
+            mapped_to = mappings[0]["mapped_to"] if mappings else name
+            region = display_regions.get(mapped_to)
+            if region is None:
+                Logger.warning(
+                    f"DISPLAY_MISMATCH: XML output id={output_id} "
+                    f"name={name!r} maps to {mapped_to!r} which"
+                    f"is "
+                    f"not in display.conf; skipping. Available: "
+                    f"{sorted(display_regions.keys())}"
+                )
+                continue
+            video_outputs[output_id] = {
+                "name": name,
+                "mapped_to": mapped_to,
+                "x": region["x"],
+                "y": region["y"],
+                "width": region["width"],
+                "height": region["height"],
+                "canvas_region": dict(region),
+            }
         PLAYER_HANDLER.start_video_outputs(
             video_outputs, canvas_override=(canvas_w, canvas_h)
         )
