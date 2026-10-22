@@ -55,6 +55,11 @@ cuems-engine (0.1.1-1) UNRELEASED; urgency=medium
   * UPGRADE EVERY HOST TOGETHER: the GO payload carries run_seq, which is
     not wire-compatible with engines before 0.1.0rc6-3, and an engine before
     0.1.0rc6-6 has no unload handler.
+  * The comms thread is cuems-utils' AsyncCommsThread. If the bus hub or
+    the editor listener stops (a closed socket, a failed listener), the
+    engine SIGTERMs itself and exits 1, so Restart=on-failure restarts it;
+    it used to keep running with no bus. An operator stop exits 0. The
+    comms join on shutdown is bounded at 5 s (TimeoutStopSec=10).
 
  -- Adrià Masip <adria@stagelab.coop>  Fri, 16 Oct 2026 19:00:00 +0200
 

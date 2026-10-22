@@ -16,7 +16,7 @@ from cuemsutils.log import Logger, logged
 
 from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
-from .core.BaseEngine import BaseEngine
+from .core.BaseEngine import COMMS_STOP_TIMEOUT, BaseEngine
 from .core.libmtc import libmtcmaster
 from .tools.ids import as_id, id_str
 
@@ -417,7 +417,7 @@ class ControllerEngine(BaseEngine):
         if self.with_mtc:
             self.stop_timecode()
         if hasattr(self, "communications_thread"):
-            self.communications_thread.stop()
+            self.communications_thread.stop(timeout=COMMS_STOP_TIMEOUT)
 
     #########################
     # Timecode

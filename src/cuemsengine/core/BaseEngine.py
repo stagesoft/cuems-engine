@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from cuemsutils.cues import ActionCue, CueList, CuemsScript
 from cuemsutils.log import Logger, logged
+from cuemsutils.tools.AsyncCommsThread import AsyncCommsThread
 from cuemsutils.tools.ConfigManager import ConfigManager
 from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.identity_check import SENTINEL
@@ -34,6 +35,10 @@ from .EngineStatus import EngineStatus
 MTC_PORT = "Midi Through Port-0"
 SHOW_LOCK_PATH = "/tmp/cuems.show.lock"
 CONTROLLER_HOST = "controller.local"
+#: Seconds stop_comms() waits for the comms thread to cancel its tasks and
+#: join: below the units' TimeoutStopSec=10 (cuems-common), so systemd does
+#: not SIGKILL a shutdown that is still releasing NNG.
+COMMS_STOP_TIMEOUT = 5
 
 
 class BaseEngine(SignalEngine):
@@ -121,6 +126,28 @@ class BaseEngine(SignalEngine):
         except Exception as e:
             Logger.error(f"Error removing show lock file: {e}")
             raise e
+
+    def _communications_thread(self) -> AsyncCommsThread | None:
+        """This engine's comms thread, or None before it exists."""
+        return getattr(self, "communications_thread", None)
+
+    def exit_status(self) -> int:
+        """1 when the comms thread ended by itself, else 0.
+
+        Overrides SignalEngine's hook: its SIGTERM/SIGINT handlers stop the
+        engine and then exit with this. The comms thread's fatal path is a
+        SIGTERM to this process, which gets the same stop as an operator's
+        SIGTERM; only end_reason tells them apart. A non-zero status is what
+        makes systemd's Restart=on-failure restart the engine.
+        """
+        comms = self._communications_thread()
+        if not isinstance(comms, AsyncCommsThread) or comms.end_reason is None:
+            return 0
+        Logger.critical(
+            f"{self.__class__.__name__} stopped because its communications "
+            f"ended: {comms.end_reason}"
+        )
+        return 1
 
     # --------- STATUS --------- #
     def set_status(self, property: str, value: str, strict: bool = False) -> None:

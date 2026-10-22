@@ -145,6 +145,25 @@ def _no_mdns_lookup():
 
 
 @pytest.fixture(autouse=True)
+def terminated():
+    """Record, instead of send, the SIGTERM a comms thread sends its engine when it ends.
+
+    A comms thread whose bus or editor listener stops calls terminate_process(),
+    which SIGTERMs this process so the engine restarts (cuems-utils'
+    AsyncCommsThread supervision). In a test that process is pytest. A test
+    that starts real comms threads (a busy port, a closed socket) must never
+    end the session, so every test gets this recorder; the list holds the comms
+    thread that would have signalled. Request it by name to assert on it.
+    """
+    calls = []
+    with patch(
+        "cuemsengine.comms.AsyncCommsThread.terminate_process",
+        side_effect=lambda: calls.append(threading.current_thread()),
+    ):
+        yield calls
+
+
+@pytest.fixture(autouse=True)
 def _isolated_runtime_paths(tmp_path_factory):
     """Redirect the engine's hardcoded /tmp runtime paths into a temp dir.
 
@@ -214,19 +233,16 @@ def _stop_comms_threads():
 
     Production code stops these threads via NodeEngine/ControllerEngine
     stop_comms(). Tests construct hubs and comms threads directly and never go
-    through that path, so the suite needs the same discipline here.
+    through that path, so the suite needs the same discipline here. The loop
+    is cuems-utils' (AsyncCommsThread.stop_all: every live instance, a failing
+    one logged and the others still stopped).
     """
     try:
-        from cuemsengine.comms.AsyncCommsThread import AsyncCommsThread
+        from cuemsutils.tools.AsyncCommsThread import AsyncCommsThread
     except Exception:
         return
 
-    for thread in threading.enumerate():
-        if isinstance(thread, AsyncCommsThread) and thread.is_alive():
-            try:
-                thread.stop(timeout=5)
-            except Exception as e:
-                print(f"Error stopping comms thread {thread.name}: {e}")
+    AsyncCommsThread.stop_all(timeout=5)
 
 
 def _free_orphan_nng_aios():

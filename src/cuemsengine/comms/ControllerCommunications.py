@@ -98,9 +98,13 @@ class ControllerCommunications(AsyncCommsThread):
 
     def create_all_tasks(self):
         Logger.info("Starting all tasks in ControllerCommunications")
+        # Essential: the engine is useless without its bus or its editor, so
+        # either ending takes the engine down for a restart. The receiver
+        # returns at once when no callbacks are set, and the WebSocket
+        # listener when a server already holds its port; both are allowed.
         tasks = [
-            asyncio.create_task(self.editor_listener()),
-            asyncio.create_task(self.nng_hub.start()),
+            self.essential(asyncio.create_task(self.editor_listener())),
+            self.essential(asyncio.create_task(self.nng_hub.start())),
             asyncio.create_task(self.nng_hub.start_message_receiver()),
         ]
 

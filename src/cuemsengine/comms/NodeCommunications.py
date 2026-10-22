@@ -80,8 +80,10 @@ class NodeCommunications(AsyncCommsThread):
             else "None"
         )
         Logger.info(f"Command callbacks registered: {callbacks}")
+        # Essential: a node without its bus hears no controller. The receiver
+        # returns at once when no callbacks are set, which is allowed.
         return [
-            asyncio.create_task(self.nng_hub.start()),
+            self.essential(asyncio.create_task(self.nng_hub.start())),
             asyncio.create_task(self.nng_hub.start_message_receiver()),
         ]
 

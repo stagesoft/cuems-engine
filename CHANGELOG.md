@@ -43,6 +43,18 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
 
 ### Changed
 
+- **The comms thread is cuems-utils' `AsyncCommsThread`** (0.1.1), and the engine now notices when
+  its communications stop. The base class moved into the library
+  (cuems-utils `specs/planning/async-comms-thread-absorption.md`); `comms/AsyncCommsThread.py` keeps
+  only the engine's fatal path. Before, the comms thread waited for *all* its tasks, so a bus hub
+  whose socket had closed left the engine running with no bus (a controller reaching no node, a node
+  hearing no controller) and a closed editor responder spun the editor listener without yielding,
+  starving the bus and the WebSocket. Now the **bus hub** (both engines) and the **editor listener**
+  (controller) are essential: if either ends, the engine logs `communications ended`, SIGTERMs
+  itself, stops as for any SIGTERM and **exits 1** (`BaseEngine.exit_status()`, through cuems-utils
+  0.1.1's `SignalEngine.exit_status` hook), so `Restart=on-failure` restarts it. An operator stop
+  still exits 0. The message receiver and the WebSocket OSC listener may still end early.
+  `stop_comms()` now bounds the join at 5 s, inside the units' `TimeoutStopSec=10`.
 - **Show loading**: `read_script` uses `CuemsScript.load`. A version-1 `script.xml` is converted
   in memory (the file on disk is left alone); a script newer than the installed library is
   refused with the library's error.

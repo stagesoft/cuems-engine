@@ -13,7 +13,7 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
 
-from .core.BaseEngine import BaseEngine
+from .core.BaseEngine import COMMS_STOP_TIMEOUT, BaseEngine
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
@@ -387,6 +387,10 @@ class NodeEngine(BaseEngine):
         self.stop_comms()
         super().stop()
 
+    def _communications_thread(self):
+        """The node's comms thread belongs to the cue handler, not the engine."""
+        return getattr(CUE_HANDLER, "communications_thread", None)
+
     @logged
     def stop_comms(self):
         """Stop the NNG comms thread before the interpreter tears down.
@@ -400,11 +404,11 @@ class NodeEngine(BaseEngine):
         ControllerEngine does the equivalent in its own stop_comms(); without
         this, only the node engine core-dumped on every restart.
         """
-        comms = getattr(CUE_HANDLER, "communications_thread", None)
+        comms = self._communications_thread()
         if comms is None:
             return
         try:
-            comms.stop()
+            comms.stop(timeout=COMMS_STOP_TIMEOUT)
         except Exception as e:
             Logger.error(f"Error stopping NNG comms thread: {e}")
 
