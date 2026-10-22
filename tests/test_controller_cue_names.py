@@ -321,3 +321,53 @@ class TestUnload:
         assert controller.cue_names == {}
         assert controller.cue_status == {}
         assert controller.cue_enabled_status == {}
+
+
+# ---------------------------------------------------------------------------
+# R-2 (009): the name walk over a real version-2 script
+# ---------------------------------------------------------------------------
+
+V2_PROJECT = (
+    Path(__file__).parent
+    / ".."
+    / "dev"
+    / "test_xml_files"
+    / "projects"
+    / "video_no_pixels_v2"
+    / "script.xml"
+)
+V2_VIDEO = "5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f11"
+V2_NESTED_LIST = "5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f21"
+V2_NESTED_AUDIO = "5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f13"
+
+
+def test_the_walk_over_a_real_v2_script_descends_and_tolerates_an_empty_name(
+    controller,
+):
+    """The v2 schema refuses an empty ``<name/>`` (``minLength`` 1), so an
+    empty name can only reach the walk from code or an older library. The
+    loaded cue is emptied after the load; the walk must give ``""``, descend
+    into the CueList child and raise nothing."""
+    from cuemsutils.cues import CuemsScript
+
+    script = CuemsScript.load(str(V2_PROJECT))
+    script.find(V2_NESTED_AUDIO)["name"] = ""
+
+    names = controller._collect_cue_names(script.cuelist)
+
+    assert names[V2_VIDEO] == "Video no pixels"
+    assert names[V2_NESTED_LIST] == "Nested list"
+    assert names[V2_NESTED_AUDIO] == ""
+    assert all(type(name) is str for name in names.values())
+
+
+def test_the_walk_gives_an_empty_string_for_a_cue_with_no_name_key(controller):
+    from cuemsutils.cues import CuemsScript
+
+    script = CuemsScript.load(str(V2_PROJECT))
+    del script.find(V2_NESTED_AUDIO)["name"]
+
+    names = controller._collect_cue_names(script.cuelist)
+
+    assert names[V2_NESTED_AUDIO] == ""
+    assert names[V2_VIDEO] == "Video no pixels"
