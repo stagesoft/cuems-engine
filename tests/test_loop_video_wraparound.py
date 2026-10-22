@@ -14,6 +14,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from cuemsutils.cues import VideoCue
+from cuemsutils.cues.MediaCue import Media
 from cuemsutils.tools.CTimecode import CTimecode
 
 from cuemsengine.cues.loop_cue import loop_cue
@@ -50,7 +51,7 @@ def _run(loop, stop_after=None):
     cue = SimpleNamespace(
         id="cue",
         loop=loop,
-        media=SimpleNamespace(duration="00:00:10.000"),
+        media=Media({"file_name": "media.file", "duration": "00:00:10.000"}),
         _layer_ids=[LAYER],
         _local=True,
         _stop_requested=False,
