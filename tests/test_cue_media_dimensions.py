@@ -20,10 +20,11 @@ Design: cuems-RELATIONS Plans/2026-10-01-engine-late-go-media-probe.md §3.3.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from cuemsutils.cues import VideoCue
+from cuemsutils.cues import CuemsScript, VideoCue
 
 PH = "cuemsengine.players.PlayerHandler"
 
@@ -228,3 +229,46 @@ class TestCallSites:
         probed, probes, _ = _dims(handler, _cue())
         assert probes == 1
         assert stored == probed
+
+
+# ---------------------------------------------------------------------------
+# R-1 (009): a version-2 project whose Media never stored the sizes
+# ---------------------------------------------------------------------------
+
+V2_NO_PIXELS = (
+    Path(__file__).parent.parent
+    / "dev"
+    / "test_xml_files"
+    / "projects"
+    / "video_no_pixels_v2"
+    / "script.xml"
+)
+
+
+def test_a_loaded_v2_project_without_stored_sizes_takes_the_probe_path(handler):
+    """Real ``CuemsScript.load`` of a project saved before the editor stored
+    ``pixel_width`` / ``pixel_height`` / ``file_size`` (research R3).
+
+    ``Media.get`` answers ``None`` for the absent keys, which is what the
+    engine's ``_positive_int`` guards read as "missing": the probe runs.
+    """
+    from cuemsengine.NodeEngine import own_media_size_mismatches
+
+    script = CuemsScript.load(str(V2_NO_PIXELS))
+    cue = next(c for c in script.cuelist.contents if isinstance(c, VideoCue))
+    assert cue.media.get("pixel_width") is None
+    assert cue.media.get("pixel_height") is None
+    assert cue.media.get("file_size") is None
+
+    with patch.object(handler, "media_dimensions", return_value=(1280, 720)) as probe:
+        assert handler.cue_media_dimensions(cue) == (1280, 720)
+    probe.assert_called_once_with("clip.mp4")
+
+    # No stored file_size: nothing to compare the node's copy with.
+    assert (
+        own_media_size_mismatches({cue.id: "clip.mp4"}, script.find, handler.media_path)
+        == []
+    )
+    assert own_media_size_mismatches(
+        {cue.id: "gone.mp4"}, script.find, handler.media_path
+    ) == [("gone.mp4", None, None)]

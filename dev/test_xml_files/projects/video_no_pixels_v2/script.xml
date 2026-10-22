@@ -1,0 +1,197 @@
+<?xml version='1.0' encoding='utf-8'?>
+<cms:CuemsProject xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ ../cuems/script.xsd" doc_version="2">
+    <CuemsScript>
+        <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f10</id>
+        <name>Video without pixel size</name>
+        <description>A video cue whose Media lacks pixel_width, pixel_height and file_size (009 R-1)</description>
+        <created>2020-01-01T00:00:00.000</created>
+        <modified>2020-01-01T00:00:00.000</modified>
+        <ui_properties />
+        <CueList>
+            <autoload>false</autoload>
+            <description>Main cuelist desc id ML</description>
+            <enabled>true</enabled>
+            <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f20</id>
+            <loop>1</loop>
+            <name>Main cuelist id ML</name>
+            <offset>
+                <CTimecode>00:00:00.000</CTimecode>
+            </offset>
+            <post_go>pause</post_go>
+            <postwait>
+                <CTimecode>00:00:00.000</CTimecode>
+            </postwait>
+            <prewait>
+                <CTimecode>00:00:00.000</CTimecode>
+            </prewait>
+            <target />
+            <timecode>false</timecode>
+            <ui_properties>
+                <timeline_position>
+                    <x>0</x>
+                    <y>0</y>
+                </timeline_position>
+            </ui_properties>
+            <contents>
+                <Cue class="video">
+                            <autoload>false</autoload>
+                            <description>Video cue desc id V2</description>
+                            <enabled>true</enabled>
+                            <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f11</id>
+                            <loop>1</loop>
+                            <name>Video no pixels</name>
+                            <offset>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </offset>
+                            <post_go>pause</post_go>
+                            <postwait>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </postwait>
+                            <prewait>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </prewait>
+                            <target />
+                            <timecode>false</timecode>
+                            <ui_properties>
+                                <timeline_position>
+                                    <x>0</x>
+                                    <y>0</y>
+                                </timeline_position>
+                            </ui_properties>
+                            <Media>
+                                <file_name>clip.mp4</file_name>
+                                <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f12</id>
+                                <duration><CTimecode>00:00:12.000</CTimecode></duration>
+                                <regions>
+                                    <Region>
+                                        <id>0</id>
+                                        <loop>3</loop>
+                                        <in_time>
+                                            <CTimecode>00:00:00.000</CTimecode>
+                                        </in_time>
+                                        <out_time>
+                                            <CTimecode>00:00:12.000</CTimecode>
+                                        </out_time>
+                                    </Region>
+                                </regions>
+                            </Media>
+                            <outputs>
+                                <CueOutput class="video">
+                                    <output_name>0367f391-ebf4-48b2-9f26-000000000001_0</output_name>
+                                    <output_geometry>
+                                        <x_scale>1</x_scale>
+                                        <y_scale>1</y_scale>
+                                        <corners>
+                                            <top_left>
+                                                <x>0</x>
+                                                <y>0</y>
+                                            </top_left>
+                                            <top_right>
+                                                <x>1</x>
+                                                <y>0</y>
+                                            </top_right>
+                                            <bottom_left>
+                                                <x>0</x>
+                                                <y>1</y>
+                                            </bottom_left>
+                                            <bottom_right>
+                                                <x>1</x>
+                                                <y>1</y>
+                                            </bottom_right>
+                                        </corners>
+                                    </output_geometry>
+                                </CueOutput>
+                            </outputs>
+                        </Cue>
+                <CueList>
+                    <autoload>false</autoload>
+                    <description>Main cuelist desc id ML</description>
+                    <enabled>true</enabled>
+                    <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f21</id>
+                    <loop>1</loop>
+                    <name>Nested list</name>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <post_go>pause</post_go>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <prewait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </prewait>
+                    <target />
+                    <timecode>false</timecode>
+                    <ui_properties>
+                        <timeline_position>
+                            <x>0</x>
+                            <y>0</y>
+                        </timeline_position>
+                    </ui_properties>
+                    <contents>
+                        <Cue class="audio">
+                            <autoload>false</autoload>
+                            <description>Audio cue desc id 10</description>
+                            <enabled>true</enabled>
+                            <id>5b9e2a14-7c3d-4f8e-9a61-0d2b4c6e8f13</id>
+                            <loop>1</loop>
+                            <name>Nested audio</name>
+                            <offset>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </offset>
+                            <post_go>go</post_go>
+                            <postwait>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </postwait>
+                            <prewait>
+                                <CTimecode>00:00:00.000</CTimecode>
+                            </prewait>
+                            <target />
+                            <timecode>false</timecode>
+                            <ui_properties>
+                                <timeline_position>
+                                    <x>0</x>
+                                    <y>0</y>
+                                </timeline_position>
+                            </ui_properties>
+                            <Media>
+                                <file_name>sposa_non_mi_conosci.16.s.wav</file_name>
+                                <id>32afd4cb-a42b-48c8-9bb3-18f273d741fc</id>
+                                <duration><CTimecode>00:00:00.000</CTimecode></duration>
+                                <regions>
+                                    <Region>
+                                        <id>0</id>
+                                        <loop>3</loop>
+                                        <in_time>
+                                            <CTimecode>00:00:00.000</CTimecode>
+                                        </in_time>
+                                        <out_time>
+                                            <CTimecode>00:00:12.000</CTimecode>
+                                        </out_time>
+                                    </Region>
+                                </regions>
+                            </Media>
+                            <outputs>
+                                <CueOutput class="audio">
+                                    <output_name>Out1</output_name>
+                                    <output_vol>100</output_vol>
+                                    <channels>
+                                        <channel>
+                                            <channel_num>100</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                        <channel>
+                                            <channel_num>100</channel_num>
+                                            <channel_vol>100</channel_vol>
+                                        </channel>
+                                    </channels>
+                                </CueOutput>
+                            </outputs>
+                            <master_vol>100</master_vol>
+                        </Cue>
+                    </contents>
+                </CueList>
+            </contents>
+        </CueList>
+    </CuemsScript>
+</cms:CuemsProject>
