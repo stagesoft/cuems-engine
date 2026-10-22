@@ -17,6 +17,7 @@ from cuemsutils.cues import AudioCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
+from ..tools.ids import id_str
 from ..tools.PortHandler import PORT_HANDLER
 from .AudioMixer import AudioMixer, MixerClient, start_audio_mixer
 from .AudioPlayer import AudioClient, AudioPlayer, start_audio_output
@@ -258,7 +259,7 @@ class PlayerHandler:
     def remove_cue_player(self, cue: Cue):
         """Removes a cue player"""
         osc_client = None
-        cue_id = str(cue.id)
+        cue_id = id_str(cue.id)
         with self._lock:
             try:
                 player = self._cue_players.pop(cue)
@@ -457,7 +458,7 @@ class PlayerHandler:
                     cue_players_to_remove.append((cue, player, osc_client))
             for cue, player, osc_client in cue_players_to_remove:
                 self._cue_players.pop(cue, None)
-                players_to_kill.append((str(cue.id), player, osc_client))
+                players_to_kill.append((id_str(cue.id), player, osc_client))
 
         Logger.info(f"Killing {len(players_to_kill)} audio players during cleanup")
         for entry in players_to_kill:
@@ -607,7 +608,7 @@ class PlayerHandler:
         # without being disarmed first (the old process would keep running,
         # holding its JACK client and OSC port, while its reference is silently
         # overwritten in _audio_players_by_id).
-        cue_id = str(cue.id)
+        cue_id = id_str(cue.id)
         with self._lock:
             existing_player = self._audio_players_by_id.pop(cue_id, None)
             self._cue_players.pop(cue, None)
@@ -630,7 +631,7 @@ class PlayerHandler:
         player, client = self._audio_output_generator(
             port=ports["audio_output"],
             media=self.media_path(cue.media["file_name"]),
-            uuid=str(cue.id),
+            uuid=id_str(cue.id),
         )
         cue._osc = client
         self.set_player_endpoints(cue)
@@ -638,11 +639,11 @@ class PlayerHandler:
 
         # Also track by cue ID string for cleanup when cue object is lost
         with self._lock:
-            self._audio_players_by_id[str(cue.id)] = player
+            self._audio_players_by_id[id_str(cue.id)] = player
 
         # Connect the player to the audio mixer if available
         if self._audio_mixer is not None:
-            uuid_slug = "".join(str(cue.id).split("-"))
+            uuid_slug = "".join(id_str(cue.id).split("-"))
             player_name = f"Audio_Player-{uuid_slug}"
 
             # Resolve each output_name to its JACK port via the ID in the

@@ -720,10 +720,11 @@ class ControllerEngine(BaseEngine):
         if data is None:
             Logger.warning(f"stop_project message without data from {operation.sender}")
             return
-        cue_id = str(data.get("cue", ""))
+        cue_id = as_id(data.get("cue", ""))
         sender = operation.sender
         what = (
-            f"stop_project from {sender} (cue {cue_id}, run_seq {data.get('run_seq')})"
+            f"stop_project from {sender} (cue {id_str(cue_id)}, "
+            f"run_seq {data.get('run_seq')})"
         )
         if sender not in self._adopted_nodes:
             Logger.warning(f"Dropping {what}: sender is not an adopted node")
@@ -751,7 +752,7 @@ class ControllerEngine(BaseEngine):
                 return
         name = self.cue_names.get(cue_id, "")
         Logger.info(
-            f'stop_project cue {cue_id} ("{name}") from node {sender}: '
+            f'stop_project cue {id_str(cue_id)} ("{name}") from node {sender}: '
             "stopping the show"
         )
         self.stop_script(None)
@@ -1160,7 +1161,7 @@ class ControllerEngine(BaseEngine):
             and hasattr(self.communications_thread, "broadcast_osc")
         ):
             self.communications_thread.broadcast_osc(
-                f"/engine/status/cue_name/{cue_id}", name
+                f"/engine/status/cue_name/{id_str(cue_id)}", name
             )
 
     def _broadcast_cue_enabled(self, cue_id: str, enabled: bool) -> None:
@@ -1298,7 +1299,7 @@ class ControllerEngine(BaseEngine):
 
         # Per-cue names (after `load` above, like the live burst)
         for cid, name in self.cue_names.items():
-            data = build_osc_message(f"/engine/status/cue_name/{cid}", name)
+            data = build_osc_message(f"/engine/status/cue_name/{id_str(cid)}", name)
             if data:
                 await websocket.send(data)
 
@@ -1946,7 +1947,7 @@ class ControllerEngine(BaseEngine):
         # hand — so any script built by another path simply lacks it.
         return {
             "status": status,
-            "project_uuid": str(self.script.id),
+            "project_uuid": id_str(self.script.id),
             "project_unix_name": str(getattr(self.script, "unix_name", "") or ""),
         }
 

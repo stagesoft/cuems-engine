@@ -1090,7 +1090,7 @@ class NodeEngine(BaseEngine):
                     continue
                 found.append(
                     {
-                        "cue_id": cue.id,
+                        "cue_id": id_str(cue.id),
                         "cue_name": getattr(cue, "name", ""),
                         "outputs": [
                             {"output": name, "reason": reason}
@@ -1405,7 +1405,7 @@ class NodeEngine(BaseEngine):
                     action=ActionType.UPDATE,
                     sender=self.cm.node_uuid,
                     target="stop_project",
-                    data={"cue": str(cue_id), "run_seq": run_seq},
+                    data={"cue": id_str(cue_id), "run_seq": run_seq},
                 )
             )
         except Exception as e:

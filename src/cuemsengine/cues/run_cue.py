@@ -11,6 +11,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..tools.ids import id_str
 from ..tools.MtcListener import MtcListener
 from .helpers import media_duration
 
@@ -232,7 +233,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     try:
         mixer = PLAYER_HANDLER.get_audio_mixer()
         if mixer:
-            uuid_slug = "".join(str(cue.id).split("-"))
+            uuid_slug = "".join(id_str(cue.id).split("-"))
             # Actual JACK client name is Audio_Player-{uuid} with ports
             # "outport 0", "outport 1"
             player_name = f"Audio_Player-{uuid_slug}"

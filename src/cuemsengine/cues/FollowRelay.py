@@ -42,6 +42,7 @@ from typing import Any, Callable
 from cuemsutils.cues import ActionCue, DmxCue
 from cuemsutils.log import Logger
 
+from ..tools.ids import as_id, id_str
 from .CueHandler import _ArmWalk
 
 # A cancel that reaches a target which has already started stops it only if it
@@ -190,8 +191,8 @@ class FollowRelay:
             "op": op,
             "origin": self.node_id,
             "run_seq": run_seq,
-            "source": str(cue.id),
-            "target": str(getattr(target, "id", "")),
+            "source": id_str(cue.id),
+            "target": id_str(getattr(target, "id", None)),
             "seed_ms": float(instant_ms),
         }
         if reason is not None:
@@ -236,8 +237,8 @@ class FollowRelay:
             Logger.warning(f"Follow: ignoring a message with op {op!r}")
 
     def _on_announce(self, data: dict) -> None:
-        source_id = str(data.get("source"))
-        target_id = str(data.get("target"))
+        source_id = as_id(data.get("source"))
+        target_id = as_id(data.get("target"))
         origin = data.get("origin")
         what = f"{source_id} -> {target_id} from {origin}"
         if origin == self.node_id:
@@ -316,7 +317,7 @@ class FollowRelay:
         self._spawn(f"FollowWait:{source_id}", self._wait_and_dispatch, entry)
 
     def _on_cancel(self, data: dict) -> None:
-        source_id = str(data.get("source"))
+        source_id = as_id(data.get("source"))
         origin = data.get("origin")
         reason = data.get("reason")
         if origin == self.node_id:
