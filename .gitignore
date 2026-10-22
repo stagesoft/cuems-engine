@@ -19,8 +19,11 @@ nohup.out
 .coverage*
 
 site/
-.venv/*
-!.venv/pyvenv.cfg
+.venv/
+.venv-*/
+.ruff_cache/
+.016-native/
+/__pycache__
 
 dev/test_xml_files/media/
 

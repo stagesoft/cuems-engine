@@ -170,6 +170,14 @@ no mocks for OSC, NNG, or subprocess boundaries. See
 [`specs/planning/contributor-workflow.md §6`](specs/planning/contributor-workflow.md)
 for the full integration test policy.
 
+**Test cleanup.** `tests/conftest.py` keeps interrupted runs from leaving engines, players or
+threads behind: it registers a `SIGINT` handler (Ctrl+C) that runs every registered cleanup, and
+two fixtures hand resources over to it. Use `engine_cleanup` for any test that starts a
+`ControllerEngine` or `NodeEngine` (`engine = engine_cleanup(ControllerEngine(with_mtc=False))`; no
+manual `stop()`), and `process_cleanup` for any `multiprocessing.Process` a test starts. Run the
+parallel suite with `-n auto --dist loadfile`: `tests/test_port_handler.py` picks real ports and
+two of its tests on different workers collide.
+
 ---
 
 ## 7. Commit Hygiene

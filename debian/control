@@ -45,8 +45,7 @@ Description: CUEMS Engine - Engine infrastructure of the CueMS system
  .
  This package installs into the /usr/lib/cuems/ virtual environment
  provided by cuems-utils. Console scripts are installed to
- /usr/lib/cuems/bin/node-engine, /usr/lib/cuems/bin/controller-engine,
- and /usr/lib/cuems/bin/system-ports.
+ /usr/lib/cuems/bin/node-engine and /usr/lib/cuems/bin/controller-engine.
  .
  The systemd service files are provided by cuems-common and run the
  respective console scripts.

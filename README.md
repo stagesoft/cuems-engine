@@ -134,7 +134,7 @@ Player subprocess management and hardware I/O:
 * **`AudioMixer`** — JACK-based audio mixing and routing
 * **`JackConnectionManager`** — JACK port connection management
 * **`AudioPlayer`** — audio client subprocess wrapper
-* **`VideoPlayer`** — video client subprocess wrapper (delegates to `gradient-motiond`)
+* **`VideoClient`** / **`VideoOutput`** — the OSC client of the videocomposer and a display output it drives
 * **`DmxPlayer`** — DMX output subprocess wrapper
 * **`GradientClient`** — OSC client for communicating with `gradient-motiond`
 * **`Player`** — abstract base player interface

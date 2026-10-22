@@ -113,7 +113,6 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
-    "cuems: marks tests as using CUEMS engines (automatic cleanup)",
 ]
 # Ensure proper cleanup on keyboard interrupt
 junit_duration_report = "call"

@@ -95,7 +95,7 @@ A single `GO` press:
   canvas setup, and OSC communication.
 - **`AudioMixer`** — JACK-based audio mixing, routing, and graph validation.
 - **`JackConnectionManager`** — JACK port management with self-heal on stale clients.
-- **`AudioPlayer`** / **`VideoPlayer`** / **`DmxPlayer`** — subprocess wrappers.
+- **`AudioPlayer`** / **`DmxPlayer`** — subprocess wrappers; **`VideoClient`** / **`VideoOutput`** — the videocomposer's OSC client and its display outputs.
 - **`GradientClient`** — fire-and-forget UDP OSC client for `gradient-motiond`;
   uses explicit `int64` for `start_mtc_ms` to avoid truncation above 2³¹ ms.
 
