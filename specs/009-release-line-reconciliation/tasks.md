@@ -307,9 +307,9 @@ rename conflicts.
   - Merge any section duplicated between 008's rc7 notes and rc_1's notes.
   - Leave the `<!-- SPECKIT START -->` block alone.
 - [X] T068 [P] Edit `docs/unattended-playback.md`: `cuems-utils ≥ 0.1.0rc17` (about `:77`) → `cuems-utils ≥ 0.1.1`, and `engine 0.1.0rc6-3 or later` (about `:95`) → `cuems-engine 0.1.1-1 or later`. Add no dev-planning prose. Check `docs/index.md` for the same version claims. Commit T067 and T068: `docs(009): version claims after reconciliation`. Mark #19 `proven` (a recorded check).
-- [ ] T069 Re-fetch and re-measure exactly as T003 and T004, and write `specs/009-release-line-reconciliation/evidence/remeasure-handoff.md` plus an updated `stray-head-sweep.md`. **If anything moved**: merge the delta by the same rules (T008–T018 for line commits; merge-by-SHA for new heads), add the adaptation tasks it needs, and repeat T048 before continuing. Record the loop.
-- [ ] T070 Run the CI-equivalent suite **three times, interleaved**: arm A, which is `git worktree add ../009-armA e994a5e` plus the same stub, then the 009 HEAD, ×3. Write `specs/009-release-line-reconciliation/evidence/suite-final.md` with per-run counts and the failing-id sets. HEAD's failures must be ⊆ arm A's in every run (SC-003). Remove the worktree afterwards.
-- [ ] T071 Run lint on the whole tree as CI does (`black --check src/ tests/`, `isort --check src/ tests/`, `flake8 src/`), and fix any issues in a `style(009): …` commit. Record the result in `suite-final.md`.
+- [X] T069 Re-fetch and re-measure exactly as T003 and T004, and write `specs/009-release-line-reconciliation/evidence/remeasure-handoff.md` plus an updated `stray-head-sweep.md`. **If anything moved**: merge the delta by the same rules (T008–T018 for line commits; merge-by-SHA for new heads), add the adaptation tasks it needs, and repeat T048 before continuing. Record the loop.
+- [X] T070 Run the CI-equivalent suite **three times, interleaved**: arm A, which is `git worktree add ../009-armA e994a5e` plus the same stub, then the 009 HEAD, ×3. Write `specs/009-release-line-reconciliation/evidence/suite-final.md` with per-run counts and the failing-id sets. HEAD's failures must be ⊆ arm A's in every run (SC-003). Remove the worktree afterwards.
+- [X] T071 Run lint on the whole tree as CI does (`black --check src/ tests/`, `isort --check src/ tests/`, `flake8 src/`), and fix any issues in a `style(009): …` commit. Record the result in `suite-final.md`.
 
 **Checkpoint**: the code and record state is final. Only pure moves (Phase 8) and CI (Phase 9) follow.
 
