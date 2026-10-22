@@ -111,7 +111,11 @@ def _cue_op(action, data):
 
 
 def test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id(controller):
-    """Nodes report cue ids as text; the script's are ``Uuid``."""
+    """Nodes report cue ids as text; the script's are ``Uuid``.
+
+    A cue ADD is only honoured while the show is running (869fhjdq5).
+    """
+    controller.set_status("running", "yes")
     controller.cue_status = {as_id(CUE): 0}
     controller.communications_thread.broadcast_osc.reset_mock()
 
@@ -122,6 +126,23 @@ def test_an_editor_cue_id_as_str_matches_the_scripts_uuid_cue_id(controller):
     controller.communications_thread.broadcast_osc.assert_any_call(
         f"/engine/status/cue/{CUE}", 1
     )
+
+
+def test_an_editor_cue_add_is_ignored_while_not_running(controller):
+    """A late start report after a STOP must not leave the cue at 1."""
+    controller.set_status("running", "no")
+    controller.cue_status = {as_id(CUE): 0}
+    controller.communications_thread.broadcast_osc.reset_mock()
+
+    with patch("cuemsengine.ControllerEngine.Logger") as log:
+        controller.cue_operation_callback(
+            _cue_op(ActionType.ADD, {"id": CUE, "offset": 0})
+        )
+
+    assert controller.cue_status[CUE] == 0
+    controller.communications_thread.broadcast_osc.assert_not_called()
+    (message,), _ = log.debug.call_args
+    assert f"Ignoring cue {ActionType.ADD} for {CUE}: not running" in message
 
 
 def test_a_cue_enabled_update_as_str_matches_the_scripts_uuid_cue_id(controller):
