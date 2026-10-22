@@ -66,7 +66,7 @@ pyenv local 3.11
 poetry install
 
 # Link the source tree into your environment for live editing
-bash scripts/link-dev.sh
+bash dev/scripts/link-dev.sh
 
 # Verify the test suite is green before making any changes
 poetry run pytest

@@ -340,10 +340,10 @@ first. Each sub-section is one commit.
 
 ### §14.2 developer tools (one commit)
 
-- [ ] T079 [US5] `git mv scripts/osc_send.py dev/scripts/osc_send.py`. Confirm the top-level `scripts/` is now empty and gone.
-- [ ] T080 [US5] Create `dev/README.md`: one line each for `scripts/link-dev.sh` (the editable `cuemsengine.pth` overlay over `/usr/lib/cuems`), `scripts/kill_cuems.sh` and `scripts/osc_send.py`, plus "Nothing under `dev/` is packaged or run by CI." Also fix the usage comments inside `dev/scripts/link-dev.sh` (lines 7–8) to say `./dev/scripts/link-dev.sh`.
-- [ ] T081 [US5] Fix `README.md:243` and `CONTRIBUTORS.md:69` to `dev/scripts/link-dev.sh`. Then `git grep -nE "(^|[^/])scripts/link-dev\.sh" -- . ':!specs' ':!.specify'` must be empty.
-- [ ] T082 [US5] Run `/speckit-constitution` for a **MINOR 1.1.0 → 1.2.0** amendment of `.specify/memory/constitution.md` (FR-046, research R8):
+- [X] T079 [US5] `git mv scripts/osc_send.py dev/scripts/osc_send.py`. Confirm the top-level `scripts/` is now empty and gone.
+- [X] T080 [US5] Create `dev/README.md`: one line each for `scripts/link-dev.sh` (the editable `cuemsengine.pth` overlay over `/usr/lib/cuems`), `scripts/kill_cuems.sh` and `scripts/osc_send.py`, plus "Nothing under `dev/` is packaged or run by CI." Also fix the usage comments inside `dev/scripts/link-dev.sh` (lines 7–8) to say `./dev/scripts/link-dev.sh`.
+- [X] T081 [US5] Fix `README.md:243` and `CONTRIBUTORS.md:69` to `dev/scripts/link-dev.sh`. Then `git grep -nE "(^|[^/])scripts/link-dev\.sh" -- . ':!specs' ':!.specify'` must be empty.
+- [X] T082 [US5] Run `/speckit-constitution` for a **MINOR 1.1.0 → 1.2.0** amendment of `.specify/memory/constitution.md` (FR-046, research R8):
   - lines 122 and 139: `scripts/link-dev.sh` → `dev/scripts/link-dev.sh`
   - lines 117–118: test files live under `tests/` at the repository root, split by kind into `tests/unit/`, `tests/integration/` and `tests/contract/`, with helpers in `tests/support/` and fixtures in `tests/data/`. The directory decides the marker, and each module is named after the source module it covers (`test_<module>.py`). C2's classification rule is the reference.
   - update the Sync Impact Report and `Last Amended`; no other text changes

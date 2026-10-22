@@ -4,8 +4,8 @@
 # Requires sudo (to modify /usr/lib/cuems).
 #
 # Usage: run from the cuems-engine repo root, or from anywhere with CUEMS_ENGINE_SRC set:
-#   ./scripts/link-dev.sh
-#   sudo ./scripts/link-dev.sh
+#   ./dev/scripts/link-dev.sh
+#   sudo ./dev/scripts/link-dev.sh
 #
 # To restore the installed package: reinstall the deb (e.g. dpkg -i ...cuems-engine*.deb).
 

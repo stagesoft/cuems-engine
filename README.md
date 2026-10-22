@@ -241,7 +241,7 @@ poetry install
 
 # Or, when the package is already installed system-wide under /usr/lib/cuems,
 # replace it with a symlink to this source tree:
-./scripts/link-dev.sh
+./dev/scripts/link-dev.sh
 ```
 
 Restart the `controller-engine` and `node-engine` services after symlinking to pick up source changes. To restore the installed package, reinstall the Debian package.
