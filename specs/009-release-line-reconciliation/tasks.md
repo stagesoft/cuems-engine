@@ -410,25 +410,25 @@ cuemsutils ref and commit, the counts and the xfail list; the badge step is skip
 **Priority note**: US6 (P2) is implemented after US5 (P3) because its jobs select tests **by
 directory** (C1/C2).
 
-- [ ] T106 [US6] In `.github/workflows/ci.yml`:
+- [X] T106 [US6] In `.github/workflows/ci.yml`:
   - set the `on:` block per C1: `push` and `pull_request` on `[main, rc_1, feat/xml-refactor]`, and `workflow_dispatch` with the `cuemsutils_ref` input defaulting to `xml-refactor-merge-candidate`
   - add a top-level `env: CUEMSUTILS_REF: ${{ inputs.cuemsutils_ref || 'xml-refactor-merge-candidate' }}` and `PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring`
   - set the default `permissions: contents: read`
-- [ ] T107 [US6] Replace the `test` job with a **`unit`** job (`needs: lint`, `debian:bookworm`), keeping the current system-package, native-library and Poetry 2.4.1 steps verbatim. Change these:
+- [X] T107 [US6] Replace the `test` job with a **`unit`** job (`needs: lint`, `debian:bookworm`), keeping the current system-package, native-library and Poetry 2.4.1 steps verbatim. Change these:
   - `actions/checkout@v4` with `fetch-depth: 0`, then the R2 fetch of `debian/bookworm`, `rc_1` and `--tags`
   - the C1 install sequence: `poetry add --lock …#${CUEMSUTILS_REF}`; a cache key from `hashFiles('poetry.lock')` computed **after** that step, plus the ref; `poetry install --with dev`; `systemd-python==235`; log the `resolved_reference` and `cuemsutils.__version__` to `$GITHUB_STEP_SUMMARY`; `git checkout -- pyproject.toml poetry.lock && git diff --exit-code`
   - `COVERAGE_FILE=.coverage.unit poetry run pytest tests/unit tests/contract -n auto --cov=src --cov-report= --junitxml=junit-unit.xml`
   - upload `.coverage.unit` and `junit-unit.xml`
-- [ ] T108 [US6] Add the **`integration`** job (`needs: lint`, same container and install sequence; the default checkout depth is enough): `COVERAGE_FILE=.coverage.integration poetry run pytest tests/integration -m "not slow" --cov=src --cov-report= --junitxml=junit-integration.xml`, then upload both files. Keep the comment explaining why `slow` tests are not run here (FR-055).
-- [ ] T109 [US6] Add the **`coverage`** job (`needs: [unit, integration]`, `permissions: contents: write`): download both artifacts, `coverage combine`, `coverage report --fail-under=45`, `coverage xml`. Move the badge generation and the `github-pages-deploy-action` steps here under `if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rc_1')`. Upload `coverage.xml`.
-- [ ] T110 [US6] Add the **`gate-summary`** job (`needs: [lint, unit, integration, coverage]`, `if: always()`). It downloads the JUnit XMLs and writes to `$GITHUB_STEP_SUMMARY`:
+- [X] T108 [US6] Add the **`integration`** job (`needs: lint`, same container and install sequence; the default checkout depth is enough): `COVERAGE_FILE=.coverage.integration poetry run pytest tests/integration -m "not slow" --cov=src --cov-report= --junitxml=junit-integration.xml`, then upload both files. Keep the comment explaining why `slow` tests are not run here (FR-055).
+- [X] T109 [US6] Add the **`coverage`** job (`needs: [unit, integration]`, `permissions: contents: write`): download both artifacts, `coverage combine`, `coverage report --fail-under=45`, `coverage xml`. Move the badge generation and the `github-pages-deploy-action` steps here under `if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/rc_1')`. Upload `coverage.xml`.
+- [X] T110 [US6] Add the **`gate-summary`** job (`needs: [lint, unit, integration, coverage]`, `if: always()`). It downloads the JUnit XMLs and writes to `$GITHUB_STEP_SUMMARY`:
   - the engine ref and `github.sha`
   - `CUEMSUTILS_REF`, the resolved commit and the version (passed as job outputs from `unit`)
   - per-job passed/failed/skipped/xfailed/xpassed counts, parsed with a short inline `python3 -c` over the JUnit XML
   - the xfail node ids with reasons, and the skip list with reasons
   - the combined coverage %
-- [ ] T111 [US6] Validate locally: `$PY -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"`, plus `actionlint` if available. Diff against the C1 table, and check that no job other than `coverage` has `contents: write`. Commit `ci(009): pre-publication gate — parallel unit/integration, combined coverage, cuemsutils_ref`.
-- [ ] T112 [US6] Add the pre-publication checklist to `CONTRIBUTORS.md`'s release section (FR-057): "(1) #24 has landed on the C5 structure after cuems-nodeconf's consolidation; (2) dispatch `ci.yml` on the post-merge `feat/xml-refactor` head with `cuemsutils_ref` = cuems-utils' reconciled tag and confirm green; (3) only then publish to PyPI and upload the `.deb`." Commit.
+- [X] T111 [US6] Validate locally: `$PY -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"`, plus `actionlint` if available. Diff against the C1 table, and check that no job other than `coverage` has `contents: write`. Commit `ci(009): pre-publication gate — parallel unit/integration, combined coverage, cuemsutils_ref`.
+- [X] T112 [US6] Add the pre-publication checklist to `CONTRIBUTORS.md`'s release section (FR-057): "(1) #24 has landed on the C5 structure after cuems-nodeconf's consolidation; (2) dispatch `ci.yml` on the post-merge `feat/xml-refactor` head with `cuemsutils_ref` = cuems-utils' reconciled tag and confirm green; (3) only then publish to PyPI and upload the `.deb`." Commit.
 - [ ] T113 [US6] **Ask the maintainer before pushing**: pushing the branch is an outward act. Once approved, push `009-release-line-reconciliation` and dispatch, with `gh workflow run ci.yml --ref 009-release-line-reconciliation -f cuemsutils_ref=xml-refactor-merge-candidate` or the Actions UI. Wait for the run.
 - [ ] T114 [US6] Write `specs/009-release-line-reconciliation/evidence/ci-gate.md`: the run URL, the engine SHA, which must equal the local HEAD, the cuemsutils ref, resolved commit and version, each job's conclusion and counts, the strict-xfail list (must equal `strict-xfails.md`), whether the changelog test ran or skipped, the combined coverage, and the line showing the badge step **skipped**. If the run is red, fix it on the branch (new commit), re-dispatch, and record every attempt.
 

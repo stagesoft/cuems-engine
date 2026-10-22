@@ -31,7 +31,8 @@ If this file and that document conflict, the planning document wins.
 11. [Review Process](#11-review-process)
 12. [Changelog Line](#12-changelog-line)
 13. [Dependency Governance](#13-dependency-governance)
-14. [License](#14-license)
+14. [Releasing 0.1.1](#14-releasing-011)
+15. [License](#15-license)
 
 ---
 
@@ -337,7 +338,26 @@ but still require a one-line justification in the PR description.
 
 ---
 
-## 14. License
+## 14. Releasing 0.1.1
+
+0.1.1 is published only after the pre-publication gate (`.github/workflows/ci.yml`) has been green on the
+post-merge `feat/xml-refactor` head. The checklist, in order:
+
+1. **#24 has landed** on the structure in
+   `specs/009-release-line-reconciliation/upstream-reports/rc_1-mock-nodeconf-structure.md`, after
+   cuems-nodeconf's consolidation.
+2. **Dispatch `ci.yml`** on the post-merge `feat/xml-refactor` head with `cuemsutils_ref` set to cuems-utils'
+   reconciled tag, and confirm it is green. The gate summary records the engine SHA, the cuems-utils ref and
+   commit, the counts per job, the strict xfails (they must show only the lock test) and whether the changelog
+   test ran or skipped.
+3. **Only then** publish to PyPI and upload the `.deb`.
+
+Every host in a cluster must be upgraded together: the GO payload carries `run_seq`, and an engine before
+`0.1.0rc6-3` is not wire-compatible with it.
+
+---
+
+## 15. License
 
 cuems-engine is licensed under the GNU General Public License v3.0 (GPL-3.0).
 By contributing, you agree that your contributions will be licensed under GPL-3.0.
