@@ -227,3 +227,69 @@ class TestFollowRelay:
         with patch.object(running, "_forward_command_to_nodes") as fwd:
             running.status_operation_callback(op)
         fwd.assert_not_called()
+
+
+def test_follow_senders_are_the_adopted_nodes_of_the_go_gate(tmp_path):
+    """R-4 (009): the follow relay and the GO gate share one adoption rule.
+
+    The relay accepts an adopted node whether or not it answered the liveness
+    probe, and refuses a node the map marks not adopted and a uuid it does not
+    hold, exactly the set ``_adopted_node_uuids`` gives the GO gate.
+    """
+    from cuemsutils.tools.ids import coerce_identity as as_id
+
+    from .network_map_helpers import (
+        controller_with_map,
+        resolve_cluster,
+        typed_network_map,
+    )
+
+    controller_id, online, offline = (
+        "3f2b8c1e-5d4a-4b6e-9c7f-1a2b3c4d5e6f",
+        "9a8b7c6d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+        "5b1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    )
+    not_adopted, stranger = (
+        "7c7c7c7c-0000-4000-8000-000000000007",
+        "8e8e8e8e-0000-4000-8000-000000000008",
+    )
+    source, target = (
+        "2c2c2c2c-0000-4000-8000-00000000000a",
+        "3d3d3d3d-0000-4000-8000-00000000000b",
+    )
+    network_map = typed_network_map(
+        tmp_path,
+        [
+            {"uuid": controller_id, "node_role": "controller", "adopted": True},
+            {"uuid": online, "adopted": True},
+            {"uuid": offline, "adopted": True},
+            {"uuid": not_adopted, "adopted": False},
+        ],
+    )
+    with controller_with_map(controller_id, network_map) as engine:
+        resolve_cluster(engine, alive=[online])
+        engine.set_status("running", "yes")
+        engine.cue_status = {as_id(source): 0, as_id(target): 0}
+
+        accepted = set()
+        for sender in (controller_id, online, offline, not_adopted, stranger):
+            message = NodeOperation(
+                type=OperationType.STATUS,
+                action=ActionType.UPDATE,
+                sender=sender,
+                target="follow",
+                data={
+                    "op": "announce",
+                    "source": source,
+                    "target": target,
+                    "seed_ms": 0,
+                    "run_seq": engine._run_seq,
+                },
+            )
+            with patch.object(engine, "_forward_command_to_nodes") as forward:
+                engine.status_operation_callback(message)
+            if forward.called:
+                accepted.add(sender)
+
+        assert accepted == {str(uuid) for uuid in engine._adopted_node_uuids()}
+        assert accepted == {controller_id, online, offline}

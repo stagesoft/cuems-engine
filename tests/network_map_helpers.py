@@ -154,3 +154,39 @@ def controller_with_map(own_uuid, network_map):
         finally:
             engine._cancel_arm_watchdog()
             engine.stop()
+
+
+def resolve_cluster(engine, alive=()):
+    """Run the load-time cluster resolution; the ``alive`` nodes pong as ``str``.
+
+    The ping is intercepted where it would leave for the NNG loop and the
+    pongs are fed through ``status_operation_callback``, the path real replies
+    take. Returns the diagnosis the controller published.
+    """
+    from cuemsengine.comms.NodesHub import ActionType, NodeOperation, OperationType
+
+    hub = engine.communications_thread.nng_hub
+
+    def deliver(_coro, _loop):
+        (operation,), _ = hub.send_operation.call_args
+        if operation.target == "ping":
+            for sender in alive:
+                engine.status_operation_callback(
+                    NodeOperation(
+                        type=OperationType.STATUS,
+                        action=ActionType.UPDATE,
+                        sender=sender,
+                        target="pong",
+                        data={},
+                    )
+                )
+
+    with (
+        patch(
+            "cuemsengine.ControllerEngine.asyncio.run_coroutine_threadsafe",
+            side_effect=deliver,
+        ),
+        patch.object(engine._pong_event, "wait"),
+    ):
+        engine._resolve_cluster_state()
+    return engine._load_diagnosis
