@@ -429,8 +429,8 @@ directory** (C1/C2).
   - the combined coverage %
 - [X] T111 [US6] Validate locally: `$PY -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci.yml'))"`, plus `actionlint` if available. Diff against the C1 table, and check that no job other than `coverage` has `contents: write`. Commit `ci(009): pre-publication gate — parallel unit/integration, combined coverage, cuemsutils_ref`.
 - [X] T112 [US6] Add the pre-publication checklist to `CONTRIBUTORS.md`'s release section (FR-057): "(1) #24 has landed on the C5 structure after cuems-nodeconf's consolidation; (2) dispatch `ci.yml` on the post-merge `feat/xml-refactor` head with `cuemsutils_ref` = cuems-utils' reconciled tag and confirm green; (3) only then publish to PyPI and upload the `.deb`." Commit.
-- [ ] T113 [US6] **Ask the maintainer before pushing**: pushing the branch is an outward act. Once approved, push `009-release-line-reconciliation` and dispatch, with `gh workflow run ci.yml --ref 009-release-line-reconciliation -f cuemsutils_ref=xml-refactor-merge-candidate` or the Actions UI. Wait for the run.
-- [ ] T114 [US6] Write `specs/009-release-line-reconciliation/evidence/ci-gate.md`: the run URL, the engine SHA, which must equal the local HEAD, the cuemsutils ref, resolved commit and version, each job's conclusion and counts, the strict-xfail list (must equal `strict-xfails.md`), whether the changelog test ran or skipped, the combined coverage, and the line showing the badge step **skipped**. If the run is red, fix it on the branch (new commit), re-dispatch, and record every attempt.
+- [ ] T113 **DEFERRED (maintainer, 2026-10-22): waits for the coordinated cuems-utils tag re-cut; nothing pushed or dispatched.** [US6] **Ask the maintainer before pushing**: pushing the branch is an outward act. Once approved, push `009-release-line-reconciliation` and dispatch, with `gh workflow run ci.yml --ref 009-release-line-reconciliation -f cuemsutils_ref=xml-refactor-merge-candidate` or the Actions UI. Wait for the run.
+- [ ] T114 **DEFERRED with T113**; `evidence/ci-gate.md` records the deferral and what closes it. [US6] Write `specs/009-release-line-reconciliation/evidence/ci-gate.md`: the run URL, the engine SHA, which must equal the local HEAD, the cuemsutils ref, resolved commit and version, each job's conclusion and counts, the strict-xfail list (must equal `strict-xfails.md`), whether the changelog test ran or skipped, the combined coverage, and the line showing the badge step **skipped**. If the run is red, fix it on the branch (new commit), re-dispatch, and record every attempt.
 
 **Checkpoint**: US6 delivered.
 
@@ -446,7 +446,7 @@ directory** (C1/C2).
   - Leave "Pairs with" unchanged.
   - Add the pre-publication checklist line from T112 and the FR-038 note.
 - [X] T117 Write `specs/009-release-line-reconciliation/evidence/wo-traceability.md`: for each WO section 0–14 and Appendix A, the 009 artefact that carries it (spec FR/SC, research R#, contract C#, or evidence file), following the spec's traceability table. Every row must point at an existing file and anchor.
-- [ ] T118 **Final task: delete the work order** (FR-060).
+- [X] T118 **Final task: delete the work order** (FR-060).
   1. Record `git log -1 --format=%H -- specs/planning/release-line-reconciliation-0.1.1.md` in `spec.md`'s header as "Work order last commit: `<sha>`".
   2. Run `git grep -n release-line-reconciliation-0.1.1 -- . ':!specs/009-*'`. It must be empty; re-point any hit (for example in `specs/planning/`) to `specs/009-release-line-reconciliation/spec.md` first.
   3. `git rm specs/planning/release-line-reconciliation-0.1.1.md`.

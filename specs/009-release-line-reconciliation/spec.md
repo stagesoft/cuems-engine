@@ -11,7 +11,7 @@ docs commit that adds the work order. Nothing else differs.
 **Created**: 2026-10-17
 **Status**: Clarified 2026-10-17; analysed 2026-10-18 (`/speckit-analyze`, remediated)
 **Work order**: `specs/planning/release-line-reconciliation-0.1.1.md` (pre-spec, written 2026-10-17
-at `e994a5e`). This spec cites its sections as **WO §n**. The final task of 009 deletes that file
+at `e994a5e`). Work order last commit: `945ccba5aff30f09e5c937ff6fe73e26e8372c02`. This spec cites its sections as **WO §n**. The final task of 009 deletes that file
 (FR-060), so every section it contains must be traceable from this directory first. See
 [Traceability](#traceability-to-the-work-order).
 **Input**: User description: "Feature `009-release-line-reconciliation` for cuems-engine. Branch off
