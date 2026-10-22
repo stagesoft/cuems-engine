@@ -438,14 +438,14 @@ directory** (C1/C2).
 
 ## Phase 10: Polish and hand-off
 
-- [ ] T115 Complete `specs/009-release-line-reconciliation/evidence/inventory-proofs.md`: every item #1–#23 `proven`, with its proof id and a pass on HEAD; #24 `sequenced` (or `proven` if FR-007's safety net fired). This is SC-002.
-- [ ] T116 Rewrite `../.xml-refactor-tag-messages/cuems-engine.txt` (FR-058). This is the planning artefact outside the repository that the spec names, not a sibling's source.
+- [X] T115 Complete `specs/009-release-line-reconciliation/evidence/inventory-proofs.md`: every item #1–#23 `proven`, with its proof id and a pass on HEAD; #24 `sequenced` (or `proven` if FR-007's safety net fired). This is SC-002.
+- [X] T116 Rewrite `../.xml-refactor-tag-messages/cuems-engine.txt` (FR-058). This is the planning artefact outside the repository that the spec names, not a sibling's source.
   - `Tag:` → "the post-merge `feat/xml-refactor` head (maintainer fills in after the `--no-ff` merge)".
   - Replace "NOT YET RECONCILED" with "Reconciled with origin/debian/bookworm at `<T016 sha>` (0.1.0rc6-5)" plus the X-1 condition.
   - Add items #1–#13 to "Carries".
   - Leave "Pairs with" unchanged.
   - Add the pre-publication checklist line from T112 and the FR-038 note.
-- [ ] T117 Write `specs/009-release-line-reconciliation/evidence/wo-traceability.md`: for each WO section 0–14 and Appendix A, the 009 artefact that carries it (spec FR/SC, research R#, contract C#, or evidence file), following the spec's traceability table. Every row must point at an existing file and anchor.
+- [X] T117 Write `specs/009-release-line-reconciliation/evidence/wo-traceability.md`: for each WO section 0–14 and Appendix A, the 009 artefact that carries it (spec FR/SC, research R#, contract C#, or evidence file), following the spec's traceability table. Every row must point at an existing file and anchor.
 - [ ] T118 **Final task: delete the work order** (FR-060).
   1. Record `git log -1 --format=%H -- specs/planning/release-line-reconciliation-0.1.1.md` in `spec.md`'s header as "Work order last commit: `<sha>`".
   2. Run `git grep -n release-line-reconciliation-0.1.1 -- . ':!specs/009-*'`. It must be empty; re-point any hit (for example in `specs/planning/`) to `specs/009-release-line-reconciliation/spec.md` first.

@@ -35,7 +35,19 @@ are filled in when they run on the merged tree (T027, T048).
 | 21 | Hotfix line `rc5-2…rc5-6` | D + `-s ours` | FR-008 | `hotfix-rc5-equivalence.md`, `tests/test_changelog_complete.py` | proven |
 | 22 | `35cbe78`: output maps ignore inputs (silent-audio bug) | M by SHA | A-7 | `tests/test_node_output_maps.py::test_audio_output_zero_resolves_to_the_output_not_the_input`, `::test_video_output_zero_resolves_to_the_output_not_the_input` (red `failing-first-A-7.txt`; mutation check: reading inputs gives `system:capture_1`) | proven |
 | 23 | `d50ee4b`: mock players report JACK ready | M by SHA | — | `tests/test_mock_players_jack_ready.py` (4 tests; red `failing-first-23.txt`) | proven |
-| 24 | `5a1811c` + `3c11c60`: mock nodeconf and its drop-in | not in 009 | FR-016a | `upstream-reports/rc_1-mock-nodeconf-structure.md` (T065) | sequenced (pending T065) |
+| 24 | `5a1811c` + `3c11c60`: mock nodeconf and its drop-in | not in 009 | FR-016a | `upstream-reports/rc_1-mock-nodeconf-structure.md` (T065) | sequenced (T065 written) |
 | **25** | **New 2026-10-19, not in the spec:** project unload reaches nodes as an unload; `_teardown_project`; docs on the A/V loop guarantee (869fh8kef, #41; released in `0.1.0rc6-6`) | M | A-5 (ids in the new unload path), changelog | `tests/test_node_unload_project.py`, `tests/test_cross_node_follow_controller.py` (unload forwards `/engine/command/unload`, `run_seq` bumped first), `tests/test_project_load.py` | proven (`suite-after-adapt.txt`: 1444 passed, no failure outside arm A) |
 
 `NO PROOF` flags: none beyond #2 (T026a). Every other item has a bookworm test file or a recorded check.
+
+
+## SC-002 closing check (T115)
+
+HEAD `a585e97`, libmtc stub applied for the run only, the commands of the CI jobs:
+
+- `pytest tests/unit tests/contract -n auto --dist loadfile`: 1370 passed, 1 xfailed in 14.79s 
+- `pytest tests/integration -m "not slow" --dist loadfile`: 119 passed, 6 deselected in 50.31s 
+
+Items #1–#23 and #25 are `proven` (a test node id or a recorded check, each passing on HEAD); #24 is `sequenced`: not built in 009
+by clarification (FR-007), its agreed structure is written in `upstream-reports/rc_1-mock-nodeconf-structure.md`, and
+`5a1811c` / `3c11c60` are confirmed not on `rc_1` (`remeasure-handoff.md`), so the FR-016 safety net did not fire.
