@@ -1,0 +1,46 @@
+# failing-first #23 (T021) — HEAD 7054fcb, before d50ee4b
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 4 items
+tests/test_mock_players_jack_ready.py FFFF                               [100%]
+=================================== FAILURES ===================================
+_________ test_audioplayer_registers_the_real_players_client_and_ports _________
+tests/test_mock_players_jack_ready.py:85: in test_audioplayer_registers_the_real_players_client_and_ports
+    (client,) = fake_jack.created
+    ^^^^^^^^^
+E   ValueError: not enough values to unpack (expected 1, got 0)
+------------------------------ Captured log call -------------------------------
+_______________ test_jack_volume_registers_input_n_and_output_n ________________
+tests/test_mock_players_jack_ready.py:96: in test_jack_volume_registers_input_n_and_output_n
+    (client,) = fake_jack.created
+    ^^^^^^^^^
+E   ValueError: not enough values to unpack (expected 1, got 0)
+------------------------------ Captured log call -------------------------------
+_ test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint[audioplayer] _
+tests/test_mock_players_jack_ready.py:117: in test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint
+    assert ready_lines(out) == [READY_LINE.decode()]
+E   AssertionError: assert [] == ['[OK] RUNNING!']
+E     
+E     Right contains one more item: '[OK] RUNNING!'
+E     Use -v to get more diff
+------------------------------ Captured log call -------------------------------
+_ test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint[jack-volume] _
+tests/test_mock_players_jack_ready.py:117: in test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint
+    assert ready_lines(out) == [READY_LINE.decode()]
+E   AssertionError: assert [] == ['[OK] RUNNING!']
+E     
+E     Right contains one more item: '[OK] RUNNING!'
+E     Use -v to get more diff
+------------------------------ Captured log call -------------------------------
+=========================== short test summary info ============================
+FAILED tests/test_mock_players_jack_ready.py::test_audioplayer_registers_the_real_players_client_and_ports
+FAILED tests/test_mock_players_jack_ready.py::test_jack_volume_registers_input_n_and_output_n
+FAILED tests/test_mock_players_jack_ready.py::test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint[audioplayer]
+FAILED tests/test_mock_players_jack_ready.py::test_without_a_jack_server_the_mock_is_still_a_running_osc_endpoint[jack-volume]
+============================== 4 failed in 0.79s ===============================
