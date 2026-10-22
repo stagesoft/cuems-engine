@@ -34,7 +34,7 @@ are filled in when they run on the merged tree (T027, T048).
 | 20 | `cuemsutils >= 0.1.0rc17` | R → ours | subsumed only if X-1 holds | T058 relation verdicts; X-1 xfails (T060) | pending |
 | 21 | Hotfix line `rc5-2…rc5-6` | D + `-s ours` | FR-008 | `evidence/hotfix-rc5-equivalence.md` (T023), changelog test (T024–T026) | pending |
 | 22 | `35cbe78`: output maps ignore inputs (silent-audio bug) | M by SHA | A-7 | `tests/test_node_output_maps.py::test_audio_output_zero_resolves_to_the_output_not_the_input`, `::test_video_output_zero_resolves_to_the_output_not_the_input` (red `failing-first-A-7.txt`; mutation check: reading inputs gives `system:capture_1`) | proven |
-| 23 | `d50ee4b`: mock players report JACK ready | M by SHA | — | `tests/test_mock_players_jack_ready.py` (T021/T022) | pending |
+| 23 | `d50ee4b`: mock players report JACK ready | M by SHA | — | `tests/test_mock_players_jack_ready.py` (4 tests; red `failing-first-23.txt`) | proven |
 | 24 | `5a1811c` + `3c11c60`: mock nodeconf and its drop-in | not in 009 | FR-016a | `upstream-reports/rc_1-mock-nodeconf-structure.md` (T065) | sequenced (pending T065) |
 | **25** | **New 2026-10-19, not in the spec:** project unload reaches nodes as an unload; `_teardown_project`; docs on the A/V loop guarantee (869fh8kef, #41; released in `0.1.0rc6-6`) | M | A-5 (ids in the new unload path), changelog | `tests/test_node_unload_project.py`, `tests/test_cross_node_follow_controller.py` (unload forwards `/engine/command/unload`, `run_seq` bumped first), `tests/test_project_load.py` | pending |
 
