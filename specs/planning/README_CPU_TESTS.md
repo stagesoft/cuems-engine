@@ -73,42 +73,30 @@ pip install -e ".[dev]"
 
 ## Running the Tests
 
-### Using the Test Runner Script
+### Running them
+
+The wrapper script `run_cpu_tests.py` was deleted in feature 009; run pytest directly. The CPU tests are
+integration tests (they start real engines) and the long ones are marked `slow`:
 
 ```bash
-# Run all CPU tests
-python tests/run_cpu_tests.py
-
-# Run only fast tests (exclude slow ones)
-python tests/run_cpu_tests.py --markers "not slow"
-
-# Run only integration tests
-python tests/run_cpu_tests.py --markers "integration"
-
-# Run with verbose output
-python tests/run_cpu_tests.py --verbose
-
-# Run with coverage report
-python tests/run_cpu_tests.py --coverage
-
-# List available tests
-python tests/run_cpu_tests.py --list-tests
+# The slow CPU tests (the default way to run them)
+pytest tests/integration/test_cpu_usage.py -m slow
 ```
 
-### Using pytest Directly
+### More pytest invocations
 
 ```bash
 # Run all CPU tests
-pytest tests/test_cpu_usage.py -v
+pytest tests/integration/test_cpu_usage.py -v
 
 # Run specific test
-pytest tests/test_cpu_usage.py::TestBaseEngineCPUUsage::test_base_engine_idle_cpu_usage -v
+pytest tests/integration/test_cpu_usage.py::TestBaseEngineCPUUsage::test_base_engine_idle_cpu_usage -v
 
 # Run tests with markers
-pytest tests/test_cpu_usage.py -m "not slow" -v
+pytest tests/integration/test_cpu_usage.py -m "not slow" -v
 
 # Run tests in parallel (if pytest-xdist is installed)
-pytest tests/test_cpu_usage.py -n auto -v
+pytest tests/integration/test_cpu_usage.py -n auto -v
 ```
 
 ## Test Markers
@@ -163,7 +151,7 @@ Each test provides detailed output including:
 Run tests with increased verbosity for debugging:
 
 ```bash
-pytest tests/test_cpu_usage.py -v -s --tb=long
+pytest tests/integration/test_cpu_usage.py -v -s --tb=long
 ```
 
 ### Performance Profiling
@@ -172,7 +160,7 @@ For detailed performance analysis, use pytest-profiling:
 
 ```bash
 pip install pytest-profiling
-pytest tests/test_cpu_usage.py --profile
+pytest tests/integration/test_cpu_usage.py --profile
 ```
 
 ## Customization
@@ -214,7 +202,7 @@ def monitor_custom_metric(self, process, metric_name, duration=5.0):
 - name: Run CPU Usage Tests
   run: |
     pip install -e ".[dev]"
-    pytest tests/test_cpu_usage.py -m "not slow" --junitxml=cpu-tests.xml
+    pytest tests/integration/test_cpu_usage.py -m "not slow" --junitxml=cpu-tests.xml
 ```
 
 ### Jenkins Pipeline Example
@@ -223,7 +211,7 @@ def monitor_custom_metric(self, process, metric_name, duration=5.0):
 stage('CPU Tests') {
     steps {
         sh 'pip install -e ".[dev]"'
-        sh 'pytest tests/test_cpu_usage.py --junitxml=cpu-tests.xml'
+        sh 'pytest tests/integration/test_cpu_usage.py --junitxml=cpu-tests.xml'
     }
     post {
         always {

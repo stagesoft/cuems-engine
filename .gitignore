@@ -18,7 +18,6 @@ nohup.out
 *.pid
 .coverage*
 
-dev/local/
 site/
 .venv/*
 !.venv/pyvenv.cfg

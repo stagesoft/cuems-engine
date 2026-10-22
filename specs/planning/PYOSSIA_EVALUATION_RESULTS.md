@@ -188,3 +188,5 @@ class MidiOscRouter:
 The oscsend workaround for video can be removed since pyossia OSC sending is reliable. The NNG workaround should stay because pyossia cannot receive OSC reliably.
 
 For future MIDI↔OSC routing, use mido + pyossia.OSCDevice as a simple custom solution.
+
+The investigation scripts `dev/test_pyossia_{gmq,midi,without_daemon}.py` were deleted in 009; last commit `9c35e76`.

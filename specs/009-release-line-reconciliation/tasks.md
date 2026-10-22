@@ -327,16 +327,16 @@ the path prefix plus the listed retirements only.
 **Ordering note**: §14.4 (strays) runs before §14.3 (re-layout), so retired files are not moved
 first. Each sub-section is one commit.
 
-- [ ] T072 [US5] Snapshot before the cleanup: `$PY -m pytest --collect-only -q > specs/009-release-line-reconciliation/evidence/collect-before.txt`, plus a full run's pass/fail per node id into `outcome-before.txt` (`-rA`).
+- [X] T072 [US5] Snapshot before the cleanup: `$PY -m pytest --collect-only -q > specs/009-release-line-reconciliation/evidence/collect-before.txt`, plus a full run's pass/fail per node id into `outcome-before.txt` (`-rA`).
 
 ### §14.1 `dev/` deletions (one commit)
 
-- [ ] T073 [US5] `git rm` the superseded and stale files under `dev/`: `CuemsEngine.py`, `CuemsEngine_old.py`, `AudioPlayerRemote.py`, `VideoPlayerRemote.py`, `NodeAudioPlayers.py`, `NodeVideoPlayers.py`, `NodeControl.score`, `cuems-engine.service`, `network_map.xsd`, `display.py`, `editor-engine-commands.txt`, `diagnose_env_output.txt`, `test_cleanup_demo.py`, `test_pyossia_gmq.py`, `test_pyossia_midi.py`, `test_pyossia_without_daemon.py`, `test_json_files/`, and `test_xml_files/test_jsons.txt`. First note the last commit of the pyossia scripts with `git log -1 --format=%h -- dev/test_pyossia_*.py`.
-- [ ] T074 [US5] Append one line to `specs/planning/PYOSSIA_EVALUATION_RESULTS.md`: "The investigation scripts `dev/test_pyossia_{gmq,midi,without_daemon}.py` were deleted in 009; last commit `<sha from T073>`."
-- [ ] T075 [US5] `git rm dev/scripts/change_to_firstrun.sh dev/scripts/change_to_master.sh dev/scripts/change_to_slave.sh dev/scripts/diagnose_env.py dev/scripts/run_cpu_tests.py`.
-- [ ] T076 [US5] Compare the process names matched by `dev/scripts/kill_cuems_processes.py` and `dev/scripts/kill_cuems.sh` against 869evtdf7's binary names (`cuems-audioplayer`, `cuems-dmxplayer`, `cuems-videocomposer`, own-user only). Update `dev/scripts/kill_cuems.sh` if it matches stale names, then `git rm dev/scripts/kill_cuems_processes.py`. Record the comparison in `specs/009-release-line-reconciliation/evidence/kill-cuems-check.md` (accepted default Q9).
-- [ ] T077 [US5] Rewrite `specs/planning/README_CPU_TESTS.md`: replace every `run_cpu_tests.py` invocation with `pytest tests/integration/test_cpu_usage.py -m slow`, the path after T101.
-- [ ] T078 [US5] Remove the `dev/local/` rule from `.gitignore` (the media rule is re-pointed in T098). Run the suite (unchanged pass set versus `outcome-before.txt`, since the fixtures are not moved yet) and commit `chore(009/14.1): delete superseded dev/ content`.
+- [X] T073 [US5] `git rm` the superseded and stale files under `dev/`: `CuemsEngine.py`, `CuemsEngine_old.py`, `AudioPlayerRemote.py`, `VideoPlayerRemote.py`, `NodeAudioPlayers.py`, `NodeVideoPlayers.py`, `NodeControl.score`, `cuems-engine.service`, `network_map.xsd`, `display.py`, `editor-engine-commands.txt`, `diagnose_env_output.txt`, `test_cleanup_demo.py`, `test_pyossia_gmq.py`, `test_pyossia_midi.py`, `test_pyossia_without_daemon.py`, `test_json_files/`, and `test_xml_files/test_jsons.txt`. First note the last commit of the pyossia scripts with `git log -1 --format=%h -- dev/test_pyossia_*.py`.
+- [X] T074 [US5] Append one line to `specs/planning/PYOSSIA_EVALUATION_RESULTS.md`: "The investigation scripts `dev/test_pyossia_{gmq,midi,without_daemon}.py` were deleted in 009; last commit `<sha from T073>`."
+- [X] T075 [US5] `git rm dev/scripts/change_to_firstrun.sh dev/scripts/change_to_master.sh dev/scripts/change_to_slave.sh dev/scripts/diagnose_env.py dev/scripts/run_cpu_tests.py`.
+- [X] T076 [US5] Compare the process names matched by `dev/scripts/kill_cuems_processes.py` and `dev/scripts/kill_cuems.sh` against 869evtdf7's binary names (`cuems-audioplayer`, `cuems-dmxplayer`, `cuems-videocomposer`, own-user only). Update `dev/scripts/kill_cuems.sh` if it matches stale names, then `git rm dev/scripts/kill_cuems_processes.py`. Record the comparison in `specs/009-release-line-reconciliation/evidence/kill-cuems-check.md` (accepted default Q9).
+- [X] T077 [US5] Rewrite `specs/planning/README_CPU_TESTS.md`: replace every `run_cpu_tests.py` invocation with `pytest tests/integration/test_cpu_usage.py -m slow`, the path after T101.
+- [X] T078 [US5] Remove the `dev/local/` rule from `.gitignore` (the media rule is re-pointed in T098). Run the suite (unchanged pass set versus `outcome-before.txt`, since the fixtures are not moved yet) and commit `chore(009/14.1): delete superseded dev/ content`.
 
 ### §14.2 developer tools (one commit)
 
