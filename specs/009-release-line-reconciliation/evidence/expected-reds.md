@@ -21,5 +21,7 @@ Exact node ids of A-2 and A-3 are read off `suite-arm-B.txt` (T017).
 
 ## New findings (appended by T017)
 
-*None yet.* The line moved after the spec (`0.1.0rc6-6`, see `remeasure-start.md`); any red the new
-delta causes is appended here with its classification.
+*None.* Arm B (`suite-arm-B.txt`, merge commit `1c12959`) fails exactly the 10 ids above, including after
+absorbing the post-spec `0.1.0rc6-6` delta. The A-2 ids are the four `test_run_sets_end_to_start_plus_converted_duration[video-…]`
+cases plus `test_run_with_no_duration_is_zero_and_warned[video]`; the A-3 ids are
+`test_counted_loop_wraps_then_clamps_on_its_last_pass` and `test_infinite_loop_keeps_wrapping`.
