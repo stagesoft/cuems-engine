@@ -248,19 +248,19 @@ Restart the `controller-engine` and `node-engine` services after symlinking to p
 
 ### Run tests
 
-From the repo root, the same two passes CI runs:
+From the repo root, the same two passes CI runs (see [tests/README.md](tests/README.md) for the layout):
 
 ```bash
-poetry run pytest -m "not integration" -n auto     # unit tests, parallel
-poetry run pytest -m "integration and not slow"    # fast integration tests
+poetry run pytest tests/unit tests/contract -n auto --dist loadfile   # unit + contract, parallel
+poetry run pytest tests/integration -m "not slow" --dist loadfile     # fast integration tests
 ```
 
-Useful markers:
+Useful selections (the directory decides the marker, so `-m unit` and `tests/unit` agree):
 
 ```bash
 poetry run pytest -m unit                  # fast unit tests only
 poetry run pytest -m "not slow"            # skip long-running tests
-poetry run pytest -m integration           # integration tests (requires hardware or mocks)
+poetry run pytest tests/integration -m slow  # long integration tests, on a rig
 poetry run pytest --cov=src                # with coverage report
 ```
 

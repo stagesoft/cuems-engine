@@ -1,0 +1,28 @@
+# SC-009 cleanup check (T103, T105) — 2026-10-22, HEAD 28bf459 + the staged re-layout
+
+$ git grep -nE "dev/test_xml_files|test_json_files|pytest_cuems_plugin|CuemsEngine_old" -- . ":!specs"
+(empty)
+
+$ git grep -nE "(^|[^/])scripts/link-dev\.sh" -- . ":!specs" ":!.specify"
+(empty)
+
+$ find dev -maxdepth 2 | sort
+dev
+dev/README.md
+dev/scripts
+dev/scripts/kill_cuems.sh
+dev/scripts/link-dev.sh
+dev/scripts/osc_send.py
+
+$ ls tests/test_*.py
+ls: cannot access 'tests/test_*.py': No such file or directory
+
+## lint (scratch venv, no stub applied)
+151 files would be left unchanged.
+isort clean
+flake8 clean
+
+## unit + contract with no network (unshare -rn), libmtc stub applied for the run only
+XFAIL tests/contract/test_lock_is_current.py::test_poetry_lock_is_current - poetry.lock relocks at publication, once cuemsutils 0.1.1 is resolvable (cuems-utils 016, FR-022)
+======================= 1370 passed, 1 xfailed in 14.82s =======================
+0 failures; the 8 environmental failures of WO §6.1 do not occur

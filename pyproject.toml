@@ -113,6 +113,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "contract: marks repository and packaging invariants (the directory decides the marker)",
 ]
 # Ensure proper cleanup on keyboard interrupt
 junit_duration_report = "call"
@@ -121,6 +122,7 @@ filterwarnings = ["ignore::pytest.PytestUnhandledThreadExceptionWarning"]
 [tool.coverage.run]
 source = ["src"]
 branch = true
+relative_files = true
 omit = [
     "*/tests/*",
     "*/test_*",

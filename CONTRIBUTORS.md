@@ -155,17 +155,28 @@ Your git log on the feature branch MUST show this order. The PR template asks fo
 the commit SHA of your failing-test commit. Reviewers will check it.
 
 ```bash
-# Run only unit tests (fast feedback loop)
-poetry run pytest -m "not integration"
+# Fast feedback loop: unit and contract tests, no network needed
+poetry run pytest tests/unit tests/contract -n auto --dist loadfile
 
-# Run the full suite including integration tests
-poetry run pytest
+# Integration tests (real sockets, subprocesses, JACK); `slow` ones are for a rig
+poetry run pytest tests/integration -m "not slow" --dist loadfile
+
+# The full suite
+poetry run pytest -n auto --dist loadfile
 
 # Run with coverage report
 poetry run pytest --cov=src --cov-report=term-missing
 ```
 
-Integration tests (`@pytest.mark.integration`) MUST run against real subsystems —
+**Where a test goes.** Tests live in `tests/unit/`, `tests/integration/` or `tests/contract/`, and the
+directory decides the marker (no hand-written `unit`/`integration` marks; a test file at the root of
+`tests/` is a collection error). A test is integration if it binds or connects a real socket, starts a
+real subprocess or player, touches JACK or ALSA, or relies on a `sleep` ≥ 0.5 s; contract if it asserts a
+repository or packaging invariant; everything else is unit, and mocks what it would otherwise touch.
+Name the file after the source module it covers (`test_<module>.py`). **If you work on `rc_1`**: put new
+tests in those three directories, never in the root of `tests/`. See [`tests/README.md`](tests/README.md).
+
+Integration tests (the `tests/integration/` ones) MUST run against real subsystems —
 no mocks for OSC, NNG, or subprocess boundaries. See
 [`specs/planning/contributor-workflow.md §6`](specs/planning/contributor-workflow.md)
 for the full integration test policy.
@@ -175,7 +186,7 @@ threads behind: it registers a `SIGINT` handler (Ctrl+C) that runs every registe
 two fixtures hand resources over to it. Use `engine_cleanup` for any test that starts a
 `ControllerEngine` or `NodeEngine` (`engine = engine_cleanup(ControllerEngine(with_mtc=False))`; no
 manual `stop()`), and `process_cleanup` for any `multiprocessing.Process` a test starts. Run the
-parallel suite with `-n auto --dist loadfile`: `tests/test_port_handler.py` picks real ports and
+parallel suite with `-n auto --dist loadfile`: `tests/unit/test_port_handler.py` picks real ports and
 two of its tests on different workers collide.
 
 ---
