@@ -272,24 +272,24 @@ structure message are written.
 xfailed, each with a reason naming its report; the six documents exist under `upstream-reports/`
 (SC-004, SC-006).
 
-- [ ] T059 [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md`:
+- [X] T059 [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md`:
   - **X-1**: `stop_project` in the version-2 `script.xsd` `ActionType` and in the ActionCue docs, **targetless** (the engine's evidence for utils 017's S-1 and D5; research R4).
   - **X-2**: keep `Replaces: cuems-engine (<< 0.1.0rc6-2~)` and add it to 016's relation matrix.
   - **X-3**: CACHEDIR.TAG, with T056/T057's result.
   - **X-4**: the `Media` `Unset` stays key-absent, with T043's result.
   - The successor path `specs/009-release-line-reconciliation/`, replacing the WO that utils 017 cites at `945ccba`.
   - The request that the utils maintainer link this report from cuems-utils' "still owed" list. That is their edit, not ours.
-- [ ] T060 [US4] Write `tests/test_stop_project_xsd.py` with the X-1 tests. Each is marked `@pytest.mark.xfail(strict=True, reason="cuems-utils 0.1.1 lacks rc17 stop_project — specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md")`:
+- [X] T060 [US4] Write `tests/test_stop_project_xsd.py` with the X-1 tests. Each is marked `@pytest.mark.xfail(strict=True, reason="cuems-utils 0.1.1 lacks rc17 stop_project — specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md")`:
   - (a) `CuemsScript.load` of a version-2 script containing one ActionCue with `<action_type>stop_project</action_type>` and **no target** (fixture `dev/test_xml_files/projects/stop_project_v2/script.xml`, created here; it moves in T097) loads and yields that ActionCue
   - (b) saving that loaded script back through the published write path validates
 
   Run them: they must report `xfailed` (not error, not pass). If either passes, follow FR-021 instead: remove the marker and record it.
-- [ ] T061 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-frontend-engine-contracts.md`, naming the C4 rows W3 and W4, plus W1's "every host together" for awareness.
-- [ ] T062 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-editor-engine-contracts.md`, naming the C4 rows W2 and W4 (the save path through utils' XSD).
-- [ ] T063 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-power-bridge-engine-contracts.md`, naming the C4 rows W2 and W4 (their `0.3.1-2` half, absorbed in their 0.4.0-1 reconciliation).
-- [ ] T064 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-nodeconf-engine-contracts.md`, naming the C4 row W6: the planned `cuems-nodeconf.service.d` drop-in from `cuems-engine-mock`, whose shape is to be agreed in cuems-nodeconf's consolidation. Link the C5 structure.
-- [ ] T065 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/rc_1-mock-nodeconf-structure.md`, addressed to #24's author (Ion) and the `rc_1` maintainer. Carry contract C5 in full: placement, interface, rules 1–5, behaviours B1–B5 as the red-first test list, base, timing (after cuems-nodeconf's consolidation, before 0.1.1 is published) and the merge-by-SHA route. List the three defects of `5a1811c` (WO §4.1 row 24 (a)–(c)) so the author knows what to change.
-- [ ] T066 [US4] Run `$PY -m pytest tests -rxX -q | grep -E "XFAIL|XPASS"` and write `specs/009-release-line-reconciliation/evidence/strict-xfails.md`. The set must equal {`test_lock_is_current.py::test_poetry_lock_is_current`} ∪ {T060's tests}, each reason containing its report path (SC-004). Also check that every path cited in `pyproject.toml`, `CHANGELOG.md` and the xfail reasons under `upstream-reports/` now exists (I6). Commit T059–T066 as `docs(009): upstream reports and X-1 strict xfails`.
+- [X] T061 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-frontend-engine-contracts.md`, naming the C4 rows W3 and W4, plus W1's "every host together" for awareness.
+- [X] T062 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-editor-engine-contracts.md`, naming the C4 rows W2 and W4 (the save path through utils' XSD).
+- [X] T063 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-power-bridge-engine-contracts.md`, naming the C4 rows W2 and W4 (their `0.3.1-2` half, absorbed in their 0.4.0-1 reconciliation).
+- [X] T064 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/cuems-nodeconf-engine-contracts.md`, naming the C4 row W6: the planned `cuems-nodeconf.service.d` drop-in from `cuems-engine-mock`, whose shape is to be agreed in cuems-nodeconf's consolidation. Link the C5 structure.
+- [X] T065 [P] [US4] Write `specs/009-release-line-reconciliation/upstream-reports/rc_1-mock-nodeconf-structure.md`, addressed to #24's author (Ion) and the `rc_1` maintainer. Carry contract C5 in full: placement, interface, rules 1–5, behaviours B1–B5 as the red-first test list, base, timing (after cuems-nodeconf's consolidation, before 0.1.1 is published) and the merge-by-SHA route. List the three defects of `5a1811c` (WO §4.1 row 24 (a)–(c)) so the author knows what to change.
+- [X] T066 [US4] Run `$PY -m pytest tests -rxX -q | grep -E "XFAIL|XPASS"` and write `specs/009-release-line-reconciliation/evidence/strict-xfails.md`. The set must equal {`test_lock_is_current.py::test_poetry_lock_is_current`} ∪ {T060's tests}, each reason containing its report path (SC-004). Also check that every path cited in `pyproject.toml`, `CHANGELOG.md` and the xfail reasons under `upstream-reports/` now exists (I6). Commit T059–T066 as `docs(009): upstream reports and X-1 strict xfails`.
 
 **Checkpoint**: US4 delivered.
 

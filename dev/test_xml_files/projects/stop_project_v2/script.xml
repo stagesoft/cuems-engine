@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<cms:CuemsProject xmlns:cms="https://stagelab.coop/cuems/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://stagelab.coop/cuems/ script.xsd" doc_version="2">
+    <CuemsScript>
+        <CueList>
+            <autoload>false</autoload>
+            <description />
+            <enabled>true</enabled>
+            <id>c1d2e3f4-0001-4aaa-8aaa-000000000001</id>
+            <loop>1</loop>
+            <name>stop_project</name>
+            <offset>
+                <CTimecode>00:00:00.000</CTimecode>
+            </offset>
+            <post_go>pause</post_go>
+            <postwait>
+                <CTimecode>00:00:00.000</CTimecode>
+            </postwait>
+            <prewait>
+                <CTimecode>00:00:00.000</CTimecode>
+            </prewait>
+            <target />
+            <timecode>false</timecode>
+            <ui_properties />
+            <contents>
+                <ActionCue>
+                    <autoload>false</autoload>
+                    <description />
+                    <enabled>true</enabled>
+                    <id>c1d2e3f4-0002-4aaa-8aaa-000000000002</id>
+                    <loop>1</loop>
+                    <name>End of show</name>
+                    <offset>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </offset>
+                    <post_go>pause</post_go>
+                    <postwait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </postwait>
+                    <prewait>
+                        <CTimecode>00:00:00.000</CTimecode>
+                    </prewait>
+                    <target />
+                    <timecode>false</timecode>
+                    <ui_properties />
+                    <action_target />
+                    <action_type>stop_project</action_type>
+                </ActionCue>
+            </contents>
+        </CueList>
+        <created>2026-10-22T00:00:00</created>
+        <description>A targetless stop_project ActionCue, the authored end of an unattended show (009 X-1)</description>
+        <id>c1d2e3f4-0000-4aaa-8aaa-000000000000</id>
+        <modified>2026-10-22T00:00:00</modified>
+        <name>Stop project</name>
+        <ui_properties />
+    </CuemsScript>
+</cms:CuemsProject>
