@@ -226,28 +226,28 @@ build at `0.1.1-1` with their 016 relation values.
 **Independent test**: `tests/test_changelog_complete.py` (all 5 assertions of C3) runs and passes;
 verdicts are 27/27; both debs are built and inspected.
 
-- [ ] T049 [US3] Extend `tests/test_changelog_complete.py` with C3 **assertion 5**: every version from assertion 2 is named in `CHANGELOG.md` by a `<!-- source: … -->` comment or an inline `(<version>, YYYY-MM-DD)`; the first `## v` header is `v0.1.1`; and the `v0.1.1` section does not contain "not reconciled". Run it and capture the red, listing the missing versions (at least `rc6-2…rc6-5` and `rc5-2…rc5-6`), to `specs/009-release-line-reconciliation/evidence/failing-first-changelog-md.txt`.
-- [ ] T050 [US3] In `CHANGELOG.md`, extend `## v0.1.0rc6`:
+- [X] T049 [US3] Extend `tests/test_changelog_complete.py` with C3 **assertion 5**: every version from assertion 2 is named in `CHANGELOG.md` by a `<!-- source: … -->` comment or an inline `(<version>, YYYY-MM-DD)`; the first `## v` header is `v0.1.1`; and the `v0.1.1` section does not contain "not reconciled". Run it and capture the red, listing the missing versions (at least `rc6-2…rc6-5` and `rc5-2…rc5-6`), to `specs/009-release-line-reconciliation/evidence/failing-first-changelog-md.txt`.
+- [X] T050 [US3] In `CHANGELOG.md`, extend `## v0.1.0rc6`:
   - add one `<!-- source: debian/bookworm 0.1.0rc6-N (<sha>) -->` comment per build, for N = 2…5 (shas from `git log --format=%h -1 v0.1.0rc6-N`)
   - add each build's content (items #1–#13 and #15, as worded in that build's Debian entry) under the existing `Added`/`Changed`/`Fixed` sub-headers, with an inline `(0.1.0rc6-N, YYYY-MM-DD)`
 
   No new top-level header (FR-032).
-- [ ] T051 [US3] In `CHANGELOG.md`, extend `## v0.1.0rc5` with `rc5-2…rc5-6` the same way. Source comment: `<!-- source: tag v0.1.0rc5-6 (69e91e4), hotfix line -->`. Content from those five Debian entries.
-- [ ] T052 [US3] Audit every older `CHANGELOG.md` section (`v0.1.0rc4`, `rc3`, `rc2`, `v0.1.0`) against the merged `debian/changelog`, one build at a time. Add a source comment or inline revision for any missing build; `rc2-3` (the mock rsync shim) and `rc1-1` are the known unverified rows. Record the audit table in `specs/009-release-line-reconciliation/evidence/changelog-md-audit.md`.
-- [ ] T053 [US3] Rewrite the `## v0.1.1 — UNRELEASED` lead paragraph of `CHANGELOG.md`:
+- [X] T051 [US3] In `CHANGELOG.md`, extend `## v0.1.0rc5` with `rc5-2…rc5-6` the same way. Source comment: `<!-- source: tag v0.1.0rc5-6 (69e91e4), hotfix line -->`. Content from those five Debian entries.
+- [X] T052 [US3] Audit every older `CHANGELOG.md` section (`v0.1.0rc4`, `rc3`, `rc2`, `v0.1.0`) against the merged `debian/changelog`, one build at a time. Add a source comment or inline revision for any missing build; `rc2-3` (the mock rsync shim) and `rc1-1` are the known unverified rows. Record the audit table in `specs/009-release-line-reconciliation/evidence/changelog-md-audit.md`.
+- [X] T053 [US3] Rewrite the `## v0.1.1 — UNRELEASED` lead paragraph of `CHANGELOG.md`:
   1. "Contains every change released in 0.1.0rc3-1 … 0.1.0rc6-5 (including the 0.1.0rc5-2…rc5-6 hotfix builds), absorbed from debian/bookworm at `<sha of T016>`."
   2. The X-1 condition: "`stop_project` requires cuems-utils 0.1.1 to carry rc17's value; see specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md". If US4 has not run yet, the path dangles until T059 (accepted; T066 checks it).
   3. The FR-038 line: "Every host in a cluster must be upgraded together: the GO payload carries `run_seq` (not wire-compatible with engines before 0.1.0rc6-3)".
 
   Run `tests/test_changelog_complete.py` (all assertions green) and `tests/test_version_single_source.py`. Commit `docs(changelog): CHANGELOG.md covers every released build`.
-- [ ] T054 [US3] Rewrite the `0.1.1-1` entry body in `debian/changelog` (FR-031):
+- [X] T054 [US3] Rewrite the `0.1.1-1` entry body in `debian/changelog` (FR-031):
   - replace the "NOT YET RECONCILED" bullet with "Reconciled with debian/bookworm at `<T016 sha>` (0.1.0rc6-5): absorbs 0.1.0rc6-2..rc6-5", followed by one line per item #1–#13
   - add the X-1 condition bullet and the FR-038 "upgrade every host together" bullet
   - keep the `poetry.lock` bullet
 
   Check `dpkg-parsechangelog -l debian/changelog -S Version` prints `0.1.1-1`, if `dpkg-dev` is
   installed; otherwise the T024 assertion 1. Run the changelog test (green) and commit.
-- [ ] T055 [US3] Audit `debian/rules` after the merge, and write `specs/009-release-line-reconciliation/evidence/debian-rules-audit.md` quoting the line for each of:
+- [X] T055 [US3] Audit `debian/rules` after the merge, and write `specs/009-release-line-reconciliation/evidence/debian-rules-audit.md` quoting the line for each of:
   - `PIP_IGNORE_INSTALLED=1`, `PYTHONNOUSERSITE=1` and the rtmidi vendoring check (#14)
   - the `cffi-gen-src` strip (#15)
   - the renamed mock wrappers `cuems-audioplayer`/`cuems-dmxplayer` (#16)
@@ -255,9 +255,9 @@ verdicts are 27/27; both debs are built and inspected.
   - the SPDX header lines of `debian/control` and `debian/rules` (#17)
 
   If one is missing, stop and record it as a merge defect.
-- [ ] T056 [US3] Build both debs in a bookworm chroot with `../cuems-utils/specs/016-coordinated-minor-bump/tools/bookworm-build.sh`, adapted only by arguments. **Do not publish.** Write `specs/009-release-line-reconciliation/evidence/bookworm-build.md` with `dpkg -I` showing `Version: 0.1.1-1` for `cuems-engine`; for `cuems-engine-mock`, its `Depends: cuems-engine (>= 0.1.1)` and its `Conflicts:` naming both `cuems-audioplayer` and `cuems-dmxplayer`; and the output of `dpkg -c <cuems-engine deb> | grep CACHEDIR || echo absent`.
-- [ ] T057 [US3] If T056 found `/usr/lib/cuems/CACHEDIR.TAG`: write a check in `tests/test_debian_rules.py` that asserts `debian/rules` removes it, and capture the red to `failing-first-cachedir.txt`. Add the strip to `debian/rules` the way cuems-utils does (read `../cuems-utils/debian/rules` for the exact line), rebuild, re-check, and commit. If it is absent, record "absent; nothing to strip" in `bookworm-build.md` (FR-034, accepted default Q2).
-- [ ] T058 [US3] Run `../cuems-utils/specs/016-coordinated-minor-bump/tools/verdicts.sh` for the engine rows, and write `specs/009-release-line-reconciliation/evidence/relation-verdicts-009.txt`. It must show **27/27**; never write into 016's evidence. Mark #14–#18 and #20 `proven` in `inventory-proofs.md`, pointing at T055/T056/T058. #21's proof is T024–T026.
+- [X] T056 [US3] Build both debs in a bookworm chroot with `../cuems-utils/specs/016-coordinated-minor-bump/tools/bookworm-build.sh`, adapted only by arguments. **Do not publish.** Write `specs/009-release-line-reconciliation/evidence/bookworm-build.md` with `dpkg -I` showing `Version: 0.1.1-1` for `cuems-engine`; for `cuems-engine-mock`, its `Depends: cuems-engine (>= 0.1.1)` and its `Conflicts:` naming both `cuems-audioplayer` and `cuems-dmxplayer`; and the output of `dpkg -c <cuems-engine deb> | grep CACHEDIR || echo absent`.
+- [X] T057 [US3] If T056 found `/usr/lib/cuems/CACHEDIR.TAG`: write a check in `tests/test_debian_rules.py` that asserts `debian/rules` removes it, and capture the red to `failing-first-cachedir.txt`. Add the strip to `debian/rules` the way cuems-utils does (read `../cuems-utils/debian/rules` for the exact line), rebuild, re-check, and commit. If it is absent, record "absent; nothing to strip" in `bookworm-build.md` (FR-034, accepted default Q2).
+- [X] T058 [US3] Run `../cuems-utils/specs/016-coordinated-minor-bump/tools/verdicts.sh` for the engine rows, and write `specs/009-release-line-reconciliation/evidence/relation-verdicts-009.txt`. It must show **27/27**; never write into 016's evidence. Mark #14–#18 and #20 `proven` in `inventory-proofs.md`, pointing at T055/T056/T058. #21's proof is T024–T026.
 
 **Checkpoint**: US3 delivered. SC-007 and SC-008 hold, apart from lint, which is re-checked in T071.
 
