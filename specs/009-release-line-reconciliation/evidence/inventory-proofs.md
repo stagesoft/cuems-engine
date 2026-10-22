@@ -30,7 +30,7 @@ are filled in when they run on the merged tree (T027, T048).
 | 16 | Mock wrappers renamed; mock `Conflicts:`; postinst path text | M + R | — | `bookworm-build.md` (`Conflicts: cuems-audioplayer, cuems-dmxplayer`), `relation-verdicts-009.txt` 27/27 | proven |
 | 17 | SPDX headers on `debian/control`, `debian/rules` | M + R | — | `debian-rules-audit.md` | proven |
 | 18 | Changelog entries `rc3-1…rc6-6` | M + R | FR-030 | `tests/test_changelog_complete.py` (11 tests) | proven |
-| 19 | `docs/unattended-playback.md`, `docs/index.md`, CLAUDE.md additions | M | FR-040, FR-041 | recorded check: T067/T068 | pending |
+| 19 | `docs/unattended-playback.md`, `docs/index.md`, CLAUDE.md additions | M | FR-040, FR-041 | recorded check: `CLAUDE.md` (stop_project wording, no `script_finished`), `docs/unattended-playback.md` (cuems-utils ≥ 0.1.1; cuems-engine 0.1.1-1 or later), `docs/index.md` makes no version claim | proven |
 | 20 | `cuemsutils >= 0.1.0rc17` | R → ours | subsumed only if X-1 holds | `relation-verdicts-009.txt` 27/27; X-1 condition tracked by T060 | proven |
 | 21 | Hotfix line `rc5-2…rc5-6` | D + `-s ours` | FR-008 | `hotfix-rc5-equivalence.md`, `tests/test_changelog_complete.py` | proven |
 | 22 | `35cbe78`: output maps ignore inputs (silent-audio bug) | M by SHA | A-7 | `tests/test_node_output_maps.py::test_audio_output_zero_resolves_to_the_output_not_the_input`, `::test_video_output_zero_resolves_to_the_output_not_the_input` (red `failing-first-A-7.txt`; mutation check: reading inputs gives `system:capture_1`) | proven |

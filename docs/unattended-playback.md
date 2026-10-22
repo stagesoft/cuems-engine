@@ -74,8 +74,8 @@ Notes for integrators:
   (from the release that carries this fix) re-drives its project only when the
   engine's load is **empty**. Older bridges read the re-arm window as "reload"
   and, with `auto_play=true`, replayed the show on their own.
-- **Versions:** every box of the cluster needs cuems-utils ≥ 0.1.0rc17 (the
-  schema value) and the engine release that carries the feature. An older
+- **Versions:** every box of the cluster needs cuems-utils ≥ 0.1.1 (it carries
+  the schema value) and the engine release that carries the feature. An older
   utils rejects the whole project at load, visibly ("Load stalled" on the
   controller after 120 s if a node is on the old schema). A utils downgrade
   strands such a project until the stop cue is removed from `cue_script.xml`.
@@ -92,7 +92,7 @@ Use for an attract loop that runs until a technician presses STOP.
    local segment. `running` stays `yes` throughout; the cues cycle `1 → 100 → 1`.
 3. An operator STOP ends it and re-arms.
 
-Needs the engine release with the cross-node follow relay (0.1.0rc6-3 or later)
+Needs the engine release with the cross-node follow relay (cuems-engine 0.1.1-1 or later)
 when the first or last cue lives on another node. This recipe predates the
 stop cue and is in use in the field; it needs no new software.
 
