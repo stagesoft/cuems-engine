@@ -68,7 +68,7 @@ def _run(cue, mtc):
     with patch("cuemsengine.cues.run_cue.PLAYER_HANDLER") as ph:
         ph.get_audio_mixer.return_value = None
         ph.get_all_cue_output_names.return_value = []
-        ph.media_dimensions.return_value = (1920, 1080)
+        ph.cue_media_dimensions.return_value = (1920, 1080)
         runner(cue, mtc)
 
 
