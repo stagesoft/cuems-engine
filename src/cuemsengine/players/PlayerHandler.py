@@ -956,7 +956,7 @@ class PlayerHandler:
         """True the first time a (cue, output) is reported unrouted in this
         load, so the arm logs it at ERROR once and every re-arm (STOP, loop,
         enable, go() fallback) at DEBUG."""
-        key = (str(cue_id), output_name)
+        key = (id_str(cue_id), output_name)
         with self._lock:
             if key in self._unrouted_warned:
                 return False

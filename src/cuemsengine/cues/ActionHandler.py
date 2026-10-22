@@ -22,6 +22,7 @@ from cuemsutils.log import Logger
 from ..comms.NodeCommunications import NodeCommunications
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..tools.ids import id_str
 from ..tools.MtcListener import MtcListener
 
 # Actions supported by the engine runtime.
@@ -587,7 +588,7 @@ def _handle_stop_project(
     the controller can name the cue.
     """
     return ActionHandler._action_result(
-        "applied", "stop_project", None, origin_cue_id=str(action_cue.id)
+        "applied", "stop_project", None, origin_cue_id=id_str(action_cue.id)
     )
 
 
