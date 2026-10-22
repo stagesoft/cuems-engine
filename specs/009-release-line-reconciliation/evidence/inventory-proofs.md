@@ -13,7 +13,7 @@ are filled in when they run on the merged tree (T027, T048).
 | # | Item | Method | Seams | Proof | State |
 |---|---|---|---|---|---|
 | 1 | Video scale readback (float32 tolerance), placement failures at ERROR, disarm skips layers removed by `/reset` (869f8hfra, #20) | M | A-1 | `tests/test_disarm_video_layers.py`, `tests/test_video_placement_failure.py`; A-1 in `tests/test_action_cue.py` | pending |
-| 2 | Dead `VideoPlayer` deleted (869f8v8yv, #21; `e890954`) | M | — | **T026a**: `tests/test_dead_videoplayer_removed.py` (no test came with it) | pending |
+| 2 | Dead `VideoPlayer` deleted (869f8v8yv, #21; `e890954`) | M | — | `tests/test_dead_videoplayer_removed.py` (3 tests; no test came with the item; red on `e994a5e` in `failing-first-2.txt`) | proven |
 | 3 | Pre-arm of the next segment; one arm per cue; arm epochs; JACK wait ends on a dead player; unarmable GO skips (869f9wqpn, #22) | M | — | `tests/test_arm_publish_gate.py`, `tests/test_arm_wait_messages.py`, `tests/test_player_handler_port_wait_abort.py` | pending |
 | 4 | Pre-arm measurement log lines (#22) | M | — | `tests/test_arm_inventory.py` | pending |
 | 5 | Video pixel size from the project; nodes report their own differing media (869fat84r, #22) | M | A-2, R-1 | `tests/test_cue_media_dimensions.py`, `tests/test_own_media_sizes.py`, `tests/test_media_duration.py` (A-2); R-1 test (T043) | pending |
