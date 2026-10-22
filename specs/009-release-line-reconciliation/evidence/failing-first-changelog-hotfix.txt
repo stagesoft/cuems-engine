@@ -1,0 +1,21 @@
+# failing-first changelog (hotfix half, T024) — HEAD 7728b56
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122
+cuemsutils.__version__: 0.1.1
+git fetch --all --tags done in T003 (refs are fresh)
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 9 items
+tests/test_changelog_complete.py .F.......                               [100%]
+=================================== FAILURES ===================================
+____________________ test_every_released_version_is_listed _____________________
+tests/test_changelog_complete.py:159: in test_every_released_version_is_listed
+    assert not missing, f"released builds missing from debian/changelog: {missing}"
+E   AssertionError: released builds missing from debian/changelog: ['0.1.0rc5-2', '0.1.0rc5-3', '0.1.0rc5-4', '0.1.0rc5-5', '0.1.0rc5-6']
+E   assert not ['0.1.0rc5-2', '0.1.0rc5-3', '0.1.0rc5-4', '0.1.0rc5-5', '0.1.0rc5-6']
+=========================== short test summary info ============================
+FAILED tests/test_changelog_complete.py::test_every_released_version_is_listed
+========================= 1 failed, 8 passed in 0.87s ==========================
