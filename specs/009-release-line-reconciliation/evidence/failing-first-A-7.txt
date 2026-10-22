@@ -1,0 +1,48 @@
+# failing-first A-7 / #22 (T019) — HEAD f2e3296, before 35cbe78
+cuems-utils HEAD: ff84193b3beee8ed3f3ec7485621ed5dc04eb122  (tag commit 4b336cd has the same NodeMappingType.get/device_of_class)
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 3 items
+tests/test_node_output_maps.py .FF                                       [100%]
+=================================== FAILURES ===================================
+_________ test_audio_output_zero_resolves_to_the_output_not_the_input __________
+tests/test_node_output_maps.py:82: in test_audio_output_zero_resolves_to_the_output_not_the_input
+    node.set_audio_players()
+src/cuemsengine/NodeEngine.py:623: in set_audio_players
+    for port_type_list in port_type_dict.values():
+                          ^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'values'
+------------------------------ Captured log setup ------------------------------
+------------------------------ Captured log call -------------------------------
+_________ test_video_output_zero_resolves_to_the_output_not_the_input __________
+tests/test_node_output_maps.py:101: in test_video_output_zero_resolves_to_the_output_not_the_input
+    node.set_video_players()
+src/cuemsengine/NodeEngine.py:713: in set_video_players
+    for port_type_list in port_type_dict.values():
+                          ^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'values'
+------------------------------ Captured log setup ------------------------------
+------------------------------ Captured log call -------------------------------
+=========================== short test summary info ============================
+FAILED tests/test_node_output_maps.py::test_audio_output_zero_resolves_to_the_output_not_the_input
+FAILED tests/test_node_output_maps.py::test_video_output_zero_resolves_to_the_output_not_the_input
+========================= 2 failed, 1 passed in 1.09s ==========================
+
+## Why it is red, and what differs from the task text (T019)
+
+T019 expected the red to be "resolves to system:capture_1" (the symptom 35cbe78 describes, produced by
+iterating a *list* of port-type dicts). It is red for an earlier reason: on the 0.1.1 library,
+`cm.node_mappings.get("audio")` is a single typed `DeviceType` (`{"outputs": [[{"output": {...}}, …]],
+"inputs": [[{"input": {...}}, …]], "class": "audio"}`), so `for port_type_dict in …get("audio", [])` iterates its
+*keys* and `port_type_dict.values()` raises `AttributeError: 'str' object has no attribute 'values'`.
+`set_audio_players`/`set_video_players` therefore cannot run at all against the typed mappings (008's
+migration did not reach them; no existing test calls them with real mappings).
+
+Consequence for T020: merging 35cbe78 by SHA is not enough. Its hunks assume the old iteration and call
+`port_type_dict.get("outputs", [])` on what is a str here. The A-7 adaptation (typed read, outputs only) goes
+in right after the merge, red-first against this same test.
