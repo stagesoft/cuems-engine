@@ -28,3 +28,9 @@ Method: quickstart §1 loop over `refs/remotes/origin` and `refs/tags`, `git rev
 New since the spec: `origin/release/0.1.0rc6-6`, `pre-release-0.1.0rc6-6-merge`, `v0.1.0rc6-6`,
 `origin/fix/869fh8kef-node-unload` (`af27553`) — all ancestors of bookworm `3108b4f` and (the fix branch)
 of rc_1. No new stray head.
+
+## Hand-off update (T069)
+
+Re-run at hand-off: the same 22 refs have unabsorbed commits and the verdicts above stand. `origin/fix/node-output-maps-ignore-inputs`,
+`origin/fix/mock-players-jack-ready`, `v0.1.0rc5-2/-3/-6`, `origin/hotfix/rc5-*`, `origin/debian/bookworm`, `origin/rc_1`,
+`origin/release/*`, `origin/fix/*` and the `pre-*-merge` / `v0.1.0rc6-*` tags are now ancestors of HEAD. See `remeasure-handoff.md`.
