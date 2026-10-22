@@ -1,0 +1,30 @@
+# failing-first changelog (CHANGELOG.md half, T049) — HEAD 646bacd
+cuems-utils HEAD: b592a5779d102280f6d9fa775553399c3ae4a58f
+cuemsutils.__version__: 0.1.1
+(the 'not reconciled' check also matches the 'not yet reconciled' wording the section carries)
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 11 items
+tests/test_changelog_complete.py ....FF.....                             [100%]
+=================================== FAILURES ===================================
+_________________ test_changelog_md_names_every_released_build _________________
+tests/test_changelog_complete.py:218: in test_changelog_md_names_every_released_build
+    assert not missing, f"released builds absent from CHANGELOG.md: {missing}"
+E   AssertionError: released builds absent from CHANGELOG.md: ['0.1.0rc1-1', '0.1.0rc2-1', '0.1.0rc2-2', '0.1.0rc2-3', '0.1.0rc5-2', '0.1.0rc5-3', '0.1.0rc5-4', '0.1.0rc5-5', '0.1.0rc5-6', '0.1.0rc6-2', '0.1.0rc6-3', '0.1.0rc6-4', '0.1.0rc6-5', '0.1.0rc6-6']
+E   assert not ['0.1.0rc1-1', '0.1.0rc2-1', '0.1.0rc2-2', '0.1.0rc2-3', '0.1.0rc5-2', '0.1.0rc5-3', ...]
+_______________ test_changelog_md_leads_with_the_stable_release ________________
+tests/test_changelog_complete.py:224: in test_changelog_md_leads_with_the_stable_release
+    assert not re.search(r"not (yet )?reconciled", sections[0].lower())
+E   AssertionError: assert not <re.Match object; span=(360, 378), match='not yet reconciled'>
+E    +  where <re.Match object; span=(360, 378), match='not yet reconciled'> = <function search at 0x7f4fe0c3a700>('not (yet )?reconciled', 'v0.1.1 — unreleased\n\ncoordinated `xml-refactor` landing (cuems-utils feature 016): every cuems repository moves to ... 012 — it takes `coerce_identity` from it — and no pre-rc7 engine has been run against\n   012 or a re-minted map.\n\n')
+E    +    where <function search at 0x7f4fe0c3a700> = re.search
+E    +    and   'v0.1.1 — unreleased\n\ncoordinated `xml-refactor` landing (cuems-utils feature 016): every cuems repository moves to ... 012 — it takes `coerce_identity` from it — and no pre-rc7 engine has been run against\n   012 or a re-minted map.\n\n' = <built-in method lower of str object at 0x55955df86870>()
+E    +      where <built-in method lower of str object at 0x55955df86870> = 'v0.1.1 — UNRELEASED\n\nCoordinated `xml-refactor` landing (cuems-utils feature 016): every CUEMS repository moves to ... 012 — it takes `coerce_identity` from it — and no pre-rc7 engine has been run against\n   012 or a re-minted map.\n\n'.lower
+=========================== short test summary info ============================
+FAILED tests/test_changelog_complete.py::test_changelog_md_names_every_released_build
+FAILED tests/test_changelog_complete.py::test_changelog_md_leads_with_the_stable_release
+========================= 2 failed, 9 passed in 0.90s ==========================

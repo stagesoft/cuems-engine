@@ -188,6 +188,42 @@ def test_entries_are_in_descending_version_order(worktree):
     assert not misordered, f"not in descending dpkg order: {misordered}"
 
 
+def _released_versions(sources):
+    return set().union(*(set(found) for found in sources.values()))
+
+
+def _named_in_changelog_md(version, text):
+    """A ``<!-- source: ... <version> ... -->`` comment, or ``(<version>, date)``."""
+    token = rf"(?<![0-9A-Za-z.~+:-]){re.escape(version)}(?![0-9A-Za-z.~+:-])"
+    for comment in re.findall(r"<!--\s*source:.*?-->", text, flags=re.DOTALL):
+        if re.search(token, comment):
+            return True
+    return re.search(rf"\({re.escape(version)}, \d{{4}}-\d{{2}}-\d{{2}}\)", text)
+
+
+@pytest.fixture(scope="module")
+def changelog_md(repo):
+    return (repo / "CHANGELOG.md").read_text()
+
+
+def test_changelog_md_names_every_released_build(sources, changelog_md):
+    missing = sorted(
+        (
+            v
+            for v in _released_versions(sources)
+            if not _named_in_changelog_md(v, changelog_md)
+        ),
+        key=cmp_to_key(compare_versions),
+    )
+    assert not missing, f"released builds absent from CHANGELOG.md: {missing}"
+
+
+def test_changelog_md_leads_with_the_stable_release(changelog_md):
+    sections = re.split(r"^## (?=v)", changelog_md, flags=re.MULTILINE)[1:]
+    assert sections[0].startswith("v0.1.1")
+    assert not re.search(r"not (yet )?reconciled", sections[0].lower())
+
+
 @pytest.mark.parametrize(
     "newer, older",
     [
