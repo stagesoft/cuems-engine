@@ -458,7 +458,7 @@ class TestFadeActionsFromAVersion1Script:
             repeat = handler.execute_action(cue, mtc)
 
         assert first["status"] == "applied"
-        mock_disarm.assert_called_once_with(target)
+        mock_disarm.assert_called_once_with(target, reason="stop_action")
         assert repeat["status"] == "applied_no_change"
 
 

@@ -1,0 +1,54 @@
+# failing-first A-1 — merge-induced red on 2e016d1 (arm B: suite-arm-B.txt)
+cuems-utils HEAD: 1c1334c44600c228b9634cc2aab601941d86f7a4
+cuemsutils.__version__: 0.1.1
+
+============================= test session starts ==============================
+platform linux -- Python 3.11.9, pytest-9.1.1, pluggy-1.7.0
+rootdir: /disk/Projects/StageLab/cuems-engine
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, mock-3.16.0, xdist-3.8.0, cov-7.1.0, anyio-4.15.1
+collected 1 item
+tests/test_action_cue.py F                                               [100%]
+=================================== FAILURES ===================================
+_ TestFadeActionsFromAVersion1Script.test_former_fade_out_is_stop_and_disarms_its_target _
+/home/adria/.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:939: in assert_called_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected call not found.
+E   Expected: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'})
+E     Actual: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'}, reason='stop_action')
+During handling of the above exception, another exception occurred:
+/home/adria/.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:951: in assert_called_once_with
+    return self.assert_called_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: expected call not found.
+E   Expected: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'})
+E     Actual: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'}, reason='stop_action')
+E   
+E   pytest introspection follows:
+E   
+E   Kwargs:
+E   assert {'reason': 'stop_action'} == {}
+E     
+E     Left contains 1 more item:
+E     {'reason': 'stop_action'}
+E     Use -v to get more diff
+During handling of the above exception, another exception occurred:
+tests/test_action_cue.py:461: in test_former_fade_out_is_stop_and_disarms_its_target
+    mock_disarm.assert_called_once_with(target)
+E   AssertionError: expected call not found.
+E   Expected: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'})
+E     Actual: disarm({'Media': {}, 'autoload': False, 'description': None, 'enabled': True, 'id': 069e7d22-7fcd-4694-86c1-0adc057ff7a1, 'loop': 1, 'master_vol': 100, 'name': 'empty', 'offset': 00:00:00.000, 'outputs': None, 'post_go': 'pause', 'postwait': 00:00:00.000, 'prewait': 00:00:00.000, 'target': None, 'timecode': False, 'ui_properties': None, 'class': 'audio'}, reason='stop_action')
+E   
+E   pytest introspection follows:
+E   
+E   Kwargs:
+E   assert {'reason': 'stop_action'} == {}
+E     
+E     Left contains 1 more item:
+E     {'reason': 'stop_action'}
+E     Use -v to get more diff
+------------------------------ Captured log setup ------------------------------
+------------------------------ Captured log call -------------------------------
+=========================== short test summary info ============================
+FAILED tests/test_action_cue.py::TestFadeActionsFromAVersion1Script::test_former_fade_out_is_stop_and_disarms_its_target
+============================== 1 failed in 1.27s ===============================
