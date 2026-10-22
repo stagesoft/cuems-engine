@@ -60,6 +60,9 @@ cuems-engine (0.1.1-1) UNRELEASED; urgency=medium
     engine SIGTERMs itself and exits 1, so Restart=on-failure restarts it;
     it used to keep running with no bus. An operator stop exits 0. The
     comms join on shutdown is bounded at 5 s (TimeoutStopSec=10).
+  * The cluster liveness probe resends its ping, within its 1.5 s window,
+    to nodes that have not ponged: a ping lost on a link that had just
+    come up left a live node out of the GO gate.
 
  -- Adrià Masip <adria@stagelab.coop>  Fri, 16 Oct 2026 19:00:00 +0200
 

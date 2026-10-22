@@ -249,6 +249,78 @@ def test_probe_returns_only_controller_when_no_remote_nodes(controller):
     assert controller.communications_thread.nng_hub.send_operation.call_count == 0
 
 
+# ─── Probe resends its ping (cuems-utils H6) ────────────────────────────
+
+
+class TestProbeResendsPing:
+    """NNG's BUS can drop a message sent the instant a link comes up (measured
+    3 in 12000, 0 after a 20 ms settle). A lost ping silently left a live
+    node out of the GO gate's required set, so the probe resends it to the
+    nodes that have not ponged, spread over its window. A ping is idempotent:
+    the pong set is a set, and the node only answers it.
+    """
+
+    def _probe(self, controller, deliver, timeout=0.3):
+        """Run the probe; `deliver(n)` is called on the n-th ping (from 1)."""
+        sends = []
+
+        def broadcast(coro, loop):
+            sends.append(time.monotonic())
+            deliver(len(sends))
+            return Mock()
+
+        with patch(
+            "cuemsengine.ControllerEngine.asyncio.run_coroutine_threadsafe",
+            side_effect=broadcast,
+        ):
+            begin = time.monotonic()
+            alive = controller._probe_cluster_liveness(timeout=timeout)
+            elapsed = time.monotonic() - begin
+        return alive, sends, elapsed
+
+    def _pong(self, controller, sender=SLAVE_UUID):
+        controller.status_operation_callback(_pong_op(sender))
+
+    def test_a_node_that_pongs_at_once_gets_one_ping(self, controller):
+        alive, sends, _ = self._probe(controller, lambda n: self._pong(controller))
+        assert alive == {CONTROLLER_UUID, SLAVE_UUID}
+        assert len(sends) == 1
+
+    def test_a_lost_first_ping_is_resent_and_the_node_counts_as_alive(self, controller):
+        alive, sends, _ = self._probe(
+            controller, lambda n: n == 2 and self._pong(controller)
+        )
+        assert alive == {CONTROLLER_UUID, SLAVE_UUID}
+        assert len(sends) == 2
+
+    def test_a_silent_node_gets_two_resends_spread_over_the_window(self, controller):
+        alive, sends, elapsed = self._probe(controller, lambda n: None, timeout=0.3)
+        assert alive == {CONTROLLER_UUID}
+        assert len(sends) == controller._PING_SENDS == 3
+        gaps = [b - a for a, b in zip(sends, sends[1:])]
+        assert all(0.08 <= gap <= 0.2 for gap in gaps), gaps
+        assert elapsed < 0.3 + 0.1  # the window is not extended by the resends
+
+    def test_a_failing_resend_still_reports_the_pongs_that_arrived(self, controller):
+        controller.cm.network_map = {
+            "node_list": [
+                {"node": {"uuid": CONTROLLER_UUID, "adopted": True}},
+                {"node": {"uuid": SLAVE_UUID, "adopted": True}},
+                {"node": {"uuid": SECOND_SLAVE_UUID, "adopted": True}},
+            ],
+        }
+
+        def deliver(n):
+            if n == 1:
+                self._pong(controller, SLAVE_UUID)
+            else:
+                raise RuntimeError("bus closed")
+
+        alive, sends, _ = self._probe(controller, deliver)
+        assert alive == {CONTROLLER_UUID, SLAVE_UUID}
+        assert len(sends) == 3
+
+
 # ─── OSC route registration from a typed map (FR-009) ───────────────────
 
 

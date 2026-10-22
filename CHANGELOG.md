@@ -55,6 +55,12 @@ together with `cuems-utils` 012–014; **read the upgrade notes before deploying
   0.1.1's `SignalEngine.exit_status` hook), so `Restart=on-failure` restarts it. An operator stop
   still exits 0. The message receiver and the WebSocket OSC listener may still end early.
   `stop_comms()` now bounds the join at 5 s, inside the units' `TimeoutStopSec=10`.
+- **The liveness probe resends its ping** to the nodes that have not answered, at a third and two
+  thirds of its 1.5 s window, which is not extended. NNG's bus can drop a message sent the instant a
+  link comes up (cuems-utils measured 3 in 12000, 0 after a 20 ms settle), and a lost ping silently
+  left a live node out of the GO gate's required set. Only the ping is resent: it is idempotent,
+  where a resent `go` would fire the next cue and a resent `load` would re-arm the node. `load` keeps
+  its visible failure (`Load stalled`, the gate staying closed).
 - **Show loading**: `read_script` uses `CuemsScript.load`. A version-1 `script.xml` is converted
   in memory (the file on disk is left alone); a script newer than the installed library is
   refused with the library's error.

@@ -1655,6 +1655,13 @@ class ControllerEngine(BaseEngine):
             pass
         return id_str(uuid)
 
+    # One ping and two resends, spread over the probe window. NNG's BUS can
+    # drop a message sent the instant a link comes up (cuems-utils H6: 3 in
+    # 12000, 0 after a 20 ms settle), and a lost ping silently left a live
+    # node out of the GO gate. A ping is idempotent: the node only answers it,
+    # and the pong set is a set.
+    _PING_SENDS = 3
+
     def _probe_cluster_liveness(self, timeout: float = 1.5) -> set[str]:
         """Broadcast a ping to all nodes and collect pong replies.
 
@@ -1671,7 +1678,9 @@ class ControllerEngine(BaseEngine):
 
         The set of senders that respond within `timeout` is the authoritative
         "alive right now" view of the cluster. The controller's own UUID is
-        always included (it never needs to ping itself).
+        always included (it never needs to ping itself). The ping is resent at
+        each _PING_SENDS-th of the window while a node has not answered; the
+        window itself is not extended.
 
         Returns the set of UUIDs that are alive.
         """
@@ -1700,18 +1709,25 @@ class ControllerEngine(BaseEngine):
             target="ping",
             data={"value": None, "address": "/engine/cluster/ping"},
         )
-        try:
-            asyncio.run_coroutine_threadsafe(
-                self.communications_thread.nng_hub.send_operation(ping_op),
-                self.communications_thread.event_loop,
-            )
-        except Exception as e:
-            Logger.warning(f"Could not broadcast cluster ping: {e}")
+        if not self._broadcast_ping(ping_op):
             return {controller_uuid}
 
         # Early-exit wait. The comms thread sets the event when all expected
-        # pongs have arrived; otherwise we wake on timeout with whatever did.
-        self._pong_event.wait(timeout=timeout)
+        # pongs have arrived; otherwise we resend at each slice of the window
+        # and finally wake on timeout with whatever did arrive.
+        deadline = time.monotonic() + timeout
+        interval = timeout / self._PING_SENDS
+        for resend in range(1, self._PING_SENDS):
+            if self._pong_event.wait(timeout=interval):
+                break
+            with self._cluster_lock:
+                missing = expected - self._pong_responses
+            Logger.debug(
+                f"Cluster probe: no pong yet from {_sorted_ids(missing)}; "
+                f"resending ping ({resend}/{self._PING_SENDS - 1})"
+            )
+            self._broadcast_ping(ping_op)
+        self._pong_event.wait(timeout=max(0.0, deadline - time.monotonic()))
 
         with self._cluster_lock:
             alive = set(self._pong_responses)
@@ -1721,6 +1737,18 @@ class ControllerEngine(BaseEngine):
             f"alive_remote={_sorted_ids(alive - {controller_uuid})}"
         )
         return alive
+
+    def _broadcast_ping(self, ping_op: NodeOperation) -> bool:
+        """Queue one ping on the bus. False (and a warning) if it could not be."""
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.nng_hub.send_operation(ping_op),
+                self.communications_thread.event_loop,
+            )
+        except Exception as e:
+            Logger.warning(f"Could not broadcast cluster ping: {e}")
+            return False
+        return True
 
     def _resolve_cluster_state(self) -> None:
         """Probe the cluster and decide which nodes the GO gate must wait for.
