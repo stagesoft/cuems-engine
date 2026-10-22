@@ -17,11 +17,44 @@ cuems-engine (0.1.1-1) UNRELEASED; urgency=medium
   * poetry.lock is NOT relocked: cuemsutils 0.1.1 is unresolvable until it is
     published. tests/test_lock_is_current.py (strict xfail) turns red the day
     the lock is regenerated, so the obligation cannot be forgotten.
-  * NOT YET RECONCILED: the release line debian/bookworm (0.1.0rc3-1 ..
-    0.1.0rc6-5) is 119 commits ahead and not absorbed. That includes the
-    stop_project ActionCue, which needs cuemsutils' stop_project
-    (0.1.0rc17). Do not publish until it is reconciled and relocked, then
-    re-verify the package relations.
+  * Reconciled with debian/bookworm at 1c12959 (0.1.0rc6-6): this release
+    absorbs 0.1.0rc6-2 .. 0.1.0rc6-6, and the released entries 0.1.0rc2-1
+    .. 0.1.0rc6-6 below (with the 0.1.0rc5-2 .. rc5-6 hotfix builds) are kept
+    as they shipped. What the absorbed builds changed:
+    - 869f8hfra: video scale readback with float32 tolerance; placement
+      failures logged at ERROR and recorded per cue; disarm skips layers
+      removed by /reset. 869f8v8yv: the dead VideoPlayer class is gone.
+    - 869f9wqpn: a node pre-arms its next segment; one arm in flight per
+      cue; arm epochs (publish or abandon); the JACK port wait ends on a
+      dead player; a GO that cannot arm its cue skips it and advances.
+    - 869fat84r: a video cue takes its pixel size from the project; nodes
+      report their own media files that differ.
+    - 869fa89uh: a play-once video cue no longer wraps to frame 0.
+    - 869fc8ytz: cross-node Auto follow relay (run_seq in every GO).
+    - 869fbyjzx, 869fcvz85: an audio player is wired only once it reports
+      RUNNING; edge-by-edge repair at GO.
+    - 869fedahu: cue names on the :9190 channel.
+    - 869evtdf7: orphan sweeps never abort a load.
+    - 869dr2kzh, 869ebkkme: project_status with three states; node adoption
+      from the UI; cluster_warning.
+    - 869fgq3xv: unrouted video outputs stay dark.
+    - 869fhjdq5, 869fhjdp8: the stop_project ActionCue; cue ADD/UPDATE
+      ignored while not running; script_finished removed.
+    - 869fh8kef: a project unload reaches the nodes as an unload.
+    - Packaging: isolated build venv, rtmidi vendoring check; cffi-gen-src
+      no longer shipped; mock wrappers renamed (Conflicts covers both
+      players); SPDX headers.
+  * ADAPTED to the 0.1.1 library while absorbing: node output lookups read
+    the typed device mappings and take outputs only (35cbe78); mock audio
+    players register their JACK ports and print the ready line (d50ee4b);
+    ids of the absorbed code leave through id_str and enter through as_id.
+  * CONDITION (stop_project): cuems-utils 0.1.1 must contain rc17's
+    stop_project ActionType value, or a project with a stop_project cue
+    cannot be loaded or saved. See
+    specs/009-release-line-reconciliation/upstream-reports/cuems-utils-x1-x4.md.
+  * UPGRADE EVERY HOST TOGETHER: the GO payload carries run_seq, which is
+    not wire-compatible with engines before 0.1.0rc6-3, and an engine before
+    0.1.0rc6-6 has no unload handler.
 
  -- Adrià Masip <adria@stagelab.coop>  Fri, 16 Oct 2026 19:00:00 +0200
 
