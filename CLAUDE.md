@@ -55,6 +55,18 @@ MTC starts running as soon as a project is loaded and ready — **before** the f
 
 The engine's `MtcListener` reads MTC from ALSA `Midi Through Port-0` (delivered by rtpmidid on nodes); on the controller the MTC *source* is a `libmtcmaster` `MtcMaster` (ALSA client ~130). The controller stays at libmtcmaster's default `FR_25` — the engine never binds `MTCSender_setFrameRate`, so **CUEMS MTC is always 25 fps**; players translate that to media fps.
 
+**Contract with the players: every time the engine sends is within ±12 h of the current MTC** (in practice seconds:
+`run_cue` is parked at start − 5 s, loops re-anchor at pass end, fades use `frozen_mtc_ms` or the live value). The engine
+stamps them in its own 24h-extended domain (`MtcListener._apply_24h_offset`, reset at load; the controller also at STOP,
+node engines not). Each player converts every engine time into **its own** MTC day (`MtcReceiver::toLocalDay`, nearest
+day, 12 h rule) because its day count can differ (a per-cue audio player born after 24 h — the lleida-diposit silence of
+2026-10-24 — or a STOP at wire 23–24 h / 0–1 h after a wrap, or a restart past 24 h). Any engine value further than 12 h
+from now is placed on the wrong day by every fixed player. Known violators, each its own task under 869c3p77c: the
+catch-up storm on a forward MTC jump (`go_at_end` seeds `fire_seed_ms = body_end + postwait`) and the NNG
+`go_mtc_ms`/`seed_ms` after a node-engine restart past 24 h. **Ordering trap:** do not make node engines reset their
+domain at STOP until every consumer runs the fixed `mtcreceiver` (an unfixed gradient-motiond would go out of step at
+every STOP in those windows). Plan: cuems-RELATIONS `Plans/2026-10-25-mtc-day-align-24h-wrap.md` §3.5, ClickUp 1amfwm7fbqy.
+
 ## Cue play modes & pre/post-wait semantics
 
 A cue's `post_go` field decides what happens after it fires. Three values, mapped to UI labels in `cuems-frontend` (`sequence.component.ts:107-109`):
