@@ -1,3 +1,16 @@
+cuems-engine (0.1.0rc6-7~pre869ejxng3.2) bookworm; urgency=medium
+
+  * TEST BUILD, not a release: as .1, plus the day alignment phase 2
+    (cuems-RELATIONS Plans/2026-10-25-mtc-day-align-24h-wrap.md step 5+10,
+    feature d15ac20): the cue start goes as /start_tod (MTC position modulo
+    24 h, whole ms, int32) to a player whose CAPS line carries "dayalign",
+    as the float /offset to every other player; /offset_i is removed.
+  * Install together with cuems-audioplayer 0.0.3-15~pre869ejxng3.8 or later:
+    that player Breaks the .1 engine (the only one that sent /offset_i); this
+    engine drives every older player correctly (float /offset).
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 26 Oct 2026 11:45:33 +0100
+
 cuems-engine (0.1.0rc6-7~pre869ejxng3.1) bookworm; urgency=medium
 
   * TEST BUILD, not a release: 869ejxng3 + 1amfwm7e6cw Phase A (rig rows on
