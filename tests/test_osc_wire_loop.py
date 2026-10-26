@@ -4,7 +4,7 @@
 """The new audio endpoints on the wire (plan 869ejxng3 + 1amfwm7e6cw rev 3.14,
 §4.2, §7.1): a real pyossia device (the engine's AudioClient) sends to a UDP
 socket on loopback; the datagrams' type tags are what cuems-audioplayer parses
-(``/loop`` as ``,iii`` or ``,i``, ``/offset_i`` as ``,i``), the repetition
+(``/loop`` as ``,iii`` or ``,i``, ``/start_tod`` as ``,i``), the repetition
 filter is off (a per-pass re-send goes out), and ``num`` near 2^31 - 1
 survives. ``/offset`` stays ``,f`` for old players.
 """
@@ -74,8 +74,14 @@ def test_loop_once_is_one_int(wire):
 def test_the_filter_is_off_a_resend_goes_out(wire):
     assert wire("/loop", [3, 19200, 48000])[2] == [3, 19200, 48000]
     assert wire("/loop", [3, 19200, 48000])[2] == [3, 19200, 48000]
-    assert wire("/offset_i", -600080) == ("/offset_i", ",i", [-600080])
-    assert wire("/offset_i", -600080) == ("/offset_i", ",i", [-600080])
+    assert wire("/start_tod", 600080) == ("/start_tod", ",i", [600080])
+    assert wire("/start_tod", 600080) == ("/start_tod", ",i", [600080])
+
+
+def test_start_tod_edges_are_int32(wire):
+    # day-align §7.2: [0, 86 399 999] always fits an int32
+    assert wire("/start_tod", 86399999) == ("/start_tod", ",i", [86399999])
+    assert wire("/start_tod", 0) == ("/start_tod", ",i", [0])
 
 
 def test_offset_stays_float_for_old_players(wire):

@@ -19,11 +19,14 @@ OSC_AUDIOPLAYER_CONF = {
     "/check": [ValueType.Impulse, None],
     # 869ejxng3 + 1amfwm7e6cw (plan §4.2): sent only to a player that printed
     # "CAPS: loop varispeed". /loop is i:passes [i:period_num i:period_den]
-    # (passes 1 = once, N >= 2 = wrap N-1 times, <= 0 = forever); /offset_i is
-    # the offset in whole ms as int32 (/offset stays Float for old players).
-    # Both with the repetition filter OFF: the same value is re-sent per pass.
+    # (passes 1 = once, N >= 2 = wrap N-1 times, <= 0 = forever). /start_tod is
+    # the cue start as MTC position modulo 24 h in whole ms (int32), sent only
+    # to a player whose CAPS line carries "dayalign" (cuems-RELATIONS
+    # Plans/2026-10-25-mtc-day-align-24h-wrap.md §7.2; it replaced /offset_i).
+    # /offset stays Float for every other player. Both with the repetition
+    # filter OFF: the same value is re-sent per pass.
     "/loop": [ValueType.List, None, None, False],
-    "/offset_i": [ValueType.Int, None, None, False],
+    "/start_tod": [ValueType.Int, None, None, False],
 }
 
 OSC_AUDIOMIXER_CONF = {

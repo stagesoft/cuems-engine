@@ -115,8 +115,8 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
       applies the ack rules; no offset, no final ``/mtcfollow 0`` (the player
       ends by itself). A finite loop returns at its ``_end_mtc``.
     * **legacy**: today's per-pass offset re-anchor and final ``/mtcfollow 0``,
-      on P when P is known (``/offset_i`` to a capable player), on the stored
-      media duration otherwise.
+      on P when P is known, on the stored media duration otherwise; the start
+      goes as ``/start_tod`` to a dayalign player, as ``/offset`` otherwise.
 
     A newer GO of the cue (``_go_generation``) ends this loop at once.
 
@@ -133,7 +133,6 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
     )
     go_gen = getattr(cue, "_go_generation", 0)
     period = loop_mode.period_of(cue)
-    capable = getattr(cue, "_audio_capable", False) is True
 
     def stale() -> bool:
         return getattr(cue, "_go_generation", 0) != go_gen
@@ -220,10 +219,9 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
                 # (int)
                 # to preserve sub-ms precision at NTSC framerates
                 # (29.97/23.976).
-                offset_to_go = -cue._start_mtc.milliseconds_exact
-                key = "/offset"
-                if capable:
-                    key, offset_to_go = "/offset_i", round(offset_to_go)
+                key, offset_to_go = loop_mode.start_message(
+                    cue, cue._start_mtc.milliseconds_exact
+                )
 
                 Logger.info(
                     f"Loop {loop_counter}: setting offset={offset_to_go}"
