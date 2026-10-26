@@ -69,7 +69,7 @@ class FakeOsc:
 
 
 class FakePlayer:
-    def __init__(self, caps=("loop", "varispeed")):
+    def __init__(self, caps=("loop", "varispeed", "dayalign")):
         self.caps = frozenset(caps)
         self.loop_ack = None
         self.last_wrap_ver = -1
@@ -153,13 +153,14 @@ def test_wrap_mode_sends_loop_and_never_reanchors():
     mtc, start = _lifecycle(cue, player, on_reveal=lambda: player.ack("wrap", 1))
     osc = cue._osc
     run = osc.in_phase("run")
-    offset = [v for p, v in run if p == "/offset_i"]
-    assert len(offset) == 1 and isinstance(offset[0], int)  # whole ms, int32 (G1b)
+    tod = [v for p, v in run if p == "/start_tod"]
+    assert len(tod) == 1 and isinstance(tod[0], int)  # whole ms, int32 (day-align §7.2)
+    assert tod[0] == round(start) % loop_mode.DAY_MS
     assert ("/loop", [3, 19200, 48000]) in run
-    _before(osc.paths("run"), "/offset_i", "/loop")  # the loop after the offset
+    _before(osc.paths("run"), "/start_tod", "/loop")  # the loop after the start
     assert "/offset" not in osc.paths() and "/mtcfollow" not in osc.paths("run")
     reveal = osc.paths("reveal")
-    _before(reveal, "/offset_i", "/mtcfollow")
+    _before(reveal, "/start_tod", "/mtcfollow")
     _before(reveal, "/loop", "/mtcfollow")  # /loop applied before following starts
     assert ("/mtcfollow", 1) in osc.in_phase("reveal")
     # the passes: one /loop re-send per later pass, no offset, no /mtcfollow 0
@@ -177,13 +178,13 @@ def test_no_wrap_ack_within_the_timeout_falls_back_to_legacy_on_P():
     assert cue._wrap_fallback is True and cue._player_wraps is False
     loop = cue._osc.in_phase("loop")
     paths = [p for p, _ in loop]
-    _before(loop, ("/loop", [1]), ("/offset_i", loop[paths.index("/offset_i")][1]))
+    _before(loop, ("/loop", [1]), ("/start_tod", loop[paths.index("/start_tod")][1]))
     after = paths[loop.index(("/loop", [1])) + 1 :]
-    assert set(after) <= {"/offset_i", "/mtcfollow"} and "/loop" not in after
+    assert set(after) <= {"/start_tod", "/mtcfollow"} and "/loop" not in after
     assert loop[-1] == ("/mtcfollow", 0)  # legacy ends with /mtcfollow 0
-    # the re-anchors after the fallback are one P apart
-    offs = [v for p, v in loop if p == "/offset_i"]
-    assert all(b - a == -400 for a, b in zip(offs, offs[1:]))
+    # the per-pass re-sends after the fallback are one P apart
+    tods = [v for p, v in loop if p == "/start_tod"]
+    assert len(tods) >= 2 and all(b - a == 400 for a, b in zip(tods, tods[1:]))
 
 
 def test_an_off_ack_newer_than_the_wrap_falls_back():
@@ -238,7 +239,7 @@ def test_a_capable_player_gets_loop_1_when_not_wrapping(why):
     _lifecycle(cue, FakePlayer())
     osc = cue._osc
     assert ("/loop", [1]) in osc.in_phase("run")
-    _before(osc.paths("run"), "/offset_i", "/loop")
+    _before(osc.paths("run"), "/start_tod", "/loop")
     assert cue._wrap_requested is False
     assert osc.values("/loop") == [[1]]  # never a wrap request, never re-sent
     assert osc.in_phase("loop")[-1] == ("/mtcfollow", 0)
@@ -249,7 +250,7 @@ def test_an_old_player_gets_no_loop_and_float_offsets_reanchored_on_P():
     cue = _cue(3)
     _lifecycle(cue, None)
     osc = cue._osc
-    assert "/loop" not in osc.paths() and "/offset_i" not in osc.paths()
+    assert "/loop" not in osc.paths() and "/start_tod" not in osc.paths()
     run, reveal, loop = (
         [v for p, v in osc.in_phase(ph) if p == "/offset"]
         for ph in ("run", "reveal", "loop")
@@ -262,9 +263,32 @@ def test_an_old_player_gets_no_loop_and_float_offsets_reanchored_on_P():
     assert osc.in_phase("loop")[-1] == ("/mtcfollow", 0)
 
 
+def test_loop_varispeed_without_dayalign_keeps_wrap_mode_with_a_float_offset():
+    # a feature player of before the day alignment (F0/F1): wrap mode is kept,
+    # the start goes as /offset (day-align §7.3, E2 x F0/F1)
+    cue, player = _cue(3), FakePlayer(caps=("loop", "varispeed"))
+    mtc, start = _lifecycle(cue, player, on_reveal=lambda: player.ack("wrap", 1))
+    osc = cue._osc
+    assert "/start_tod" not in osc.paths()
+    run = [v for p, v in osc.in_phase("run") if p == "/offset"]
+    assert len(run) == 1 and isinstance(run[0], float) and run[0] == -start
+    assert ("/loop", [3, 19200, 48000]) in osc.in_phase("run")
+    assert cue._wrap_requested is True and cue._player_wraps is True
+
+
+def test_dayalign_without_loop_varispeed_gets_start_tod_and_legacy_loops():
+    cue, player = _cue(3), FakePlayer(caps=("dayalign",))
+    _lifecycle(cue, player)
+    osc = cue._osc
+    assert "/loop" not in osc.paths() and "/offset" not in osc.paths()
+    run = [v for p, v in osc.in_phase("run") if p == "/start_tod"]
+    loop = [v for p, v in osc.in_phase("loop") if p == "/start_tod"]
+    assert len(run) == 1 and [b - run[0] for b in loop] == [400, 800]
+
+
 def test_an_abort_before_the_offset_leaves_no_wrap():
     cue = _cue(3)
-    cue._osc = FakeOsc(fail={"/offset_i"})
+    cue._osc = FakeOsc(fail={"/start_tod"})
     mtc = FakeMtc()
     with patch.object(PLAYER_HANDLER, "audio_player", lambda c: FakePlayer()):
         run_cue(cue, mtc, mtc.main_tc.milliseconds_exact)

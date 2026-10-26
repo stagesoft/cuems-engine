@@ -33,10 +33,10 @@ def test_inert_without_the_master_switch(monkeypatch):
 
 def test_drop_osc_counts_per_path(monkeypatch):
     monkeypatch.setenv("CUEMS_TEST_KNOBS", "1")
-    monkeypatch.setenv("CUEMS_TEST_DROP_OSC", "/loop:2,/offset_i:1")
+    monkeypatch.setenv("CUEMS_TEST_DROP_OSC", "/loop:2,/start_tod:1")
     assert [test_knobs.drop_osc("/loop") for _ in range(3)] == [False, True, False]
-    assert test_knobs.drop_osc("/offset_i")
-    assert not test_knobs.drop_osc("/offset_i")
+    assert test_knobs.drop_osc("/start_tod")
+    assert not test_knobs.drop_osc("/start_tod")
     assert not test_knobs.drop_osc("/mtcfollow")
     assert not test_knobs.drop_osc(None)
 

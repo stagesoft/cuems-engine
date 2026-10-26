@@ -211,6 +211,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     player = PLAYER_HANDLER.audio_player(cue)
     capable = loop_mode.player_capable(player)
     cue._audio_capable = capable
+    cue._audio_dayalign = loop_mode.player_dayalign(player)
     period = loop_mode.period_of(cue)
 
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
@@ -246,9 +247,8 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         )
         cue._end_mtc = cue._start_mtc + duration
 
-    # Audio player formula: file_position = MTC + offset
-    # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-    offset_to_go = -cue._start_mtc.milliseconds_exact
+    # Audio player formula: file_position = MTC + offset, offset = -start_mtc;
+    # a dayalign player gets the start itself, modulo 24 h (/start_tod)
 
     # Verify mixer graph; only repair if drifted. Arm already wired it; the
     # unconditional reconnect at GO costs ~21-28 ms (measured) without
@@ -293,18 +293,12 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
 
-    # Define the offset - use MTC framerate for consistent timing with video
+    # Define the start - use MTC framerate for consistent timing with video
     try:
-        if capable:
-            # whole ms as int32 for a capable player (G1b); Float otherwise
-            key, offset_to_go = "/offset_i", round(offset_to_go)
-        else:
-            key = "/offset"
-
-        cue._osc.set_value(key, offset_to_go)
+        key, value = loop_mode.start_message(cue, cue._start_mtc.milliseconds_exact)
+        cue._osc.set_value(key, value)
         Logger.info(
-            f"offset {offset_to_go} to {key}:"
-            f"{str(cue._osc.get_node(key).parameter.value)}",
+            f"start {value} to {key}:{cue._osc.get_node(key).parameter.value}",
             extra={"caller": cue.__class__.__name__},
         )
     except Exception as e:
@@ -661,10 +655,7 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     try:
         start = getattr(cue, "_start_mtc", None)
         if start is not None:
-            if getattr(cue, "_audio_capable", False) is True:
-                cue._osc.set_value("/offset_i", round(-start.milliseconds_exact))
-            else:
-                cue._osc.set_value("/offset", -start.milliseconds_exact)
+            cue._osc.set_value(*loop_mode.start_message(cue, start.milliseconds_exact))
     except Exception as e:
         Logger.warning(f"reveal_audioCue: /offset failed: {e}")
     if loop_mode.wrap_active(cue):
