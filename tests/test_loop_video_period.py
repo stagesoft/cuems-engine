@@ -476,6 +476,15 @@ def wire(monkeypatch):
     monkeypatch.setattr(PORT_HANDLER, "new_random_port", _free_port)
     client = VideoClient(player_port=rx.getsockname()[1], name="wire-video-test")
     client.create_layer_endpoints("L1")
+    # creating the layer endpoints pushes the initial `visible -1` (endpoints.py):
+    # drain it, so each send below reads its own datagram
+    rx.settimeout(0.3)
+    try:
+        while True:
+            rx.recv(2048)
+    except socket.timeout:
+        pass
+    rx.settimeout(2)
 
     def send(path, value):
         client.set_value(path, value)
