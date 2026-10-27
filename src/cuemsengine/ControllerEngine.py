@@ -609,7 +609,7 @@ class ControllerEngine(BaseEngine):
                     # 869ejxng3 §4.2: the operator sees a mixed-mode cluster
                     # before GO (a loop period missed the node's load budget).
                     Logger.warning(
-                        f"Node {sender}: {len(legacy)} looping audio cue(s) "
+                        f"Node {sender}: {len(legacy)} looping cue(s) "
                         f"without a loop period, legacy loop (a gap per pass) on "
                         f"that node for this load: {legacy}"
                     )
