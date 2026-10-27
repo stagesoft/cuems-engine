@@ -249,7 +249,7 @@ def _node(script):
     return n
 
 
-def test_the_load_walk_marks_cuelist_children_and_picks_local_looping_audio():
+def test_the_load_walk_marks_cuelist_children_and_picks_local_looping_media():
     top = _cue("loop.wav", loop=-1)
     once = _cue("once.wav", loop=1)
     remote = _cue("remote.wav", loop=3, local=False)
@@ -261,7 +261,7 @@ def test_the_load_walk_marks_cuelist_children_and_picks_local_looping_audio():
     root.contents = [top, once, remote, video, inner]
     node = _node(SimpleNamespace(cuelist=root))
     found = node._loop_period_cues()
-    assert found == [top]
+    assert found == [top, video]  # VideoCues joined in Phase B (X2)
     assert child._in_cuelist is True and top._in_cuelist is False
 
 
