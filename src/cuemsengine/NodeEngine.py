@@ -17,17 +17,19 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools import media_sidecars
 
 from .core.BaseEngine import BaseEngine
+from .cues import loop_mode
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
 from .players.LoopPeriods import LOAD_BUDGET_S as LOOP_PERIOD_LOAD_BUDGET_S
-from .players.LoopPeriods import probe_loop_periods
+from .players.LoopPeriods import loop_drift_pairs, probe_loop_periods
 from .players.PlayerHandler import (
     PLAYER_HANDLER,
     _positive_int,
     check_orphan_binary_names,
 )
+from .players.VideoCaps import caps_path
 from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
@@ -166,6 +168,7 @@ class NodeEngine(BaseEngine):
 
     def start(self):
         self._log_versions()
+        PLAYER_HANDLER.refresh_video_caps()
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
         self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         # Creates command dictionary and OSCQuery client
@@ -1182,9 +1185,10 @@ class NodeEngine(BaseEngine):
 
     def _loop_period_cues(self) -> list:
         """Mark every CueList child ``_in_cuelist`` (they play once, Q2, I11) and
-        return the local looping AudioCues whose period the load needs: loop != 1,
-        enabled or not (a cue enabled at runtime then has its period, I16i), not
-        inside a CueList. VideoCues join in Phase B (their realFrames)."""
+        return the local looping AudioCues and VideoCues whose period the load
+        needs: loop != 1, enabled or not (a cue enabled at runtime then has its
+        period, I16i), not inside a CueList. A VideoCue needs it for its
+        realFrames and band too (X2)."""
         found = []
 
         def walk(cuelist, inside):
@@ -1193,7 +1197,7 @@ class NodeEngine(BaseEngine):
                 if isinstance(cue, CueList):
                     walk(cue, True)
                 elif (
-                    isinstance(cue, AudioCue)
+                    isinstance(cue, (AudioCue, VideoCue))
                     and not inside
                     and getattr(cue, "_local", False) is True
                     and cue.loop != 1
@@ -1206,9 +1210,11 @@ class NodeEngine(BaseEngine):
 
     def _start_loop_period_probe(self):
         """Give the looping cues their period beside the arm (§4.1): from the
-        editor's sidecar, this node's cache, or a probe within the budget."""
+        editor's sidecar, this node's cache, or a probe within the budget.
+        The videocomposer's caps file is read here too, at every load (§4.2)."""
         self._legacy_period = []
         cues = self._loop_period_cues()
+        self._check_video_caps(cues)
         if not cues:
             return None
         cancel = Event()
@@ -1240,8 +1246,75 @@ class NodeEngine(BaseEngine):
         ]
         Logger.info(
             f"loop periods: {len(cues) - len(self._legacy_period)} of {len(cues)} "
-            f"looping audio cue(s) can wrap; legacy: {self._legacy_period or 'none'}"
+            f"looping cue(s) have one; legacy: {self._legacy_period or 'none'}"
         )
+        for cue in cues:
+            if isinstance(cue, VideoCue):
+                self._assign_video_band(cue)
+        self._warn_loop_drift()
+
+    @staticmethod
+    def _check_video_caps(cues) -> None:
+        """Re-read the videocomposer's caps file; WARNING when this load loops
+        video and the videocomposer cannot wrap on a period (§4.2)."""
+        caps = PLAYER_HANDLER.refresh_video_caps()
+        if loop_mode.VC_LOOP_PERIOD in caps:
+            return
+        videos = [str(c.id) for c in cues if isinstance(c, VideoCue)]
+        if videos:
+            Logger.warning(
+                "videocomposer without the loop_period capability (no valid "
+                f"{caps_path()}): looping video cue(s) {videos} run in legacy mode "
+                "(re-anchored every pass on P; an A/V pair stays within one pass)"
+            )
+
+    @staticmethod
+    def _assign_video_band(cue) -> None:
+        """The band of a looping VideoCue's period against its realFrames (D2,
+        D8), fixed for the load: 1/2 wrap, 3 legacy with a WARNING."""
+        cue._video_band = None
+        period = loop_mode.period_of(cue)
+        if period is None:
+            return
+        band = loop_mode.video_band(period)
+        if band is None:
+            Logger.warning(
+                f"video {cue.id}: loop period without a video frame count or rate "
+                f"(fps {period.fps}, frames {period.real_frames}): legacy mode"
+            )
+            return
+        cue._video_band, stretch = band
+        Logger.info(
+            f"loop period for {cue.id}: {period.num}/{period.den} = "
+            f"{period.ms:.3f} ms, {period.real_frames} frames at {period.fps} fps "
+            f"({period.frames_rule}), band {cue._video_band}"
+        )
+        if cue._video_band == loop_mode.BAND_LEGACY:
+            Logger.warning(
+                f"video {cue.id} would be stretched {stretch:+.2f} %, runs in legacy "
+                "mode; the A/V pair will drift"
+            )
+        if getattr(period, "vfr", False):
+            Logger.warning(
+                f"video {cue.id}: variable frame rate (avg != r_frame_rate), outside "
+                "the A/V loop guarantee"
+            )
+
+    def _warn_loop_drift(self) -> None:
+        """D7 (warning only): two looping media cues on this node that start
+        together (the same Auto-continue chain and the same prewait) with
+        periods less than 5 % apart but not equal drift apart by the difference
+        on every pass: one WARNING per pair. Pairs split across nodes are not
+        compared."""
+        if not (self.script and self.script.cuelist):
+            return
+        for a, b, diff_ms in loop_drift_pairs(self.script.cuelist.contents or []):
+            Logger.warning(
+                f"loop drift: {a.id} (P = {loop_mode.period_of(a).ms:.3f} ms) and "
+                f"{b.id} (P = {loop_mode.period_of(b).ms:.3f} ms) start together but "
+                f"their periods differ by {diff_ms:.3f} ms: they drift apart by that "
+                "much on every pass (make the files the same length, or one file)"
+            )
 
     #########################
     # Nextcue

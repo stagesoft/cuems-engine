@@ -237,3 +237,64 @@ def probe_loop_periods(
         )
     _finish_in_background(list(dict.fromkeys(misses)), cache)
     return legacy
+
+
+DRIFT_WARN_FRACTION = 0.05
+
+
+def loop_drift_pairs(contents) -> list:
+    """D7 (§4.7): ``(a, b, |P_a - P_b| ms)`` for every pair of local looping
+    media cues with a period that start together — the same Auto-continue
+    chain (``post_go == "go"`` links, which trigger the whole chain at once)
+    and the same prewait — whose periods differ by less than 5 % but are not
+    equal. Under D2 a VideoCue on ``X.mp4`` and an AudioCue on the audio
+    extracted from it have equal periods and never pair up."""
+    parent = {}
+
+    def find(c):
+        while parent.setdefault(id(c), c) is not c:
+            c = parent[id(c)]
+        return c
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra is not rb:
+            parent[id(rb)] = ra
+
+    cues = list(contents or [])
+    for c in cues:
+        find(c)
+        target = getattr(c, "_target_object", None)
+        if getattr(c, "post_go", None) == "go" and target is not None:
+            union(c, target)
+
+    def period(c):
+        p = getattr(c, "_loop_period", None)
+        return p if isinstance(p, Period) else None
+
+    looping = [
+        c
+        for c in cues
+        if getattr(c, "_local", False) is True
+        and getattr(c, "loop", 1) != 1
+        and period(c) is not None
+    ]
+
+    def start_ms(c):
+        try:
+            return c.prewait.milliseconds_exact
+        except AttributeError:
+            return 0.0
+
+    pairs = []
+    for i, a in enumerate(looping):
+        for b in looping[i + 1 :]:
+            if find(a) is not find(b) or start_ms(a) != start_ms(b):
+                continue
+            pa, pb = period(a), period(b)
+            if pa.num * pb.den == pb.num * pa.den:
+                continue  # equal periods: they stay together
+            diff = abs(pa.ms - pb.ms)
+            if diff < DRIFT_WARN_FRACTION * max(pa.ms, pb.ms):
+                pairs.append((a, b, diff))
+    return pairs

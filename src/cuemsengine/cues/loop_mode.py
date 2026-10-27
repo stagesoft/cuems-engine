@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
-"""Wrap mode for looping AudioCues (plan 869ejxng3 + 1amfwm7e6cw rev 3.14,
-§4.2, §4.5): the player wraps the loop itself on one period P, gapless, and
-follows MTC by varispeed; the engine only re-sends ``/loop`` per pass.
+"""Wrap mode for looping AudioCues and VideoCues (plan 869ejxng3 + 1amfwm7e6cw
+rev 3.14, §4.2, §4.4, §4.5): the player wraps the loop itself on one period P,
+gapless, and follows MTC by varispeed; the videocomposer wraps the layer on the
+same P (Phase B, the helpers at the end of this module); the engine only
+re-sends ``/loop`` (and, for video, ``/loop/period``) per pass.
 
 A cue runs in **wrap mode** when its player printed ``CAPS: loop varispeed``,
 it loops (``loop != 1``), it is not a CueList child, and its period P is known
@@ -124,3 +126,110 @@ def fall_back(cue, reason: str) -> None:
         cue._osc.set_value("/loop", [1])
     except Exception as e:
         Logger.warning(f"Audio cue {cue.id}: /loop [1] failed: {e}")
+
+
+# --------------------------------------------------------------------------
+# Video (Phase B, §4.4/§4.5): the videocomposer wraps a looping layer on the
+# same P as the audio player, given as /loop [1, passes] + /loop/period
+# [num, den, realFrames], when its caps file names ``loop_period`` and the
+# file's band is 1 or 2. Band 3 (> 2 frames and > 1 % between P and the video's
+# own length) runs legacy: re-anchored on the video's own length, WARNING at
+# load (an operator error under the guarantee).
+
+VC_LOOP_PERIOD = "loop_period"
+BAND_HOLD = 1  # |Pf - realFrames| <= 2 frames: hold or cut at the loop cut
+BAND_STRETCH = 2  # > 2 frames and <= 1 %: stretched over the pass
+BAND_LEGACY = 3  # > 2 frames and > 1 %: no period, legacy
+
+
+def parse_fps(fps) -> tuple | None:
+    """``"num/den"`` (r_frame_rate) as a pair of positive ints, or None."""
+    try:
+        n, d = str(fps).split("/")
+        n, d = int(n), int(d)
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return (n, d) if n > 0 and d > 0 else None
+
+
+def video_band(period: Period) -> tuple | None:
+    """``(band, stretch %)`` of a VideoCue's period against its realFrames, in
+    integer rationals as the videocomposer computes it; None without a frame
+    count or a frame rate (the cue then runs legacy)."""
+    rate = parse_fps(getattr(period, "fps", None))
+    frames = getattr(period, "real_frames", None)
+    if rate is None or not frames or frames <= 0:
+        return None
+    a = period.num * rate[0]  # Pf = a / b frames
+    b = period.den * rate[1]
+    diff = abs(a - frames * b)
+    stretch = 100.0 * (a / b - frames) / frames
+    if diff <= 2 * b:
+        return BAND_HOLD, stretch
+    if 100 * diff > frames * b:
+        return BAND_LEGACY, stretch
+    return BAND_STRETCH, stretch
+
+
+def video_own_length_ms(period: Period) -> float | None:
+    """The video stream's own length (realFrames / fps) in ms, or None."""
+    rate = parse_fps(getattr(period, "fps", None))
+    frames = getattr(period, "real_frames", None)
+    if rate is None or not frames:
+        return None
+    return frames * rate[1] * 1000.0 / rate[0]
+
+
+def video_passes(cue) -> int:
+    """The pass count on the wire: ``loop`` when finite, -1 when forever."""
+    loop = int(cue.loop)
+    return loop if loop >= 1 else -1
+
+
+def video_wrap_eligible(cue, video_caps) -> bool:
+    """Wrap mode for a VideoCue: it loops, is not a CueList child, the
+    videocomposer is capable and its band (given at load) is 1 or 2."""
+    return (
+        cue.loop != 1
+        and not in_cuelist(cue)
+        and VC_LOOP_PERIOD in (video_caps or ())
+        and period_of(cue) is not None
+        and getattr(cue, "_video_band", None) in (BAND_HOLD, BAND_STRETCH)
+    )
+
+
+def video_loop_args(cue) -> list:
+    """``/loop`` for a VideoCue in wrap mode: [1, passes]."""
+    return [1, video_passes(cue)]
+
+
+def video_period_args(period: Period) -> list:
+    """``/loop/period``: [num, den, realFrames]."""
+    return [int(period.num), int(period.den), int(period.real_frames)]
+
+
+def video_legacy_pass_ms(cue) -> float | None:
+    """The per-pass re-anchor length of a VideoCue in legacy mode: P for band
+    1/2 (an old videocomposer), the video's own length in band 3, None (the
+    stored media duration) without a period."""
+    p = period_of(cue)
+    if p is None:
+        return None
+    if getattr(cue, "_video_band", None) == BAND_LEGACY:
+        return video_own_length_ms(p)
+    if getattr(cue, "_video_band", None) in (BAND_HOLD, BAND_STRETCH):
+        return p.ms
+    return None
+
+
+def send_video_wrap(cue, layer_ids) -> None:
+    """``/loop [1, passes]`` then ``/loop/period`` to every layer (before
+    ``/mtcfollow 1`` at GO; again every pass, H10)."""
+    period = period_of(cue)
+    for layer_id in layer_ids:
+        path = f"/videocomposer/layer/{layer_id}"
+        try:
+            cue._osc.set_value(f"{path}/loop", video_loop_args(cue))
+            cue._osc.set_value(f"{path}/loop/period", video_period_args(period))
+        except Exception as e:
+            Logger.error(f"Video cue {cue.id} layer {layer_id}: wrap sends failed: {e}")

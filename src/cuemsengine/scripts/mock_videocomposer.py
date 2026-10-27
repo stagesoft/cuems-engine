@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 Mock videocomposer replacement for headless/cloud deployments.
@@ -23,6 +24,7 @@ Systemd example:
 """
 
 import argparse
+import os
 import signal
 import sys
 import threading
@@ -30,6 +32,42 @@ import threading
 from cuemsutils.log import Logger
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
+
+# The capability file the node engine reads at every load (869ejxng3 §4.2):
+# the mock speaks the same protocol as the real videocomposer, so it says so.
+# Its unit has no RuntimeDirectory: it creates /run/cuems itself, removes a
+# leftover at start and its own file at exit (I16j).
+CAPS_PATH = os.environ.get("CUEMS_VC_CAPS_FILE", "/run/cuems/videocomposer.caps")
+CAPS_TOKENS = ("loop_period",)
+
+
+def write_caps(path: str = CAPS_PATH) -> bool:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "w") as f:
+            f.write(f"pid={os.getpid()}\n")
+            for token in CAPS_TOKENS:
+                f.write(f"{token}\n")
+        os.replace(tmp, path)
+        return True
+    except OSError as e:
+        Logger.warning(f"[mock-videocomposer] caps file {path} not written: {e}")
+        return False
+
+
+def remove_caps(path: str = CAPS_PATH) -> None:
+    try:
+        with open(path) as f:
+            first = f.readline().strip()
+        if first == f"pid={os.getpid()}":
+            os.unlink(path)
+    except OSError:
+        pass
 
 
 def main():
@@ -109,7 +147,11 @@ Start before the engine so OSC packets are received.
     signal.signal(signal.SIGINT, handle_signal)
 
     Logger.info(f"[mock-videocomposer] listening on {args.host}:{args.port}")
-    server.serve_forever()
+    write_caps()
+    try:
+        server.serve_forever()
+    finally:
+        remove_caps()
     Logger.info("[mock-videocomposer] stopped")
     sys.exit(0)
 

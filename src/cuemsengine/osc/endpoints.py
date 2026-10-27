@@ -139,10 +139,13 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     ],  # 1 = enable, 0 = disable
     "/videocomposer/layer/{}/visible": [ValueType.Int, None, -1],
     "/videocomposer/layer/{}/autounload": [ValueType.Int, None],  # 0 or 1
-    "/videocomposer/layer/{}/loop": [
-        ValueType.Int,
-        None,
-    ],  # 1 = enable loop, 0 = disable
+    # 869ejxng3 + 1amfwm7e6cw (plan §4.2): /loop is a list, [1, passes] in wrap
+    # mode (passes <= 0 -> -1), [1] / [0] on the legacy and CueList paths (on
+    # the wire ",i 1" / ",i 0", as the Int endpoint sent); /loop/period is
+    # [num, den, realFrames] (0 0 0 clears). Both with the repetition filter
+    # OFF: they are re-sent every pass.
+    "/videocomposer/layer/{}/loop": [ValueType.List, None, None, False],
+    "/videocomposer/layer/{}/loop/period": [ValueType.List, None, None, False],
     # opacity (0.0 to 1.0)
     "/videocomposer/layer/{}/opacity": [ValueType.Float, None],
     "/videocomposer/layer/{}/position": [

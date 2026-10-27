@@ -317,8 +317,20 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
 def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
     """Handle the video media playback loop.
 
-    Manages looping behavior for all layers in cue._layer_ids,
-    updating offset via the single VideoClient in cue._osc.
+    Manages looping behavior for all layers in cue._layer_ids via the single
+    VideoClient in cue._osc. Two modes (869ejxng3 + 1amfwm7e6cw, §4.5; the
+    mode was fixed at GO by run_videoCue, ``cue._video_wrap``):
+
+    * **wrap**: the videocomposer wraps the layer on P and counts the passes
+      itself (/loop [1, passes] + /loop/period). The engine keeps the timeline
+      (pass k from base + k·P to base + (k+1)·P, k = 0 included, rounded once
+      from the absolute instant, G20) and re-sends both per pass (a lost
+      datagram is healed by the next pass, H10); no offset, no /loop 0 before
+      the last pass. The layer is hidden at _end_mtc as today (H17).
+    * **legacy**: today's per-pass offset re-anchor and /loop [0] before the
+      last pass, on P when the file's band is 1 or 2 (an old videocomposer), on
+      the video's own length in band 3, on the stored media duration otherwise.
+
     on_last_loop: as for loop_audioCue.
     """
     Logger.info(
@@ -328,12 +340,19 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
 
     try:
         loop_counter = 0
+        wrap = getattr(cue, "_video_wrap", False) is True
+        pass_ms = (
+            loop_mode.period_of(cue).ms if wrap else loop_mode.video_legacy_pass_ms(cue)
+        )
         duration = CTimecode(cue.media.duration).return_in_other_framerate(
             mtc.main_tc.framerate
         )
+        base_ms = cue._start_mtc.milliseconds_exact
         Logger.info(
             f"Video duration: {duration}, duration in frames:"
             f"{duration.frame_number} {duration.framerate}"
+            + (f", pass {pass_ms:.3f} ms" if pass_ms is not None else "")
+            + f", mode: {'wrap' if wrap else 'legacy'}"
         )
         Logger.info(
             f"Initial _end_mtc: {cue._end_mtc.milliseconds_rounded}ms,"
@@ -349,11 +368,14 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
         # of file before the engine hides the layer and shows frame 0 again
         # (869fa89uh).
         if cue.loop != 1:
-            for layer_id in layer_ids:
-                try:
-                    cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", 1)
-                except Exception as e:
-                    Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
+            if wrap:
+                loop_mode.send_video_wrap(cue, layer_ids)
+            else:
+                for layer_id in layer_ids:
+                    try:
+                        cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", [1])
+                    except Exception as e:
+                        Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
 
         while cue.loop < 1 or loop_counter < cue.loop:
             if cue._stop_requested:
@@ -393,11 +415,27 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
 
             if cue._local and will_loop_again:
-                cue._start_mtc = CTimecode(
-                    framerate=cue._end_mtc.framerate,
-                    frames=cue._end_mtc.frames,
-                )
-                cue._end_mtc = cue._start_mtc + duration
+                if pass_ms is not None:
+                    framerate = cue._end_mtc.framerate
+                    cue._start_mtc = loop_mode.tc_at(
+                        framerate, base_ms + loop_counter * pass_ms
+                    )
+                    cue._end_mtc = loop_mode.tc_at(
+                        framerate, base_ms + (loop_counter + 1) * pass_ms
+                    )
+                else:
+                    cue._start_mtc = CTimecode(
+                        framerate=cue._end_mtc.framerate,
+                        frames=cue._end_mtc.frames,
+                    )
+                    cue._end_mtc = cue._start_mtc + duration
+
+                if wrap:
+                    # The layer wraps by itself: re-send /loop + /loop/period
+                    # (idempotent), no offset, no /loop 0 before the last pass.
+                    loop_mode.send_video_wrap(cue, layer_ids)
+                    continue
+
                 offset_change_frames = -cue._start_mtc.frame_number
 
                 Logger.info(
@@ -420,7 +458,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
                     for layer_id in layer_ids:
                         try:
                             cue._osc.set_value(
-                                f"/videocomposer/layer/{layer_id}/loop", 0
+                                f"/videocomposer/layer/{layer_id}/loop", [0]
                             )
                         except Exception as e:
                             Logger.error(

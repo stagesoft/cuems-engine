@@ -512,10 +512,27 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
-    cue._end_mtc = cue._start_mtc + duration
+    # Loop mode (869ejxng3 §4.5, Phase B), fixed for this GO: wrap when the
+    # videocomposer is capable and the file's band is 1 or 2, else legacy.
+    wrap = loop_mode.video_wrap_eligible(cue, PLAYER_HANDLER.video_caps)
+    cue._video_wrap = wrap
+    if wrap:
+        pass_ms = loop_mode.period_of(cue).ms
+    elif cue.loop != 1:
+        pass_ms = loop_mode.video_legacy_pass_ms(cue)
+    else:
+        pass_ms = None
+    if pass_ms is not None:
+        # The pass ends on P (or, in band 3, on the video's own length), one
+        # rounding from the absolute instant (G20).
+        cue._end_mtc = loop_mode.tc_at(
+            mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + pass_ms
+        )
+    else:
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(
+            mtc.main_tc.framerate
+        )
+        cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
 
     if not layer_ids or getattr(cue, "_osc", None) is None:
@@ -542,18 +559,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # Sending it here closes the race so the first loop wraps cleanly. Finite
     # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
     loop_early = getattr(cue, "loop", 1) < 1
-
-    # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
-    # enabled on the videocomposer BEFORE the layer starts following MTC below.
-    # Otherwise there's a race: the layer follows MTC (mtcfollow=1) from here,
-    # but /loop is only sent later by loop_videoCue() — which go_threaded calls
-    # AFTER the postwait sleep. In that window the VC has wraparound_=false, so
-    # when the media frame overshoots its length it CLAMPS to the last frame
-    # (LayerPlayback: adjustedFrame = totalFrames-1) and the video visibly
-    # freezes on the final frame until loop_videoCue() finally sends /loop.
-    # Sending it here closes the race so the first loop wraps cleanly. Finite
-    # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
-    loop_early = getattr(cue, "loop", 1) < 1
+    # In wrap mode every looping layer gets /loop [1, passes] + /loop/period
+    # before /mtcfollow instead: the videocomposer counts the passes itself.
 
     # Re-apply position for each layer before making visible (layer may not
     # have been ready when position was set during arm). Each layer's output
@@ -600,8 +607,10 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         client.set_value(f"{layer_path}/offset", int(offset_to_go))
         # Enable wraparound early for infinite loops, BEFORE mtcfollow, so the
         # first loop wraps instead of freezing on the clamped last frame.
-        if loop_early:
-            client.set_value(f"{layer_path}/loop", 1)
+        if wrap:
+            loop_mode.send_video_wrap(cue, [layer_id])
+        elif loop_early:
+            client.set_value(f"{layer_path}/loop", [1])
         # Preload the correct frame while INVISIBLE: offset+mtcfollow let the
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
@@ -612,6 +621,28 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s),"
         f" offset={offset_to_go}"
     )
+    if cue.loop != 1:
+        Logger.info(f"Video cue {cue.id} loop mode: {_video_loop_mode_text(cue, wrap)}")
+
+
+def _video_loop_mode_text(cue, wrap: bool) -> str:
+    """The one-line loop mode of a looping VideoCue at GO (§4.5)."""
+    period = loop_mode.period_of(cue)
+    if wrap:
+        return (
+            f"wrap, passes {loop_mode.video_passes(cue)}, P = {period.num}/{period.den}"
+            f" = {period.ms:.3f} ms, {period.real_frames} frames,"
+            f" band {cue._video_band}"
+        )
+    if loop_mode.in_cuelist(cue):
+        return "legacy (CueList child)"
+    if period is None:
+        return "legacy (no loop period)"
+    if getattr(cue, "_video_band", None) == loop_mode.BAND_LEGACY:
+        return "legacy (band 3, re-anchored on the video's own length)"
+    if loop_mode.VC_LOOP_PERIOD not in PLAYER_HANDLER.video_caps:
+        return "legacy (videocomposer without loop_period, re-anchored on P)"
+    return "legacy"
 
 
 # ---------------------------------------------------------------------------
