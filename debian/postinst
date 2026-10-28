@@ -15,6 +15,14 @@ role_target() {
     esac
 }
 
+# A role target counts as up while it is still starting (install during boot)
+target_up() {
+    case "$(systemctl is-active "$1" 2>/dev/null)" in
+        active|activating|reloading) return 0 ;;
+    esac
+    return 1
+}
+
 case "$1" in
     configure)
         # Verify virtual environment exists
@@ -50,14 +58,13 @@ case "$1" in
 
                 # $2 is the previously-configured version (set on upgrade, empty on fresh install).
                 # Never start an engine the host's role does not run: on a node the controller
-                # engine stays stopped (1amfwm7fr8f). Upgrade: restart only what is running;
-                # fresh install: start only an engine whose role target is active.
-                if [ -n "$2" ]; then
-                    if systemctl is-active --quiet "$svc"; then
-                        echo "Upgrade from $2 detected, restarting $svc..."
-                    fi
-                    systemctl try-restart "$svc" || echo "WARNING: Failed to restart $svc service" >&2
-                elif systemctl is-active --quiet "$(role_target "$svc")"; then
+                # engine stays stopped (1amfwm7fr8f). A running engine is restarted; one that is
+                # stopped or failed is started only when its role target is up.
+                if systemctl is-active --quiet "$svc"; then
+                    [ -n "$2" ] && echo "Upgrade from $2 detected, restarting $svc..."
+                    systemctl restart "$svc" || echo "WARNING: Failed to restart $svc service" >&2
+                elif target_up "$(role_target "$svc")"; then
+                    systemctl reset-failed "$svc" 2>/dev/null || true
                     systemctl start "$svc" || echo "WARNING: Failed to start $svc service" >&2
                 fi
             done
