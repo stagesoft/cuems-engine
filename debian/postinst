@@ -1,8 +1,19 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 set -e
 
 CUEMS_VENV="/usr/lib/cuems"
 ENGINE_SERVICES="cuems-controller-engine cuems-node-engine"
+
+# The role target that pulls each engine (WantedBy= in cuems-common's units)
+role_target() {
+    case "$1" in
+        cuems-controller-engine) echo cuems-controller.target ;;
+        cuems-node-engine)       echo cuems-node.target ;;
+    esac
+}
 
 case "$1" in
     configure)
@@ -37,11 +48,16 @@ case "$1" in
                     systemctl enable "$svc" || echo "WARNING: Failed to enable $svc service" >&2
                 fi
 
-                # $2 is the previously-configured version (set on upgrade, empty on fresh install)
+                # $2 is the previously-configured version (set on upgrade, empty on fresh install).
+                # Never start an engine the host's role does not run: on a node the controller
+                # engine stays stopped (1amfwm7fr8f). Upgrade: restart only what is running;
+                # fresh install: start only an engine whose role target is active.
                 if [ -n "$2" ]; then
-                    echo "Upgrade from $2 detected, restarting $svc..."
-                    systemctl restart "$svc" || echo "WARNING: Failed to restart $svc service" >&2
-                else
+                    if systemctl is-active --quiet "$svc"; then
+                        echo "Upgrade from $2 detected, restarting $svc..."
+                    fi
+                    systemctl try-restart "$svc" || echo "WARNING: Failed to restart $svc service" >&2
+                elif systemctl is-active --quiet "$(role_target "$svc")"; then
                     systemctl start "$svc" || echo "WARNING: Failed to start $svc service" >&2
                 fi
             done
