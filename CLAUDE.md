@@ -55,6 +55,17 @@ MTC starts running as soon as a project is loaded and ready — **before** the f
 
 The engine's `MtcListener` reads MTC from ALSA `Midi Through Port-0` (delivered by rtpmidid on nodes); on the controller the MTC *source* is a `libmtcmaster` `MtcMaster` (ALSA client ~130). The controller stays at libmtcmaster's default `FR_25` — the engine never binds `MTCSender_setFrameRate`, so **CUEMS MTC is always 25 fps**; players translate that to media fps.
 
+**Engine contract for MTC consumers across the 24 h wrap (1amfwm7fbqy).** Cue times are stamped in the engine's
+**own** 24h-extended domain (`milliseconds_exact` adds 86 400 000 ms for every wrap *this* engine has seen; reset at
+project load), while each player's `mtcreceiver` counts only the wraps *its* process has seen. Fixed consumers
+(mtcreceiver `eb7ad4f`+: audioplayer, videocomposer, dmxplayer, gradient-motiond) convert each engine time into their
+own day with the nearest-day rule `k = floorDiv(engine − head + 12 h, 24 h)` and log `MTC day realign k=…`. That is
+only correct while **every time the engine sends a player is within ±12 h of the current MTC** (in practice
+seconds): keep it so. Known violators, each its own task: the catch-up storm on a forward MTC jump, and the NNG
+`go_mtc_ms`/`seed_ms` after a node-engine restart past 24 h (today the nodes reject that GO anchor with a WARNING and
+use their own MTC). The 869ejxng3 feature line sends `/start_tod <int32 ms>` (MTC mod 24 h) in place of `/offset_i`.
+Plan: cuems-RELATIONS `Plans/2026-10-25-mtc-day-align-24h-wrap.md` §3.5.
+
 ## Cue play modes & pre/post-wait semantics
 
 A cue's `post_go` field decides what happens after it fires. Three values, mapped to UI labels in `cuems-frontend` (`sequence.component.ts:107-109`):
