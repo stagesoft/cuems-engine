@@ -112,7 +112,8 @@ def test_beyond_T_a_lone_cue_loops_its_own_track():
 
 def test_a_lone_video_at_29_97_gets_its_exact_frame_count():
     # P = V: num = frames x 1001, den = 30000 -> Pf = realFrames exactly
-    p = _p(48000 * 30, 899, fps="30000/1001")
+    # (the audio 25 s against 29.997 s of video: beyond T, the lone video's own)
+    p = _p(48000 * 25, 899, fps="30000/1001")
     c = loop_mode.choose_period(p, True, False)
     assert (c.period.num, c.period.den) == (899 * 1001, 30000)
     pf = Fraction(c.period.num * 30000, c.period.den * 1001)

@@ -188,6 +188,17 @@ def _isolated_runtime_paths(tmp_path_factory):
             continue
         patchers.append(patcher)
 
+    # The videocomposer's caps file (869ejxng3 Phase B) is
+    # /run/cuems/videocomposer.caps on a host: a live videocomposer's pid there
+    # makes every load's caps check probe it with os.kill(pid, 0), which a test
+    # that fakes os.kill then counts as one of its own calls. Point the reader
+    # at a file no videocomposer writes.
+    env = patch.dict(
+        os.environ, {"CUEMS_VC_CAPS_FILE": str(run_dir / "videocomposer.caps")}
+    )
+    env.start()
+    patchers.append(env)
+
     try:
         yield run_dir
     finally:
