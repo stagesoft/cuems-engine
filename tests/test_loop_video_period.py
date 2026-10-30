@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """Looping VideoCues on the shared period (plan 869ejxng3 + 1amfwm7e6cw,
-Phase B, §4.2, §4.4, §4.5, §4.7): the band rule, wrap mode (``/loop [1,
-passes]`` + ``/loop/period`` before ``/mtcfollow``, re-sent per pass, no
-offset, no ``/loop 0``), legacy on P for an old videocomposer and on the
-video's own length in band 3, CueList children as today, the caps file, the
-mock videocomposer's caps file, the load-time band and caps warnings, the D7
-drift warning, and the sends on the wire.
+Phase B, §4.2, §4.4, §4.5, §4.7; rev 3.17, D15): the track lengths and the
+slack threshold, wrap mode (``/loop [1, passes]`` + ``/loop/period`` before
+``/mtcfollow``, re-sent per pass, no offset, no ``/loop 0``) whatever the
+mismatch, legacy on min(P, V) for an old videocomposer (R24), CueList children
+as today, the caps file, the mock videocomposer's caps file, the load-time
+period and caps warnings, the D7 drift warning (different files only), and the
+sends on the wire. The D15 choice and grouping: ``test_loop_length_d15.py``.
 
 Real time, a fake MTC (25 fps whole frames), a fake OSC client that records
 ``set_value``.
@@ -93,7 +94,7 @@ def _period(num=19200, den=48000, frames=10, fps="25/1"):
     )
 
 
-def _cue(loop, period=None, band=None, duration="00:00:00.360", in_cuelist=False):
+def _cue(loop, period=None, duration="00:00:00.360", in_cuelist=False):
     d = {
         "id": str(uuid.uuid4()),
         "name": "video loop test",
@@ -104,7 +105,7 @@ def _cue(loop, period=None, band=None, duration="00:00:00.360", in_cuelist=False
     cue._local = True
     cue._stop_requested = False
     cue._loop_period = period
-    cue._video_band = band
+    cue._loop_origin = "audio" if period is not None else None
     cue._in_cuelist = in_cuelist
     cue._layer_ids = list(LAYERS)
     cue._layer_outputs = {lid: "out" for lid in LAYERS}
@@ -142,40 +143,43 @@ def _lifecycle(cue, caps=CAPABLE, stop_after_ms=None):
     return mtc, start_ms
 
 
-# --------------------------------------------------------------------------- bands
+# --------------------------------------------------------------------------- lengths
 
 
-def test_the_band_rule_matches_the_videocomposer():
-    # Pf = 10 frames: 10 / 8 / 12 frames are within 2 (band 1)
-    for frames in (8, 10, 12):
-        assert loop_mode.video_band(_period(frames=frames))[0] == loop_mode.BAND_HOLD
-    # 3 frames off a short file is > 1 %: legacy, never a stretch
-    assert loop_mode.video_band(_period(frames=7))[0] == loop_mode.BAND_LEGACY
-    assert loop_mode.video_band(_period(frames=13))[0] == loop_mode.BAND_LEGACY
-    # sintel: 888.106 s against 22200 frames: 2.65 frames, 120 ppm -> band 2
-    sintel = _period(num=888106 * 48, den=48000, frames=22200)
-    band, stretch = loop_mode.video_band(sintel)
-    assert band == loop_mode.BAND_STRETCH and 0.01 < stretch < 0.02
-    # 29.97 at 1001 denominators, exact: P = 1001/300 s = 100 frames
-    assert (
-        loop_mode.video_band(_period(num=1001, den=300, frames=100, fps="30000/1001"))[
-            0
-        ]
-        == loop_mode.BAND_HOLD
-    )
-    # no frame count or no rate: no band (legacy)
-    assert loop_mode.video_band(_period(frames=None)) is None
-    assert loop_mode.video_band(_period(fps=None)) is None
-    assert loop_mode.video_band(_period(fps="0/0")) is None
+def test_the_track_lengths_and_the_slack_threshold():
+    from fractions import Fraction
+
+    p = _period(num=19200, den=48000, frames=10)
+    assert loop_mode.audio_length(p) == Fraction(2, 5)
+    assert loop_mode.video_length(p) == Fraction(2, 5)
+    # a video-only file: num/den is V already, no A
+    vonly = Period(**{**p.__dict__, "rate": None})
+    assert loop_mode.audio_length(vonly) is None
+    # no frame count or no rate: no V
+    assert loop_mode.video_length(_period(frames=None)) is None
+    assert loop_mode.video_length(_period(fps=None)) is None
+    assert loop_mode.video_length(_period(fps="0/0")) is None
+    # 29.97 at 1001 denominators, exact
+    ntsc = _period(num=1001, den=300, frames=100, fps="30000/1001")
+    assert loop_mode.video_length(ntsc) == Fraction(1001, 300)
+    # T = max(2 frames, 80 ms) (R5): 24 fps 83.3 ms, 25 fps 80, 29.97 fps 80,
+    # 50 and 60 fps the 80 ms floor (4 and 4.8 frames)
+    ms = {
+        f: float(loop_mode.slack(_period(fps=f)) * 1000)
+        for f in ("24/1", "25/1", "30000/1001", "50/1", "60/1")
+    }
+    assert abs(ms["24/1"] - 83.333) < 0.01
+    assert ms["25/1"] == ms["30000/1001"] == ms["50/1"] == ms["60/1"] == 80.0
+    assert loop_mode.slack(_period(fps=None)) == Fraction(2, 25)
 
 
-def test_the_legacy_pass_is_P_in_band_1_and_2_and_the_own_length_in_band_3():
-    p = _period(frames=7)
-    assert loop_mode.video_legacy_pass_ms(_cue(3, p, loop_mode.BAND_LEGACY)) == 280.0
-    assert (
-        loop_mode.video_legacy_pass_ms(_cue(3, _period(), loop_mode.BAND_HOLD)) == 400.0
-    )
-    assert loop_mode.video_legacy_pass_ms(_cue(3, None, None)) is None
+def test_the_legacy_pass_is_min_of_P_and_V():
+    # R24: an old videocomposer re-anchors on min(P, V)
+    assert loop_mode.video_legacy_pass_ms(_cue(3, _period(frames=7))) == 280.0
+    assert loop_mode.video_legacy_pass_ms(_cue(3, _period(frames=12))) == 400.0
+    assert loop_mode.video_legacy_pass_ms(_cue(3, _period())) == 400.0
+    assert loop_mode.video_legacy_pass_ms(_cue(3, None)) is None
+    assert loop_mode.video_legacy_pass_ms(_cue(3, _period(frames=None))) is None
     assert loop_mode.video_passes(_cue(3)) == 3
     assert loop_mode.video_passes(_cue(-1)) == -1
     assert loop_mode.video_passes(_cue(0)) == -1
@@ -185,7 +189,7 @@ def test_the_legacy_pass_is_P_in_band_1_and_2_and_the_own_length_in_band_3():
 
 
 def test_wrap_mode_sends_loop_and_period_before_mtcfollow_on_every_layer():
-    cue = _cue(3, _period(), loop_mode.BAND_HOLD)
+    cue = _cue(3, _period())
     _lifecycle(cue)
     run = cue._osc.in_phase("run")
     for lid in LAYERS:
@@ -200,7 +204,7 @@ def test_wrap_mode_sends_loop_and_period_before_mtcfollow_on_every_layer():
 
 
 def test_wrap_mode_resends_per_pass_and_never_reanchors():
-    cue = _cue(3, _period(), loop_mode.BAND_HOLD)
+    cue = _cue(3, _period())
     mtc, start_ms = _lifecycle(cue)
     loop = cue._osc.in_phase("loop")
     assert not [p for p, _ in loop if p.endswith("/offset")]
@@ -219,23 +223,27 @@ def test_wrap_mode_resends_per_pass_and_never_reanchors():
 
 
 def test_an_infinite_wrap_sends_minus_one_passes():
-    cue = _cue(-1, _period(), loop_mode.BAND_HOLD)
+    cue = _cue(-1, _period())
     _lifecycle(cue, stop_after_ms=900)
     assert set(map(tuple, cue._osc.values("/loop"))) == {(1, -1)}
     assert not [p for p, _ in cue._osc.in_phase("loop") if p.endswith("/offset")]
 
 
-def test_band_2_wraps_too():
+def test_no_mismatch_sends_a_cue_to_legacy():
+    # D15: D8's bands 2-3 are gone; any period with a frame count wraps
     sintel = _period(num=888106 * 48, den=48000, frames=22200)
-    cue = _cue(-1, sintel, loop_mode.BAND_STRETCH)
-    assert loop_mode.video_wrap_eligible(cue, CAPABLE)
+    assert loop_mode.video_wrap_eligible(_cue(-1, sintel), CAPABLE)
+    assert loop_mode.video_wrap_eligible(_cue(-1, _period(frames=7)), CAPABLE)
+    assert loop_mode.video_wrap_eligible(_cue(-1, _period(frames=13)), CAPABLE)
+    # without a frame count it cannot wrap (R21)
+    assert not loop_mode.video_wrap_eligible(_cue(-1, _period(frames=None)), CAPABLE)
 
 
 # --------------------------------------------------------------------------- legacy
 
 
 def test_an_old_videocomposer_gets_today_s_sends_reanchored_on_P():
-    cue = _cue(3, _period(), loop_mode.BAND_HOLD, duration="00:00:00.360")
+    cue = _cue(3, _period(), duration="00:00:00.360")
     _lifecycle(cue, caps=frozenset())
     assert cue._video_wrap is False
     assert not cue._osc.values("/loop/period")
@@ -250,9 +258,10 @@ def test_an_old_videocomposer_gets_today_s_sends_reanchored_on_P():
     assert l1[-1] == ("/videocomposer/layer/L1/loop", [0])
 
 
-def test_band_3_runs_legacy_on_the_video_s_own_length():
-    cue = _cue(3, _period(frames=7), loop_mode.BAND_LEGACY)
-    _lifecycle(cue)
+def test_an_old_videocomposer_reanchors_a_shorter_video_on_its_own_length():
+    # R24: P = 400 ms (the audio of a pair), V = 280 ms: min(P, V)
+    cue = _cue(3, _period(frames=7))
+    _lifecycle(cue, caps=frozenset())
     assert cue._video_wrap is False
     assert not cue._osc.values("/loop/period")
     offsets = [v for p, v in cue._osc.in_phase("loop") if p.endswith("L1/offset")]
@@ -260,8 +269,16 @@ def test_band_3_runs_legacy_on_the_video_s_own_length():
     assert [-o - base for o in offsets] == [7, 14]  # 280 ms passes
 
 
+def test_a_capable_videocomposer_wraps_a_shorter_video_on_P():
+    # the same cue with a capable videocomposer: wrap on P, the tail is the VC's
+    cue = _cue(3, _period(frames=7))
+    _lifecycle(cue)
+    assert cue._video_wrap is True
+    assert [19200, 48000, 7] in cue._osc.values("/loop/period", "run")
+
+
 def test_no_period_is_today_s_path():
-    cue = _cue(-1, None, None, duration="00:00:00.400")
+    cue = _cue(-1, None, duration="00:00:00.400")
     _lifecycle(cue, stop_after_ms=700)
     assert cue._osc.values("/loop", "run") == [[1], [1]]  # loop_early, per layer
     assert not cue._osc.values("/loop/period")
@@ -269,12 +286,12 @@ def test_no_period_is_today_s_path():
 
 
 def test_a_cuelist_child_plays_as_today():
-    cue = _cue(-1, _period(), loop_mode.BAND_HOLD, in_cuelist=True)
+    cue = _cue(-1, _period(), in_cuelist=True)
     assert not loop_mode.video_wrap_eligible(cue, CAPABLE)
 
 
 def test_a_play_once_cue_sends_no_loop():
-    cue = _cue(1, None, None)
+    cue = _cue(1, None)
     _lifecycle(cue)
     assert not cue._osc.values("/loop")
     assert not cue._osc.values("/loop/period")
@@ -361,17 +378,21 @@ def test_the_load_walk_takes_local_looping_video_too():
     assert child._in_cuelist is True
 
 
-def test_the_band_is_fixed_at_load_and_band_3_warns():
+def test_the_video_period_check_warns_only_without_a_frame_count_or_on_vfr():
     from cuemsengine.NodeEngine import NodeEngine
 
     ok, wide = _cue(-1, _period()), _cue(-1, _period(frames=7))
+    blind = _cue(-1, _period(frames=None))
+    vfr = _cue(-1, Period(**{**_period().__dict__, "vfr": True}))
     with patch("cuemsengine.NodeEngine.Logger") as log:
-        NodeEngine._assign_video_band(ok)
-        NodeEngine._assign_video_band(wide)
-    assert ok._video_band == loop_mode.BAND_HOLD
-    assert wide._video_band == loop_mode.BAND_LEGACY
+        for c in (ok, wide, blind, vfr):
+            NodeEngine._check_video_period(c)
     warnings = [str(c.args[0]) for c in log.warning.call_args_list]
-    assert any("would be stretched" in w and str(wide.id) in w for w in warnings)
+    assert len(warnings) == 2
+    assert any(
+        "without a video frame count" in w and str(blind.id) in w for w in warnings
+    )
+    assert any("variable frame rate" in w and str(vfr.id) in w for w in warnings)
 
 
 def test_a_videocomposer_without_the_capability_is_a_warning_when_video_loops():
@@ -395,13 +416,15 @@ def test_a_videocomposer_without_the_capability_is_a_warning_when_video_loops():
 # --------------------------------------------------------------------------- D7
 
 
-def _media(kind, period, prewait=0.0, post_go="pause", target=None, local=True):
+def _media(
+    kind, period, prewait=0.0, post_go="pause", target=None, local=True, file_name=None
+):
     d = {
         "id": str(uuid.uuid4()),
         "name": "d7",
         "loop": -1,
         "Media": {
-            "file_name": "x",
+            "file_name": file_name or f"{uuid.uuid4().hex}.mov",
             "id": str(uuid.uuid4()),
             "duration": "00:00:01.000",
         },
@@ -422,7 +445,7 @@ def test_d7_warns_for_a_chain_pair_within_5_percent_but_not_equal():
     audio = _media(AudioCue, a2010, post_go="go", target=video)
     pairs = loop_drift_pairs([audio, video])
     assert len(pairs) == 1 and abs(pairs[0][2] - 10.0) < 1e-6
-    # equal periods (an A/V file and its extracted audio, D2): no warning
+    # equal periods (an A/V file within T and its extracted audio): no warning
     same = _media(VideoCue, a2010)
     audio2 = _media(AudioCue, a2010, post_go="go", target=same)
     assert loop_drift_pairs([audio2, same]) == []
@@ -439,6 +462,10 @@ def test_d7_warns_for_a_chain_pair_within_5_percent_but_not_equal():
     remote = _media(VideoCue, v2000, local=False)
     audio6 = _media(AudioCue, a2010, post_go="go", target=remote)
     assert loop_drift_pairs([audio6, remote]) == []
+    # the same file: the D15 pair or the load's own warning, never D7
+    one = _media(VideoCue, v2000, file_name="one.mp4")
+    audio7 = _media(AudioCue, a2010, post_go="go", target=one, file_name="one.mp4")
+    assert loop_drift_pairs([audio7, one]) == []
 
 
 # --------------------------------------------------------------------------- wire

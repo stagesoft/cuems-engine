@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """The loop period P of the media a node loops (plan 869ejxng3 + 1amfwm7e6cw
-rev 3.14, §4.1, D14).
+rev 3.14, §4.1, D14; rev 3.17: the period is the file's, which length a cue
+loops on is chosen afterwards, ``loop_mode.choose_period``, D15).
 
 Where a node gets P from, in order:
 
@@ -20,7 +21,6 @@ Where a node gets P from, in order:
 The engine never writes a sidecar: ``media/indexes/`` mirrors the controller's.
 """
 
-import dataclasses
 import json
 import os
 import tempfile
@@ -172,14 +172,21 @@ def probe_loop_periods(
     file_budget_s: float = FILE_BUDGET_S,
     clock=monotonic,
     cancel=None,
+    lock=None,
 ) -> list:
-    """Give every cue of *cues* its ``_loop_period`` (a ``Period`` or ``None``).
+    """Give every cue of *cues* its ``_loop_period`` (a ``Period`` or ``None``):
+    the file's period as probed, both track lengths; the length each cue loops
+    on is chosen afterwards by the load (D15), and the test knob
+    ``CUEMS_TEST_FORCE_PERIOD`` applies to that choice, not here (R3).
 
     Returns the ids of the cues left without one (budget miss, failure, a period
     beyond int32): they run legacy on this node for this load. One INFO line per
     cue, one WARNING per failure. A file used by several cues is probed once.
     Once *cancel* (an ``Event``) is set nothing more is assigned: the load has
-    reported its modes in ``armed_ready`` and they never change after it.
+    reported its modes in ``armed_ready`` and they never change after it. With
+    *lock*, the check and the assignment are atomic against the load setting
+    *cancel* under the same lock (the load then rewrites the periods with its
+    choice, which a late raw assignment would undo).
     """
     total_budget_s = test_knobs.probe_budget_s(total_budget_s)
     start = clock()
@@ -203,12 +210,6 @@ def probe_loop_periods(
                 p, source = None, "budget"
                 misses.append(path)
             seen[path] = (p, source)
-        forced = test_knobs.forced_period(cue.id)
-        if forced is not None and p is not None:
-            p = dataclasses.replace(p, num=forced[0], den=forced[1])
-            Logger.warning(
-                f"TEST KNOB: loop period of {cue.id} forced to {forced[0]}/{forced[1]}"
-            )
         if p is not None and p.num > INT32_MAX:
             Logger.error(
                 f"loop period of {name} ({p.num} samples) exceeds the int32 wire "
@@ -227,9 +228,15 @@ def probe_loop_periods(
                     f"loop period for {cue.id} ({name}) unknown ({source}): legacy loop"
                 )
             continue
-        if cancel is not None and cancel.is_set():
-            break
-        cue._loop_period = p
+        if lock is not None:
+            with lock:
+                if cancel is not None and cancel.is_set():
+                    break
+                cue._loop_period = p
+        else:
+            if cancel is not None and cancel.is_set():
+                break
+            cue._loop_period = p
         size = p.size
         Logger.info(
             f"loop period for {cue.id}: {p.num}/{p.den} = {p.ms:.3f} ms "
@@ -242,13 +249,13 @@ def probe_loop_periods(
 DRIFT_WARN_FRACTION = 0.05
 
 
-def loop_drift_pairs(contents) -> list:
-    """D7 (§4.7): ``(a, b, |P_a - P_b| ms)`` for every pair of local looping
-    media cues with a period that start together — the same Auto-continue
-    chain (``post_go == "go"`` links, which trigger the whole chain at once)
-    and the same prewait — whose periods differ by less than 5 % but are not
-    equal. Under D2 a VideoCue on ``X.mp4`` and an AudioCue on the audio
-    extracted from it have equal periods and never pair up."""
+def start_together_key(contents):
+    """The D7 predicate (§4.7, Z14) as a key function over the cues of
+    *contents* (top level): two cues with equal keys start together — the same
+    Auto-continue chain (``post_go == "go"`` links, which trigger the whole
+    chain at once) and the same prewait. Locality plays no part:
+    ``_target_object`` is set for every cue on every node. Used by the D7
+    warning and by the D15 same-file pair (§4.1a)."""
     parent = {}
 
     def find(c):
@@ -261,12 +268,41 @@ def loop_drift_pairs(contents) -> list:
         if ra is not rb:
             parent[id(rb)] = ra
 
-    cues = list(contents or [])
-    for c in cues:
+    for c in list(contents or []):
         find(c)
         target = getattr(c, "_target_object", None)
         if getattr(c, "post_go", None) == "go" and target is not None:
             union(c, target)
+
+    def start_ms(c):
+        try:
+            return c.prewait.milliseconds_exact
+        except AttributeError:
+            return 0.0
+
+    def key(c):
+        return (id(find(c)), start_ms(c))
+
+    return key
+
+
+def media_file(cue) -> str | None:
+    try:
+        return cue.media.file_name
+    except AttributeError:
+        return None
+
+
+def loop_drift_pairs(contents) -> list:
+    """D7 (§4.7): ``(a, b, |P_a - P_b| ms)`` for every pair of local looping
+    media cues with a period, **on different files** (cues on one file are the
+    D15 pair or warned by the load, §4.1a), that start together and whose
+    periods differ by less than 5 % but are not equal. Under D15 a VideoCue on
+    ``X.mp4`` and an AudioCue on the audio extracted from it have equal periods
+    while the container's tracks are within the slack threshold, and warn
+    beyond it (R19)."""
+    cues = list(contents or [])
+    key = start_together_key(cues)
 
     def period(c):
         p = getattr(c, "_loop_period", None)
@@ -280,16 +316,10 @@ def loop_drift_pairs(contents) -> list:
         and period(c) is not None
     ]
 
-    def start_ms(c):
-        try:
-            return c.prewait.milliseconds_exact
-        except AttributeError:
-            return 0.0
-
     pairs = []
     for i, a in enumerate(looping):
         for b in looping[i + 1 :]:
-            if find(a) is not find(b) or start_ms(a) != start_ms(b):
+            if key(a) != key(b) or media_file(a) == media_file(b):
                 continue
             pa, pb = period(a), period(b)
             if pa.num * pb.den == pb.num * pa.den:

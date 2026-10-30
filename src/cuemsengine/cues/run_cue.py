@@ -513,7 +513,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         )
 
     # Loop mode (869ejxng3 §4.5, Phase B), fixed for this GO: wrap when the
-    # videocomposer is capable and the file's band is 1 or 2, else legacy.
+    # videocomposer is capable and the period carries a video frame count
+    # (D15: no mismatch sends a cue to legacy), else legacy.
     wrap = loop_mode.video_wrap_eligible(cue, PLAYER_HANDLER.video_caps)
     cue._video_wrap = wrap
     if wrap:
@@ -523,8 +524,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     else:
         pass_ms = None
     if pass_ms is not None:
-        # The pass ends on P (or, in band 3, on the video's own length), one
-        # rounding from the absolute instant (G20).
+        # The pass ends on P (in legacy, on min(P, V), R24), one rounding from
+        # the absolute instant (G20).
         cue._end_mtc = loop_mode.tc_at(
             mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + pass_ms
         )
@@ -632,16 +633,16 @@ def _video_loop_mode_text(cue, wrap: bool) -> str:
         return (
             f"wrap, passes {loop_mode.video_passes(cue)}, P = {period.num}/{period.den}"
             f" = {period.ms:.3f} ms, {period.real_frames} frames,"
-            f" band {cue._video_band}"
+            f" {getattr(cue, '_loop_origin', None)} length"
         )
     if loop_mode.in_cuelist(cue):
         return "legacy (CueList child)"
     if period is None:
         return "legacy (no loop period)"
-    if getattr(cue, "_video_band", None) == loop_mode.BAND_LEGACY:
-        return "legacy (band 3, re-anchored on the video's own length)"
+    if loop_mode.video_length(period) is None:
+        return "legacy (no video frame count, the stored media duration)"
     if loop_mode.VC_LOOP_PERIOD not in PLAYER_HANDLER.video_caps:
-        return "legacy (videocomposer without loop_period, re-anchored on P)"
+        return "legacy (videocomposer without loop_period, re-anchored on min(P, V))"
     return "legacy"
 
 

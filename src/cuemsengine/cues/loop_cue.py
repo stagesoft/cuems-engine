@@ -328,8 +328,8 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
       datagram is healed by the next pass, H10); no offset, no /loop 0 before
       the last pass. The layer is hidden at _end_mtc as today (H17).
     * **legacy**: today's per-pass offset re-anchor and /loop [0] before the
-      last pass, on P when the file's band is 1 or 2 (an old videocomposer), on
-      the video's own length in band 3, on the stored media duration otherwise.
+      last pass, on min(P, V) with a period (an old videocomposer, R24), on the
+      stored media duration otherwise.
 
     on_last_loop: as for loop_audioCue.
     """

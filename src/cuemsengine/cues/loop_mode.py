@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 """Wrap mode for looping AudioCues and VideoCues (plan 869ejxng3 + 1amfwm7e6cw
-rev 3.14, §4.2, §4.4, §4.5): the player wraps the loop itself on one period P,
+rev 3.17, §4.1a, §4.2, §4.4, §4.5): the player wraps the loop itself on one period P,
 gapless, and follows MTC by varispeed; the videocomposer wraps the layer on the
 same P (Phase B, the helpers at the end of this module); the engine only
 re-sends ``/loop`` (and, for video, ``/loop/period``) per pass.
@@ -25,6 +25,9 @@ the float ``/offset`` (= -start, the engine's extended ms) to every other player
 is gone).
 """
 
+import dataclasses
+from dataclasses import dataclass
+from fractions import Fraction
 from time import monotonic
 
 from cuemsutils.log import Logger
@@ -129,17 +132,32 @@ def fall_back(cue, reason: str) -> None:
 
 
 # --------------------------------------------------------------------------
-# Video (Phase B, §4.4/§4.5): the videocomposer wraps a looping layer on the
-# same P as the audio player, given as /loop [1, passes] + /loop/period
-# [num, den, realFrames], when its caps file names ``loop_period`` and the
-# file's band is 1 or 2. Band 3 (> 2 frames and > 1 % between P and the video's
-# own length) runs legacy: re-anchored on the video's own length, WARNING at
-# load (an operator error under the guarantee).
+# Which length a cue loops on (D15, rev 3.15–3.17, §4.1a). The period of a
+# file (the sidecar, the cache or the probe) carries both track lengths:
+# A = the audio track's decoded length (num/den of a file with audio) and
+# V = the video track's (realFrames at r_frame_rate). The engine chooses P per
+# looping cue at load with two thresholds: T, the *slack* threshold,
+# max(2 frames, 80 ms), and S, the *content* threshold, 500 ms. Up to S a
+# mismatch is slack and the audio rules; beyond S it is content and the
+# longest track rules.
+#
+#   audio-only / video-only file        -> its track
+#   A/V, |A - V| <= T                   -> A for every cue (the video cut or held <= T)
+#   A/V, > T, a lone cue                -> its own track (A for audio, V for video)
+#   A/V, T < |A - V| <= S, a pair       -> A (the video held or cut <= 0.5 s)
+#   A/V, > S, a pair                    -> max(A, V); V quantized to the audio grid
+#
+# A pair is at least one AudioCue and one VideoCue on the same file, looping,
+# not CueList children, starting together (the D7 predicate), over the whole
+# project; the grouping lives in NodeEngine, the rule here.
 
 VC_LOOP_PERIOD = "loop_period"
-BAND_HOLD = 1  # |Pf - realFrames| <= 2 frames: hold or cut at the loop cut
-BAND_STRETCH = 2  # > 2 frames and <= 1 %: stretched over the pass
-BAND_LEGACY = 3  # > 2 frames and > 1 %: no period, legacy
+SLACK_FRAMES = 2
+SLACK_FLOOR_MS = 80
+PAIR_SLACK_MS = 500  # S; the same value as the videocomposer's HOLD_TAIL_MAX_MS
+ORIGIN_AUDIO = "audio"
+ORIGIN_VIDEO = "video"
+ORIGIN_LONGEST = "longest"
 
 
 def parse_fps(fps) -> tuple | None:
@@ -152,32 +170,115 @@ def parse_fps(fps) -> tuple | None:
     return (n, d) if n > 0 and d > 0 else None
 
 
-def video_band(period: Period) -> tuple | None:
-    """``(band, stretch %)`` of a VideoCue's period against its realFrames, in
-    integer rationals as the videocomposer computes it; None without a frame
-    count or a frame rate (the cue then runs legacy)."""
+def audio_length(period: Period) -> Fraction | None:
+    """A, the audio track's decoded length in seconds, or None for a video-only
+    file (whose num/den is already its video length). Read from the period the
+    probe gave, never from a chosen one."""
+    if getattr(period, "rate", None) is None:
+        return None
+    return Fraction(int(period.num), int(period.den))
+
+
+def video_length(period: Period) -> Fraction | None:
+    """V, the video track's length (realFrames / fps) in seconds, or None
+    without a frame count or a frame rate."""
     rate = parse_fps(getattr(period, "fps", None))
     frames = getattr(period, "real_frames", None)
     if rate is None or not frames or frames <= 0:
         return None
-    a = period.num * rate[0]  # Pf = a / b frames
-    b = period.den * rate[1]
-    diff = abs(a - frames * b)
-    stretch = 100.0 * (a / b - frames) / frames
-    if diff <= 2 * b:
-        return BAND_HOLD, stretch
-    if 100 * diff > frames * b:
-        return BAND_LEGACY, stretch
-    return BAND_STRETCH, stretch
+    return Fraction(int(frames) * rate[1], rate[0])
+
+
+def slack(period: Period) -> Fraction:
+    """T in seconds: max(2 frames at the file's fps, 80 ms) (R5)."""
+    floor = Fraction(SLACK_FLOOR_MS, 1000)
+    rate = parse_fps(getattr(period, "fps", None))
+    if rate is None:
+        return floor
+    return max(Fraction(SLACK_FRAMES * rate[1], rate[0]), floor)
+
+
+@dataclass(frozen=True)
+class LoopChoice:
+    """The length one looping cue runs on, and what its shorter track does."""
+
+    period: Period  # what goes on the wire: num/den and realFrames
+    origin: str  # audio | video | longest
+    paired: bool  # it belongs to a same-file pair beyond T
+    audio_ms: float | None
+    video_ms: float | None
+    tail_ms: float  # >= 0, the period beyond (or short of) this cue's track
+    treatment: str  # "" | held | cut | not drawn | silent
+
+
+def _ms(x: Fraction | None) -> float | None:
+    return None if x is None else float(x * 1000)
+
+
+def _with_length(period: Period, num: int, den: int) -> Period:
+    if num == period.num and den == period.den:
+        return period
+    return dataclasses.replace(period, num=int(num), den=int(den))
+
+
+def choose_period(period: Period, is_video: bool, paired: bool) -> LoopChoice:
+    """The D15 choice for one cue (§4.1a) from its file's period as probed.
+
+    *paired*: the cue is in a group with at least one AudioCue and one
+    VideoCue on the same file that start together. With P = V on a lone
+    VideoCue the layer sees ``Pf = realFrames`` exactly (num = frames × fps
+    den, den = fps num); a pair beyond S whose video is the longer gets V
+    quantized to the audio sample grid (num = round(V × rate), den = rate), so
+    the player's integer wrap and the videocomposer's rational wrap agree (R1).
+    """
+    a, v = audio_length(period), video_length(period)
+    a_ms, v_ms = _ms(a), _ms(v)
+    if a is None:  # video-only: num/den is V already
+        return LoopChoice(period, ORIGIN_VIDEO, False, None, v_ms, 0.0, "")
+    if v is None:  # audio-only, or the video length unknown (R21): the audio rules
+        return LoopChoice(period, ORIGIN_AUDIO, False, a_ms, None, 0.0, "")
+    diff = abs(a - v)
+    pair = paired and diff > slack(period)
+    if diff <= slack(period):
+        p, origin = a, ORIGIN_AUDIO
+        chosen = period
+    elif not paired:
+        if is_video:
+            rate = parse_fps(period.fps)
+            p, origin = v, ORIGIN_VIDEO
+            chosen = _with_length(period, period.real_frames * rate[1], rate[0])
+        else:
+            p, origin, chosen = a, ORIGIN_AUDIO, period
+    elif diff <= Fraction(PAIR_SLACK_MS, 1000):
+        p, origin, chosen = a, ORIGIN_AUDIO, period
+    elif a >= v:
+        p, origin, chosen = a, ORIGIN_LONGEST, period
+    else:
+        rate = parse_fps(period.fps)
+        sr = int(period.rate)
+        fn, fd = rate
+        num = (2 * int(period.real_frames) * fd * sr + fn) // (2 * fn)
+        p, origin = Fraction(num, sr), ORIGIN_LONGEST
+        chosen = _with_length(period, num, sr)
+    own = v if is_video else a
+    tail = p - own
+    tail_ms = abs(float(tail * 1000))
+    if tail == 0:
+        treatment = ""
+    elif not is_video:
+        treatment = "silent" if tail > 0 else "cut"
+    elif tail < 0:
+        treatment = "cut"
+    elif tail * 1000 > PAIR_SLACK_MS:
+        treatment = "not drawn"
+    else:
+        treatment = "held"
+    return LoopChoice(chosen, origin, pair, a_ms, v_ms, tail_ms, treatment)
 
 
 def video_own_length_ms(period: Period) -> float | None:
     """The video stream's own length (realFrames / fps) in ms, or None."""
-    rate = parse_fps(getattr(period, "fps", None))
-    frames = getattr(period, "real_frames", None)
-    if rate is None or not frames:
-        return None
-    return frames * rate[1] * 1000.0 / rate[0]
+    return _ms(video_length(period))
 
 
 def video_passes(cue) -> int:
@@ -188,13 +289,15 @@ def video_passes(cue) -> int:
 
 def video_wrap_eligible(cue, video_caps) -> bool:
     """Wrap mode for a VideoCue: it loops, is not a CueList child, the
-    videocomposer is capable and its band (given at load) is 1 or 2."""
+    videocomposer is capable and its period (given at load) carries a video
+    frame count and rate. No mismatch ever sends a cue to legacy (D15)."""
+    period = period_of(cue)
     return (
         cue.loop != 1
         and not in_cuelist(cue)
         and VC_LOOP_PERIOD in (video_caps or ())
-        and period_of(cue) is not None
-        and getattr(cue, "_video_band", None) in (BAND_HOLD, BAND_STRETCH)
+        and period is not None
+        and video_length(period) is not None
     )
 
 
@@ -209,17 +312,15 @@ def video_period_args(period: Period) -> list:
 
 
 def video_legacy_pass_ms(cue) -> float | None:
-    """The per-pass re-anchor length of a VideoCue in legacy mode: P for band
-    1/2 (an old videocomposer), the video's own length in band 3, None (the
-    stored media duration) without a period."""
+    """The per-pass re-anchor length of a VideoCue in legacy mode (an old
+    videocomposer, or a CueList child): min(P, V) (R24: an old layer asked for
+    frames past its end would seek on every vsync of the tail), None (the
+    stored media duration) without a period or a video length."""
     p = period_of(cue)
-    if p is None:
+    v = video_own_length_ms(p) if p is not None else None
+    if v is None:
         return None
-    if getattr(cue, "_video_band", None) == BAND_LEGACY:
-        return video_own_length_ms(p)
-    if getattr(cue, "_video_band", None) in (BAND_HOLD, BAND_STRETCH):
-        return p.ms
-    return None
+    return min(p.ms, v)
 
 
 def send_video_wrap(cue, layer_ids) -> None:
