@@ -14,6 +14,9 @@ cuems-engine (0.1.0rc6-7) bookworm; urgency=medium
     upgrade a controller during a show), a stopped or failed unit is
     started only where its role target is up. A node still running a stray
     cuems-controller-engine from the old postinst keeps it: stop it by hand.
+  * Does not ship cuemsutils' cuems-loop-period console script (cuems-utils
+    0.1.0rc18 owns it); the first rc6-7 build did, and dpkg refused utils rc18
+    next to it.
   * Depends on cuems-utils >= 0.1.0rc18. Install the whole batch together
     on every box: cuems-audioplayer 0.0.3-15, cuems-videocomposer 0.1.2-12,
     cuems-editor 0.1.0rc1-8, cuems-gradient-motiond 0.3.1-2,
