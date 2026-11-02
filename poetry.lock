@@ -344,14 +344,14 @@ toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
 name = "cuemsutils"
-version = "0.1.0rc14"
+version = "0.1.0rc18"
 description = "Reusable classes and methods for CueMS system"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "cuemsutils-0.1.0rc14-py3-none-any.whl", hash = "sha256:56b7ee57421ba809168f9379597bb150fe72a718529b705135327bda758c2a3b"},
-    {file = "cuemsutils-0.1.0rc14.tar.gz", hash = "sha256:142a9fcefd33329f42aebdcead86b6b1e1112b9a62b61b2e2d56df7b0e9be5b4"},
+    {file = "cuemsutils-0.1.0rc18-py3-none-any.whl", hash = "sha256:acd15e386588e5eb1767b961b521755a33da392914fbfa13f39054bda8ede482"},
+    {file = "cuemsutils-0.1.0rc18.tar.gz", hash = "sha256:4752ca013e7282b6c8d4e4092a7b554a8a2eb4e5625535555fe83925e47bb3df"},
 ]
 
 [package.dependencies]
@@ -1370,4 +1370,4 @@ docs = ["Sphinx", "elementpath (>=4.4.0,<5.0.0)", "jinja2", "sphinx-rtd-theme"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "e541d52d0a9be96d7e2fd9ae3f6564e2e31f9c23cc0bab08dd80bf3c1aa06cec"
+content-hash = "3ffde04e0f17b558657324efef350ef7048d0fa8b8e85f5c64051c2176e6e158"

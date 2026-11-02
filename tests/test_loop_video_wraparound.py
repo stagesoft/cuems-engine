@@ -68,16 +68,19 @@ def test_play_once_cue_never_enables_wraparound():
 
 def test_counted_loop_wraps_then_clamps_on_its_last_pass():
     calls = _run(loop=3)
-    assert calls[0] == (LOOP_PATH, 1)
-    assert [c for c in calls if c[0] == LOOP_PATH] == [(LOOP_PATH, 1), (LOOP_PATH, 0)]
+    assert calls[0] == (LOOP_PATH, [1])
+    assert [c for c in calls if c[0] == LOOP_PATH] == [
+        (LOOP_PATH, [1]),
+        (LOOP_PATH, [0]),
+    ]
     # two rebases (passes 2 and 3); /loop 0 comes right after the last offset
     offsets = [i for i, c in enumerate(calls) if c[0] == OFFSET_PATH]
     assert len(offsets) == 2
-    assert calls.index((LOOP_PATH, 0)) == offsets[-1] + 1
-    assert calls[-1] == (LOOP_PATH, 0)
+    assert calls.index((LOOP_PATH, [0])) == offsets[-1] + 1
+    assert calls[-1] == (LOOP_PATH, [0])
 
 
 def test_infinite_loop_keeps_wrapping():
     calls = _run(loop=-1, stop_after=6)
-    assert calls[0] == (LOOP_PATH, 1)
-    assert (LOOP_PATH, 0) not in calls
+    assert calls[0] == (LOOP_PATH, [1])
+    assert (LOOP_PATH, [0]) not in calls
