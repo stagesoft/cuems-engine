@@ -3,26 +3,41 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import dataclasses
 import os
+import shutil
 import subprocess
 import threading
-from time import sleep
+from threading import Event, Lock, Thread
+from time import monotonic, sleep
 
-from cuemsutils.cues import CueList, VideoCue
+from cuemsutils.cues import AudioCue, CueList, VideoCue
 from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.MediaCue import MediaCue
 from cuemsutils.log import Logger, logged
+from cuemsutils.tools import media_sidecars
 
 from .core.BaseEngine import BaseEngine
+from .cues import loop_mode
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
 from .players import AudioClient, DmxClient, VideoClient
+from .players.LoopPeriods import INT32_MAX as LOOP_PERIOD_INT32_MAX
+from .players.LoopPeriods import LOAD_BUDGET_S as LOOP_PERIOD_LOAD_BUDGET_S
+from .players.LoopPeriods import (
+    loop_drift_pairs,
+    media_file,
+    probe_loop_periods,
+    start_together_key,
+)
 from .players.PlayerHandler import (
     PLAYER_HANDLER,
     _positive_int,
     check_orphan_binary_names,
 )
+from .players.VideoCaps import caps_path
+from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
 from .tools.display_conf import read_display_conf
 from .tools.PortHandler import PORT_HANDLER
@@ -133,6 +148,9 @@ class NodeEngine(BaseEngine):
         # selection landed and stop advancing its own (now stale) walk —
         # 869f79ecc.
         self._selection_epoch: int = 0
+        # Cue ids that loop in legacy mode on this node for the loaded project
+        # (no loop period in time, 869ejxng3); reported in every armed_ready.
+        self._legacy_period: list[str] = []
         # with_cm=False (test shells) skips ConfigManager — no controller_ip/cm.
         if self.with_cm and hasattr(self, "cm") and hasattr(self, "controller_ip"):
             self.nng_hub_address = (
@@ -156,6 +174,8 @@ class NodeEngine(BaseEngine):
             self.deploy_manager = None
 
     def start(self):
+        self._log_versions()
+        PLAYER_HANDLER.refresh_video_caps()
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
         self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         # Creates command dictionary and OSCQuery client
@@ -167,6 +187,37 @@ class NodeEngine(BaseEngine):
         if self.mtc_listener is not None:
             self.mtc_listener.start()
         super().start()
+
+    @staticmethod
+    def _log_versions() -> None:
+        """The engine's own Debian package version (every rc6-N tag says
+        0.1.0rc6 to importlib, I8), and whether ffprobe is there for the loop
+        periods (869ejxng3 §4.5): the only version visibility there is (G15)."""
+        version = None
+        try:
+            r = subprocess.run(
+                ["dpkg-query", "-W", "-f=${Version}", "cuems-engine"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            version = r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            pass
+        if not version:
+            try:
+                from importlib.metadata import version as _v
+
+                version = f"{_v('cuemsengine')} (python package)"
+            except Exception:
+                version = "unknown"
+        Logger.info(f"node engine: cuems-engine {version}")
+        test_knobs.announce()
+        if shutil.which("ffprobe") is None:
+            Logger.warning(
+                "ffprobe not found: looping cues without a .period sidecar run "
+                "in legacy mode (a gap per pass)"
+            )
 
     def _setup_nng_command_callback(self):
         """
@@ -888,8 +939,14 @@ class NodeEngine(BaseEngine):
         # `deploy` bus command, which can arrive mid-show.
         self.check_unrouted_video_outputs()
 
+        # Loop periods (869ejxng3 §4.1, D12): read or probed beside the arm,
+        # waited for before armed_ready, so GO is enabled only when every node
+        # knows each looping cue's mode.
+        period_probe = self._start_loop_period_probe()
+
         # Prepare the script to be played (arms new cues)
         self.ready_script(reason="load")
+        self._finish_loop_period_probe(period_probe)
 
         # Start cue dependencies
         # self.set_players()
@@ -930,6 +987,7 @@ class NodeEngine(BaseEngine):
         self._teardown_project("unload")
 
         self.reset_script()
+        self._legacy_period = []
         self.set_status("load", "")
         self.remove_show_lock_file()
         self._broadcast_nextcue()
@@ -1111,58 +1169,304 @@ class NodeEngine(BaseEngine):
 
     def ensure_video_indexes(self):
         """
-        Run cuems-videoindexer on any video files that are missing a .idx
-        sidecar.
+        Run cuems-videoindexer on any video files whose .idx sidecar is missing
+        or stale.
 
         This is a safety net for files that were copied manually or deployed to
-        a
-        node that never ran the editor upload hook. For normally-uploaded files
-        the
-        index was already created by the editor and this is a no-op.
+        a node that never ran the editor upload hook. For normally-uploaded
+        files the index was already created by the editor and this is a no-op.
+        The caller is shared with the editor
+        (``cuemsutils.tools.media_sidecars.ensure_video_index``, 869ejxng3).
         """
         if not self.script:
             return
         file_names = self.script.get_own_media_filenames(config=self.cm)
         video_exts = {".mp4", ".mov", ".avi", ".mkv", ".mpg"}
-        unindexed = []
-        for name in file_names:
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in video_exts:
-                continue
-            full_path = PLAYER_HANDLER.media_path(name)
-            idx_dir = os.path.join(os.path.dirname(full_path), "indexes")
-            idx_path = os.path.join(idx_dir, os.path.basename(full_path) + ".idx")
-            if not os.path.exists(idx_path):
-                unindexed.append(full_path)
-        if unindexed:
-            Logger.info(
-                f"ensure_video_indexes: indexing {len(unindexed)} video(s)"
-                f"missing .idx: "
-                f"{[os.path.basename(p) for p in unindexed]}"
+        videos = [
+            PLAYER_HANDLER.media_path(name)
+            for name in file_names
+            if os.path.splitext(name)[1].lower() in video_exts
+        ]
+        if videos:
+            media_sidecars.ensure_video_index(videos, timeout_s=600)
+
+    def _loop_period_cues(self) -> list:
+        """Mark every CueList child ``_in_cuelist`` (they play once, Q2, I11) and
+        return the local looping AudioCues and VideoCues whose period the load
+        needs: loop != 1, enabled or not (a cue enabled at runtime then has its
+        period, I16i), not inside a CueList. A VideoCue needs it for its
+        realFrames and its D15 length too (X2, §4.1a)."""
+        found = []
+
+        def walk(cuelist, inside):
+            for cue in cuelist.contents or []:
+                cue._in_cuelist = inside
+                if isinstance(cue, CueList):
+                    walk(cue, True)
+                elif (
+                    isinstance(cue, (AudioCue, VideoCue))
+                    and not inside
+                    and getattr(cue, "_local", False) is True
+                    and cue.loop != 1
+                ):
+                    found.append(cue)
+
+        if self.script and self.script.cuelist:
+            walk(self.script.cuelist, False)
+        return found
+
+    def _start_loop_period_probe(self):
+        """Give the looping cues their period beside the arm (§4.1): from the
+        editor's sidecar, this node's cache, or a probe within the budget.
+        The videocomposer's caps file is read here too, at every load (§4.2)."""
+        self._legacy_period = []
+        cues = self._loop_period_cues()
+        self._check_video_caps(cues)
+        if not cues:
+            return None
+        cancel = Event()
+        lock = Lock()
+        result = {}
+
+        def run():
+            result["legacy"] = probe_loop_periods(
+                cues,
+                PLAYER_HANDLER.media_path,
+                PLAYER_HANDLER.loop_period_cache,
+                cancel=cancel,
+                lock=lock,
             )
-            try:
-                result = subprocess.run(
-                    ["cuems-videoindexer"] + unindexed,
-                    timeout=600,
-                    capture_output=True,
-                    text=True,
-                )
-            except Exception as e:
-                Logger.warning(f"ensure_video_indexes: indexer failed: {e}")
-                return
-            if result.returncode == 0:
-                Logger.info("ensure_video_indexes: indexer ok (rc=0)")
-                if result.stdout:
-                    Logger.debug(
-                        f"ensure_video_indexes stdout: {result.stdout.strip()}"
-                    )
-            else:
+
+        t = Thread(target=run, name="loop-period-probe", daemon=True)
+        t.start()
+        return (t, cancel, result, cues, monotonic(), lock)
+
+    def _finish_loop_period_probe(self, probe) -> None:
+        if probe is None:
+            return
+        t, cancel, result, cues, started, lock = probe
+        budget = test_knobs.probe_budget_s(LOOP_PERIOD_LOAD_BUDGET_S)
+        t.join(max(0.0, budget + 2.0 - (monotonic() - started)))
+        with lock:  # the modes are fixed from here on (reported in armed_ready)
+            cancel.set()
+        if t.is_alive():
+            Logger.warning("loop period probe still running after the load budget")
+        self._choose_loop_lengths(cues)
+        self._legacy_period = [
+            str(c.id) for c in cues if getattr(c, "_loop_period", None) is None
+        ]
+        Logger.info(
+            f"loop periods: {len(cues) - len(self._legacy_period)} of {len(cues)} "
+            f"looping cue(s) have one; legacy: {self._legacy_period or 'none'}"
+        )
+        for cue in cues:
+            if isinstance(cue, VideoCue):
+                self._check_video_period(cue)
+        self._warn_loop_drift()
+
+    def _looping_media_cues(self) -> list:
+        """Every looping AudioCue and VideoCue at the project's top level (not a
+        CueList child), on any node, enabled or not: the members a D15 pair is
+        looked up among (§4.1a; a pair may be split across nodes, and every
+        node must choose the same length without an exchange)."""
+        if not (self.script and self.script.cuelist):
+            return []
+        return [
+            c
+            for c in self.script.cuelist.contents or []
+            if isinstance(c, (AudioCue, VideoCue)) and c.loop != 1
+        ]
+
+    def _choose_loop_lengths(self, cues) -> None:
+        """D15 (§4.1a, rev 3.17): give every local looping cue with a period the
+        length it loops on — its own track, A within the slack threshold, or a
+        same-file pair's choice — then apply the force-period test knob to that
+        choice (R3) and re-check the int32 bound on the chosen num (R12). The
+        file's period as probed is kept as ``_loop_period_raw``; the origin
+        (audio / video / longest) as ``_loop_origin``."""
+        contents = (
+            self.script.cuelist.contents or []
+            if self.script and self.script.cuelist
+            else []
+        )
+        key = start_together_key(contents)
+        groups = {}
+        for c in self._looping_media_cues():
+            groups.setdefault((media_file(c), key(c)), []).append(c)
+        raw_of_file = {}
+        for cue in cues:
+            raw = loop_mode.period_of(cue)
+            cue._loop_period_raw = raw
+            cue._loop_origin = None
+            cue._loop_partners = []
+            if raw is not None:
+                raw_of_file.setdefault(media_file(cue), raw)
+        logged_groups = set()
+        for cue in cues:
+            raw = cue._loop_period_raw
+            if raw is None:
+                continue
+            gkey = (media_file(cue), key(cue))
+            group = groups.get(gkey, [cue])
+            paired = any(isinstance(c, AudioCue) for c in group) and any(
+                isinstance(c, VideoCue) for c in group
+            )
+            choice = loop_mode.choose_period(raw, isinstance(cue, VideoCue), paired)
+            chosen = choice.period
+            if choice.paired:
+                cue._loop_partners = [str(c.id) for c in group if c is not cue]
+                if gkey not in logged_groups:
+                    logged_groups.add(gkey)
+                    self._log_pair(cue, group, raw, choice)
+            forced = test_knobs.forced_period(cue.id)
+            if forced is not None:
+                chosen = dataclasses.replace(chosen, num=forced[0], den=forced[1])
                 Logger.warning(
-                    "ensure_video_indexes: indexer returned"
-                    f"rc={result.returncode}. "
-                    f"stdout={result.stdout.strip()!r}"
-                    f"stderr={result.stderr.strip()!r}"
+                    f"TEST KNOB: loop period of {cue.id} forced to "
+                    f"{forced[0]}/{forced[1]} (after the {choice.origin} choice)"
                 )
+            if chosen.num > LOOP_PERIOD_INT32_MAX:
+                Logger.error(
+                    f"loop period of {cue.id} ({chosen.num}/{chosen.den}, the "
+                    f"{choice.origin} length) exceeds the int32 wire range: legacy loop"
+                )
+                cue._loop_period = None
+                continue
+            cue._loop_period = chosen
+            cue._loop_origin = choice.origin
+            pair = (
+                f", pair with {', '.join(cue._loop_partners)}"
+                if cue._loop_partners
+                else ""
+            )
+            tail = (
+                f", tail {choice.tail_ms:.3f} ms on the "
+                f"{'video' if isinstance(cue, VideoCue) else 'audio'}, "
+                f"{choice.treatment}"
+                if choice.treatment
+                else ""
+            )
+            Logger.info(
+                f"loop length for {cue.id}: {chosen.num}/{chosen.den} = "
+                f"{chosen.ms:.3f} ms ({choice.origin}{pair}; audio "
+                f"{self._fmt_ms(choice.audio_ms)}, video "
+                f"{self._fmt_ms(choice.video_ms)}){tail}"
+            )
+        self._warn_same_file_different_starts(groups, raw_of_file)
+
+    @staticmethod
+    def _fmt_ms(ms) -> str:
+        return "-" if ms is None else f"{ms:.3f} ms"
+
+    def _log_pair(self, cue, group, raw, choice) -> None:
+        """One INFO line per same-file pair beyond the slack threshold (§4.5)."""
+        video_tail = loop_mode.choose_period(raw, True, True)
+        audio_tail = loop_mode.choose_period(raw, False, True)
+        tails = "; ".join(
+            f"tail {c.tail_ms:.3f} ms on the {kind}, {c.treatment}"
+            for kind, c in (("video", video_tail), ("audio", audio_tail))
+            if c.treatment
+        )
+        Logger.info(
+            f"A/V pair on {media_file(cue)}: "
+            f"{', '.join(str(c.id) for c in group)}; audio "
+            f"{self._fmt_ms(choice.audio_ms)}, video {self._fmt_ms(choice.video_ms)}; "
+            f"loops on the {choice.origin} length" + (f"; {tails}" if tails else "")
+        )
+
+    def _warn_same_file_different_starts(self, groups, raw_of_file) -> None:
+        """R10: looping cues on one file that do not start together are not a
+        pair: each loops on its own track, and when those lengths differ they
+        drift apart by the difference every pass — one WARNING per file (a file
+        no local cue loops is left to the nodes that loop it), DEBUG when the
+        lengths agree."""
+        by_file = {}
+        for (file, _), group in groups.items():
+            by_file.setdefault(file, []).append(group)
+        for file, file_groups in by_file.items():
+            raw = raw_of_file.get(file)
+            if raw is None or len(file_groups) < 2:
+                continue
+            lengths = {}
+            for group in file_groups:
+                paired = any(isinstance(c, AudioCue) for c in group) and any(
+                    isinstance(c, VideoCue) for c in group
+                )
+                for c in group:
+                    p = loop_mode.choose_period(
+                        raw, isinstance(c, VideoCue), paired
+                    ).period
+                    lengths[str(c.id)] = p.ms
+            if len(set(lengths.values())) > 1:
+                diff = max(lengths.values()) - min(lengths.values())
+                Logger.warning(
+                    f"same file, different starts: {', '.join(lengths)} on {file} "
+                    f"loop on different tracks and drift apart by {diff:.3f} ms per "
+                    "pass (start them together to make them a pair)"
+                )
+            else:
+                Logger.debug(
+                    f"same file, different starts: {', '.join(lengths)} on {file} "
+                    "loop on the same length"
+                )
+
+    @staticmethod
+    def _check_video_caps(cues) -> None:
+        """Re-read the videocomposer's caps file; WARNING when this load loops
+        video and the videocomposer cannot wrap on a period (§4.2)."""
+        caps = PLAYER_HANDLER.refresh_video_caps()
+        if loop_mode.VC_LOOP_PERIOD in caps:
+            return
+        videos = [str(c.id) for c in cues if isinstance(c, VideoCue)]
+        if videos:
+            Logger.warning(
+                "videocomposer without the loop_period capability (no valid "
+                f"{caps_path()}): looping video cue(s) {videos} run in legacy mode "
+                "(re-anchored every pass on P; an A/V pair stays within one pass)"
+            )
+
+    @staticmethod
+    def _check_video_period(cue) -> None:
+        """A looping VideoCue's period at load (§4.4): without a video frame
+        count or rate it runs legacy (WARNING, R21); a variable frame rate is
+        outside the guarantee (WARNING). No mismatch ever sends a cue to legacy
+        (D15: D8's bands 2–3 are gone)."""
+        period = loop_mode.period_of(cue)
+        if period is None:
+            return
+        if loop_mode.video_length(period) is None:
+            Logger.warning(
+                f"video {cue.id}: loop period without a video frame count or rate "
+                f"(fps {period.fps}, frames {period.real_frames}): legacy mode"
+            )
+            return
+        Logger.info(
+            f"video {cue.id}: {period.real_frames} frames at {period.fps} fps "
+            f"({period.frames_rule}), period {period.num}/{period.den} = "
+            f"{period.ms:.3f} ms ({getattr(cue, '_loop_origin', None)})"
+        )
+        if getattr(period, "vfr", False):
+            Logger.warning(
+                f"video {cue.id}: variable frame rate (avg != r_frame_rate), outside "
+                "the A/V loop guarantee"
+            )
+
+    def _warn_loop_drift(self) -> None:
+        """D7 (warning only): two looping media cues on this node, on different
+        files, that start together (the same Auto-continue chain and the same
+        prewait) with periods less than 5 % apart but not equal drift apart by
+        the difference on every pass: one WARNING per pair. Pairs split across
+        nodes are not compared (the D15 grouping, which decides behaviour, is
+        whole-project)."""
+        if not (self.script and self.script.cuelist):
+            return
+        for a, b, diff_ms in loop_drift_pairs(self.script.cuelist.contents or []):
+            Logger.warning(
+                f"loop drift: {a.id} (P = {loop_mode.period_of(a).ms:.3f} ms) and "
+                f"{b.id} (P = {loop_mode.period_of(b).ms:.3f} ms) start together but "
+                f"their periods differ by {diff_ms:.3f} ms: they drift apart by that "
+                "much on every pass (make the files the same length, or one file)"
+            )
 
     #########################
     # Nextcue
@@ -1318,12 +1622,19 @@ class NodeEngine(BaseEngine):
         from .comms.NodesHub import ActionType, NodeOperation, OperationType
 
         try:
+            data = {"armed": "yes"}
+            # The cues that loop in legacy mode on this node for this load
+            # (869ejxng3 §4.2): repeated as is by the re-arm after STOP. An old
+            # controller reads only "armed".
+            legacy = list(getattr(self, "_legacy_period", None) or [])
+            if legacy:
+                data["legacy_period"] = legacy
             operation = NodeOperation(
                 type=OperationType.STATUS,
                 action=ActionType.UPDATE,
                 sender=self.cm.node_uuid,
                 target="armed_ready",
-                data={"armed": "yes"},
+                data=data,
             )
             CUE_HANDLER.communications_thread.send_operation(operation, timeout=0.1)
             Logger.debug(f"Notified Controller that {context} is complete")

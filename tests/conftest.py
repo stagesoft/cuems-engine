@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import gc
 import multiprocessing
@@ -163,6 +164,20 @@ def _isolated_runtime_paths(tmp_path_factory):
         ),
     ]
 
+    # The node's loop-period cache (869ejxng3 D14) lives in /var/cache/cuems on a
+    # host: a test must neither read a host's entries nor write its own there.
+    try:
+        from cuemsengine.players.LoopPeriods import LoopPeriodCache
+
+        targets.append(
+            (
+                "cuemsengine.players.PlayerHandler.PLAYER_HANDLER._loop_period_cache",
+                LoopPeriodCache(str(run_dir / "loop-periods.json")),
+            )
+        )
+    except ImportError:
+        pass
+
     patchers = []
     for target, replacement in targets:
         try:
@@ -172,6 +187,17 @@ def _isolated_runtime_paths(tmp_path_factory):
             # Not importable in this context — nothing to isolate.
             continue
         patchers.append(patcher)
+
+    # The videocomposer's caps file (869ejxng3 Phase B) is
+    # /run/cuems/videocomposer.caps on a host: a live videocomposer's pid there
+    # makes every load's caps check probe it with os.kill(pid, 0), which a test
+    # that fakes os.kill then counts as one of its own calls. Point the reader
+    # at a file no videocomposer writes.
+    env = patch.dict(
+        os.environ, {"CUEMS_VC_CAPS_FILE": str(run_dir / "videocomposer.caps")}
+    )
+    env.start()
+    patchers.append(env)
 
     try:
         yield run_dir

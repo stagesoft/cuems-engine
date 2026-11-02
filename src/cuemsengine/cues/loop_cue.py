@@ -11,7 +11,9 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
+from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import CTimecode, MtcListener
+from . import loop_mode
 
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).
@@ -105,11 +107,21 @@ def loop_fadeCue(cue: FadeCue, mtc: MtcListener):
 def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
     """Handle the audio media playback loop.
 
-    This method manages the playback loop for audio media, including handling
-    looping behavior and OSC communication for timing control.
+    Two modes (869ejxng3 + 1amfwm7e6cw, plan §4.5; see ``loop_mode``):
+
+    * **wrap**: the player wraps the passes itself on P, gaplessly. The engine
+      only keeps the timeline (every pass k, k = 0 included, from the absolute
+      instants base + k·P and base + (k+1)·P), re-sends ``/loop`` per pass and
+      applies the ack rules; no offset, no final ``/mtcfollow 0`` (the player
+      ends by itself). A finite loop returns at its ``_end_mtc``.
+    * **legacy**: today's per-pass offset re-anchor and final ``/mtcfollow 0``,
+      on P when P is known, on the stored media duration otherwise; the start
+      goes as ``/start_tod`` to a dayalign player, as ``/offset`` otherwise.
+
+    A newer GO of the cue (``_go_generation``) ends this loop at once.
 
     Args:
-        ossia: The OSC communication interface.
+        cue: The audio cue.
         mtc: The MIDI Time Code interface.
         on_last_loop: called once, at the start of the last of several loops,
             when the cue's final end is known (cross-node Auto follow,
@@ -119,21 +131,32 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
         f"Running audio cue loop {cue.id}, cue.loop={cue.loop}"
         f"(type={type(cue.loop).__name__})"
     )
+    go_gen = getattr(cue, "_go_generation", 0)
+    period = loop_mode.period_of(cue)
+
+    def stale() -> bool:
+        return getattr(cue, "_go_generation", 0) != go_gen
 
     try:
         loop_counter = 0
         duration = CTimecode(cue.media.duration).return_in_other_framerate(
             mtc.main_tc.framerate
         )
+        base_ms = cue._start_mtc.milliseconds_exact
         Logger.info(
-            f"Audio duration: {duration}, "
-            f"_end_mtc: {cue._end_mtc.milliseconds_rounded}ms, "
-            f"current MTC: {mtc.main_tc.milliseconds_rounded}ms"
+            f"Audio duration: {duration}"
+            + (f", P = {period.ms:.3f} ms" if period is not None else "")
+            + f", _end_mtc: {cue._end_mtc.milliseconds_rounded}ms, "
+            f"current MTC: {mtc.main_tc.milliseconds_rounded}ms, "
+            f"mode: {'wrap' if loop_mode.wrap_active(cue) else 'legacy'}"
         )
 
         while cue.loop < 1 or loop_counter < cue.loop:
             if cue._stop_requested:
                 Logger.info(f"Audio loop {cue.id} cancelled by stop request")
+                return
+            if stale():
+                Logger.info(f"Audio loop {cue.id} superseded by a newer GO")
                 return
             _start_of_last_loop(cue, loop_counter, on_last_loop)
             Logger.info(
@@ -141,28 +164,18 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
                 f"cue.loop={cue.loop}"
             )
 
-            # Future: uncomment to enable percentage progress updates.
-            # last_status_update = 0.0
             while mtc.main_tc.milliseconds_rounded < cue._end_mtc.milliseconds_rounded:
                 if cue._stop_requested:
                     Logger.info(
                         f"Audio loop {cue.id} cancelled by stop request" f"(inner)"
                     )
                     return
+                if stale():
+                    Logger.info(f"Audio loop {cue.id} superseded by a newer GO (inner)")
+                    return
+                if loop_mode.wrap_active(cue):
+                    loop_mode.check_wrap_ack(cue, PLAYER_HANDLER.audio_player(cue))
                 sleep(0.02)
-                # Future: uncomment to enable percentage progress updates.
-                # Throttled to CUE_STATUS_UPDATE_HZ (Tier 1 / node-side).
-                # _now = time.monotonic()
-                # if _now - last_status_update >= 1.0 / CUE_STATUS_UPDATE_HZ:
-                #     last_status_update = _now
-                # _elapsed = mtc.main_tc.milliseconds_rounded -
-                # cue._start_mtc.milliseconds_rounded
-                # _total = cue._end_mtc.milliseconds_rounded -
-                # cue._start_mtc.milliseconds_rounded
-                #     if _total > 0:
-                #         _pct = max(1, min(99, int(100 * _elapsed / _total)))
-                # CUE_HANDLER.communications_thread.update_cue(cue.id, _pct,
-                # timeout=0.1)
 
             Logger.info(
                 f"Audio iteration {loop_counter + 1} finished "
@@ -178,17 +191,37 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
             )
 
             if cue._local and will_loop_again:
-                cue._start_mtc = CTimecode(
-                    framerate=cue._end_mtc.framerate,
-                    frames=cue._end_mtc.frames,
-                )
-                cue._end_mtc = cue._start_mtc + duration
+                if period is not None:
+                    framerate = cue._end_mtc.framerate
+                    cue._start_mtc = loop_mode.tc_at(
+                        framerate, base_ms + loop_counter * period.ms
+                    )
+                    cue._end_mtc = loop_mode.tc_at(
+                        framerate, base_ms + (loop_counter + 1) * period.ms
+                    )
+                else:
+                    cue._start_mtc = CTimecode(
+                        framerate=cue._end_mtc.framerate,
+                        frames=cue._end_mtc.frames,
+                    )
+                    cue._end_mtc = cue._start_mtc + duration
+
+                if loop_mode.wrap_active(cue):
+                    # The player wraps by itself: re-send /loop (idempotent; a
+                    # lost datagram is healed by the next pass), no offset.
+                    try:
+                        cue._osc.set_value("/loop", loop_mode.loop_args(cue, period))
+                    except Exception as e:
+                        Logger.warning(f"Audio /loop re-send failed: {e}")
+                    continue
 
                 # Drift-sensitive: use _exact (float) rather than _rounded
                 # (int)
                 # to preserve sub-ms precision at NTSC framerates
                 # (29.97/23.976).
-                offset_to_go = -cue._start_mtc.milliseconds_exact
+                key, offset_to_go = loop_mode.start_message(
+                    cue, cue._start_mtc.milliseconds_exact
+                )
 
                 Logger.info(
                     f"Loop {loop_counter}: setting offset={offset_to_go}"
@@ -198,7 +231,7 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
                 )
 
                 try:
-                    cue._osc.set_value("/offset", offset_to_go)
+                    cue._osc.set_value(key, offset_to_go)
                     Logger.info(
                         f"Audio offset sent: {offset_to_go}",
                         extra={"caller": cue.__class__.__name__},
@@ -212,7 +245,14 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
         Logger.info(
             f"Audio loop FINISHED: loop_counter={loop_counter}, cue.loop={cue.loop}"
         )
-        if cue._local:
+        if loop_mode.wrap_active(cue):
+            # The player ends by itself at the end of its last pass; the
+            # disarm after this return waits 2 frames for it (CueHandler).
+            Logger.info(
+                "Audio loop ended in wrap mode: no /mtcfollow 0",
+                extra={"caller": cue.__class__.__name__},
+            )
+        elif cue._local:
             try:
                 cue._osc.set_value("/mtcfollow", 0)
                 Logger.info(
@@ -277,8 +317,20 @@ def loop_dmxCue(cue: DmxCue, mtc: MtcListener):
 def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
     """Handle the video media playback loop.
 
-    Manages looping behavior for all layers in cue._layer_ids,
-    updating offset via the single VideoClient in cue._osc.
+    Manages looping behavior for all layers in cue._layer_ids via the single
+    VideoClient in cue._osc. Two modes (869ejxng3 + 1amfwm7e6cw, §4.5; the
+    mode was fixed at GO by run_videoCue, ``cue._video_wrap``):
+
+    * **wrap**: the videocomposer wraps the layer on P and counts the passes
+      itself (/loop [1, passes] + /loop/period). The engine keeps the timeline
+      (pass k from base + k·P to base + (k+1)·P, k = 0 included, rounded once
+      from the absolute instant, G20) and re-sends both per pass (a lost
+      datagram is healed by the next pass, H10); no offset, no /loop 0 before
+      the last pass. The layer is hidden at _end_mtc as today (H17).
+    * **legacy**: today's per-pass offset re-anchor and /loop [0] before the
+      last pass, on min(P, V) with a period (an old videocomposer, R24), on the
+      stored media duration otherwise.
+
     on_last_loop: as for loop_audioCue.
     """
     Logger.info(
@@ -288,12 +340,19 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
 
     try:
         loop_counter = 0
+        wrap = getattr(cue, "_video_wrap", False) is True
+        pass_ms = (
+            loop_mode.period_of(cue).ms if wrap else loop_mode.video_legacy_pass_ms(cue)
+        )
         duration = CTimecode(cue.media.duration).return_in_other_framerate(
             mtc.main_tc.framerate
         )
+        base_ms = cue._start_mtc.milliseconds_exact
         Logger.info(
             f"Video duration: {duration}, duration in frames:"
             f"{duration.frame_number} {duration.framerate}"
+            + (f", pass {pass_ms:.3f} ms" if pass_ms is not None else "")
+            + f", mode: {'wrap' if wrap else 'legacy'}"
         )
         Logger.info(
             f"Initial _end_mtc: {cue._end_mtc.milliseconds_rounded}ms,"
@@ -309,11 +368,14 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
         # of file before the engine hides the layer and shows frame 0 again
         # (869fa89uh).
         if cue.loop != 1:
-            for layer_id in layer_ids:
-                try:
-                    cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", 1)
-                except Exception as e:
-                    Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
+            if wrap:
+                loop_mode.send_video_wrap(cue, layer_ids)
+            else:
+                for layer_id in layer_ids:
+                    try:
+                        cue._osc.set_value(f"/videocomposer/layer/{layer_id}/loop", [1])
+                    except Exception as e:
+                        Logger.error(f"Loop enable failed for layer {layer_id}: {e}")
 
         while cue.loop < 1 or loop_counter < cue.loop:
             if cue._stop_requested:
@@ -353,11 +415,27 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
             will_loop_again = cue.loop < 1 or loop_counter < cue.loop
 
             if cue._local and will_loop_again:
-                cue._start_mtc = CTimecode(
-                    framerate=cue._end_mtc.framerate,
-                    frames=cue._end_mtc.frames,
-                )
-                cue._end_mtc = cue._start_mtc + duration
+                if pass_ms is not None:
+                    framerate = cue._end_mtc.framerate
+                    cue._start_mtc = loop_mode.tc_at(
+                        framerate, base_ms + loop_counter * pass_ms
+                    )
+                    cue._end_mtc = loop_mode.tc_at(
+                        framerate, base_ms + (loop_counter + 1) * pass_ms
+                    )
+                else:
+                    cue._start_mtc = CTimecode(
+                        framerate=cue._end_mtc.framerate,
+                        frames=cue._end_mtc.frames,
+                    )
+                    cue._end_mtc = cue._start_mtc + duration
+
+                if wrap:
+                    # The layer wraps by itself: re-send /loop + /loop/period
+                    # (idempotent), no offset, no /loop 0 before the last pass.
+                    loop_mode.send_video_wrap(cue, layer_ids)
+                    continue
+
                 offset_change_frames = -cue._start_mtc.frame_number
 
                 Logger.info(
@@ -380,7 +458,7 @@ def loop_videoCue(cue: VideoCue, mtc: MtcListener, on_last_loop=None):
                     for layer_id in layer_ids:
                         try:
                             cue._osc.set_value(
-                                f"/videocomposer/layer/{layer_id}/loop", 0
+                                f"/videocomposer/layer/{layer_id}/loop", [0]
                             )
                         except Exception as e:
                             Logger.error(

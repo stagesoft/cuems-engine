@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from pyossia import ValueType
 
@@ -16,6 +17,16 @@ OSC_AUDIOPLAYER_CONF = {
     "/mtcfollow": [ValueType.Int, None],
     "/offset": [ValueType.Float, None],
     "/check": [ValueType.Impulse, None],
+    # 869ejxng3 + 1amfwm7e6cw (plan §4.2): sent only to a player that printed
+    # "CAPS: loop varispeed". /loop is i:passes [i:period_num i:period_den]
+    # (passes 1 = once, N >= 2 = wrap N-1 times, <= 0 = forever). /start_tod is
+    # the cue start as MTC position modulo 24 h in whole ms (int32), sent only
+    # to a player whose CAPS line carries "dayalign" (cuems-RELATIONS
+    # Plans/2026-10-25-mtc-day-align-24h-wrap.md §7.2; it replaced /offset_i).
+    # /offset stays Float for every other player. Both with the repetition
+    # filter OFF: the same value is re-sent per pass.
+    "/loop": [ValueType.List, None, None, False],
+    "/start_tod": [ValueType.Int, None, None, False],
 }
 
 OSC_AUDIOMIXER_CONF = {
@@ -128,10 +139,13 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
     ],  # 1 = enable, 0 = disable
     "/videocomposer/layer/{}/visible": [ValueType.Int, None, -1],
     "/videocomposer/layer/{}/autounload": [ValueType.Int, None],  # 0 or 1
-    "/videocomposer/layer/{}/loop": [
-        ValueType.Int,
-        None,
-    ],  # 1 = enable loop, 0 = disable
+    # 869ejxng3 + 1amfwm7e6cw (plan §4.2): /loop is a list, [1, passes] in wrap
+    # mode (passes <= 0 -> -1), [1] / [0] on the legacy and CueList paths (on
+    # the wire ",i 1" / ",i 0", as the Int endpoint sent); /loop/period is
+    # [num, den, realFrames] (0 0 0 clears). Both with the repetition filter
+    # OFF: they are re-sent every pass.
+    "/videocomposer/layer/{}/loop": [ValueType.List, None, None, False],
+    "/videocomposer/layer/{}/loop/period": [ValueType.List, None, None, False],
     # opacity (0.0 to 1.0)
     "/videocomposer/layer/{}/opacity": [ValueType.Float, None],
     "/videocomposer/layer/{}/position": [

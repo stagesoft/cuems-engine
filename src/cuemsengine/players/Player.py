@@ -4,6 +4,7 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 import os
+from dataclasses import dataclass
 from subprocess import PIPE, STDOUT, Popen
 from threading import Event, Thread
 from time import sleep
@@ -16,6 +17,51 @@ from cuemsutils.log import Logger, logged
 # we are running"). Matched as a substring: the line starts with the player's
 # logger slug, e.g. b"[Cuems:d<uuid>] [OK] RUNNING!\n".
 READY_LINE = b"[OK] RUNNING!"
+
+# 869ejxng3 + 1amfwm7e6cw (plan §4.2). A capable cuems-audioplayer prints, each
+# line in one write(2):
+#   b"[<slug>] [OK] CAPS: loop varispeed\n"            before RUNNING
+#   b"[<slug>] [OK] LOOP <ver> <passes> <num> <den> <mode>\n"
+# on every /loop it receives (the receipt, carrying the PREVIOUS mode) and
+# whenever its effective mode changes; mode is pending | once | wrap | off and
+# ver counts the mode changes. The line with the highest ver wins.
+CAPS_TAG = b"[OK] CAPS:"
+LOOP_TAG = b"[OK] LOOP "
+LOOP_MODES = ("pending", "once", "wrap", "off")
+
+
+@dataclass(frozen=True)
+class LoopAck:
+    """The latest LOOP line of a player (§4.2)."""
+
+    ver: int
+    passes: int
+    num: int
+    den: int
+    mode: str
+
+
+def parse_caps(line: bytes) -> frozenset:
+    """The tokens of a CAPS line, or an empty set."""
+    i = line.find(CAPS_TAG)
+    if i < 0:
+        return frozenset()
+    return frozenset(line[i + len(CAPS_TAG) :].decode("utf8", "replace").split())
+
+
+def parse_loop_ack(line: bytes) -> LoopAck | None:
+    """A LOOP line as a LoopAck, or None when it is not one (or malformed)."""
+    i = line.find(LOOP_TAG)
+    if i < 0:
+        return None
+    parts = line[i + len(LOOP_TAG) :].decode("utf8", "replace").split()
+    if len(parts) < 5 or parts[4] not in LOOP_MODES:
+        return None
+    try:
+        ver, passes, num, den = (int(x) for x in parts[:4])
+    except ValueError:
+        return None
+    return LoopAck(ver, passes, num, den, parts[4])
 
 
 class Player(Thread):
@@ -53,6 +99,27 @@ class Player(Thread):
         # before the hand-off) is described in AudioMixer.connect_player_to_
         # outputs and the 869fbyjzx plan; it is not built.
         self.ready = Event()
+        # What the subprocess announced on stdout (§4.2), reset per run.
+        self.caps = frozenset()
+        self.loop_ack = None  # LoopAck: the line with the highest ver
+        self.last_wrap_ver = (
+            -1
+        )  # ver of the latest "wrap" line (an "off" counts only above it)
+
+    def note_line(self, line: bytes) -> None:
+        """Record a CAPS or LOOP line (the stdout reader; also used by tests)."""
+        if CAPS_TAG in line:
+            self.caps = parse_caps(line)
+            Logger.info(f"Player capabilities: {sorted(self.caps)}")
+            return
+        ack = parse_loop_ack(line)
+        if ack is None:
+            return
+        if ack.mode == "wrap":
+            self.last_wrap_ver = max(self.last_wrap_ver, ack.ver)
+        current = self.loop_ack
+        if current is None or ack.ver >= current.ver:
+            self.loop_ack = ack  # one reference assignment: readers see old or new
 
     def run(self):
         raise NotImplementedError
@@ -68,6 +135,9 @@ class Player(Thread):
             # This run starts not ready: an Event left set by an earlier run of
             # the same Player object would pass the audio wiring's gate at once.
             self.ready.clear()
+            self.caps = frozenset()
+            self.loop_ack = None
+            self.last_wrap_ver = -1
             my_env = os.environ.copy()
             my_env["DISPLAY"] = ":0"
             self.p = Popen(call_args, stdout=PIPE, stderr=STDOUT, env=my_env)
@@ -79,6 +149,8 @@ class Player(Thread):
                     Logger.debug(f"Subprocess output: {line}")
                     if READY_LINE in line:
                         self.ready.set()
+                    elif b"[OK] " in line:
+                        self.note_line(line)
                 # Prevent CPU spinning when subprocess has no output
                 sleep(0.01)
 
