@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
       
 
@@ -2123,7 +2123,11 @@ any asyncio loop exists, so subprocess.run() (short timeout) is correct.</p>
 <span class="normal">664</span>
 <span class="normal">665</span>
 <span class="normal">666</span>
-<span class="normal">667</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CuemsDeploy</span><span class="p">:</span>
+<span class="normal">667</span>
+<span class="normal">668</span>
+<span class="normal">669</span>
+<span class="normal">670</span>
+<span class="normal">671</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CuemsDeploy</span><span class="p">:</span>
     <span class="n">_RSYNC_PASSWORD</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"f48t5eL2kLHw2Wfw"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -2729,7 +2733,10 @@ any asyncio loop exists, so subprocess.run() (short timeout) is correct.</p>
 <span class="sd">        Expand bare media filenames to rsync-relative paths for --files-from.</span>
 
 <span class="sd">        Every file gets a media/&lt;name&gt; entry. Video files (.mp4 .mov .avi</span>
-<span class="sd">        .mkv .mpg) also get a media/indexes/&lt;name&gt;.idx sidecar entry.</span>
+<span class="sd">        .mkv .mpg) also get a media/indexes/&lt;name&gt;.idx sidecar entry, and every</span>
+<span class="sd">        file its loop period sidecar media/indexes/&lt;name&gt;.period (869ejxng3</span>
+<span class="sd">        D14: written by the editor at upload; --ignore-missing-args makes an</span>
+<span class="sd">        absent one harmless, and -t keeps the mtime its size+mtime check needs).</span>
 <span class="sd">        """</span>
         <span class="n">_VIDEO_EXTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">".mp4"</span><span class="p">,</span> <span class="s2">".mov"</span><span class="p">,</span> <span class="s2">".avi"</span><span class="p">,</span> <span class="s2">".mkv"</span><span class="p">,</span> <span class="s2">".mpg"</span><span class="p">}</span>
         <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
@@ -2737,6 +2744,7 @@ any asyncio loop exists, so subprocess.run() (short timeout) is correct.</p>
             <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"media/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">name</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">_VIDEO_EXTS</span><span class="p">:</span>
                 <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"media/indexes/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.idx"</span><span class="p">)</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"media/indexes/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.period"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 </code></pre></div></td></tr></table></div>
               </details>
@@ -6854,10 +6862,10 @@ socket it did not own (869ed9wf7).</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
