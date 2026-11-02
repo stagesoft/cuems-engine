@@ -12,10 +12,22 @@ survives. ``/offset`` stays ``,f`` for old players.
 import socket
 import struct
 
+import pyossia
 import pytest
 
 from cuemsengine.players.AudioPlayer import AudioClient
 from cuemsengine.tools.PortHandler import PORT_HANDLER
+
+# The fixture's teardown (AudioClient.remove_device) removes the device's nodes,
+# which older libossia builds cannot do: skip like tests/test_ossia.py does
+# rather than error out on a host whose pyossia lacks Node.remove_child.
+pytestmark = pytest.mark.skipif(
+    not hasattr(pyossia.Node, "remove_child"),
+    reason=(
+        "installed pyossia has no Node.remove_child — node removal is "
+        "unsupported by this libossia build; update the system pyossia package"
+    ),
+)
 
 
 def _free_port():

@@ -9,6 +9,7 @@ legacy and is reported in ``armed_ready`` (and logged by the controller).
 
 import json
 import os
+import shutil
 import time
 import uuid
 import wave
@@ -21,6 +22,12 @@ from cuemsutils.cues import AudioCue, CueList, VideoCue
 from cuemsutils.tools import media_sidecars as ms
 
 from cuemsengine.players import LoopPeriods as lp
+
+# These run the real ffprobe (the header rule, the sidecar round trip): skip on a
+# host without ffmpeg instead of failing on a probe that returned nothing.
+requires_ffprobe = pytest.mark.skipif(
+    shutil.which("ffprobe") is None, reason="ffprobe (ffmpeg) is not installed"
+)
 
 
 def _wav(path, frames=24000, rate=48000):
@@ -82,6 +89,7 @@ def test_the_sidecar_comes_first(tmp_path, cache):
     assert (p.num, source) == (11111, "sidecar")
 
 
+@requires_ffprobe
 def test_a_real_probe_is_cached_on_disk_and_survives_a_restart(tmp_path, cache):
     f = _wav(tmp_path / "a.wav", frames=24000)
     p, source = lp.media_loop_period(f, 10, cache)  # the real ffprobe: header rule
@@ -95,6 +103,7 @@ def test_a_real_probe_is_cached_on_disk_and_survives_a_restart(tmp_path, cache):
     assert not os.path.exists(ms.sidecar_path(f))  # the engine never writes one
 
 
+@requires_ffprobe
 def test_a_stale_sidecar_and_a_changed_file_are_probed_again(tmp_path, cache):
     f = _wav(tmp_path / "a.wav", frames=24000)
     ms.write_period(f, _period(f, num=11111))
@@ -265,6 +274,7 @@ def test_the_load_walk_marks_cuelist_children_and_picks_local_looping_media():
     assert child._in_cuelist is True and top._in_cuelist is False
 
 
+@requires_ffprobe
 def test_the_probe_runs_beside_the_arm_and_fixes_the_legacy_list(tmp_path):
     from cuemsengine.players.PlayerHandler import PLAYER_HANDLER
 

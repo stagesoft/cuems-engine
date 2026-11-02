@@ -23,6 +23,7 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pyossia
 import pytest
 from cuemsutils.cues import AudioCue, CueList, VideoCue
 from cuemsutils.tools.CTimecode import CTimecode
@@ -522,6 +523,13 @@ def wire(monkeypatch):
     rx.close()
 
 
+@pytest.mark.skipif(
+    not hasattr(pyossia.Node, "remove_child"),
+    reason=(
+        "installed pyossia has no Node.remove_child — node removal is "
+        "unsupported by this libossia build; update the system pyossia package"
+    ),
+)
 def test_the_video_loop_sends_on_the_wire(wire):
     lp = "/videocomposer/layer/L1"
     # legacy: byte for byte what the Int endpoint sent
