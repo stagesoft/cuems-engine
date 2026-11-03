@@ -1,3 +1,29 @@
+cuems-engine (0.1.0rc6-7) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm (0.1.0rc6-7, 869ejxng3 batch, PR #45):
+    gapless MTC-locked A/V loops. One loop period per file, read from the
+    cuems-utils sidecar and sent to both players (/start_tod to the audio
+    player, /loop/period to the videocomposer); no per-pass re-anchor.
+    D15 picks the length a cue loops on: one track -> that track; A/V
+    within max(2 frames, 80 ms) -> the audio for every cue; a lone cue
+    beyond it -> its own track; a same-file pair within 0.5 s -> the audio,
+    beyond -> the longer track (quantised to the sample grid when it is the
+    video), the pair found across the whole project.
+  * postinst never starts an engine the host's role does not run
+    (1amfwm7fr8f, PR #46); running units are restarted as before (so never
+    upgrade a controller during a show), a stopped or failed unit is
+    started only where its role target is up. A node still running a stray
+    cuems-controller-engine from the old postinst keeps it: stop it by hand.
+  * Does not ship cuemsutils' cuems-loop-period console script (cuems-utils
+    0.1.0rc18 owns it); the first rc6-7 build did, and dpkg refused utils rc18
+    next to it.
+  * Depends on cuems-utils >= 0.1.0rc18. Install the whole batch together
+    on every box: cuems-audioplayer 0.0.3-15, cuems-videocomposer 0.1.2-12,
+    cuems-editor 0.1.0rc1-8, cuems-gradient-motiond 0.3.1-2,
+    cuems-dmxplayer 0.0.0-8.
+
+ -- Ion Reguera <ion@stagelab.coop>  Tue, 03 Nov 2026 00:29:03 +0100
+
 cuems-engine (0.1.0rc6-6) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm:

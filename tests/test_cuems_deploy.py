@@ -871,12 +871,15 @@ def test_rsync_password_not_in_method_bodies():
 
 
 def test_media_files_video_and_audio(deploy):
-    """T031: video gets media/ + idx entry; audio gets only media/ entry."""
+    """T031: video gets media/ + idx entry; audio gets only media/ entry; both
+    get their loop period sidecar (869ejxng3 D14)."""
     result = deploy._media_files(["clip.mp4", "track.wav"])
     assert result == [
         "media/clip.mp4",
         "media/indexes/clip.mp4.idx",
+        "media/indexes/clip.mp4.period",
         "media/track.wav",
+        "media/indexes/track.wav.period",
     ]
 
 

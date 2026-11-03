@@ -4,6 +4,7 @@
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 from functools import singledispatch
+from time import monotonic
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -12,6 +13,7 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+from . import loop_mode
 
 
 @singledispatch
@@ -110,6 +112,9 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
         return
     if not _ensure_child_loaded(cue, child):
         return  # re-arm failed (already logged loudly) — don't dispatch
+    # A CueList child plays once (869ejxng3 Q2): the load walk marks it too;
+    # this covers a child reached without one (defensive, I11).
+    child._in_cuelist = True
     run_cue(child, mtc, frozen_mtc_ms)
 
 
@@ -196,6 +201,18 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     # / JACK ports missing), reveal_audioCue sees this False and no-ops instead of
     # asserting mtcfollow on a player that never got set up.
     cue._reveal_ready = False
+    # Wrap mode (869ejxng3, plan §4.5), all reset per GO: _player_wraps is set
+    # only by the player's wrap ack, so an abort below leaves it False; the
+    # fallback is latched for this GO only (M6).
+    cue._player_wraps = False
+    cue._wrap_requested = False
+    cue._wrap_fallback = False
+    cue._wrap_reveal_t = None
+    player = PLAYER_HANDLER.audio_player(cue)
+    capable = loop_mode.player_capable(player)
+    cue._audio_capable = capable
+    cue._audio_dayalign = loop_mode.player_dayalign(player)
+    period = loop_mode.period_of(cue)
 
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
     # chains)
@@ -217,15 +234,21 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
-    # Convert duration to MTC framerate to prevent drift when looping
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
-    cue._end_mtc = cue._start_mtc + duration
+    if period is not None:
+        # The pass ends on the file's real length P (one rounding, from the
+        # absolute instant, G20), not on the stored duration rounded to frames.
+        cue._end_mtc = loop_mode.tc_at(
+            mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + period.ms
+        )
+    else:
+        # Convert duration to MTC framerate to prevent drift when looping
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(
+            mtc.main_tc.framerate
+        )
+        cue._end_mtc = cue._start_mtc + duration
 
-    # Audio player formula: file_position = MTC + offset
-    # To play from position 0 when MTC = start_mtc, we need offset = -start_mtc
-    offset_to_go = -cue._start_mtc.milliseconds_exact
+    # Audio player formula: file_position = MTC + offset, offset = -start_mtc;
+    # a dayalign player gets the start itself, modulo 24 h (/start_tod)
 
     # Verify mixer graph; only repair if drifted. Arm already wired it; the
     # unconditional reconnect at GO costs ~21-28 ms (measured) without
@@ -270,14 +293,12 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
 
-    # Define the offset - use MTC framerate for consistent timing with video
+    # Define the start - use MTC framerate for consistent timing with video
     try:
-        key = "/offset"
-
-        cue._osc.set_value(key, offset_to_go)
+        key, value = loop_mode.start_message(cue, cue._start_mtc.milliseconds_exact)
+        cue._osc.set_value(key, value)
         Logger.info(
-            f"offset {offset_to_go} to {key}:"
-            f"{str(cue._osc.get_node(key).parameter.value)}",
+            f"start {value} to {key}:{cue._osc.get_node(key).parameter.value}",
             extra={"caller": cue.__class__.__name__},
         )
     except Exception as e:
@@ -288,6 +309,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     else:
         # Setup reached the offset send → safe for reveal_cue to start following.
         cue._reveal_ready = True
+        _send_loop_mode(cue, capable, period)
 
     # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). The offset above
     # is harmless while not following; reveal_cue turns following on at
@@ -317,6 +339,35 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             f"Error setting master volume in run_audioCue: {e}",
             extra={"caller": cue.__class__.__name__},
         )
+
+
+def _send_loop_mode(cue, capable: bool, period) -> None:
+    """After the offset: ``/loop [passes, num, den]`` for a wrap-eligible cue,
+    ``/loop [1]`` for every other cue on a capable player; nothing to an old
+    player. One INFO line per GO naming the mode."""
+    if not capable:
+        Logger.info(f"Audio cue {cue.id} loop mode: legacy (player without CAPS loop)")
+        return
+    wrap = period is not None and cue.loop != 1 and not loop_mode.in_cuelist(cue)
+    args = loop_mode.loop_args(cue, period) if wrap else [1]
+    try:
+        cue._osc.set_value("/loop", args)
+    except Exception as e:
+        Logger.warning(f"Error sending /loop {args} in run_audioCue: {e}")
+        wrap = False
+    cue._wrap_requested = wrap
+    if wrap:
+        Logger.info(
+            f"Audio cue {cue.id} loop mode: wrap+varispeed, passes {cue.loop}, "
+            f"P = {period.num}/{period.den} = {period.ms:.3f} ms"
+        )
+    else:
+        why = (
+            "plays once"
+            if cue.loop == 1 or loop_mode.in_cuelist(cue)
+            else "no loop period"
+        )
+        Logger.info(f"Audio cue {cue.id} loop mode: legacy ({why})")
 
 
 @run_cue.register
@@ -461,10 +512,28 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
-    duration = CTimecode(cue.media.duration).return_in_other_framerate(
-        mtc.main_tc.framerate
-    )
-    cue._end_mtc = cue._start_mtc + duration
+    # Loop mode (869ejxng3 §4.5, Phase B), fixed for this GO: wrap when the
+    # videocomposer is capable and the period carries a video frame count
+    # (D15: no mismatch sends a cue to legacy), else legacy.
+    wrap = loop_mode.video_wrap_eligible(cue, PLAYER_HANDLER.video_caps)
+    cue._video_wrap = wrap
+    if wrap:
+        pass_ms = loop_mode.period_of(cue).ms
+    elif cue.loop != 1:
+        pass_ms = loop_mode.video_legacy_pass_ms(cue)
+    else:
+        pass_ms = None
+    if pass_ms is not None:
+        # The pass ends on P (in legacy, on min(P, V), R24), one rounding from
+        # the absolute instant (G20).
+        cue._end_mtc = loop_mode.tc_at(
+            mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + pass_ms
+        )
+    else:
+        duration = CTimecode(cue.media.duration).return_in_other_framerate(
+            mtc.main_tc.framerate
+        )
+        cue._end_mtc = cue._start_mtc + duration
     offset_to_go = -cue._start_mtc.frame_number
 
     if not layer_ids or getattr(cue, "_osc", None) is None:
@@ -491,18 +560,8 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # Sending it here closes the race so the first loop wraps cleanly. Finite
     # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
     loop_early = getattr(cue, "loop", 1) < 1
-
-    # Infinite-loop cues (cue.loop < 1, e.g. loop=-1) must have wraparound
-    # enabled on the videocomposer BEFORE the layer starts following MTC below.
-    # Otherwise there's a race: the layer follows MTC (mtcfollow=1) from here,
-    # but /loop is only sent later by loop_videoCue() — which go_threaded calls
-    # AFTER the postwait sleep. In that window the VC has wraparound_=false, so
-    # when the media frame overshoots its length it CLAMPS to the last frame
-    # (LayerPlayback: adjustedFrame = totalFrames-1) and the video visibly
-    # freezes on the final frame until loop_videoCue() finally sends /loop.
-    # Sending it here closes the race so the first loop wraps cleanly. Finite
-    # loops (cue.loop >= 1) keep the existing loop_videoCue timing untouched.
-    loop_early = getattr(cue, "loop", 1) < 1
+    # In wrap mode every looping layer gets /loop [1, passes] + /loop/period
+    # before /mtcfollow instead: the videocomposer counts the passes itself.
 
     # Re-apply position for each layer before making visible (layer may not
     # have been ready when position was set during arm). Each layer's output
@@ -549,8 +608,10 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         client.set_value(f"{layer_path}/offset", int(offset_to_go))
         # Enable wraparound early for infinite loops, BEFORE mtcfollow, so the
         # first loop wraps instead of freezing on the clamped last frame.
-        if loop_early:
-            client.set_value(f"{layer_path}/loop", 1)
+        if wrap:
+            loop_mode.send_video_wrap(cue, [layer_id])
+        elif loop_early:
+            client.set_value(f"{layer_path}/loop", [1])
         # Preload the correct frame while INVISIBLE: offset+mtcfollow let the
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
@@ -561,6 +622,28 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s),"
         f" offset={offset_to_go}"
     )
+    if cue.loop != 1:
+        Logger.info(f"Video cue {cue.id} loop mode: {_video_loop_mode_text(cue, wrap)}")
+
+
+def _video_loop_mode_text(cue, wrap: bool) -> str:
+    """The one-line loop mode of a looping VideoCue at GO (§4.5)."""
+    period = loop_mode.period_of(cue)
+    if wrap:
+        return (
+            f"wrap, passes {loop_mode.video_passes(cue)}, P = {period.num}/{period.den}"
+            f" = {period.ms:.3f} ms, {period.real_frames} frames,"
+            f" {getattr(cue, '_loop_origin', None)} length"
+        )
+    if loop_mode.in_cuelist(cue):
+        return "legacy (CueList child)"
+    if period is None:
+        return "legacy (no loop period)"
+    if loop_mode.video_length(period) is None:
+        return "legacy (no video frame count, the stored media duration)"
+    if loop_mode.VC_LOOP_PERIOD not in PLAYER_HANDLER.video_caps:
+        return "legacy (videocomposer without loop_period, re-anchored on min(P, V))"
+    return "legacy"
 
 
 # ---------------------------------------------------------------------------
@@ -604,9 +687,18 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     try:
         start = getattr(cue, "_start_mtc", None)
         if start is not None:
-            cue._osc.set_value("/offset", -start.milliseconds_exact)
+            cue._osc.set_value(*loop_mode.start_message(cue, start.milliseconds_exact))
     except Exception as e:
         Logger.warning(f"reveal_audioCue: /offset failed: {e}")
+    if loop_mode.wrap_active(cue):
+        # re-sent at the reveal (idempotent); the 1 s ack check starts here
+        try:
+            cue._osc.set_value(
+                "/loop", loop_mode.loop_args(cue, loop_mode.period_of(cue))
+            )
+        except Exception as e:
+            Logger.warning(f"reveal_audioCue: /loop failed: {e}")
+        cue._wrap_reveal_t = monotonic()
     try:
         cue._osc.set_value("/mtcfollow", 1)
     except Exception as e:
@@ -659,7 +751,8 @@ def blank_cue(cue: Cue, mtc: MtcListener):
     blank_cue hides it while the cue stays in _armed_cues (STOP-reachable
     through the whole tail; disarming here instead would make the tail
     unreachable by stop_all_cues → ghost fire after STOP). Default no-op:
-    audio is already silent (loop_audioCue sends /mtcfollow 0 at loop end),
+    audio is already silent (legacy: loop_audioCue sends /mtcfollow 0 at loop
+    end; wrap mode, 869ejxng3: the player ends by itself after its last pass),
     DMX scenes have ended, actions/CueLists have nothing to hide.
     """
     pass

@@ -11,6 +11,8 @@ from typing import Any, Callable, Union
 from cuemsutils.log import Logger, logged
 from pyossia import Node, ValueType, ossia
 
+from ..tools import test_knobs
+
 CLEANUP_DELAY = 0.3
 STARTUP_DELAY = 0.3
 # set_value() readback tolerance. pyossia stores Float and the elements of
@@ -177,6 +179,8 @@ class OssiaNodes(object):
             - ValueError: If the value could not be set to the node
         """
         path = node if isinstance(node, str) else None
+        if test_knobs.drop_osc(path):
+            return
         if isinstance(node, str):
             try:
                 node = self.nodes[node]
