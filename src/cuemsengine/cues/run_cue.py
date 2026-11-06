@@ -199,8 +199,10 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     return
 
 
-def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: list):
-    """Check a player's mixer wiring at GO and fix it edge by edge.
+def _verify_audio_wiring_at_go(
+    cue, mixer, player_name: str, selected_outputs: list, where: str = "GO"
+):
+    """Check a player's mixer wiring at GO (or at arm) and fix it edge by edge.
 
     Never a full rewire (869fbyjzx): a GO can reach this while the cue is
     audible (a fresh GO, or a 'play' action, on a cue that is still
@@ -216,7 +218,7 @@ def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: l
     )
     if diff is None:
         Logger.error(
-            f"Audio cue {cue.id}: no mixer input for its outputs at GO "
+            f"Audio cue {cue.id}: no mixer input for its outputs at {where} "
             f"({selected_outputs}) — cue will be SILENT despite showing "
             f"armed (mixer inputs unavailable)."
         )
@@ -226,13 +228,13 @@ def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: l
         Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
         return
     Logger.warning(
-        f"Audio cue {cue.id}: graph not wired correctly at GO "
+        f"Audio cue {cue.id}: graph not wired correctly at {where} "
         f"(missing: {missing}; stray: {stray}); repairing edge by edge"
     )
     connected_ok, strays_left = mixer.repair_player_connections(missing, stray)
     if not connected_ok:
         Logger.error(
-            f"Audio cue {cue.id}: mixer repair failed at GO — cue will be "
+            f"Audio cue {cue.id}: mixer repair failed at {where} — cue will be "
             f"SILENT despite showing armed (a mixer connection could not be "
             f"made)."
         )
@@ -268,9 +270,32 @@ def _audio_wiring_target(cue):
     return mixer, player_name, selected_outputs
 
 
-def _audio_ports_ok_at_go(cue) -> bool:
+def verify_audio_wiring_at_arm(cue) -> None:
+    """869feynrj §4.5a (preload at arm, CAPS selfgate only): the mixer wiring
+    check, done once at the end of a successful arm instead of at every GO.
+    A selfgate player is built with RTAUDIO_JACK_DONT_CONNECT (S0-20), so no
+    RtAudio auto-connect can appear after the arm's own wiring; a GO keeps
+    only the cheap port_exists of outport 0. Never raises."""
+    try:
+        target = _audio_wiring_target(cue)
+        if target is None:
+            return
+        mixer, player_name, selected_outputs = target
+        _verify_audio_wiring_at_go(
+            cue, mixer, player_name, selected_outputs, where="arm"
+        )
+    except Exception as e:
+        Logger.warning(f"Audio cue {cue.id}: wiring check at arm failed: {e}")
+
+
+def _audio_ports_ok_at_go(cue, selfgate: bool = False) -> bool:
     """The JACK half of an audio GO, outside any lock. False only when the
-    player's outport 0 is gone (it died between arm and GO)."""
+    player's outport 0 is gone (it died between arm and GO).
+
+    selfgate (869feynrj §4.5a, review 2 F10): the wiring was checked at arm;
+    only the port check stays. An older player keeps the GO-time diff and
+    edge-by-edge repair (869fbyjzx): its RtAudio may auto-connect when the
+    stream starts, so its GO OSC is byte-identical to before."""
     # Verify mixer graph; only repair if drifted. Arm already wired it; the
     # unconditional reconnect at GO costs ~21-28 ms (measured) without
     # touching the audio path.
@@ -293,7 +318,8 @@ def _audio_ports_ok_at_go(cue) -> bool:
             )
             return False
 
-        _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
+        if not selfgate:
+            _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
     return True
@@ -313,6 +339,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     player = PLAYER_HANDLER.audio_player(cue)
     capable = loop_mode.player_capable(player)
     dayalign = loop_mode.player_dayalign(player)
+    selfgate = loop_mode.player_selfgate(player)
     period = loop_mode.period_of(cue)
 
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
@@ -350,7 +377,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
 
     # Audio player formula: file_position = MTC + offset, offset = -start_mtc;
     # a dayalign player gets the start itself, modulo 24 h (/start_tod)
-    ports_ok = _audio_ports_ok_at_go(cue)
+    ports_ok = _audio_ports_ok_at_go(cue, selfgate)
 
     with _setup_section() as ok:
         if not ok:

@@ -10,6 +10,8 @@ from cuemsutils.cues.Cue import Cue
 from cuemsutils.log import Logger
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from . import loop_mode
+from .run_cue import verify_audio_wiring_at_arm
 
 
 @singledispatch
@@ -23,6 +25,12 @@ def arm_cue(cue: Cue):
 @arm_cue.register
 def arm_audioCue(cue: AudioCue):
     PLAYER_HANDLER.new_audio_output(cue)
+    # 869feynrj §4.5a: a GO of a selfgate cue only sends its start and commits
+    # its follow; the wiring check it used to make at GO is made here, once.
+    # /loop and /volmaster stay at GO (S0-15: a reused player may have latched
+    # /loop [1], a FadeCue may have moved its level since the arm).
+    if loop_mode.player_selfgate(PLAYER_HANDLER.audio_player(cue)):
+        verify_audio_wiring_at_arm(cue)
 
 
 @arm_cue.register
