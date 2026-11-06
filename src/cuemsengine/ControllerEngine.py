@@ -727,6 +727,14 @@ class ControllerEngine(BaseEngine):
                     "lead"
                 )
         lead, capped_by, wanted = go_lead.go_lead_ms(latencies)
+        if lead > go_lead.OLD_NODE_ACCEPT_MS and "old_nodes" not in logged:
+            logged.add("old_nodes")
+            Logger.warning(
+                f"GO lead {lead:.0f} ms is above {go_lead.OLD_NODE_ACCEPT_MS:.0f} "
+                "ms: older node engines (rc6-7, no lead_ms) reject an anchor led "
+                "this far and start on their own MTC, L early; run the same "
+                "engine on every node of the cluster"
+            )
         if capped_by is not None and ("cap", capped_by) not in logged:
             logged.add(("cap", capped_by))
             Logger.warning(

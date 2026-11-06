@@ -156,9 +156,38 @@ class TestControllerLatency:
         with patch("cuemsengine.ControllerEngine.Logger") as log:
             assert c._go_lead_ms() == go_lead.GO_LEAD_MAX_MS
             c._go_lead_ms()
-        assert log.warning.call_count == 1 and "big" in str(log.warning.call_args)
+        caps = [w for w in log.warning.call_args_list if "capped" in str(w)]
+        assert len(caps) == 1 and "big" in str(caps[0])
         c._reset_node_latency()
         assert c._latencies() == {}
+
+    def test_a_lead_above_160_warns_about_older_node_engines_once_per_load(self):
+        """Review fix 8 (S0-14, R15): an rc6-7 node rejects an anchor led
+        more than ~200 ms (from L ~160 when its MTC is a frame behind) and
+        anchors on its own MTC, L early: the whole cluster must run this
+        engine."""
+        c = _controller()
+        c._required_nodes = {"slow"}
+        c._note_node_latency("slow", 150.0)  # L = 170
+        with patch("cuemsengine.ControllerEngine.Logger") as log:
+            assert c._go_lead_ms() == pytest.approx(170.0)
+            c._go_lead_ms()
+        old = [w for w in log.warning.call_args_list if "older node engines" in str(w)]
+        assert len(old) == 1
+        c._reset_node_latency()
+        c._required_nodes = {"slow"}
+        c._note_node_latency("slow", 150.0)
+        with patch("cuemsengine.ControllerEngine.Logger") as log:
+            c._go_lead_ms()
+        assert any("older node engines" in str(w) for w in log.warning.call_args_list)
+
+    def test_a_lead_up_to_160_does_not_warn(self):
+        c = _controller()
+        c._required_nodes = {"n"}
+        c._note_node_latency("n", 140.0)  # L = 160
+        with patch("cuemsengine.ControllerEngine.Logger") as log:
+            assert c._go_lead_ms() == pytest.approx(160.0)
+        log.warning.assert_not_called()
 
 
 class TestControllerGo:

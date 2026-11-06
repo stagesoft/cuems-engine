@@ -169,12 +169,6 @@ def parse_loop_ack(line: bytes) -> LoopAck | None:
 
 
 class Player(Thread):
-    # 869feynrj: called by the stdout reader with (player, kind, parsed) for
-    # every START / CANCEL / LATENCY line; kind is "start", "cancel" or
-    # "latency". Set by players.StartGate at import (the engine's cancel
-    # records and late-start rules live there). Never raises into the reader.
-    selfgate_hook = None
-
     """Base class for all players in the system.
     Holds the common methods and attributes for all players.
     Extends the Thread class.
@@ -183,6 +177,12 @@ class Player(Thread):
     IMPORTANT: The run method must be implemented in the child classes.
 
     """
+
+    # 869feynrj: called by the stdout reader with (player, kind, parsed) for
+    # every START / CANCEL / LATENCY line; kind is "start", "cancel" or
+    # "latency". Set by players.StartGate at import (the engine's cancel
+    # records and late-start rules live there). Never raises into the reader.
+    selfgate_hook = None
 
     def __init__(self, daemon: bool = True):
         """

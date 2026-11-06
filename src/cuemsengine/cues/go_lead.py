@@ -34,6 +34,11 @@ GO_LEAD_MAX_MS = 250.0
 GO_LEAD_DELTA_MS = 15.0
 GO_LEAD_MARGIN_MS = 5.0
 
+# An rc6-7 node engine (no lead_ms) accepts the controller's anchor only while
+# local - anchor >= -200 ms: from L ~ 160 ms, when its MTC reads a frame
+# behind, it rejects a led anchor and starts on its own MTC, L early (S0-14).
+OLD_NODE_ACCEPT_MS = 160.0
+
 
 def ceil_frame(ms: float, frame_ms: float = FRAME_MS) -> float:
     """The first MTC frame at or after ``ms`` (D11)."""

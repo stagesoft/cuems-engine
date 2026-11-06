@@ -2401,7 +2401,10 @@ class NodeEngine(BaseEngine):
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         # Drift baseline; consumed by BaseEngine.timecode = mtc - go_offset.
-        # The GO press instant itself (not the first local cue's arrival).
+        # GO_mtc is the LED anchor (869feynrj §4.5: the press + L, ceiled to
+        # the next frame), i.e. the instant a prewait-0 cue's sample 0 sounds:
+        # the node timecode reads 0 there, aligned with the media, and -L
+        # between the press and that instant.
         self.go_offset = GO_mtc
 
         # Broadcast nextcue to UI
