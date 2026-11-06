@@ -10,12 +10,59 @@ This module provides a simple interface for managing JACK audio connections
 using the python-jack (JACK-Client) library.
 """
 
+import re
+import shutil
+import subprocess
+
 try:
     import jack
 except (ImportError, OSError):
     jack = None
 
 from cuemsutils.log import Logger, logged
+
+# 869feynrj §4.5d: the playback latency comes from `jack_lsp -l -p`, not from
+# the Python client. The venv's JACK-Client (0.5.7 on the deployed stack) has
+# no Port.get_latency_range and its cffi does not declare jack_latency_range_t
+# (step 3 on test2: every node start failed the query).
+JACK_LSP = "jack_lsp"
+JACK_LSP_TIMEOUT_S = 2.0
+_PLAYBACK_LATENCY = re.compile(r"port playback latency = \[\s*(\d+)\s+(\d+)\s*\]")
+_PROPERTIES = re.compile(r"properties:\s*(.*)")
+
+
+def parse_jack_lsp_playback_latency(text: str) -> int | None:
+    """The largest playback latency (frames, the range's max) over the
+    physical playback ports (properties ``input`` and ``physical``) in the
+    output of ``jack_lsp -l -p``, or None when there is none.
+
+    Port names start a line; their attributes are indented below them. Other
+    unindented lines (a comment, a stray path) are ports with no properties
+    and never count."""
+    ports = []
+    current = None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            current = {"latency": None, "properties": set()}
+            ports.append(current)
+            continue
+        if current is None:
+            continue
+        m = _PLAYBACK_LATENCY.search(line)
+        if m:
+            current["latency"] = int(m.group(2))
+            continue
+        m = _PROPERTIES.search(line)
+        if m:
+            current["properties"] = {p.strip() for p in m.group(1).split(",") if p}
+    latencies = [
+        p["latency"]
+        for p in ports
+        if p["latency"] is not None and {"input", "physical"} <= p["properties"]
+    ]
+    return max(latencies) if latencies else None
 
 
 class JackConnectionManager:
@@ -267,23 +314,35 @@ class JackConnectionManager:
 
     def playback_latency(self) -> tuple[int, int, int] | None:
         """(latency frames, sample rate, period frames) of the system
-        playback ports, or None when JACK does not answer.
+        playback ports, or None when JACK does not answer (one WARNING).
 
-        The latency is the largest playback latency of the physical sinks
-        (``jack_lsp -l``: 1536 frames at -p512 -n3), the period JACK's
-        buffer size (869feynrj §4.5d: a node's output latency is known
-        before any audio player exists)."""
+        The latency is the largest playback latency of the physical sinks,
+        read with ``jack_lsp -l -p`` (1536 frames at -p512 -n3; run as the
+        engine's user, jackd's, with a 2 s timeout); the rate and the period
+        are the JACK client's. Called once at node start, on the starting
+        thread (869feynrj §4.5d: a node's output latency is known before
+        any audio player exists)."""
         client = self.client
-        if client is None or jack is None:
+        if client is None:
+            Logger.warning("JACK playback latency: no JACK client")
             return None
         try:
-            ports = client.get_ports(is_physical=True, is_input=True, is_audio=True)
-            if not ports:
-                return None
-            frames = max(int(p.get_latency_range(jack.PLAYBACK)[1]) for p in ports)
+            done = subprocess.run(
+                [shutil.which(JACK_LSP) or JACK_LSP, "-l", "-p"],
+                capture_output=True,
+                text=True,
+                timeout=JACK_LSP_TIMEOUT_S,
+            )
+            if done.returncode != 0:
+                raise RuntimeError(
+                    f"jack_lsp exited {done.returncode}: {(done.stderr or '').strip()}"
+                )
+            frames = parse_jack_lsp_playback_latency(done.stdout or "")
+            if frames is None:
+                raise RuntimeError("no physical playback port in jack_lsp -l -p")
             return frames, int(client.samplerate), int(client.blocksize)
         except Exception as e:
-            Logger.warning(f"JACK playback latency query failed: {e}")
+            Logger.warning(f"JACK playback latency query failed: {e!r}")
             return None
 
     def __del__(self):
