@@ -37,6 +37,10 @@ from cuemsutils.tools.media_sidecars import Period
 WRAP_ACK_TIMEOUT_S = 1.0
 CAPS_NEEDED = frozenset({"loop", "varispeed"})
 CAPS_DAYALIGN = "dayalign"
+# 869feynrj (cuems-RELATIONS Plans/2026-11-03-audio-first-pass-head-869feynrj.md
+# §4.1): the player starts itself at sample 0 once following (padded start),
+# takes /cancelstart and prints the START / CANCEL / LATENCY lines.
+CAPS_SELFGATE = "selfgate"
 DAY_MS = 86_400_000
 
 
@@ -59,6 +63,14 @@ def player_dayalign(player) -> bool:
     """The player converts ``/start_tod`` into its own MTC day (CAPS ``dayalign``)."""
     caps = getattr(player, "caps", None)
     return isinstance(caps, frozenset) and CAPS_DAYALIGN in caps
+
+
+def player_selfgate(player) -> bool:
+    """The player self-gates its start and takes ``/cancelstart`` (CAPS
+    ``selfgate``, 869feynrj §4.1). Every engine change of that plan that a
+    player sees is gated on this: an older player gets today's OSC."""
+    caps = getattr(player, "caps", None)
+    return isinstance(caps, frozenset) and CAPS_SELFGATE in caps
 
 
 def start_tod(start_ms: float) -> int:

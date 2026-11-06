@@ -24,6 +24,7 @@ from .DmxPlayer import DmxClient, DmxPlayer, start_dmx_player
 from .GradientClient import GradientClient
 from .LoopPeriods import LoopPeriodCache
 from .Player import Player
+from .StartGate import START_GATE
 from .VideoCaps import read_videocomposer_caps
 from .VideoPlayer import VideoClient, VideoOutput
 
@@ -275,6 +276,17 @@ class PlayerHandler:
             return None
         return player
 
+    def live_audio_players(self) -> list[tuple]:
+        """(cue, player, osc client) of every audio player whose process
+        has not exited: the player table STOP walks to send its
+        /cancelstart (869feynrj D10, S0-4), independent of the armed list."""
+        with self._lock:
+            return [
+                (cue, player, getattr(cue, "_osc", None))
+                for cue, player in self._cue_players.items()
+                if isinstance(player, AudioPlayer) and not _process_exited(player)
+            ]
+
     @property
     def loop_period_cache(self) -> LoopPeriodCache:
         return self._loop_period_cache
@@ -305,6 +317,11 @@ class PlayerHandler:
 
             # Also remove from ID-based tracking
             self._audio_players_by_id.pop(cue_id, None)
+
+            # 869feynrj §4.3, S0-7: the player is going away and can no longer
+            # answer a /cancelstart: close its open records first, so the
+            # watchdog never raises a false ERROR for it.
+            START_GATE.close_records(player, f"cue {cue_id} released")
 
             # Save OSC client reference before clearing
             osc_client = getattr(cue, "_osc", None)
@@ -412,6 +429,16 @@ class PlayerHandler:
         if player is None:
             return True
 
+        # 0. A /cancelstart sent to this player is fading it out (STOP, D10;
+        #    the other stops of a playing cue, D12): the disconnect is the
+        #    first hard cut, so it waits transit + one period + fade_ms +
+        #    margin after that send (869feynrj §4.3, review 4 m4). Nothing to
+        #    wait for when no cancel was sent (older players, idle ones).
+        wait_s = START_GATE.fade_wait_s(player)
+        if wait_s > 0:
+            sleep(wait_s)
+        START_GATE.close_records(player, f"cue {cue_id} killed")
+
         # 1. Disconnect player from the mixer BEFORE destroying its JACK client
         if self._audio_mixer is not None:
             try:
@@ -480,12 +507,18 @@ class PlayerHandler:
         with self._lock:
             players_to_kill = list(self._audio_players_by_id.items())
             self._audio_players_by_id.clear()
+            # 869feynrj S0-7: every player here is about to die; its open
+            # cancel records close now, not when its turn in the kill loop
+            # comes (each kill can take up to ~1 s).
+            for _, player in players_to_kill:
+                START_GATE.close_records(player, "kill_all_audio_players")
 
             # Also clear audio players from _cue_players, saving the OSC
             # client so _kill_audio_player can free the random port.
             cue_players_to_remove = []
             for cue, player in self._cue_players.items():
                 if isinstance(player, AudioPlayer):
+                    START_GATE.close_records(player, "kill_all_audio_players")
                     osc_client = getattr(cue, "_osc", None)
                     cue._osc = None
                     cue_players_to_remove.append((cue, player, osc_client))
@@ -649,6 +682,8 @@ class PlayerHandler:
             Logger.warning(
                 f"Killing existing audio player for cue {cue_id} before re-arm"
             )
+            # 869feynrj S0-7: the third site that drops a player.
+            START_GATE.close_records(existing_player, f"cue {cue_id} re-armed")
             # Save and clear OSC client so loop_audioCue stops sending to the
             # dying player (it will hit AttributeError, caught by its blanket
             # except AttributeError handler and exit silently).
