@@ -74,3 +74,17 @@ def go_lead_ms(latencies: dict) -> tuple[float, str | None, float]:
     if need > GO_LEAD_MAX_MS:
         return GO_LEAD_MAX_MS, who, need
     return need, None, need
+
+
+def lead_source(latencies: dict) -> tuple | None:
+    """(node, out_latency_ms) of the node whose latency sets L, or None when
+    L is the floor (step 3's GO lead line)."""
+    best = None
+    for node, lat in latencies.items():
+        if not isinstance(lat, (int, float)) or isinstance(lat, bool):
+            continue
+        if float(lat) + GO_LEAD_DELTA_MS + GO_LEAD_MARGIN_MS <= GO_LEAD_FLOOR_MS:
+            continue
+        if best is None or lat > best[1]:
+            best = (node, float(lat))
+    return best

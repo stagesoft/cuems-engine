@@ -124,15 +124,36 @@ class _SetupGuard:
         self.refused = False
 
     @contextmanager
-    def section(self):
-        with self._lock:
-            self.entered = True
-            ok = not getattr(self._cue, "_stop_requested", False) and (
-                getattr(self._cue, "_go_generation", 0) == self._gen
-            )
-            if not ok:
-                self.refused = True
-            yield ok
+    def section(self, setup_cue: Cue | None = None):
+        """Yields whether the setup may send; holds the lock meanwhile. A
+        setup that ran logs its hold (869feynrj step 3, plan §13): ``setup
+        under lock: <t> ms (<type>, cue <id8>[, <n> layers])``, naming
+        ``setup_cue`` (a CueList's child) or the pass's own cue."""
+        held_ms = None
+        ok = False
+        try:
+            with self._lock:
+                t0 = monotonic()
+                self.entered = True
+                ok = not getattr(self._cue, "_stop_requested", False) and (
+                    getattr(self._cue, "_go_generation", 0) == self._gen
+                )
+                if not ok:
+                    self.refused = True
+                try:
+                    yield ok
+                finally:
+                    held_ms = (monotonic() - t0) * 1000
+        finally:
+            if ok and held_ms is not None:
+                what = setup_cue if setup_cue is not None else self._cue
+                layers = ""
+                if isinstance(what, VideoCue):
+                    layers = f", {len(getattr(what, '_layer_ids', None) or [])} layers"
+                Logger.info(
+                    f"setup under lock: {held_ms:.1f} ms ({type(what).__name__}, "
+                    f"cue {str(what.id)[:8]}{layers})"
+                )
 
 
 class CueHandler:
@@ -551,7 +572,9 @@ class CueHandler:
             return None
         return target
 
-    def _commit_follow(self, cue: Cue, target: Cue, go_gen: int) -> bool:
+    def _commit_follow(
+        self, cue: Cue, target: Cue, go_gen: int, mtc: MtcListener | None = None
+    ) -> bool:
         """The follow commit (869feynrj §4.2 step 2): ``/mtcfollow 1`` to a
         selfgate player at start - F, decided AND sent under _lock (S0-3), so
         a cancel deciding in the same lock either precedes it (and the commit
@@ -578,14 +601,17 @@ class CueHandler:
             client = getattr(target, "_osc", None)
             if client is None or not loop_mode.player_selfgate(player):
                 return False
+            sent_at = self._interpolated_clock(mtc)() if mtc is not None else None
             if not START_GATE.commit_follow(target, player, client, go_gen):
                 return False
             cue._follow_gen = go_gen
             target._follow_committed = True
+        # 869feynrj step 3: m = this node's interpolated MTC at the send.
         start = target._start_mtc.milliseconds_exact
+        at = f"{sent_at:.1f}" if sent_at is not None else "?"
         Logger.info(
-            f"Audio cue {target.id}: follow committed for its start at "
-            f"{start:.0f} ms (F {self._follow_lead_ms():.0f} ms)"
+            f"follow commit: cue {str(target.id)[:8]} at mtc {at} ms, start "
+            f"{start:.1f} ms, F {self._follow_lead_ms():.1f} ms"
         )
         return True
 
@@ -680,7 +706,7 @@ class CueHandler:
                     == "stopped"
                 ):
                     return "stopped", None
-                if not self._commit_follow(cue, target, go_gen):
+                if not self._commit_follow(cue, target, go_gen, mtc):
                     target = None
         return "ready", target
 

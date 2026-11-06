@@ -326,6 +326,7 @@ class NodeEngine(BaseEngine):
             value: The command value
             address: The original OSC address (optional)
         """
+        arrived = monotonic()
         Logger.info(f"NNG command received: {command_name} = {repr(value)}")
 
         if command_name == "player_control" and address:
@@ -334,7 +335,7 @@ class NodeEngine(BaseEngine):
             self._handle_player_control_message(address, value)
         else:
             # Handle standard commands (go, load, stop)
-            self.run_command(command_name, value)
+            self.run_command(command_name, value, arrived=arrived)
 
     def _handle_player_control_message(self, address: str, value):
         """Handle player control messages received via NNG.
@@ -562,27 +563,62 @@ class NodeEngine(BaseEngine):
             Logger.debug(f"Recieved unused OSCQuery path: {str(parameter.node)}")
             return
 
-    def run_command(self, command, value):
+    # The GO commands timed by step 3 (S0-19): an operator GO, and the
+    # power-bridge's /gocue (setnextcue + go).
+    _TIMED_GO_COMMANDS = ("go", "gocue")
+
+    def run_command(self, command, value, arrived: float | None = None):
+        """Run one command under _command_lock. ``arrived``: monotonic()
+        at the NNG handler's entry (now when not given). A GO logs how long
+        it waited for the lock and how long it held it (869feynrj step 3)."""
+        if arrived is None:
+            arrived = monotonic()
+        timed = command in self._TIMED_GO_COMMANDS
         with self._command_lock:
-            Logger.debug(f"NodeEngine executing command: {command}({repr(value)})")
-            if command in self.commands_dict.keys():
-                handler = self.commands_dict[command]
-                if handler is not None:
-                    try:
-                        handler(value)
-                    finally:
-                        if command in ("stop", "load", "unload") and self._follow_relay:
-                            # The receive hook counted it received; until
-                            # here this node's epochs still belonged to the
-                            # run it ends (869fc8ytz).
-                            self._follow_relay.stop_applied()
-                    return True
-                else:
-                    Logger.warning(f"Command {command} has no handler")
-                    return False
+            acquired = monotonic()
+            if timed:
+                self._go_what = []
+            try:
+                return self._run_command_locked(command, value)
+            finally:
+                if timed:
+                    self._log_go_timing(arrived, acquired, monotonic())
+
+    def _run_command_locked(self, command, value):
+        Logger.debug(f"NodeEngine executing command: {command}({repr(value)})")
+        if command in self.commands_dict.keys():
+            handler = self.commands_dict[command]
+            if handler is not None:
+                try:
+                    handler(value)
+                finally:
+                    if command in ("stop", "load", "unload") and self._follow_relay:
+                        # The receive hook counted it received; until
+                        # here this node's epochs still belonged to the
+                        # run it ends (869fc8ytz).
+                        self._follow_relay.stop_applied()
+                return True
             else:
-                Logger.error(f"Command {command} not found")
+                Logger.warning(f"Command {command} has no handler")
                 return False
+        else:
+            Logger.error(f"Command {command} not found")
+            return False
+
+    def _go_note(self, what: str, ms: float | None = None) -> None:
+        """Name what a GO did under _command_lock, for its timing line."""
+        parts = getattr(self, "_go_what", None)
+        if isinstance(parts, list):
+            parts.append(what if ms is None else f"{what} {ms:.1f} ms")
+
+    def _log_go_timing(self, arrived: float, acquired: float, released: float):
+        """869feynrj step 3 (S0-19): one line per GO handled."""
+        parts = getattr(self, "_go_what", None) or ["go"]
+        self._go_what = None
+        Logger.info(
+            f"GO timing: command lock waited {(acquired - arrived) * 1000:.1f} ms, "
+            f"held {(released - acquired) * 1000:.1f} ms ({', '.join(parts)})"
+        )
 
     #########################
     # Player logic
@@ -2292,6 +2328,7 @@ class NodeEngine(BaseEngine):
                 # No next cue - script has finished. Do not stop timecode or
                 # reset state.
                 Logger.info("No more cues. Press STOP to restart.")
+                self._go_note("no more cues")
                 return
 
         # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
@@ -2354,6 +2391,7 @@ class NodeEngine(BaseEngine):
             # the UI / power-bridge GO is a bare GO). Medina sala1,
             # 2026-09-30: the node's first cue fired 240 ms late otherwise.
             self._prearm_after_advance()
+            self._go_note("no local cue")
             return
 
         if walked:
@@ -2368,11 +2406,14 @@ class NodeEngine(BaseEngine):
             # waited on may have finished, and the skip line must not then
             # call a slow arm a failed one.
             was_in_flight = CUE_HANDLER.describe_arm_in_flight(cue_to_go)
+            t_arm = monotonic()
             CUE_HANDLER.arm(cue_to_go, init=True)
+            self._go_note("rearm", (monotonic() - t_arm) * 1000)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
                 self._skip_unarmed_cue(
                     cue_to_go, skipped_disabled, GO_mtc, was_in_flight
                 )
+                self._go_note("skipped")
                 return
 
         # Update state
@@ -2381,12 +2422,16 @@ class NodeEngine(BaseEngine):
 
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
+        # go() returns after the synchronous lookahead (_arm_ahead), which
+        # runs on this thread, under _command_lock.
+        t_go = monotonic()
         main_thread = CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener,
             GO_mtc + sigma_ms,
             stamp_skipped=skipped_disabled,
         )
+        self._go_note("go+lookahead", (monotonic() - t_go) * 1000)
         if main_thread is None:
             # Either a STOP landed while go() was re-arming this cue (the
             # chain-epoch barrier then refuses the dispatch — that is the F4

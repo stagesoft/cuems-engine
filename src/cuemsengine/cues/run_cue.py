@@ -49,12 +49,14 @@ def installed_guard(guard):
 
 
 @contextmanager
-def _setup_section():
+def _setup_section(cue=None):
+    """``cue``: what this section sets up (a CueList's child inside its
+    parent's guard), named by the guard's step-3 hold line."""
     guard = getattr(_SETUP_GUARD, "guard", None)
     if guard is None:
         yield True
         return
-    with guard.section() as ok:
+    with guard.section(cue) as ok:
         yield ok
 
 
@@ -219,7 +221,7 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
         start_mtc = CTimecode(
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
-    with _setup_section() as ok:
+    with _setup_section(cue) as ok:
         if not ok:
             _skipped(cue)
             return
@@ -227,11 +229,37 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     return
 
 
-def _verify_audio_wiring_at_go(
-    cue, mixer, player_name: str, selected_outputs: list, where: str = "GO"
+def _timed_wiring_check(
+    cue, mixer, player_name: str, selected_outputs: list, where: str
 ) -> bool:
+    """_verify_audio_wiring_at_go with its step-3 line (869feynrj S0-18):
+    ``wiring check at <arm|GO>: <t> ms (<ok|repaired|failed>)``. A check
+    that raises is logged failed and re-raised. True when the graph is
+    right."""
+    t0 = monotonic()
+    status = "failed"
+    try:
+        status = _verify_audio_wiring_at_go(
+            cue, mixer, player_name, selected_outputs, where=where, status=True
+        )
+    finally:
+        Logger.info(
+            f"wiring check at {where}: {(monotonic() - t0) * 1000:.1f} ms ({status})"
+        )
+    return status in ("ok", "repaired")
+
+
+def _verify_audio_wiring_at_go(
+    cue,
+    mixer,
+    player_name: str,
+    selected_outputs: list,
+    where: str = "GO",
+    status: bool = False,
+):
     """Check a player's mixer wiring at GO (or at arm) and fix it edge by edge.
-    Returns True when the graph is right (already, or after the repair).
+    Returns True when the graph is right (already, or after the repair); with
+    ``status=True`` one of "ok", "repaired", "failed" instead.
 
     Never a full rewire (869fbyjzx): a GO can reach this while the cue is
     audible (a fresh GO, or a 'play' action, on a cue that is still
@@ -251,11 +279,11 @@ def _verify_audio_wiring_at_go(
             f"({selected_outputs}) — cue will be SILENT despite showing "
             f"armed (mixer inputs unavailable)."
         )
-        return False
+        return "failed" if status else False
     missing, stray = diff
     if not missing and not stray:
         Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
-        return True
+        return "ok" if status else True
     Logger.warning(
         f"Audio cue {cue.id}: graph not wired correctly at {where} "
         f"(missing: {missing}; stray: {stray}); repairing edge by edge"
@@ -272,7 +300,10 @@ def _verify_audio_wiring_at_go(
             f"Audio cue {cue.id}: stray edge(s) still connected after repair: "
             f"{strays_left} — the cue may sound doubled and outside the mixer."
         )
-    return bool(connected_ok) and not strays_left
+    ok = bool(connected_ok) and not strays_left
+    if status:
+        return "repaired" if ok else "failed"
+    return ok
 
 
 def _audio_wiring_target(cue):
@@ -315,8 +346,8 @@ def verify_audio_wiring_at_arm(cue) -> None:
             cue._wiring_ok = True  # no mixer on this node: nothing to wire
             return
         mixer, player_name, selected_outputs = target
-        cue._wiring_ok = _verify_audio_wiring_at_go(
-            cue, mixer, player_name, selected_outputs, where="arm"
+        cue._wiring_ok = _timed_wiring_check(
+            cue, mixer, player_name, selected_outputs, "arm"
         )
     except Exception as e:
         Logger.warning(f"Audio cue {cue.id}: wiring check at arm failed: {e}")
@@ -355,14 +386,14 @@ def _audio_ports_ok_at_go(cue, selfgate: bool = False) -> bool:
             return False
 
         if not selfgate:
-            _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
+            _timed_wiring_check(cue, mixer, player_name, selected_outputs, "GO")
         elif getattr(cue, "_wiring_ok", None) is not True:
             Logger.warning(
                 f"Audio cue {cue.id}: its wiring check at arm did not succeed; "
                 "checking and repairing it at GO"
             )
-            cue._wiring_ok = _verify_audio_wiring_at_go(
-                cue, mixer, player_name, selected_outputs
+            cue._wiring_ok = _timed_wiring_check(
+                cue, mixer, player_name, selected_outputs, "GO"
             )
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
@@ -423,7 +454,7 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
     # a dayalign player gets the start itself, modulo 24 h (/start_tod)
     ports_ok = _audio_ports_ok_at_go(cue, selfgate)
 
-    with _setup_section() as ok:
+    with _setup_section(cue) as ok:
         if not ok:
             _skipped(cue)
             return
@@ -540,7 +571,7 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with
         chained cues
     """
-    with _setup_section() as ok:
+    with _setup_section(cue) as ok:
         if not ok:
             _skipped(cue)
             return
@@ -662,7 +693,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         if layer_ids and getattr(cue, "_osc", None) is not None
         else (None, None)
     )
-    with _setup_section() as ok:
+    with _setup_section(cue) as ok:
         if not ok:
             _skipped(cue)
             return

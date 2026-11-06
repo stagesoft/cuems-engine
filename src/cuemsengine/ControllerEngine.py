@@ -1630,7 +1630,9 @@ class ControllerEngine(BaseEngine):
         if self.mtc_listener is not None:
             if self.mtc_listener.is_receiving():
                 now = self._interpolated_mtc_ms()
-                go_value["go_mtc_ms"] = go_lead.ceil_frame(now + lead)
+                anchor = go_lead.ceil_frame(now + lead)
+                go_value["go_mtc_ms"] = anchor
+                self._log_go_lead(now, lead, anchor)
             else:
                 Logger.error(
                     "GO: controller MTC listener is not receiving -- sending GO "
@@ -1645,6 +1647,19 @@ class ControllerEngine(BaseEngine):
 
         Logger.info("GO command processed")
         return True
+
+    def _log_go_lead(self, press_ms: float, lead: float, anchor: float) -> None:
+        """869feynrj step 3: one line per operator GO that ships a led anchor
+        (fixed wording, ms with one decimal)."""
+        required = set(getattr(self, "_required_nodes", ()) or ())
+        known = self._latencies()
+        source = go_lead.lead_source({n: known.get(n) for n in required})
+        who = f"L from {source[0]} {source[1]:.1f} ms" if source else "L floor"
+        Logger.info(
+            f"GO lead: press {press_ms:.1f} ms (interp), L {lead:.1f} ms, anchor "
+            f"{anchor:.1f} ms (ceil +{anchor - (press_ms + lead):.1f} ms), "
+            f"lead_ms {lead:.1f}, {who}"
+        )
 
     def _interpolated_mtc_ms(self) -> float:
         """MtcListener.interpolated_ms, or the whole-frame main_tc."""
