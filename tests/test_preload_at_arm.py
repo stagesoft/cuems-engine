@@ -102,10 +102,61 @@ class TestArm:
         mixer.player_connection_diff.assert_not_called()
 
 
+class TestArmCheckFailed:
+    """Review fix 5: a wiring check that failed (or raised) at arm is not
+    trusted at GO: the GO runs the full diff and edge-by-edge repair."""
+
+    def _arm_then_go(self, arm_mixer, go_mixer, go_twice=False):
+        cue, player = _cue(), _player(SELFGATE)
+        cue._osc = MagicMock()
+        mtc = SimpleNamespace(main_tc=SimpleNamespace(framerate=25, frames=0))
+        with (
+            patch.object(PLAYER_HANDLER, "new_audio_output"),
+            patch.object(PLAYER_HANDLER, "audio_player", lambda c: player),
+            patch.object(
+                PLAYER_HANDLER, "resolve_audio_port", lambda i: "0_mixer:in_1"
+            ),
+        ):
+            with patch.object(PLAYER_HANDLER, "get_audio_mixer", lambda: arm_mixer):
+                arm_cue(cue)
+            armed_ok = cue._wiring_ok
+            with patch.object(PLAYER_HANDLER, "get_audio_mixer", lambda: go_mixer):
+                run_cue(cue, mtc, 2000.0)
+                if go_twice:
+                    run_cue(cue, mtc, 4000.0)
+        return cue, armed_ok
+
+    def test_a_failed_arm_check_is_repaired_at_go(self):
+        arm_mixer = _mixer()
+        arm_mixer.player_connection_diff.return_value = None  # no mixer input
+        go_mixer = _mixer()
+        go_mixer.player_connection_diff.return_value = ([("p:outport 0", "in")], [])
+        go_mixer.repair_player_connections.return_value = (True, [])
+        cue, armed_ok = self._arm_then_go(arm_mixer, go_mixer, go_twice=True)
+        assert armed_ok is False
+        go_mixer.repair_player_connections.assert_called_once()
+        # repaired: the next GO trusts it again (one diff over two GOs)
+        assert go_mixer.player_connection_diff.call_count == 1
+        assert cue._wiring_ok is True
+
+    def test_a_raising_arm_check_is_repaired_at_go(self):
+        arm_mixer = _mixer()
+        arm_mixer.player_connection_diff.side_effect = RuntimeError("jack gone")
+        go_mixer = _mixer()
+        cue, armed_ok = self._arm_then_go(arm_mixer, go_mixer)
+        assert armed_ok is False
+        go_mixer.player_connection_diff.assert_called_once()
+
+    def test_a_good_arm_check_is_trusted_at_go(self):
+        cue, armed_ok = self._arm_then_go(_mixer(), _mixer())
+        assert armed_ok is True
+
+
 class TestGo:
     def _run(self, caps):
         cue, mixer, player = _cue(), _mixer(), _player(caps)
         cue._osc = MagicMock()
+        cue._wiring_ok = True  # as a successful arm check leaves it
         mtc = SimpleNamespace(main_tc=SimpleNamespace(framerate=25, frames=0))
         with (
             patch.object(PLAYER_HANDLER, "audio_player", lambda c: player),

@@ -25,6 +25,7 @@ def arm_cue(cue: Cue):
 @arm_cue.register
 def arm_audioCue(cue: AudioCue):
     PLAYER_HANDLER.new_audio_output(cue)
+    cue._wiring_ok = None  # this arm's player: not checked yet
     # 869feynrj §4.5a: a GO of a selfgate cue only sends its start and commits
     # its follow; the wiring check it used to make at GO is made here, once.
     # /loop and /volmaster stay at GO (S0-15: a reused player may have latched

@@ -229,8 +229,9 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
 
 def _verify_audio_wiring_at_go(
     cue, mixer, player_name: str, selected_outputs: list, where: str = "GO"
-):
+) -> bool:
     """Check a player's mixer wiring at GO (or at arm) and fix it edge by edge.
+    Returns True when the graph is right (already, or after the repair).
 
     Never a full rewire (869fbyjzx): a GO can reach this while the cue is
     audible (a fresh GO, or a 'play' action, on a cue that is still
@@ -250,11 +251,11 @@ def _verify_audio_wiring_at_go(
             f"({selected_outputs}) — cue will be SILENT despite showing "
             f"armed (mixer inputs unavailable)."
         )
-        return
+        return False
     missing, stray = diff
     if not missing and not stray:
         Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
-        return
+        return True
     Logger.warning(
         f"Audio cue {cue.id}: graph not wired correctly at {where} "
         f"(missing: {missing}; stray: {stray}); repairing edge by edge"
@@ -271,6 +272,7 @@ def _verify_audio_wiring_at_go(
             f"Audio cue {cue.id}: stray edge(s) still connected after repair: "
             f"{strays_left} — the cue may sound doubled and outside the mixer."
         )
+    return bool(connected_ok) and not strays_left
 
 
 def _audio_wiring_target(cue):
@@ -303,13 +305,17 @@ def verify_audio_wiring_at_arm(cue) -> None:
     check, done once at the end of a successful arm instead of at every GO.
     A selfgate player is built with RTAUDIO_JACK_DONT_CONNECT (S0-20), so no
     RtAudio auto-connect can appear after the arm's own wiring; a GO keeps
-    only the cheap port_exists of outport 0. Never raises."""
+    only the cheap port_exists of outport 0. The result is kept on the cue
+    (``_wiring_ok``): a check that failed or raised is not trusted, and the
+    next GO runs the full diff and repair (review fix 5). Never raises."""
+    cue._wiring_ok = False
     try:
         target = _audio_wiring_target(cue)
         if target is None:
+            cue._wiring_ok = True  # no mixer on this node: nothing to wire
             return
         mixer, player_name, selected_outputs = target
-        _verify_audio_wiring_at_go(
+        cue._wiring_ok = _verify_audio_wiring_at_go(
             cue, mixer, player_name, selected_outputs, where="arm"
         )
     except Exception as e:
@@ -321,7 +327,9 @@ def _audio_ports_ok_at_go(cue, selfgate: bool = False) -> bool:
     player's outport 0 is gone (it died between arm and GO).
 
     selfgate (869feynrj §4.5a, review 2 F10): the wiring was checked at arm;
-    only the port check stays. An older player keeps the GO-time diff and
+    only the port check stays, unless that check did not succeed
+    (``_wiring_ok`` not True): then the full diff and repair run here and
+    their result is kept. An older player keeps the GO-time diff and
     edge-by-edge repair (869fbyjzx): its RtAudio may auto-connect when the
     stream starts, so its GO OSC is byte-identical to before."""
     # Verify mixer graph; only repair if drifted. Arm already wired it; the
@@ -348,6 +356,14 @@ def _audio_ports_ok_at_go(cue, selfgate: bool = False) -> bool:
 
         if not selfgate:
             _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
+        elif getattr(cue, "_wiring_ok", None) is not True:
+            Logger.warning(
+                f"Audio cue {cue.id}: its wiring check at arm did not succeed; "
+                "checking and repairing it at GO"
+            )
+            cue._wiring_ok = _verify_audio_wiring_at_go(
+                cue, mixer, player_name, selected_outputs
+            )
     except Exception as e:
         Logger.warning(f"Could not validate/connect player to mixer: {e}")
     return True
