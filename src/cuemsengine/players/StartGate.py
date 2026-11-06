@@ -193,13 +193,29 @@ class StartGate:
             self._checks = [c for c in self._checks if c.player is not player]
         return True
 
-    def note_follow_sent(self, player) -> None:
-        """A ``/mtcfollow 1`` sent outside a follow commit (the reveal's
-        legacy path): the player may follow from now on."""
-        if player is None:
-            return
+    def send_follow(
+        self, player, client, cue, gen, still_current: Callable | None = None
+    ) -> bool:
+        """A ``/mtcfollow 1`` to a selfgate player outside a follow commit:
+        the reveal's fallback when the commit did not happen. Sent under this
+        lock after ``still_current`` is re-checked (a pass stopped or replaced
+        meanwhile sends nothing), and the player marked as following this
+        pass, so every later stop reaches it with ``/cancelstart``. Returns
+        True if sent."""
         with self._lock:
-            player.may_follow = True
+            if still_current is not None and not still_current():
+                return False
+            client.set_value("/mtcfollow", 1)
+            if isinstance(player, Player):
+                player.may_follow = True
+                if gen is not None:
+                    player.follow_pass = (str(cue.id), gen)
+                    player.follow_cue = cue
+                    player.starts_since_commit = 0
+                    if player.cancel_records:
+                        player.cancel_records.clear()
+                        self._open.discard(player)
+        return True
 
     def follow_off(self, player, client, still_current: Callable | None = None):
         """``/mtcfollow 0`` (the legacy end of a pass) and may_follow cleared.

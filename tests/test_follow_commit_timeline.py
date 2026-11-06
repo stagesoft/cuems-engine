@@ -156,7 +156,9 @@ def quiet_gate():
     START_GATE.autostart = True
 
 
-def _drive(ch, cue, mtc, arrival_ms, player, *, audio=None, on_sleep=None):
+def _drive(
+    ch, cue, mtc, arrival_ms, player, *, audio=None, on_sleep=None, before_reveal=None
+):
     """go_threaded for real, the players patched in. Returns the events:
     {"illum": [mtc], "commit": [mtc], "reveal": [mtc]}."""
     audio = audio or cue
@@ -172,6 +174,8 @@ def _drive(ch, cue, mtc, arrival_ms, player, *, audio=None, on_sleep=None):
 
     def reveal(c, m, start_ms):
         events["reveal"].append(mtc.now)
+        if before_reveal is not None:
+            before_reveal(c)
         return reveal_cue(c, m, start_ms)
 
     with (
@@ -440,3 +444,77 @@ class TestReveal:
             ("/loop", [3, 19200, 48000])
         ]
         assert cue._wrap_reveal_t is not None
+
+
+class TestPassOwnership:
+    """Review of 4b4987c..c554465, fixes 2, 6, 7."""
+
+    def test_the_reveal_uses_the_decision_taken_under_the_lock(self):
+        """Fix 7: a re-GO's setup can reset _follow_committed between the
+        reveal's lock section and reveal_audioCue; the reveal must keep the
+        decision it took under the lock (no second start, no second follow)."""
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        cue = _audio(2000.0)
+        cue._osc = _Client(mtc, ch._lock)
+
+        def racing_setup(c):
+            c._follow_committed = False  # a re-GO's setup, after the lock
+
+        _drive(ch, cue, mtc, 1000.0, _player(), before_reveal=racing_setup)
+        assert len(cue._osc.times("/mtcfollow", 1)) == 1
+        assert len(cue._osc.times("/start_tod")) == 1
+
+    def test_a_reveal_time_follow_to_a_selfgate_player_marks_it_following(self):
+        """Fix 2: when the commit did not happen (its send raised), the
+        reveal's legacy /mtcfollow 1 leaves the player following: STOP, pause
+        and stop must still reach it with /cancelstart."""
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        cue = _audio(2000.0)
+        player = _player()
+
+        class _FlakyClient(_Client):
+            failed = False
+
+            def set_value(self, path, value):
+                if path == "/mtcfollow" and not self.failed:
+                    self.failed = True
+                    raise RuntimeError("send failed")
+                super().set_value(path, value)
+
+        cue._osc = _FlakyClient(mtc, ch._lock)
+        _drive(ch, cue, mtc, 1000.0, player)
+        assert cue._osc.times("/mtcfollow", 1)  # the reveal's legacy follow
+        assert player.may_follow is True
+        assert player.follow_pass == (str(cue.id), cue._go_generation)
+        assert START_GATE.cancel(cue, player, cue._osc, "stop_of_playing") is not None
+
+
+class TestLegacyEndOfPass:
+    """Fix 6: the end-of-pass /mtcfollow 0 compares the cue's generation with
+    the PASS's own, not with the one read at loop entry: a GO landing between
+    the reveal and the loop entry (H3) must not have its follow undone."""
+
+    def _loop(self, cue_gen, pass_gen):
+        from cuemsengine.cues.loop_cue import loop_cue
+        from cuemsengine.cues.run_cue import installed_pass
+
+        mtc = SimpleNamespace(main_tc=CTimecode(framerate=25, start_seconds=10.0))
+        cue = _audio()
+        cue._start_mtc = CTimecode(framerate=25, start_seconds=1.0)
+        cue._end_mtc = CTimecode(framerate=25, start_seconds=2.0)
+        cue._go_generation = cue_gen
+        cue._osc = _Client(_Mtc(0.0))
+        with (
+            patch.object(PLAYER_HANDLER, "audio_player", lambda c: None),
+            installed_pass(pass_gen, cue),
+        ):
+            loop_cue(cue, mtc)
+        return cue._osc.times("/mtcfollow", 0)
+
+    def test_the_owning_pass_ends_its_follow(self):
+        assert len(self._loop(cue_gen=1, pass_gen=1)) == 1
+
+    def test_a_superseded_pass_sends_no_follow_off(self):
+        assert self._loop(cue_gen=2, pass_gen=1) == []

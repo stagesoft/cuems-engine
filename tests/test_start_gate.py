@@ -94,6 +94,23 @@ class TestFollowCommit:
         assert client.sent == [("/mtcfollow", 1)] and player.may_follow is True
 
 
+class TestSendFollow:
+    """Review fix 2: the reveal's fallback /mtcfollow 1 to a selfgate player
+    (its follow commit did not happen) marks it following this pass."""
+
+    def test_marks_the_player_following_this_pass(self, gate):
+        player, client = _player(), _Client()
+        assert gate.send_follow(player, client, _Cue(), 7) is True
+        assert client.sent == [("/mtcfollow", 1)]
+        assert player.may_follow is True and player.follow_pass == ("cue-1", 7)
+        assert gate.cancel(_Cue(), player, client, "stop_of_playing") is not None
+
+    def test_a_stale_pass_sends_nothing(self, gate):
+        player, client = _player(), _Client()
+        assert gate.send_follow(player, client, _Cue(), 7, lambda: False) is False
+        assert client.sent == [] and player.may_follow is False
+
+
 class TestCancel:
     def test_cancel_sends_seq_and_fade_and_records_it(self, gate):
         cue, player, client = _committed(gate, gen=4)

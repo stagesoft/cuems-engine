@@ -7,6 +7,7 @@ import threading
 from contextlib import contextmanager
 from functools import singledispatch
 from time import monotonic
+from types import SimpleNamespace
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -14,6 +15,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..players.StartGate import START_GATE
 from ..tools.MtcListener import MtcListener
 from . import loop_mode
 
@@ -54,6 +56,32 @@ def _setup_section():
         return
     with guard.section() as ok:
         yield ok
+
+
+# The pass this thread runs (869feynrj): the cue that owns it (a CueList's
+# child plays inside its parent's pass), its go generation, and the reveal's
+# decision taken under CueHandler._lock (follow committed or not). Installed
+# by CueHandler.go_threaded for the whole pass, so a reader on the same thread
+# (reveal_audioCue, loop_audioCue) compares against THIS pass and not against
+# the cue's attributes, which a newer pass may already have reset.
+_PASS = threading.local()
+
+
+@contextmanager
+def installed_pass(go_gen: int, owner=None):
+    """Install the pass context for this thread (see _PASS)."""
+    previous = getattr(_PASS, "ctx", None)
+    ctx = SimpleNamespace(gen=go_gen, owner=owner, follow_committed=None)
+    _PASS.ctx = ctx
+    try:
+        yield ctx
+    finally:
+        _PASS.ctx = previous
+
+
+def current_pass():
+    """The pass context of this thread, or None (tests, direct calls)."""
+    return getattr(_PASS, "ctx", None)
 
 
 def _skipped(cue) -> None:
@@ -818,7 +846,14 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         # don't assert mtcfollow on a player that never got set up.
         Logger.info(f"Audio cue {cue.id} reveal skipped (setup aborted)")
         return
-    if getattr(cue, "_follow_committed", False) is True:
+    ctx = current_pass()
+    if ctx is not None and ctx.follow_committed is not None:
+        # Decided in go_threaded's reveal section, under CueHandler._lock: a
+        # newer pass's setup may have reset _follow_committed since.
+        committed = ctx.follow_committed
+    else:
+        committed = getattr(cue, "_follow_committed", False) is True
+    if committed:
         # 869feynrj §4.2 step 3: a selfgate player got /mtcfollow 1 at the
         # follow commit (start - F) and started itself at sample 0. The
         # reveal re-sends no start (one in PLAY is a reset job, §2.3) and no
@@ -853,7 +888,24 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             Logger.warning(f"reveal_audioCue: /loop failed: {e}")
         cue._wrap_reveal_t = monotonic()
     try:
-        cue._osc.set_value("/mtcfollow", 1)
+        player = PLAYER_HANDLER.audio_player(cue)
+        if loop_mode.player_selfgate(player):
+            # A selfgate player whose follow commit did not happen (its send
+            # failed): this reveal-time follow goes through the start gate, so
+            # the player is marked following and every later stop (STOP,
+            # pause, stop, a cancel) still reaches it with /cancelstart; sent
+            # only while the pass that owns it is current.
+            gen = ctx.gen if ctx is not None else None
+            owner = ctx.owner if ctx is not None and ctx.owner is not None else cue
+
+            def still_current():
+                return not getattr(owner, "_stop_requested", False) and (
+                    gen is None or getattr(owner, "_go_generation", 0) == gen
+                )
+
+            START_GATE.send_follow(player, cue._osc, cue, gen, still_current)
+        else:
+            cue._osc.set_value("/mtcfollow", 1)
     except Exception as e:
         Logger.warning(f"reveal_audioCue: /mtcfollow failed: {e}")
     Logger.info(f"Audio cue {cue.id} revealed: following MTC")

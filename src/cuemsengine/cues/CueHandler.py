@@ -28,8 +28,10 @@ from .loop_cue import loop_cue
 from .loop_mode import wrap_active
 from .run_cue import (
     blank_cue,
+    current_pass,
     first_enabled_child,
     installed_guard,
+    installed_pass,
     reveal_cue,
     run_cue,
 )
@@ -2018,16 +2020,19 @@ class CueHandler:
         """
         follow = _FollowOut()
         try:
-            self._run_cue_pass(
-                cue,
-                mtc,
-                frozen_mtc_ms,
-                go_gen,
-                chain_epoch,
-                unroll,
-                arm_epoch,
-                follow,
-            )
+            # The pass context (run_cue.installed_pass): the readers on this
+            # thread compare against this pass, not the cue's attributes.
+            with installed_pass(go_gen, cue):
+                self._run_cue_pass(
+                    cue,
+                    mtc,
+                    frozen_mtc_ms,
+                    go_gen,
+                    chain_epoch,
+                    unroll,
+                    arm_epoch,
+                    follow,
+                )
         except Exception:
             follow.error = True
             raise
@@ -2218,6 +2223,18 @@ class CueHandler:
                             # S0-21: its child is on stage from here on.
                             child._revealed = True
                             child._revealed_at = cue._revealed_at
+                        # Committed or legacy reveal, decided here under the
+                        # lock and handed to reveal_audioCue (review fix 7):
+                        # read there, _follow_committed may already be a
+                        # newer pass's (its setup resets it).
+                        ctx = current_pass()
+                        if ctx is not None:
+                            ctx.follow_committed = (
+                                follow_target is not None
+                                and getattr(follow_target, "_follow_committed", False)
+                                is True
+                                and getattr(cue, "_follow_gen", None) == go_gen
+                            )
                 if do_reveal:
                     revealed_at = cue._revealed_at
                     follow.revealed = True
