@@ -400,13 +400,23 @@ class TestResolveGoAnchor:
     """_resolve_go_anchor prefers the controller's GO instant over this
     node's own live MTC read, with a bounded, explained fallback."""
 
+    # 869feynrj §4.5c-d, D11: the plausibility check runs against
+    # anchor - lead_ms (the floor, 50 ms, when the controller sends none), and
+    # the local fallback is the node's MTC + the lead, ceiled to the frame.
     def _node(self, local_ms):
         from cuemsengine.NodeEngine import NodeEngine
 
         node = object.__new__(NodeEngine)
         node.mtc_listener = _MM()
         node.mtc_listener.main_tc.milliseconds_exact = local_ms
+        node.mtc_listener.interpolated_ms.return_value = local_ms
         return node
+
+    @staticmethod
+    def _led(local_ms, lead_ms=50.0):
+        from cuemsengine.cues.go_lead import ceil_frame
+
+        return ceil_frame(local_ms + lead_ms)
 
     def test_uses_controller_instant_within_tolerance(self):
         node = self._node(local_ms=79760.0)
@@ -420,29 +430,30 @@ class TestResolveGoAnchor:
 
     def test_falls_back_to_local_when_value_is_none(self):
         node = self._node(local_ms=79760.0)
-        assert node._resolve_go_anchor(None) == 79760.0
+        assert node._resolve_go_anchor(None) == self._led(79760.0)
 
     def test_falls_back_to_local_when_value_is_a_bare_string(self):
         # the editor's go_script path still sends an arbitrary string
         node = self._node(local_ms=79760.0)
-        assert node._resolve_go_anchor("complex_test") == 79760.0
+        assert node._resolve_go_anchor("complex_test") == self._led(79760.0)
 
     def test_falls_back_to_local_when_dict_lacks_the_key(self):
         node = self._node(local_ms=79760.0)
-        assert node._resolve_go_anchor({}) == 79760.0
+        assert node._resolve_go_anchor({}) == self._led(79760.0)
 
     def test_falls_back_to_local_when_controller_instant_is_far_in_the_future(self):
         node = self._node(local_ms=1000.0)
-        # 201ms ahead of local -- past the 200ms future-slack tolerance, so
-        # this reads as a stale or misrouted message, not a fast controller
-        assert node._resolve_go_anchor({"go_mtc_ms": 1201.0}) == 1000.0
+        # 201ms ahead of local once the lead (the 50 ms floor: no lead_ms) is
+        # taken off -- past the 200ms future-slack tolerance, so this reads as
+        # a stale or misrouted message, not a fast controller
+        assert node._resolve_go_anchor({"go_mtc_ms": 1251.0}) == self._led(1000.0)
 
     def test_falls_back_to_local_when_lag_looks_like_a_24h_wrap_asymmetry(self):
         # the controller resets its 24h wrap accumulator on load AND stop;
         # a node resets it only on load -- an implausibly stale controller
         # value must not be trusted over the node's own MTC.
         node = self._node(local_ms=90_000_000.0)
-        assert node._resolve_go_anchor({"go_mtc_ms": 0.0}) == 90_000_000.0
+        assert node._resolve_go_anchor({"go_mtc_ms": 0.0}) == self._led(90_000_000.0)
 
 
 class TestGoScriptUsesResolvedAnchor:

@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from threading import Event, Lock, Thread, current_thread
+from threading import Event, Lock, Thread, current_thread, local
 from time import monotonic, sleep
 from typing import Callable
 
@@ -85,6 +85,26 @@ class _FollowOut:
     fired: bool = False
     yielded: bool = False
     error: bool = False
+
+
+# 869feynrj §4.5e: whether the pass a go() starts was SEEDED (go_at_end,
+# ActionCue play / fade_in, a cross-node follow: anchors already past when the
+# target is set up, Phase B's) or not (an operator GO, a chain cue, a rejoin).
+# A late START of a seeded pass is INFO plus one WARNING per cue per load; of
+# any other, a WARNING. Thread-local, set around the go() call by go_from and by
+# a cue's thread around its continuation dispatch, so go()'s signature (and
+# every caller's) is unchanged.
+_DISPATCH = local()
+
+
+@contextmanager
+def _dispatch_tag(seeded: bool):
+    previous = getattr(_DISPATCH, "seeded", False)
+    _DISPATCH.seeded = bool(seeded)
+    try:
+        yield
+    finally:
+        _DISPATCH.seeded = previous
 
 
 class _SetupGuard:
@@ -1753,6 +1773,7 @@ class CueHandler:
                 self.cancel_start_locked(cue, "cancel")
 
             cue._go_epoch = chain_epoch
+            cue._pass_seeded = bool(getattr(_DISPATCH, "seeded", False))
             # Recorded here, not in the spawned thread: a disable arriving in
             # between has to find this cue's anchor to stamp a rejoin with, and
             # in a loop project it would otherwise read the PREVIOUS cycle's.
@@ -1869,15 +1890,18 @@ class CueHandler:
             if skipped_disabled:
                 self.stamp_pass(skipped_disabled, seed_ms)
             return None
-        if skipped_disabled:
-            return self.go(
-                cue,
-                mtc,
-                seed_ms + sigma_ms,
-                stamp_skipped=skipped_disabled,
-                **guards,
-            )
-        return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
+        # A seeded dispatch (869feynrj §4.5e), never led (S0-13: L per hop
+        # would drift every go_at_end chain by L per cue).
+        with _dispatch_tag(True):
+            if skipped_disabled:
+                return self.go(
+                    cue,
+                    mtc,
+                    seed_ms + sigma_ms,
+                    stamp_skipped=skipped_disabled,
+                    **guards,
+                )
+            return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
         """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
@@ -2078,13 +2102,15 @@ class CueHandler:
                         f"Unrolling post_go chain: dispatching {next_cue.id} "
                         f"at the trigger"
                     )
-                    post_go_thread = self.go(
-                        next_cue,
-                        mtc,
-                        next_arrival,
-                        chain_epoch=chain_epoch,
-                        arm_epoch=arm_epoch,
-                    )
+                    # A chain cue's pass is seeded iff its head's is (§4.5e).
+                    with _dispatch_tag(getattr(cue, "_pass_seeded", False) is True):
+                        post_go_thread = self.go(
+                            next_cue,
+                            mtc,
+                            next_arrival,
+                            chain_epoch=chain_epoch,
+                            arm_epoch=arm_epoch,
+                        )
             except Exception as e:
                 # The chain is downstream work; losing it must not cost THIS
                 # cue its own reveal.

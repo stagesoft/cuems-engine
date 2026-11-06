@@ -6,6 +6,7 @@
 import dataclasses
 import os
 import shutil
+import socket
 import subprocess
 import threading
 from threading import Event, Lock, Thread
@@ -18,7 +19,7 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools import media_sidecars
 
 from .core.BaseEngine import BaseEngine
-from .cues import loop_mode
+from .cues import go_lead, loop_mode
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
@@ -138,6 +139,14 @@ class NodeEngine(BaseEngine):
     _GO_ANCHOR_FUTURE_TOL_MS = 200.0
     _GO_ANCHOR_MAX_LAG_MS = 10_000.0
 
+    # 869feynrj §4.5d: this node's output latency + one JACK period (ms), the
+    # maximum seen since start (settings override, a JACK query at start,
+    # every player's LATENCY line), and the largest value already reported
+    # to the controller (armed_ready, or the out_latency STATUS).
+    _out_latency_ms: float | None = None
+    _out_latency_reported: float | None = None
+    _out_latency_warned_load = False
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
@@ -177,6 +186,8 @@ class NodeEngine(BaseEngine):
     def start(self):
         self._log_versions()
         PLAYER_HANDLER.refresh_video_caps()
+        START_GATE.set_node_name(socket.gethostname())
+        START_GATE.set_latency_listener(self._on_player_latency)
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
         self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         # Creates command dictionary and OSCQuery client
@@ -699,6 +710,86 @@ class NodeEngine(BaseEngine):
             self.cm.node_conf["audioplayer"]["path"],
             audio_args,
         )
+        self._init_out_latency()
+
+    # 869feynrj §4.5d: this node's output latency, known independently of
+    # armed players (review 3 N3), carried to the controller for L.
+    def _init_out_latency(self) -> None:
+        """At node start: the settings override when set, else a JACK query
+        of the playback ports; latency + one JACK period from every source
+        (review 4 m1). Never raises."""
+        jack_lat = None
+        try:
+            mixer = PLAYER_HANDLER.get_audio_mixer()
+            conn_man = getattr(mixer, "conn_man", None) if mixer else None
+            if conn_man is not None:
+                jack_lat = conn_man.playback_latency()
+        except Exception as e:
+            Logger.warning(f"Output latency: JACK query failed: {e}")
+        override = None
+        try:
+            value = self.cm.node_conf["audioplayer"].get("output_latency_ms")
+            if isinstance(value, int) and not isinstance(value, bool):
+                override = float(value)
+        except Exception:
+            override = None
+        if override is not None:
+            period_ms = (
+                jack_lat[2] * 1000.0 / jack_lat[1]
+                if jack_lat and jack_lat[1] > 0
+                else 512 * 1000.0 / 48000
+            )
+            self._note_out_latency(override + period_ms, "settings output_latency_ms")
+        elif jack_lat and jack_lat[1] > 0:
+            frames, rate, period = jack_lat
+            self._note_out_latency(
+                (frames + period) * 1000.0 / rate, "JACK playback latency"
+            )
+        else:
+            Logger.info(
+                "Output latency not known yet (no settings override, no JACK "
+                "answer): the first player's LATENCY line will tell"
+            )
+
+    def _on_player_latency(self, player, latency) -> None:
+        """START_GATE's latency listener: a player's LATENCY line."""
+        self._note_out_latency(latency.out_latency_ms, "player LATENCY line")
+
+    def _note_out_latency(self, ms: float, source: str) -> None:
+        """Keep the maximum; tell the controller when it grows (an additive
+        STATUS, so an audio cue armed after the load still raises L, N3).
+        Never blocks: it runs on a player's stdout reader too."""
+        if not isinstance(ms, (int, float)) or isinstance(ms, bool) or ms <= 0:
+            return
+        current = self._out_latency_ms
+        if current is not None and ms <= current:
+            return
+        self._out_latency_ms = float(ms)
+        CUE_HANDLER.out_latency_ms = float(ms)
+        Logger.info(
+            f"Output latency {ms:.1f} ms (latency + one period, from the {source});"
+            f" follow lead F {go_lead.follow_lead_ms(ms):.0f} ms"
+        )
+        reported = self._out_latency_reported
+        if reported is not None and ms > reported + 0.05:
+            self._send_out_latency(ms)
+
+    def _send_out_latency(self, ms: float) -> None:
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        try:
+            CUE_HANDLER.communications_thread.send_operation_nowait(
+                NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target="out_latency",
+                    data={"out_latency_ms": round(float(ms), 3)},
+                )
+            )
+            self._out_latency_reported = float(ms)
+        except Exception as e:
+            Logger.warning(f"Could not report the output latency: {e}")
 
     def _report_mixer_status(self, output_index: str = "0") -> None:
         """Snapshot the local mixer's authoritative gain to the controller.
@@ -922,6 +1013,9 @@ class NodeEngine(BaseEngine):
             return False
 
         self._teardown_project("load")
+        # 869feynrj: the once-per-load lines may be said again.
+        START_GATE.reset_for_load()
+        self._out_latency_warned_load = False
 
         # Clear the engine's 24h MTC wrap accumulator on this project transition,
         # co-orchestrated with the DMX blackout + videocomposer reset above (which
@@ -1630,6 +1724,18 @@ class NodeEngine(BaseEngine):
             legacy = list(getattr(self, "_legacy_period", None) or [])
             if legacy:
                 data["legacy_period"] = legacy
+            # 869feynrj §4.5d: additive; an old controller reads only "armed".
+            out_latency = getattr(self, "_out_latency_ms", None)
+            if out_latency is not None:
+                data["out_latency_ms"] = round(float(out_latency), 3)
+                self._out_latency_reported = float(out_latency)
+            elif not getattr(self, "_out_latency_warned_load", False):
+                self._out_latency_warned_load = True
+                Logger.warning(
+                    "No output latency known on this node (settings, JACK, a "
+                    "player's LATENCY line): the controller's GO lead uses its "
+                    "floor for this node"
+                )
             operation = NodeOperation(
                 type=OperationType.STATUS,
                 action=ActionType.UPDATE,
@@ -2086,35 +2192,55 @@ class NodeEngine(BaseEngine):
         """Resolve the GO_mtc anchor for this GO.
 
         Prefers the controller's own GO instant, shipped as
-        value == {"go_mtc_ms": <float>} by ControllerEngine.go_script.
-        Falls back to this node's own live MTC read (today's behaviour,
-        and the only thing an older controller ever sends) whenever
-        `value` doesn't carry a usable one, or the controller's instant
-        looks implausible against this node's own MTC.
+        value == {"go_mtc_ms": <float>, "lead_ms": <float>, ...} by
+        ControllerEngine.go_script. Falls back to this node's own MTC
+        whenever `value` doesn't carry a usable one, or the controller's
+        instant looks implausible against this node's own MTC.
 
         Badajoz, 2026-09-25: a node whose setnextcue pre-arm held
         _command_lock for ~500ms read its own MTC ~520ms later than the
         other two boxes at GO time and anchored its whole Auto-continue
         chain late. MTC-following cannot correct a wrong anchor -- only
         agreeing on one does.
+
+        869feynrj §4.5c-d, D11: the controller's anchor is LED, interpolated
+        MTC + L ceiled to the next frame, so the plausibility check runs
+        against anchor - lead_ms (the instant of the press); a controller
+        that sends no lead_ms (older) is checked against anchor - the floor.
+        The fallback is this node's interpolated MTC + the same lead, ceiled
+        to the next frame: the only other place L is applied (S0-13).
         """
         local = self.mtc_listener.main_tc.milliseconds_exact
+        lead = go_lead.GO_LEAD_FLOOR_MS
         if isinstance(value, dict):
+            shipped = value.get("lead_ms")
+            if (
+                isinstance(shipped, (int, float))
+                and not isinstance(shipped, bool)
+                and shipped >= 0
+            ):
+                lead = float(shipped)
             ctrl = value.get("go_mtc_ms")
             if isinstance(ctrl, (int, float)) and not isinstance(ctrl, bool):
-                lag = local - ctrl
+                lag = local - (ctrl - lead)
                 if -self._GO_ANCHOR_FUTURE_TOL_MS <= lag <= self._GO_ANCHOR_MAX_LAG_MS:
                     Logger.info(
                         f"GO anchored at controller instant {ctrl:.1f}ms "
-                        f"(node lag {lag:.1f}ms)"
+                        f"(lead {lead:.0f}ms, node lag {lag:.1f}ms)"
                     )
                     return ctrl
                 Logger.warning(
-                    f"GO anchor from controller ({ctrl:.1f}ms) implausible "
-                    f"against local MTC ({local:.1f}ms, lag {lag:.1f}ms) -- "
-                    "using local MTC instead"
+                    f"GO anchor from controller ({ctrl:.1f}ms, lead {lead:.0f}ms) "
+                    f"implausible against local MTC ({local:.1f}ms, lag "
+                    f"{lag:.1f}ms) -- using local MTC instead"
                 )
-        return local
+        now = CUE_HANDLER._interpolated_clock(self.mtc_listener)()
+        anchor = go_lead.ceil_frame(now + lead)
+        Logger.info(
+            f"GO anchored at local MTC {now:.1f}ms + lead {lead:.0f}ms -> "
+            f"{anchor:.0f}ms"
+        )
+        return anchor
 
     def go_script(self, value):
         try:

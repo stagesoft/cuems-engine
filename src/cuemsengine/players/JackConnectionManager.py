@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
 """
 JACK Connection Manager
@@ -263,6 +264,27 @@ class JackConnectionManager:
         """
         connections = self.get_connections(source_port)
         return destination_port in connections
+
+    def playback_latency(self) -> tuple[int, int, int] | None:
+        """(latency frames, sample rate, period frames) of the system
+        playback ports, or None when JACK does not answer.
+
+        The latency is the largest playback latency of the physical sinks
+        (``jack_lsp -l``: 1536 frames at -p512 -n3), the period JACK's
+        buffer size (869feynrj §4.5d: a node's output latency is known
+        before any audio player exists)."""
+        client = self.client
+        if client is None or jack is None:
+            return None
+        try:
+            ports = client.get_ports(is_physical=True, is_input=True, is_audio=True)
+            if not ports:
+                return None
+            frames = max(int(p.get_latency_range(jack.PLAYBACK)[1]) for p in ports)
+            return frames, int(client.samplerate), int(client.blocksize)
+        except Exception as e:
+            Logger.warning(f"JACK playback latency query failed: {e}")
+            return None
 
     def __del__(self):
         """Cleanup JACK client on deletion."""

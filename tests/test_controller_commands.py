@@ -502,15 +502,19 @@ class TestGoScriptAnchor:
             mock_fwd.assert_not_called()
 
     def test_forwards_go_mtc_ms_when_mtc_present(self, controller):
+        """869feynrj §4.5b-d, D11: the anchor is led -- MTC + L (the 50 ms
+        floor here: no node reported a latency) ceiled to the next 40 ms
+        frame -- and lead_ms rides along."""
         self._armed(controller)
         controller.mtc_listener = Mock()
         controller.mtc_listener.main_tc.milliseconds_exact = 79240.0
+        controller.mtc_listener.interpolated_ms.return_value = 79240.0
         controller.mtc_listener.is_receiving.return_value = True
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
                 "/engine/command/go",
-                {"go_mtc_ms": 79240.0, "run_seq": controller._run_seq},
+                {"go_mtc_ms": 79320.0, "lead_ms": 50.0, "run_seq": controller._run_seq},
             )
 
     def test_forwards_only_run_seq_when_mtc_listener_is_none(self, controller):
@@ -528,7 +532,7 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script("complex_test")
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go", {"run_seq": controller._run_seq, "lead_ms": 50.0}
             )
 
     def test_forwards_only_run_seq_for_none_value_without_mtc(self, controller):
@@ -537,7 +541,7 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go", {"run_seq": controller._run_seq, "lead_ms": 50.0}
             )
 
     def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
@@ -554,5 +558,5 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go", {"run_seq": controller._run_seq, "lead_ms": 50.0}
             )
