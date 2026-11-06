@@ -270,6 +270,9 @@ class StartGate:
             if n:
                 player.cancel_records.clear()
             self._open.discard(player)
+            # Its own fade_deadline still holds its disconnect (fade_wait_s);
+            # only STOP's pending_fade_wait_s reads this set, before any kill.
+            self._fading.discard(player)
             player.may_follow = False
             self._checks = [c for c in self._checks if c.player is not player]
         if n:
