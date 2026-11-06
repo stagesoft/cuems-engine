@@ -777,8 +777,10 @@ class NodeEngine(BaseEngine):
             f"Output latency {ms:.1f} ms (latency + one period, from the {source});"
             f" follow lead F {go_lead.follow_lead_ms(ms):.0f} ms"
         )
+        # Reported when nothing was yet (no latency known at armed_ready: the
+        # first LATENCY line must still reach the controller, N3) or larger.
         reported = self._out_latency_reported
-        if reported is not None and ms > reported + 0.05:
+        if reported is None or ms > reported + 0.05:
             self._send_out_latency(ms)
 
     def _send_out_latency(self, ms: float) -> None:
@@ -1616,8 +1618,13 @@ class NodeEngine(BaseEngine):
                 "the STOP/load that caused it"
             )
             return
-        # If cue was disabled while we were arming, disarm now.
-        if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
+        # If cue was disabled while we were arming, disarm now -- unless it
+        # is playing (a disable never stops a playing cue, 869feynrj S0-21).
+        if (
+            not cue.enabled
+            and CUE_HANDLER.find_armed_cue(cue)
+            and not getattr(cue, "_playing", False)
+        ):
             CUE_HANDLER.disarm(cue, reason="disabled")
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
             return

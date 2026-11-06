@@ -347,16 +347,37 @@ class TestNodeLatency:
         a, b, c = self._patched(mixer)
         with a, b, c:
             node._init_out_latency()
-            node._out_latency_reported = node._out_latency_ms  # armed_ready
+            nowait = CUE_HANDLER.communications_thread.send_operation_nowait
+            assert nowait.call_count == 1  # nothing reported yet: sent
             node._on_player_latency(None, LatencyLine(1536, 48000, 512))
-            CUE_HANDLER.communications_thread.send_operation_nowait.assert_not_called()
+            assert nowait.call_count == 1  # not larger: nothing new
             node._on_player_latency(None, LatencyLine(3072, 48000, 1024))
-            op = CUE_HANDLER.communications_thread.send_operation_nowait.call_args.args[
-                0
-            ]
+            assert nowait.call_count == 2
+            op = nowait.call_args.args[0]
             assert op.target == "out_latency"
             assert op.data == {"out_latency_ms": pytest.approx(85.333, abs=1e-3)}
             assert CUE_HANDLER.out_latency_ms == pytest.approx(85.333, abs=1e-3)
+
+    def test_unknown_at_armed_ready_then_a_latency_line_is_reported(self):
+        """N3 / review fix 4: no latency known when armed_ready went out (no
+        settings, no JACK answer), then the first player's LATENCY line: the
+        controller must still hear of it."""
+        from cuemsengine.cues.CueHandler import CUE_HANDLER
+        from cuemsengine.players.Player import LatencyLine
+
+        node, mixer = self._node()
+        a, b, c = self._patched(mixer)
+        with a, b, c:
+            node._init_out_latency()
+            node._notify_armed_ready("arming after load")
+            ready = CUE_HANDLER.communications_thread.send_operation.call_args.args[0]
+            assert "out_latency_ms" not in ready.data
+            node._on_player_latency(None, LatencyLine(1536, 48000, 512))
+            op = CUE_HANDLER.communications_thread.send_operation_nowait.call_args.args[
+                0
+            ]
+        assert op.target == "out_latency"
+        assert op.data == {"out_latency_ms": pytest.approx(42.667, abs=1e-3)}
 
     def test_armed_ready_carries_it(self):
         from cuemsengine.cues.CueHandler import CUE_HANDLER
@@ -377,3 +398,28 @@ class TestNodeLatency:
             node._notify_armed_ready("test")
             node._notify_armed_ready("re-arm")
         assert log.warning.call_count == 1
+
+
+class TestDisabledDuringAsyncArm:
+    """S0-21 / review fix 3: the ReArm thread's 'disabled while arming'
+    disarm leaves a playing cue alone, like every other disable path."""
+
+    def _run(self, playing):
+        import importlib
+
+        NE = importlib.import_module("cuemsengine.NodeEngine")
+        node = object.__new__(NE.NodeEngine)
+        node._project_generation = 3
+        cue = SimpleNamespace(id="c", enabled=False, _playing=playing)
+        ch = MagicMock()
+        ch.find_armed_cue.return_value = True
+        with patch.object(NE, "CUE_HANDLER", ch):
+            node._arm_with_enabled_guard(cue, 3, 0)
+        return ch
+
+    def test_a_playing_cue_is_not_disarmed(self):
+        self._run(playing=True).disarm.assert_not_called()
+
+    def test_an_idle_cue_is_disarmed(self):
+        ch = self._run(playing=False)
+        ch.disarm.assert_called_once()
