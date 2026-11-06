@@ -80,7 +80,21 @@ class TestFramework:
         assert [test_knobs.go_phase_next() for _ in range(3)] == [38.0, 3.0, 8.0]
         assert test_knobs.forced_lead_ms() == 10.0
         assert test_knobs.hold_command_lock_ms() == 150.0
-        assert test_knobs.cancel_at() == ("actionpause", -120.5)
+        # (action, offset, k, len): the single-offset form is a list of one
+        assert test_knobs.cancel_at() == ("actionpause", -120.5, 1, 1)
+        assert test_knobs.cancel_at() == ("actionpause", -120.5, 1, 1)
+
+    def test_a_list_of_offsets_is_used_in_turn_one_per_go(self, knobs):
+        """The n-th GO uses offset[n mod len], as the phase sweep counts."""
+        knobs(CANCEL_AT="stop:-200,-45,0,30")
+        got = [test_knobs.cancel_at() for _ in range(5)]
+        assert got == [
+            ("stop", -200.0, 1, 4),
+            ("stop", -45.0, 2, 4),
+            ("stop", 0.0, 3, 4),
+            ("stop", 30.0, 4, 4),
+            ("stop", -200.0, 1, 4),
+        ]
 
     @pytest.mark.parametrize(
         "name, value",
@@ -90,6 +104,8 @@ class TestFramework:
             ("HOLD_COMMAND_LOCK_MS", "abc"),
             ("CANCEL_AT", "explode:10"),
             ("CANCEL_AT", "stop"),
+            ("CANCEL_AT", "stop:-40,x"),
+            ("CANCEL_AT", "stop:"),
         ],
     )
     def test_a_bad_value_is_ignored(self, knobs, name, value):
@@ -285,8 +301,8 @@ class TestCancelAt:
         lead.post_go = "go"
         target = _audio(1010.0)
         lead._target_object = target
-        action, offset, cue, at = node._test_cancel_plan(lead, 10_000.0)
-        assert (action, offset, cue) == ("stop", -120.0, target)
+        action, offset, cue, at, k, count = node._test_cancel_plan(lead, 10_000.0)
+        assert (action, offset, cue, k, count) == ("stop", -120.0, target, 1, 1)
         # the start label the player gets: 11010 rounded to the 40 ms grid
         assert at == round(11_010.0 / 40.0) * 40.0 - 120.0
 
@@ -297,6 +313,38 @@ class TestCancelAt:
         assert at <= clock.ms < at + 1.0
         text = str(log.warning.call_args_list[-1])
         assert f"TEST KNOB: cancel stop at start{offset:+.1f} ms (mtc " in text
+        assert text.rstrip("')\"").endswith("(offset 1/1")
+
+    def test_successive_gos_take_the_offsets_in_turn(self, knobs):
+        knobs(CANCEL_AT="disable:-200,-45,30")
+        NE, node = _node()
+        cue = _audio(1000.0)
+        plans = [node._test_cancel_plan(cue, 10_000.0) for _ in range(4)]
+        assert [(p[1], p[4], p[5]) for p in plans] == [
+            (-200.0, 1, 3),
+            (-45.0, 2, 3),
+            (30.0, 3, 3),
+            (-200.0, 1, 3),
+        ]
+        assert plans[1][3] == 11_000.0 - 45.0
+        clock = _Clock(10_000.0)
+        node._on_command_received = lambda n, v: False
+        node._handle_nng_command = lambda n, v: None
+        with (
+            patch.object(NE.CUE_HANDLER, "_interpolated_clock", lambda m: clock),
+            patch.object(NE, "sleep", side_effect=clock.sleep),
+            patch.object(NE, "Logger") as log,
+        ):
+            node.mtc_listener = MagicMock()
+            node._test_cancel_fire(*plans[1])
+        line = [
+            str(c.args[0])
+            for c in log.warning.call_args_list
+            if str(c.args[0]).startswith("TEST KNOB: cancel disable at")
+        ]
+        assert len(line) == 1
+        assert line[0].startswith("TEST KNOB: cancel disable at start-45.0 ms (mtc ")
+        assert line[0].endswith(") (offset 2/3)")
 
     def test_an_offset_already_past_says_so_and_fires_now(self, knobs):
         knobs(CANCEL_AT="stop:-200")

@@ -2493,15 +2493,15 @@ class NodeEngine(BaseEngine):
         ).start()
 
     def _test_cancel_plan(self, cue_to_go, arrival_ms: float):
-        """(action, offset, target, mtc to fire at): the first local, enabled
-        AudioCue of the pass (the GO's cue and its Auto-continue chain), at
-        its start label (arrival + prewait, rounded to the 40 ms grid as the
-        player gets it) + offset. None when the knob is off or there is no
-        such cue."""
+        """(action, offset, target, mtc to fire at, k, len): the first local,
+        enabled AudioCue of the pass (the GO's cue and its Auto-continue
+        chain), at its start label (arrival + prewait, rounded to the 40 ms
+        grid as the player gets it) + this GO's offset (the k-th of len, taken
+        in turn). None when the knob is off or there is no such cue."""
         spec = test_knobs.cancel_at()
         if spec is None:
             return None
-        action, offset = spec
+        action, offset, k, count = spec
         node, walked = cue_to_go, 0
         while node is not None and walked < 1024:
             if (
@@ -2511,7 +2511,7 @@ class NodeEngine(BaseEngine):
             ):
                 start = arrival_ms + node.prewait.milliseconds_exact
                 label = round(start / go_lead.FRAME_MS) * go_lead.FRAME_MS
-                return action, offset, node, label + offset
+                return action, offset, node, label + offset, k, count
             if getattr(node, "post_go", None) != "go":
                 break
             node = getattr(node, "_target_object", None)
@@ -2521,7 +2521,15 @@ class NodeEngine(BaseEngine):
         )
         return None
 
-    def _test_cancel_fire(self, action: str, offset: float, target, at_ms: float):
+    def _test_cancel_fire(
+        self,
+        action: str,
+        offset: float,
+        target,
+        at_ms: float,
+        k: int = 1,
+        count: int = 1,
+    ):
         """Wait for the node's interpolated MTC to reach ``at_ms`` (1 ms
         resolution), then inject the cancel through the path the real command
         takes: STOP / cue_enabled / setnextcue + go through the bus receive
@@ -2538,7 +2546,8 @@ class NodeEngine(BaseEngine):
         while clock() < at_ms:
             sleep(0.0005)
         Logger.warning(
-            f"TEST KNOB: cancel {action} at start{offset:+.1f} ms (mtc {clock():.1f})"
+            f"TEST KNOB: cancel {action} at start{offset:+.1f} ms (mtc {clock():.1f}) "
+            f"(offset {k}/{count})"
         )
         self._test_injecting = True
         try:

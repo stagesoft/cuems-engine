@@ -29,11 +29,13 @@ in the release package:
 ``CUEMS_TEST_HOLD_COMMAND_LOCK_MS=<ms>`` (node, R10)
     every GO handled sleeps <ms> inside _command_lock, so the GO's handling
     is slower than L.
-``CUEMS_TEST_CANCEL_AT=<action>:<offset_ms>`` (node, R4)
+``CUEMS_TEST_CANCEL_AT=<action>:<o1>[,<o2>,...]`` (node, R4)
     on every operator GO, a cancel of the first local AudioCue of its pass at
     that cue's start + offset (+-1 ms on the interpolated MTC), through the
     path the real command takes; <action> is one of stop, disable, supersede
-    (setnextcue + go of the cue), actionstop, actionpause, actionfadeout.
+    (setnextcue + go of the cue), actionstop, actionpause, actionfadeout. With
+    several offsets the n-th GO since engine start uses offset[n mod len],
+    counted like the phase sweep.
 """
 
 import os
@@ -191,20 +193,26 @@ def hold_command_lock_ms() -> float | None:
     return _float("CUEMS_TEST_HOLD_COMMAND_LOCK_MS", minimum=0.0)
 
 
-def cancel_at() -> tuple[str, float] | None:
-    """R4: (action, offset ms from the pass's start), or None."""
+def cancel_at() -> tuple[str, float, int, int] | None:
+    """R4, once per operator GO: (action, offset ms from the pass's start,
+    k, len) -- the offset list taken in turn, k its 1-based index -- or None.
+    Each call is one GO: it advances the counter."""
     raw = _get("CUEMS_TEST_CANCEL_AT")
     if raw is None:
         return None
-    action, _, offset = raw.partition(":")
+    action, _, listed = raw.partition(":")
     try:
-        value = float(offset)
+        offsets = [float(x) for x in listed.split(",")]
     except ValueError:
-        value = None
-    if action not in CANCEL_ACTIONS or value is None:
+        offsets = []
+    if action not in CANCEL_ACTIONS or not offsets:
         Logger.warning(f"TEST KNOB: CUEMS_TEST_CANCEL_AT={raw!r} ignored")
         return None
-    return action, value
+    with _lock:
+        n = _counts.get("__cancel_at__", 0)
+        _counts["__cancel_at__"] = n + 1
+    k = n % len(offsets)
+    return action, offsets[k], k + 1, len(offsets)
 
 
 def reset_for_tests() -> None:
