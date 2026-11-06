@@ -36,6 +36,7 @@ from .players.PlayerHandler import (
     _positive_int,
     check_orphan_binary_names,
 )
+from .players.StartGate import START_GATE
 from .players.VideoCaps import caps_path
 from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
@@ -2329,7 +2330,11 @@ class NodeEngine(BaseEngine):
         # Must happen BEFORE blackout/reset so loop_cue threads don't
         # re-push DMX frames or send /visible after cleanup.
         CUE_HANDLER.stop_all_cues()
-        sleep(0.05)  # 50ms — loop_cue polls every 20ms
+        # 50 ms: loop_cue polls every 20 ms. 869feynrj D10: stop_all_cues sent
+        # /cancelstart to every selfgate player that may follow, and the first
+        # disconnect below must not cut its fade: wait max(50 ms, transit +
+        # one period + fade_ms + margin) (review 4 m3).
+        sleep(max(0.05, START_GATE.pending_fade_wait_s()))
 
         # DMX: disable MTC following first (freezes the playhead so queued
         # scenes can't fire), then blackout via OLA for instant visual reset.

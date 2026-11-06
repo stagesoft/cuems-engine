@@ -478,6 +478,40 @@ class CueHandler:
         """F on this node (869feynrj §4.2 step 2, review 4 M2)."""
         return go_lead.follow_lead_ms(self.out_latency_ms)
 
+    @staticmethod
+    def _selfgate_target(cue: Cue):
+        """(the AudioCue a stop of ``cue`` reaches, its player) when that
+        player is selfgate, else (None, None). A CueList reaches its first
+        enabled child (S0-11)."""
+        target = first_enabled_child(cue) if isinstance(cue, CueList) else cue
+        if not isinstance(target, AudioCue):
+            return None, None
+        player = PLAYER_HANDLER.audio_player(target)
+        if not loop_mode.player_selfgate(player):
+            return None, None
+        return target, player
+
+    def cancel_start_locked(self, cue: Cue, kind: str) -> bool:
+        """``/cancelstart`` to the selfgate player of ``cue`` if it may
+        follow (869feynrj §4.3). The caller holds self._lock, in the section
+        that sets the cue's stop flags, so the decision and the datagram are
+        one step and a stale thread never sends.
+
+        kind: "cancel" for a pass the engine has not revealed (its START, if
+        the player began, is a WARNING); "stop_of_playing" for STOP (always,
+        D10) and for the stops of a playing cue (D12): no WARNING, the player
+        fades over fade_ms and the disconnect waits for it. Nothing is sent
+        to an older player. Never raises; True if one went out."""
+        try:
+            target, player = self._selfgate_target(cue)
+            if target is None:
+                return False
+            client = getattr(target, "_osc", None)
+            return START_GATE.cancel(target, player, client, kind) is not None
+        except Exception as e:
+            Logger.error(f"Cue {cue.id}: /cancelstart not sent: {e}")
+            return False
+
     def _follow_commit_target(self, cue: Cue) -> Cue | None:
         """The AudioCue whose selfgate player this pass commits a follow to:
         the cue itself, or a CueList's first enabled child, played at the
@@ -1096,7 +1130,22 @@ class CueHandler:
         ``project_changed``, ``load``, ``ready_script``, ``shutdown``) and is
         logged: a disarm, the automatic one at cue end included, must never
         be silent.
+
+        A selfgate player that may still follow gets ``/cancelstart`` first
+        (869feynrj §4.3 "any disarm", D12), so a disarm of a playing cue fades
+        instead of clicking; the disconnect waits for the fade
+        (PlayerHandler). Not at a natural end (``cue_end``): the pass is over.
         """
+        if reason != "cue_end" and self._selfgate_target(cue)[0] is not None:
+            with self._lock:
+                self.cancel_start_locked(
+                    cue,
+                    (
+                        "stop_of_playing"
+                        if getattr(cue, "_revealed", False)
+                        else "cancel"
+                    ),
+                )
         cue._playing = False
         if hasattr(cue, "loaded") and cue.loaded:
             self.remove_armed_cue(cue)
@@ -1207,6 +1256,29 @@ class CueHandler:
                 cue._go_generation = getattr(cue, "_go_generation", 0) + 1
                 cue._go_epoch = self._chain_epoch
                 cue._playing = False
+            # 869feynrj D10: every selfgate player that may follow gets
+            # /cancelstart (kind stop_of_playing: STOP never warns), playing
+            # ones included, so STOP fades in ~5 ms instead of the disconnect's
+            # click. Walked over the PLAYER table, not _armed_cues (S0-4): the
+            # kill goes player by player. The second stop_all_cues of a STOP
+            # or a load (ready_script -> disarm_all) finds the players killed
+            # and may_follow cleared, and sends nothing.
+            self._stop_cancel_all_locked()
+
+    def _stop_cancel_all_locked(self) -> None:
+        """D10's sends; the caller holds self._lock. Never raises."""
+        try:
+            players = PLAYER_HANDLER.live_audio_players()
+        except Exception as e:
+            Logger.error(f"STOP: could not list the audio players: {e}")
+            return
+        for cue, player, client in players:
+            if not loop_mode.player_selfgate(player):
+                continue
+            try:
+                START_GATE.cancel(cue, player, client, "stop_of_playing")
+            except Exception as e:
+                Logger.error(f"STOP: /cancelstart to cue {cue.id} failed: {e}")
 
     def cancel_pending_descendants(self, cue: Cue) -> int:
         """Cancel the cues an Auto-continue chain dispatched behind `cue`.
@@ -1258,6 +1330,8 @@ class CueHandler:
                         node._go_generation = getattr(node, "_go_generation", 0) + 1
                         node._go_epoch = epoch
                         node._playing = False
+                        # 869feynrj §4.3: its player may already follow.
+                        self.cancel_start_locked(node, "cancel")
                         cancelled.append(node)
                 elif is_local and owned:
                     # Disabled: nothing to cancel, but claim it so enabling it
@@ -1299,15 +1373,20 @@ class CueHandler:
         The cue keeps a stamp of the pass it was cancelled out of, so
         re-enabling it before its slot puts it back (rejoin_chain).
         """
-        if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
-            return False
         with self._lock:
+            # Tested in the same section that sets the flags (869feynrj S0-1):
+            # tested before the lock, a reveal landing in between was flagged
+            # after it went on stage, never disarmed, and played to its end.
+            if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
+                return False
             self._chain_epoch = self._chain_epoch + 1
             epoch = self._chain_epoch
             cue._stop_requested = True
             cue._go_generation = getattr(cue, "_go_generation", 0) + 1
             cue._go_epoch = epoch
             cue._playing = False
+            # 869feynrj §4.3: its player may already follow.
+            self.cancel_start_locked(cue, "cancel")
             # Remember where it would have played, so a re-enable can put it
             # back at the same anchor instead of losing the slot.
             arrival = getattr(cue, "_dispatch_arrival_ms", None)
@@ -1664,6 +1743,14 @@ class CueHandler:
             cue._superseded_playing = bool(
                 getattr(cue, "_revealed", False) and getattr(cue, "_playing", False)
             )
+            if not getattr(cue, "_revealed", False):
+                # §4.3 row 1: the pass this GO supersedes produced no output,
+                # but its player may already follow it: cancel that pending
+                # start here, for the OLD pass, before the new thread exists
+                # (its own follow commit comes later; the filter is off,
+                # §4.4). A pass on stage is left alone: the new start replaces
+                # it (and an equal start is a no-op in the player, §4.1c).
+                self.cancel_start_locked(cue, "cancel")
 
             cue._go_epoch = chain_epoch
             # Recorded here, not in the spawned thread: a disable arriving in
@@ -2495,6 +2582,11 @@ class CueHandler:
             new_gen = gen + 1
             cue._go_generation = new_gen
             cue._playing = False
+            # 869feynrj §4.3, D12: a pending start is cancelled; a cue on stage
+            # (< grace_s) fades before the disarm below cuts it.
+            self.cancel_start_locked(
+                cue, "stop_of_playing" if age is not None else "cancel"
+            )
         self.cancel_pending_descendants(cue)
         self._end_illumination(cue)
         # Let the cue's own loop see the flag and leave (polls every 20 ms),

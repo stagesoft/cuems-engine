@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from threading import Thread
 from typing import Any, Callable, Literal, Protocol
@@ -70,6 +71,8 @@ class CueOrchestrator(Protocol):
     ) -> Thread | None: ...
 
     def cancel_pending_descendants(self, cue: Cue) -> int: ...
+
+    def cancel_start_locked(self, cue: Cue, kind: str) -> bool: ...
 
 
 def _filter_matches(action_type: str, filter_key: frozenset[str]) -> bool:
@@ -441,7 +444,9 @@ def _handle_play(
         fail = _ready_action_target("play", target, ch)
         if fail is not None:
             return fail
-    target._stop_requested = False
+    # No `target._stop_requested = False` here (869feynrj S0-9): unlocked, it
+    # could un-pause a pass paused < 20 ms earlier; go()'s commit section
+    # clears it under the lock for the pass it starts.
     try:
         # go_from (not go): walk the target's post_go='go' chain to THIS node's
         # first local+enabled cue. A plain go() bails when `target` is local to
@@ -471,6 +476,33 @@ def _cancel_chain_behind(ch: CueOrchestrator, target: Cue, action: str) -> None:
         )
 
 
+def _flag_stop(ch: CueOrchestrator, target: Cue, action: str) -> bool:
+    """Set a stop / pause / fade_out action's flags on its target (869feynrj
+    S0-8): under the cue handler's lock, with the ``/cancelstart`` its player
+    needs in the same section (§4.3); the lock is released before the caller
+    cascades, since cancel_pending_descendants takes it again (non-reentrant).
+
+    stop / pause of a target on stage (D12): ``stop_of_playing``, the player
+    fades and the disarm's disconnect waits for it. A pending start:
+    ``cancel``. fade_out never disarms and leaves a playing target sounding
+    (today's behaviour), so only a pending start is cancelled. Returns False,
+    changing nothing, when stop / pause find the target already stopped."""
+    lock = getattr(ch, "_lock", None)
+    with lock if lock is not None else nullcontext():
+        if action != "fade_out" and getattr(target, "_stop_requested", False):
+            return False
+        revealed = getattr(target, "_revealed", False)
+        target._stop_requested = True
+        if action != "pause":
+            # Deliberately no generation bump for a pause: the postwait tail
+            # relies on that.
+            target._go_generation = getattr(target, "_go_generation", 0) + 1
+        cancel = getattr(ch, "cancel_start_locked", None)
+        if callable(cancel) and (action != "fade_out" or not revealed):
+            cancel(target, "stop_of_playing" if revealed else "cancel")
+    return True
+
+
 def _handle_pause(
     ch: CueOrchestrator,
     _action_cue: Any,
@@ -479,14 +511,12 @@ def _handle_pause(
     frozen_mtc_ms: float | None = None,
 ) -> dict:
     target_id = target.id
-    if getattr(target, "_stop_requested", False):
+    if not _flag_stop(ch, target, "pause"):
         return ActionHandler._action_result(
             "applied_no_change", "pause", target_id, "Already stopped/paused"
         )
-    target._stop_requested = True
-    # Deliberately no generation bump on the target itself — the postwait tail
-    # relies on that. Its chain is another matter: those cues were dispatched
-    # only because this one was going to run.
+    # The target's chain: those cues were dispatched only because this one
+    # was going to run.
     _cancel_chain_behind(ch, target, "pause")
     return ActionHandler._action_result("applied", "pause", target_id)
 
@@ -499,14 +529,13 @@ def _handle_stop(
     frozen_mtc_ms: float | None = None,
 ) -> dict:
     target_id = target.id
-    if getattr(target, "_stop_requested", False):
+    if not _flag_stop(ch, target, "stop"):
         return ActionHandler._action_result(
             "applied_no_change", "stop", target_id, "Already stopped"
         )
-    target._stop_requested = True
-    target._go_generation = getattr(target, "_go_generation", 0) + 1
     _cancel_chain_behind(ch, target, "stop")
-    # Allow loop_cue to see _stop_requested and exit (polls every 20ms)
+    # Allow loop_cue to see _stop_requested and exit (polls every 20ms); also
+    # covers a selfgate player's fade (D12), which the disconnect waits for.
     time.sleep(0.1)
     try:
         ch.disarm(target, reason="stop_action")
@@ -569,7 +598,7 @@ def _handle_fade_in(
         fail = _ready_action_target("fade_in", target, ch)
         if fail is not None:
             return fail
-    target._stop_requested = False
+    # S0-9: no unlocked `target._stop_requested = False` (see _handle_play).
     try:
         # go_from (not go): same cross-node walk as play — a plain go() would
         # drop other nodes' cues on a chain owned by the target's node.
@@ -592,8 +621,7 @@ def _handle_fade_out(
     # are not cleaned up. Fix when implementing real fade behavior.
     Logger.info("fade_out treated as stop (fade envelope not yet implemented)")
     target_id = target.id
-    target._stop_requested = True
-    target._go_generation = getattr(target, "_go_generation", 0) + 1
+    _flag_stop(ch, target, "fade_out")
     _cancel_chain_behind(ch, target, "fade_out")
     return ActionHandler._action_result("applied", "fade_out", target_id)
 

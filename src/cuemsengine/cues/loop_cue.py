@@ -12,6 +12,7 @@ from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..players.StartGate import START_GATE
 from ..tools.MtcListener import CTimecode, MtcListener
 from . import loop_mode
 
@@ -254,11 +255,22 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
             )
         elif cue._local:
             try:
-                cue._osc.set_value("/mtcfollow", 0)
-                Logger.info(
-                    "Audio mtcfollow disabled",
-                    extra={"caller": cue.__class__.__name__},
-                )
+                # Through the start gate (869feynrj §4.2): may_follow is
+                # cleared with it, and a pass superseded meanwhile sends
+                # nothing -- its /mtcfollow 0 would undo the new pass's follow.
+                if START_GATE.follow_off(
+                    PLAYER_HANDLER.audio_player(cue),
+                    cue._osc,
+                    still_current=lambda: not stale(),
+                ):
+                    Logger.info(
+                        "Audio mtcfollow disabled",
+                        extra={"caller": cue.__class__.__name__},
+                    )
+                else:
+                    Logger.info(
+                        f"Audio loop {cue.id} superseded at its end: no /mtcfollow 0"
+                    )
             except Exception as e:
                 Logger.warning(
                     f"Error disabling mtcfollow: {e}",
