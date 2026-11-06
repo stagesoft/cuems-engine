@@ -663,6 +663,8 @@ class CueHandler:
                     with self._lock:
                         cue._revealed = True
                         cue._revealed_at = monotonic()
+                elif isinstance(cue, CueList):
+                    self._mark_cuelist_child(cue, go_gen)
                 target = self._follow_commit_target(cue)
                 if target is not None:
                     pending["commit"] = (
@@ -895,7 +897,10 @@ class CueHandler:
                     # Checked FIRST, on entry and on every wake.
                     stale = True
                 elif hasattr(cue, "loaded") and cue.loaded:
-                    if not cue.enabled:
+                    # A disabled cue takes effect from the next round (Q-S0-A
+                    # = (A), S0-21): a cue still playing is never disarmed
+                    # here; disarm() / STOP clear _playing when it ends.
+                    if not cue.enabled and not getattr(cue, "_playing", False):
                         needs_disarm = True
                 elif in_flight is not None:
                     if not init:
@@ -2208,6 +2213,12 @@ class CueHandler:
                         # "not started yet" must never see _revealed set
                         # without its stamp.
                         cue._revealed_at = monotonic()
+                        if isinstance(cue, CueList):
+                            # S0-21: its child is on stage from here on.
+                            child = first_enabled_child(cue)
+                            if child is not None:
+                                child._revealed = True
+                                child._revealed_at = cue._revealed_at
                 if do_reveal:
                     revealed_at = cue._revealed_at
                     follow.revealed = True
@@ -2383,6 +2394,26 @@ class CueHandler:
         if cue.post_go == "go" and cue._target_object and not cue._stop_requested:
             if post_go_thread:
                 self.wait_for_cue(post_go_thread)
+
+    def _mark_cuelist_child(self, cue: Cue, go_gen: int) -> None:
+        """A CueList's child bypasses go(), so nothing marked it as owned by
+        a pass: a disable of a playing CueList disarmed (cut) its child
+        (S0-21, Q-S0-A = (A): no disable path stops a playing cue). Its pass
+        marks it here, at the setup: playing (the disable guard reads it)
+        and not yet revealed (a cancel still reaches a pending child); the
+        parent's reveal sets the child's _revealed. Cleared like any cue's
+        by disarm() and STOP."""
+        with self._lock:
+            if getattr(cue, "_stop_requested", False) or (
+                getattr(cue, "_go_generation", 0) != go_gen
+            ):
+                return
+            child = first_enabled_child(cue)
+            if child is None or not getattr(child, "_local", False):
+                return
+            child._playing = True
+            child._revealed = False
+            child._ever_played = True
 
     def _expect_start(self, cue: Cue, target: Cue) -> None:
         """At the reveal of a follow-committed pass (869feynrj §8): the
