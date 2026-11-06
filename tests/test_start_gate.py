@@ -225,6 +225,22 @@ class TestWatchdog:
         assert client.sent.count(("/cancelstart", [1, 5])) == 2
         assert player.cancel_records == {}
 
+    @pytest.mark.parametrize("start_first", [True, False])
+    def test_the_watchdog_ignores_the_start_cancel_order(self, gate, start_first):
+        """N4: a lost cancel is caught whatever the order of START and cancel
+        (the rev 2.4 detector only fired on a START after the cancel)."""
+        cue, player, client = _committed(gate)
+        if start_first:
+            gate.on_line(player, "start", StartLine(1000, -10, 48000))
+        rec = gate.cancel(cue, player, client, "cancel")
+        if not start_first:
+            gate.on_line(player, "start", StartLine(1000, -10, 48000))
+        with patch(LOG) as log:
+            gate.scan(rec.t_sent + ACK_TIMEOUT_S + EPS)
+            gate.scan(rec.t_sent + 2 * ACK_TIMEOUT_S + 2 * EPS)
+        assert client.sent.count(("/cancelstart", [1, 5])) == 2
+        log.error.assert_called_once()
+
     def test_ack_after_the_resend_closes_without_error(self, gate):
         _, player, client, rec = self._cancelled(gate)
         gate.scan(rec.t_sent + ACK_TIMEOUT_S + EPS)

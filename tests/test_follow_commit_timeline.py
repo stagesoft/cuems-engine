@@ -212,6 +212,11 @@ class TestOrder:
         assert t_commit <= ev["illum"][0]
         assert ev["illum"][0] >= anchor  # lights at its arrival = its start
         assert ev["reveal"] and ev["reveal"][0] >= anchor
+        # D11: the start the player gets is the led anchor, on the 40 ms grid,
+        # and not before the press + L
+        (start_tod,) = [v for _, p, v, _ in cue._osc.sent if p == "/start_tod"]
+        assert start_tod == round(anchor) % 86_400_000
+        assert anchor % 40.0 == 0.0 and anchor >= g + lead
 
     def test_prewait_2s_lights_at_arrival_and_commits_at_start_minus_F(self):
         ch = _ch()

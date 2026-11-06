@@ -723,7 +723,14 @@ class NodeEngine(BaseEngine):
             mixer = PLAYER_HANDLER.get_audio_mixer()
             conn_man = getattr(mixer, "conn_man", None) if mixer else None
             if conn_man is not None:
-                jack_lat = conn_man.playback_latency()
+                answer = conn_man.playback_latency()
+                if (
+                    isinstance(answer, tuple)
+                    and len(answer) == 3
+                    and all(isinstance(x, int) for x in answer)
+                    and answer[1] > 0
+                ):
+                    jack_lat = answer
         except Exception as e:
             Logger.warning(f"Output latency: JACK query failed: {e}")
         override = None
@@ -736,11 +743,11 @@ class NodeEngine(BaseEngine):
         if override is not None:
             period_ms = (
                 jack_lat[2] * 1000.0 / jack_lat[1]
-                if jack_lat and jack_lat[1] > 0
+                if jack_lat is not None
                 else 512 * 1000.0 / 48000
             )
             self._note_out_latency(override + period_ms, "settings output_latency_ms")
-        elif jack_lat and jack_lat[1] > 0:
+        elif jack_lat is not None:
             frames, rate, period = jack_lat
             self._note_out_latency(
                 (frames + period) * 1000.0 / rate, "JACK playback latency"
