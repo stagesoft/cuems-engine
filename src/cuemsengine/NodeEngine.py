@@ -578,6 +578,13 @@ class NodeEngine(BaseEngine):
             acquired = monotonic()
             if timed:
                 self._go_what = []
+                hold = test_knobs.hold_command_lock_ms()
+                if hold:
+                    # R10 (test knob, inert in production): this GO's handling
+                    # is slower than L.
+                    Logger.warning(f"TEST KNOB: holding the command lock {hold:.1f} ms")
+                    sleep(hold / 1000.0)
+                    self._go_note("test hold", hold)
             try:
                 return self._run_command_locked(command, value)
             finally:
@@ -2311,6 +2318,10 @@ class NodeEngine(BaseEngine):
             Logger.warning("No MTC listener, cannot process GO command.")
             return
 
+        # The last GO value seen (the R4 test knob's supersede re-sends its
+        # run_seq and lead_ms).
+        self._last_go_value = value if isinstance(value, dict) else None
+
         # Determine the cue to go
         if not self.ongoing_cue:
             # First GO - use next_cue_pointer (may have been overridden by
@@ -2432,6 +2443,9 @@ class NodeEngine(BaseEngine):
             stamp_skipped=skipped_disabled,
         )
         self._go_note("go+lookahead", (monotonic() - t_go) * 1000)
+        if main_thread is not None:
+            # R4 (test knob, inert in production).
+            self._test_cancel_at(cue_to_go, GO_mtc + sigma_ms)
         if main_thread is None:
             # Either a STOP landed while go() was re-arming this cue (the
             # chain-epoch barrier then refuses the dispatch — that is the F4
@@ -2459,6 +2473,112 @@ class NodeEngine(BaseEngine):
             f"Cue {cue_to_go.id} started. Next cue:"
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
+
+    # ---- R4 test knob: a cancel at start + offset, by the real path --------
+    _test_injecting = False
+
+    def _test_cancel_at(self, cue_to_go, arrival_ms: float) -> None:
+        """CUEMS_TEST_CANCEL_AT (869feynrj step 5, R4): schedule one cancel of
+        this operator GO's pass. Never for a GO the knob injected itself."""
+        if self._test_injecting:
+            return
+        plan = self._test_cancel_plan(cue_to_go, arrival_ms)
+        if plan is None:
+            return
+        threading.Thread(
+            target=self._test_cancel_fire,
+            args=plan,
+            daemon=True,
+            name=f"TestCancelAt:{plan[2].id}",
+        ).start()
+
+    def _test_cancel_plan(self, cue_to_go, arrival_ms: float):
+        """(action, offset, target, mtc to fire at): the first local, enabled
+        AudioCue of the pass (the GO's cue and its Auto-continue chain), at
+        its start label (arrival + prewait, rounded to the 40 ms grid as the
+        player gets it) + offset. None when the knob is off or there is no
+        such cue."""
+        spec = test_knobs.cancel_at()
+        if spec is None:
+            return None
+        action, offset = spec
+        node, walked = cue_to_go, 0
+        while node is not None and walked < 1024:
+            if (
+                isinstance(node, AudioCue)
+                and getattr(node, "_local", False)
+                and getattr(node, "enabled", False)
+            ):
+                start = arrival_ms + node.prewait.milliseconds_exact
+                label = round(start / go_lead.FRAME_MS) * go_lead.FRAME_MS
+                return action, offset, node, label + offset
+            if getattr(node, "post_go", None) != "go":
+                break
+            node = getattr(node, "_target_object", None)
+            walked += 1
+        Logger.warning(
+            f"TEST KNOB: cancel {action}: no local AudioCue in this GO's pass"
+        )
+        return None
+
+    def _test_cancel_fire(self, action: str, offset: float, target, at_ms: float):
+        """Wait for the node's interpolated MTC to reach ``at_ms`` (1 ms
+        resolution), then inject the cancel through the path the real command
+        takes: STOP / cue_enabled / setnextcue + go through the bus receive
+        hook and the NNG handler, the actions through the ActionHandler."""
+        clock = CUE_HANDLER._interpolated_clock(self.mtc_listener)
+        late = clock() - at_ms
+        if late > 1.0:
+            # e.g. an offset below -L on a prewait-0 cue: before the GO itself
+            Logger.warning(
+                f"TEST KNOB: cancel {action} at start{offset:+.1f} ms was already "
+                f"{late:.1f} ms past when the GO was handled; firing now (use a "
+                "cue with a prewait for this offset)"
+            )
+        while clock() < at_ms:
+            sleep(0.0005)
+        Logger.warning(
+            f"TEST KNOB: cancel {action} at start{offset:+.1f} ms (mtc {clock():.1f})"
+        )
+        self._test_injecting = True
+        try:
+            if action == "stop":
+                self._test_inject("stop", None)
+            elif action == "disable":
+                self._test_inject("cue_enabled", f"{target.id} 0")
+            elif action == "supersede":
+                last = getattr(self, "_last_go_value", None) or {}
+                relay = self._follow_relay
+                value = {
+                    "run_seq": relay.run_seq if relay else last.get("run_seq"),
+                    "lead_ms": last.get("lead_ms", go_lead.GO_LEAD_FLOOR_MS),
+                }
+                self._test_inject("setnextcue", str(target.id))
+                self._test_inject("go", value)
+            else:
+                from cuemsutils.cues import ActionCue
+
+                from .cues.ActionHandler import ACTION_HANDLER
+
+                kind = {
+                    "actionstop": "stop",
+                    "actionpause": "pause",
+                    "actionfadeout": "fade_out",
+                }[action]
+                action_cue = ActionCue()
+                action_cue.action_type = kind
+                action_cue.action_target = target.id
+                action_cue._action_target_object = target
+                ACTION_HANDLER.execute_action(action_cue, self.mtc_listener, None)
+        except Exception as e:
+            Logger.error(f"TEST KNOB: cancel {action} failed: {e}")
+        finally:
+            self._test_injecting = False
+
+    def _test_inject(self, command: str, value) -> None:
+        """A bus command as it arrives: the receive hook, then the handler."""
+        if not self._on_command_received(command, value):
+            self._handle_nng_command(command, value)
 
     def _skip_unarmed_cue(self, cue, skipped_disabled, go_mtc, was_in_flight):
         """A GO found its cue unarmed and could not get it armed: skip the

@@ -15,15 +15,55 @@ in the release package:
 ``CUEMS_TEST_FORCE_PERIOD=<cue>:<num>:<den>``
     the period ``num / den`` seconds for the cue whose id starts with ``<cue>``
     (the beyond-bound row).
+
+869feynrj step 5 (cuems-RELATIONS Plans/2026-11-03-audio-first-pass-head-
+869feynrj.md §7.2):
+
+``CUEMS_TEST_GO_PHASE_SWEEP=<start>:<step>`` (controller, R1)
+    each operator GO waits (< 40 ms, before the press is read) until the
+    interpolated MTC sits at the current phase of its 40 ms frame; the phase
+    starts at <start> ms and advances by <step> ms per GO, modulo 40. A
+    deterministic sweep of the press phase (review 4 m8).
+``CUEMS_TEST_FORCE_LEAD_MS=<ms>`` (controller, R15 / R16)
+    L is <ms> (after the cap; lead_ms in the GO payload carries it).
+``CUEMS_TEST_HOLD_COMMAND_LOCK_MS=<ms>`` (node, R10)
+    every GO handled sleeps <ms> inside _command_lock, so the GO's handling
+    is slower than L.
+``CUEMS_TEST_CANCEL_AT=<action>:<offset_ms>`` (node, R4)
+    on every operator GO, a cancel of the first local AudioCue of its pass at
+    that cue's start + offset (+-1 ms on the interpolated MTC), through the
+    path the real command takes; <action> is one of stop, disable, supersede
+    (setnextcue + go of the cue), actionstop, actionpause, actionfadeout.
 """
 
 import os
 from threading import Lock
+from time import sleep
+from typing import Callable
 
 from cuemsutils.log import Logger
 
 _lock = Lock()
 _counts: dict = {}
+
+KNOB_NAMES = (
+    "CUEMS_TEST_DROP_OSC",
+    "CUEMS_TEST_PROBE_BUDGET_S",
+    "CUEMS_TEST_FORCE_PERIOD",
+    "CUEMS_TEST_GO_PHASE_SWEEP",
+    "CUEMS_TEST_FORCE_LEAD_MS",
+    "CUEMS_TEST_HOLD_COMMAND_LOCK_MS",
+    "CUEMS_TEST_CANCEL_AT",
+)
+FRAME_MS = 40.0  # CUEMS MTC is always 25 fps
+CANCEL_ACTIONS = (
+    "stop",
+    "disable",
+    "supersede",
+    "actionstop",
+    "actionpause",
+    "actionfadeout",
+)
 
 
 def enabled() -> bool:
@@ -39,15 +79,7 @@ def _get(name: str):
 
 def announce() -> None:
     """One WARNING naming the active knobs; nothing when none is active."""
-    active = [
-        f"{n}={os.environ[n]}"
-        for n in (
-            "CUEMS_TEST_DROP_OSC",
-            "CUEMS_TEST_PROBE_BUDGET_S",
-            "CUEMS_TEST_FORCE_PERIOD",
-        )
-        if _get(n)
-    ]
+    active = [f"{n}={os.environ[n]}" for n in KNOB_NAMES if _get(n)]
     if active:
         Logger.warning(f"TEST KNOBS ACTIVE (CUEMS_TEST_KNOBS=1): {' '.join(active)}")
 
@@ -101,6 +133,78 @@ def forced_period(cue_id):
     if prefix and str(cue_id).startswith(prefix) and num > 0 and den > 0:
         return num, den
     return None
+
+
+def _float(name: str, minimum: float | None = None) -> float | None:
+    raw = _get(name)
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        value = None
+    if value is None or (minimum is not None and value < minimum):
+        Logger.warning(f"TEST KNOB: {name}={raw!r} ignored")
+        return None
+    return value
+
+
+def go_phase_next() -> float | None:
+    """The press phase (ms inside the 40 ms frame) for this operator GO,
+    advancing by <step> per call; None when the knob is off."""
+    raw = _get("CUEMS_TEST_GO_PHASE_SWEEP")
+    if raw is None:
+        return None
+    try:
+        start, step = (float(x) for x in raw.split(":"))
+    except ValueError:
+        Logger.warning(f"TEST KNOB: CUEMS_TEST_GO_PHASE_SWEEP={raw!r} ignored")
+        return None
+    with _lock:
+        n = _counts.get("__go_phase__", 0)
+        _counts["__go_phase__"] = n + 1
+    return (start + n * step) % FRAME_MS
+
+
+def wait_for_phase(read_ms: Callable[[], float]) -> float | None:
+    """R1: wait (< one frame) until ``read_ms()`` sits at this GO's phase of
+    its 40 ms frame. Returns the phase, or None when the knob is off."""
+    phase = go_phase_next()
+    if phase is None:
+        return None
+    wait = (phase - read_ms() % FRAME_MS) % FRAME_MS
+    if wait > FRAME_MS - 0.5:  # already on it (float noise): no extra frame
+        wait = 0.0
+    if wait > 0:
+        sleep(wait / 1000.0)
+    Logger.warning(f"TEST KNOB: GO phase {phase:.1f} ms")
+    return phase
+
+
+def forced_lead_ms() -> float | None:
+    """R15 / R16: L forced to this many ms, or None."""
+    return _float("CUEMS_TEST_FORCE_LEAD_MS", minimum=0.0)
+
+
+def hold_command_lock_ms() -> float | None:
+    """R10: how long a GO holds the node's command lock on purpose, or None."""
+    return _float("CUEMS_TEST_HOLD_COMMAND_LOCK_MS", minimum=0.0)
+
+
+def cancel_at() -> tuple[str, float] | None:
+    """R4: (action, offset ms from the pass's start), or None."""
+    raw = _get("CUEMS_TEST_CANCEL_AT")
+    if raw is None:
+        return None
+    action, _, offset = raw.partition(":")
+    try:
+        value = float(offset)
+    except ValueError:
+        value = None
+    if action not in CANCEL_ACTIONS or value is None:
+        Logger.warning(f"TEST KNOB: CUEMS_TEST_CANCEL_AT={raw!r} ignored")
+        return None
+    return action, value
 
 
 def reset_for_tests() -> None:

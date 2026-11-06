@@ -20,6 +20,7 @@ from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
 from .cues import go_lead
+from .tools import test_knobs
 
 # Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
 # disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
@@ -152,6 +153,9 @@ class ControllerEngine(BaseEngine):
         self.set_node_operation_callback()
 
     def start(self):
+        # The rig-row knobs this controller honours (869feynrj step 5): one
+        # WARNING when any is active, nothing otherwise.
+        test_knobs.announce()
         self.create_timecode()
         self.set_comms()
         # Always re-detect after create_timecode(): the MtcMaster sender port
@@ -727,6 +731,12 @@ class ControllerEngine(BaseEngine):
                     "lead"
                 )
         lead, capped_by, wanted = go_lead.go_lead_ms(latencies)
+        forced = test_knobs.forced_lead_ms()
+        if forced is not None:
+            # R15 / R16 (test knob, inert in production): L forced after the
+            # cap; lead_ms in the GO payload carries it.
+            Logger.warning(f"TEST KNOB: L forced to {forced:.1f} ms")
+            lead = forced
         if lead > go_lead.OLD_NODE_ACCEPT_MS and "old_nodes" not in logged:
             logged.add("old_nodes")
             Logger.warning(
@@ -1629,6 +1639,9 @@ class ControllerEngine(BaseEngine):
         go_value = {"run_seq": self._run_seq, "lead_ms": round(lead, 3)}
         if self.mtc_listener is not None:
             if self.mtc_listener.is_receiving():
+                # R1 (test knob, inert in production): the press lands on a
+                # set phase of its MTC frame.
+                test_knobs.wait_for_phase(self._interpolated_mtc_ms)
                 now = self._interpolated_mtc_ms()
                 anchor = go_lead.ceil_frame(now + lead)
                 go_value["go_mtc_ms"] = anchor
