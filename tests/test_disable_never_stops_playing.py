@@ -63,62 +63,131 @@ def _cuelist(child):
     return cl
 
 
-def _ch():
+def _ch(real_disarm=False):
     ch = object.__new__(CueHandler)
     ch._lock = Lock()
     ch._armed_cues = []
     ch._armed_cues_set = set()
     ch.communications_thread = MagicMock()
-    ch.disarm = MagicMock()
+    if not real_disarm:
+        ch.disarm = MagicMock()
     ch.go = MagicMock(return_value=None)
     ch._next_local_fire = MagicMock(return_value=(None, 0.0))
     ch._arm_ahead = MagicMock()
     return ch
 
 
-def _play_cuelist(ch, cl):
+CHILD_MS = 1000.0  # the child's body: it plays from 1000 to 2000
+
+
+def _play_cuelist(ch, cl, on_sleep=None):
     """One pass of the CueList, its child set up and revealed, as go_threaded
-    runs it (the players patched out)."""
+    runs it (the players patched out); MTC moves by each patched sleep and
+    on_sleep(now) lets a test act while the child plays."""
     mtc = _Mtc(1000.0)
 
     def setup(c, m, start_ms):
         child = c.contents[0]
         child._start_mtc = CTimecode(framerate=25, start_seconds=start_ms / 1000)
+        child._end_mtc = CTimecode(
+            framerate=25, start_seconds=(start_ms + CHILD_MS) / 1000
+        )
+
+    def sleep(s):
+        mtc.advance(s)
+        if on_sleep is not None:
+            on_sleep(mtc.main_tc.milliseconds_exact)
 
     with (
         patch("cuemsengine.cues.CueHandler.run_cue", side_effect=setup),
         patch("cuemsengine.cues.CueHandler.reveal_cue"),
         patch("cuemsengine.cues.CueHandler.loop_cue"),
         patch("cuemsengine.cues.CueHandler.blank_cue"),
-        patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
+        patch("cuemsengine.cues.CueHandler.sleep", side_effect=sleep),
     ):
         ch.go_threaded(cl, mtc, frozen_mtc_ms=1000.0, go_gen=1)
+    return mtc
+
+
+def _disable(ch, cl):
+    NE = importlib.import_module("cuemsengine.NodeEngine")
+    node = object.__new__(NE.NodeEngine)
+    node.next_cue_pointer = None
+    with patch.object(NE, "CUE_HANDLER", ch):
+        node._apply_cue_enabled_side_effects(cl, False)
+
+
+def _armed(ch, *cues):
+    ch._armed_cues = list(cues)
+    ch._armed_cues_set = {c.id for c in cues}
 
 
 class TestCueListChildIsPlaying:
-    def test_the_pass_marks_its_child_playing_and_revealed(self):
-        ch = _ch()
+    def test_the_child_is_marked_while_it_plays_and_cleared_at_its_end(self):
+        ch = _ch(real_disarm=True)
         child = _audio()
         cl = _cuelist(child)
-        _play_cuelist(ch, cl)
-        assert child._playing is True and child._revealed is True
+        seen = []
+
+        def watch(now):
+            if 1100.0 <= now < 1000.0 + CHILD_MS:
+                seen.append((child._playing, child._revealed))
+
+        mtc = _play_cuelist(ch, cl, on_sleep=watch)
+        assert seen and all(s == (True, True) for s in seen)
+        assert mtc.main_tc.milliseconds_exact >= 1000.0 + CHILD_MS
+        assert child._playing is False and child._revealed is False
 
     def test_disabling_a_playing_cuelist_leaves_its_child_alone(self):
-        ch = _ch()
+        ch = _ch(real_disarm=True)
         child = _audio()
         cl = _cuelist(child)
+        _armed(ch, cl, child)
+        during = {}
+
+        def disable_mid_play(now):
+            if now >= 1500.0 and not during:
+                cl._playing = True
+                _disable(ch, cl)
+                during.update(
+                    loaded=child.loaded,
+                    armed=child.id in ch._armed_cues_set,
+                    playing=child._playing,
+                    stopped=getattr(child, "_stop_requested", False),
+                )
+
+        _play_cuelist(ch, cl, on_sleep=disable_mid_play)
+        assert during == {
+            "loaded": True,
+            "armed": True,
+            "playing": True,
+            "stopped": False,
+        }
+
+    def test_after_its_end_a_disable_disarms_the_child(self):
+        """The mark ends with the child's pass: no player + JACK client kept
+        until STOP (review of 4b4987c..c554465, fix 1)."""
+        ch = _ch(real_disarm=True)
+        child = _audio()
+        cl = _cuelist(child)
+        _armed(ch, cl, child)
         _play_cuelist(ch, cl)
-        ch.disarm.reset_mock()  # the parent's own end-of-pass disarm
-        ch._armed_cues = [cl, child]
-        ch._armed_cues_set = {cl.id, child.id}
-        cl._playing = True
-        NE = importlib.import_module("cuemsengine.NodeEngine")
-        node = object.__new__(NE.NodeEngine)
-        node.next_cue_pointer = None
-        with patch.object(NE, "CUE_HANDLER", ch):
-            node._apply_cue_enabled_side_effects(cl, False)
-        ch.disarm.assert_not_called()
-        assert child._stop_requested is not True
+        _armed(ch, child)  # the parent's own end disarm took the CueList
+        _disable(ch, cl)
+        assert child.loaded is False
+        assert child.id not in ch._armed_cues_set
+
+    def test_a_superseded_pass_leaves_the_newer_mark(self):
+        ch = _ch(real_disarm=True)
+        child = _audio()
+        cl = _cuelist(child)
+
+        def rego(now):
+            if now >= 1500.0 and cl._go_generation == 1:
+                cl._go_generation = 2  # a re-GO's go() commit
+                ch._mark_cuelist_child(cl, 2)  # and its setup
+
+        _play_cuelist(ch, cl, on_sleep=rego)
         assert child._playing is True
 
     def test_a_stopped_pass_marks_nothing(self):

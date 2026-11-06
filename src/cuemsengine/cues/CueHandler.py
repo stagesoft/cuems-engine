@@ -2213,12 +2213,11 @@ class CueHandler:
                         # "not started yet" must never see _revealed set
                         # without its stamp.
                         cue._revealed_at = monotonic()
-                        if isinstance(cue, CueList):
+                        child = self._owned_cuelist_child(cue, go_gen)
+                        if child is not None:
                             # S0-21: its child is on stage from here on.
-                            child = first_enabled_child(cue)
-                            if child is not None:
-                                child._revealed = True
-                                child._revealed_at = cue._revealed_at
+                            child._revealed = True
+                            child._revealed_at = cue._revealed_at
                 if do_reveal:
                     revealed_at = cue._revealed_at
                     follow.revealed = True
@@ -2386,6 +2385,7 @@ class CueHandler:
             )
 
         self._wait_wrap_player_end(cue, mtc, go_gen)
+        self._end_cuelist_child(cue, mtc, go_gen)
         self.disarm(cue, reason="cue_end")
 
         if cue.post_go == "go_at_end" and go_at_end_thread:
@@ -2401,8 +2401,9 @@ class CueHandler:
         (S0-21, Q-S0-A = (A): no disable path stops a playing cue). Its pass
         marks it here, at the setup: playing (the disable guard reads it)
         and not yet revealed (a cancel still reaches a pending child); the
-        parent's reveal sets the child's _revealed. Cleared like any cue's
-        by disarm() and STOP."""
+        parent's reveal sets the child's _revealed, and the parent's pass
+        clears both at the child's end (_end_cuelist_child). Also cleared,
+        like any cue's, by disarm() and STOP."""
         with self._lock:
             if getattr(cue, "_stop_requested", False) or (
                 getattr(cue, "_go_generation", 0) != go_gen
@@ -2414,6 +2415,55 @@ class CueHandler:
             child._playing = True
             child._revealed = False
             child._ever_played = True
+            child._cuelist_pass = (id(cue), go_gen)
+            cue._marked_child = child
+
+    @staticmethod
+    def _owned_cuelist_child(cue: Cue, go_gen: int) -> Cue | None:
+        """The child this pass of a CueList marked, while the mark is still
+        this pass's (a newer pass of the CueList re-marks it). Call with
+        self._lock held."""
+        if not isinstance(cue, CueList):
+            return None
+        child = getattr(cue, "_marked_child", None)
+        if child is None or getattr(child, "_cuelist_pass", None) != (id(cue), go_gen):
+            return None
+        return child
+
+    def _end_cuelist_child(self, cue: Cue, mtc: MtcListener, go_gen: int) -> None:
+        """The end of a CueList child's pass (S0-21). loop_cueList is a no-op,
+        so the parent's thread reaches its end right after the reveal while
+        the child still plays: it waits here for the child's body end
+        (_end_mtc, set at its setup), then clears the child's playing and
+        revealed marks -- only while this pass still owns them (a re-GO of
+        the CueList re-marks the child and its own end clears it). A STOP
+        clears them itself; a pause (its /cancelstart already silenced the
+        child) ends the wait at once. Without this a later disable never
+        disarmed the child: its player and JACK client stayed until STOP,
+        and a cross-node follow read it as still on stage."""
+        if not isinstance(cue, CueList):
+            return
+        with self._lock:
+            child = self._owned_cuelist_child(cue, go_gen)
+        if child is None:
+            return
+        start = getattr(child, "_start_mtc", None)
+        end = getattr(child, "_end_mtc", None)
+        try:
+            start_ms = start.milliseconds_exact if start is not None else None
+            end_ms = end.milliseconds_exact if end is not None else None
+        except AttributeError:
+            start_ms = end_ms = None
+        if end_ms is not None and (start_ms is None or end_ms > start_ms):
+            self._wait_mtc(cue, mtc, end_ms, go_gen)
+        with self._lock:
+            if getattr(cue, "_go_generation", 0) != go_gen:
+                return
+            if self._owned_cuelist_child(cue, go_gen) is not child:
+                return
+            child._playing = False
+            child._revealed = False
+            child._cuelist_pass = None
 
     def _expect_start(self, cue: Cue, target: Cue) -> None:
         """At the reveal of a follow-committed pass (869feynrj §8): the
