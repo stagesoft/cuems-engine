@@ -13,7 +13,8 @@ baselines/869feynrj-model/timeline_model.py (Plan.lead, Plan.F_for, ceil_frame).
   player gets (review 4 M2).
 - L, the GO lead, per operator GO, from the cluster: max(GO_LEAD_FLOOR_MS,
   max over the required nodes of out_latency_ms + delta + margin), capped at
-  GO_LEAD_MAX_MS. A node with no out_latency_ms does not raise L.
+  GO_LEAD_MAX_MS. A node with no out_latency_ms does not raise L. delta and
+  the floor were measured in step 3 (below).
 - The led anchor is ceiled to the next MTC frame (D11), so every start stays
   on the 40 ms grid and the lead is >= L.
 """
@@ -26,13 +27,19 @@ FRAME_MS = 40.0
 FOLLOW_LEAD_MS = 120.0
 FOLLOW_POLL_MS = 20.0  # CueHandler._wait_mtc's poll
 
-GO_LEAD_FLOOR_MS = 50.0
-GO_LEAD_MAX_MS = 250.0
-# PROVISIONAL: step 3 measures delta (GO press -> follow commit, preloaded
-# cues, with the post-GO lookahead running) and the floor; Ion fixes the
-# numbers. No settings key, no XSD (plan §4.5c).
-GO_LEAD_DELTA_MS = 15.0
+# Measured in step 3 on test2, 2026-11-06, fixed by Ion the same day
+# (cuems-RELATIONS baselines/869feynrj-step3/README.md). No settings key, no
+# XSD (plan §4.5c).
+# delta: GO press -> follow commit of a preloaded cue, with the post-GO
+# lookahead running, read at the player: an operator GO <= 15.5 ms, a gocue
+# (the power-bridge's /gocue = setnextcue + go) <= 27.3 ms.
+GO_LEAD_DELTA_MS = 30.0
 GO_LEAD_MARGIN_MS = 5.0
+# The floor is about the usual rig's L (32 ms latency + a 10.7 ms period + 30
+# + 5 = 77.7 ms), so a node that reports no latency still gets a usable lead;
+# on that rig L is the floor.
+GO_LEAD_FLOOR_MS = 80.0
+GO_LEAD_MAX_MS = 250.0
 
 # An rc6-7 node engine (no lead_ms) accepts the controller's anchor only while
 # local - anchor >= -200 ms: from L ~ 160 ms, when its MTC reads a frame

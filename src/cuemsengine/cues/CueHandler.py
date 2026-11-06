@@ -282,8 +282,8 @@ class CueHandler:
     # follow_lead_ms): max(_FOLLOW_LEAD_MS, this node's out_latency_ms + 2
     # polls + 5 + margin), due from the ROUNDED start label the player gets.
     # The GO lead L (go_lead.go_lead_ms) is the controller's; its floor and
-    # cap are here too for the node's fallback. PROVISIONAL margin / delta:
-    # step 3 measures them, Ion fixes the numbers (go_lead.py).
+    # cap are here too for the node's fallback. delta and the floor were
+    # measured in step 3 and fixed by Ion (go_lead.py).
     _FOLLOW_LEAD_MS = go_lead.FOLLOW_LEAD_MS
     _GO_LEAD_FLOOR_MS = go_lead.GO_LEAD_FLOOR_MS
     _GO_LEAD_MAX_MS = go_lead.GO_LEAD_MAX_MS

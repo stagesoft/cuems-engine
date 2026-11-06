@@ -32,6 +32,16 @@ from cuemsengine.cues import go_lead
 from cuemsengine.cues.CueHandler import CueHandler, _dispatch_tag
 from cuemsengine.tools.MtcListener import MtcListener
 
+# The step-3 constants (go_lead.py), every expectation below derives from them.
+DELTA, MARGIN = go_lead.GO_LEAD_DELTA_MS, go_lead.GO_LEAD_MARGIN_MS
+FLOOR, CAP = go_lead.GO_LEAD_FLOOR_MS, go_lead.GO_LEAD_MAX_MS
+RIG_OUT = 32.0 + 512 / 48  # the usual rig: 1536 frames + a 512 period, 48 kHz
+
+
+def _lead(*out_latencies):
+    """L by the rule (plan §4.5d): max(floor, out + delta + margin), capped."""
+    return min(CAP, max([FLOOR] + [o + DELTA + MARGIN for o in out_latencies]))
+
 
 class TestGoLeadRule:
     def test_floor_without_latencies(self):
@@ -39,23 +49,34 @@ class TestGoLeadRule:
         assert go_lead.go_lead_ms({"old": None})[0] == go_lead.GO_LEAD_FLOOR_MS
 
     @pytest.mark.parametrize(
-        "lat, per, want",
-        [(32.0, 512 / 48, 62.667), (64.0, 1024 / 48, 105.333), (10.0, 5.3, 50.0)],
+        "lat, per",
+        [(32.0, 512 / 48), (64.0, 1024 / 48), (85.3, 1024 / 48), (10.0, 5.3)],
     )
-    def test_latency_plus_delta_plus_margin(self, lat, per, want):
-        """timeline_model A1: L = max(floor, latency + period + 15 + 5)."""
-        assert go_lead.go_lead_ms({"n": lat + per})[0] == pytest.approx(want, abs=1e-3)
+    def test_latency_plus_delta_plus_margin(self, lat, per):
+        """timeline_model A1: L = max(floor, latency + period + delta + margin)."""
+        assert go_lead.go_lead_ms({"n": lat + per})[0] == pytest.approx(
+            max(FLOOR, lat + per + DELTA + MARGIN), abs=1e-9
+        )
+
+    def test_the_usual_rig_runs_on_the_floor(self):
+        """Step 3 (Ion, 2026-11-06): the rig's term is 42.7 + 30 + 5 = 77.7 ms,
+        under the 80 ms floor: L = 80 there."""
+        assert RIG_OUT + DELTA + MARGIN == pytest.approx(77.667, abs=1e-3)
+        assert go_lead.go_lead_ms({"n": RIG_OUT})[0] == FLOOR == 80.0
+        assert go_lead.lead_source({"n": RIG_OUT}) is None
 
     def test_one_lead_from_the_slowest_node(self):
         """A7: one L per GO, from the slowest node, for the whole cluster."""
         lead, capped, _ = go_lead.go_lead_ms({"fast": 15.3, "slow": 85.3 + 21.3})
-        assert lead == pytest.approx(126.6, abs=1e-6) and capped is None
+        assert lead == pytest.approx(_lead(15.3, 85.3 + 21.3)) and capped is None
+        assert lead > FLOOR
+        assert go_lead.lead_source({"fast": 15.3, "slow": 106.6}) == ("slow", 106.6)
 
     def test_cap_names_the_node(self):
         """A8: a node at 300 ms latency asks 341: capped at 250."""
         lead, capped, wanted = go_lead.go_lead_ms({"a": 42.7, "big": 321.3})
-        assert lead == go_lead.GO_LEAD_MAX_MS and capped == "big"
-        assert wanted == pytest.approx(341.3)
+        assert lead == CAP and capped == "big"
+        assert wanted == pytest.approx(321.3 + DELTA + MARGIN)
 
     @pytest.mark.parametrize("ms", [0.0, 1.0, 39.9, 40.0, 79240.0, 79241.5])
     def test_ceil_frame_is_on_the_grid_and_not_before(self, ms):
@@ -137,9 +158,9 @@ class TestControllerLatency:
     def test_lead_from_required_nodes_only(self):
         c = _controller()
         c._required_nodes = {"n1"}
-        c._note_node_latency("n1", 42.7)
+        c._note_node_latency("n1", 85.3)
         c._note_node_latency("not-required", 200.0)
-        assert c._go_lead_ms() == pytest.approx(62.7)
+        assert c._go_lead_ms() == pytest.approx(_lead(85.3))
 
     def test_a_node_without_latency_is_info_once_and_the_floor(self):
         c = _controller()
@@ -168,15 +189,16 @@ class TestControllerLatency:
         engine."""
         c = _controller()
         c._required_nodes = {"slow"}
-        c._note_node_latency("slow", 150.0)  # L = 170
+        slow = go_lead.OLD_NODE_ACCEPT_MS - DELTA - MARGIN + 10.0  # L = 170
+        c._note_node_latency("slow", slow)
         with patch("cuemsengine.ControllerEngine.Logger") as log:
-            assert c._go_lead_ms() == pytest.approx(170.0)
+            assert c._go_lead_ms() == pytest.approx(go_lead.OLD_NODE_ACCEPT_MS + 10.0)
             c._go_lead_ms()
         old = [w for w in log.warning.call_args_list if "older node engines" in str(w)]
         assert len(old) == 1
         c._reset_node_latency()
         c._required_nodes = {"slow"}
-        c._note_node_latency("slow", 150.0)
+        c._note_node_latency("slow", slow)
         with patch("cuemsengine.ControllerEngine.Logger") as log:
             c._go_lead_ms()
         assert any("older node engines" in str(w) for w in log.warning.call_args_list)
@@ -184,9 +206,9 @@ class TestControllerLatency:
     def test_a_lead_up_to_160_does_not_warn(self):
         c = _controller()
         c._required_nodes = {"n"}
-        c._note_node_latency("n", 140.0)  # L = 160
+        c._note_node_latency("n", go_lead.OLD_NODE_ACCEPT_MS - DELTA - MARGIN)
         with patch("cuemsengine.ControllerEngine.Logger") as log:
-            assert c._go_lead_ms() == pytest.approx(160.0)
+            assert c._go_lead_ms() == pytest.approx(go_lead.OLD_NODE_ACCEPT_MS)
         log.warning.assert_not_called()
 
 
@@ -205,10 +227,10 @@ class TestControllerGo:
         """D11: the start is exact on the grid and the lead is >= L."""
         c = _controller()
         c._required_nodes = {"n1"}
-        c._note_node_latency("n1", 42.7)
+        c._note_node_latency("n1", 85.3)
         value = self._go(c, 79240.0, interp=79253.0)
         lead = value["lead_ms"]
-        assert lead == pytest.approx(62.7)
+        assert lead == pytest.approx(_lead(85.3))
         assert value["go_mtc_ms"] == go_lead.ceil_frame(79253.0 + lead)
         assert value["go_mtc_ms"] >= 79253.0 + lead
         assert value["go_mtc_ms"] % 40.0 == 0.0
@@ -235,15 +257,21 @@ def _node(local_ms, interp=None):
 
 class TestNodeAnchor:
     def test_accepts_a_led_anchor(self):
-        # pressed at 1000, L 62.7 -> 1080; the node reads 1003 on arrival
+        # pressed at 1000 on the usual rig: L = the floor; the node reads 1003
+        lead = _lead(RIG_OUT)
+        anchor = go_lead.ceil_frame(1000.0 + lead)
         node = _node(1003.0)
-        assert node._resolve_go_anchor({"go_mtc_ms": 1080.0, "lead_ms": 62.7}) == 1080.0
+        assert node._resolve_go_anchor({"go_mtc_ms": anchor, "lead_ms": lead}) == anchor
 
     def test_checks_against_anchor_minus_lead(self):
-        # without lead_ms (an older controller) the floor is assumed
+        # without lead_ms (an older controller) the floor is assumed:
+        # accepted while local - (anchor - floor) >= -200
         node = _node(1000.0)
-        assert node._resolve_go_anchor({"go_mtc_ms": 1240.0}) == 1240.0  # lag -190
-        assert node._resolve_go_anchor({"go_mtc_ms": 1260.0}) == 1080.0  # lag -210
+        ok, late = 1000.0 + FLOOR + 190.0, 1000.0 + FLOOR + 210.0
+        assert node._resolve_go_anchor({"go_mtc_ms": ok}) == ok  # lag -190
+        assert node._resolve_go_anchor({"go_mtc_ms": late}) == go_lead.ceil_frame(
+            1000.0 + FLOOR
+        )  # lag -210
 
     def test_rc6_7_style_rejection_is_relative_to_the_lead(self):
         """timeline_model A5 / R15: a check that ignores the lead rejects an
@@ -255,10 +283,11 @@ class TestNodeAnchor:
 
     def test_fallback_is_local_plus_lead_ceiled(self):
         node = _node(79760.0, interp=79771.0)
-        assert node._resolve_go_anchor({"lead_ms": 62.7}) == go_lead.ceil_frame(
-            79771.0 + 62.7
+        lead = _lead(85.3)
+        assert node._resolve_go_anchor({"lead_ms": lead}) == go_lead.ceil_frame(
+            79771.0 + lead
         )
-        assert node._resolve_go_anchor(None) == go_lead.ceil_frame(79771.0 + 50.0)
+        assert node._resolve_go_anchor(None) == go_lead.ceil_frame(79771.0 + FLOOR)
 
 
 class TestSeedsAreNotLed:

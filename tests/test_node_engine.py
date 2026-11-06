@@ -401,8 +401,9 @@ class TestResolveGoAnchor:
     node's own live MTC read, with a bounded, explained fallback."""
 
     # 869feynrj §4.5c-d, D11: the plausibility check runs against
-    # anchor - lead_ms (the floor, 50 ms, when the controller sends none), and
-    # the local fallback is the node's MTC + the lead, ceiled to the frame.
+    # anchor - lead_ms (go_lead.GO_LEAD_FLOOR_MS when the controller sends
+    # none), and the local fallback is the node's MTC + the lead, ceiled to
+    # the frame.
     def _node(self, local_ms):
         from cuemsengine.NodeEngine import NodeEngine
 
@@ -413,10 +414,10 @@ class TestResolveGoAnchor:
         return node
 
     @staticmethod
-    def _led(local_ms, lead_ms=50.0):
-        from cuemsengine.cues.go_lead import ceil_frame
+    def _led(local_ms, lead_ms=None):
+        from cuemsengine.cues.go_lead import GO_LEAD_FLOOR_MS, ceil_frame
 
-        return ceil_frame(local_ms + lead_ms)
+        return ceil_frame(local_ms + (GO_LEAD_FLOOR_MS if lead_ms is None else lead_ms))
 
     def test_uses_controller_instant_within_tolerance(self):
         node = self._node(local_ms=79760.0)
@@ -442,11 +443,20 @@ class TestResolveGoAnchor:
         assert node._resolve_go_anchor({}) == self._led(79760.0)
 
     def test_falls_back_to_local_when_controller_instant_is_far_in_the_future(self):
+        from cuemsengine.cues.go_lead import GO_LEAD_FLOOR_MS
+        from cuemsengine.NodeEngine import NodeEngine
+
         node = self._node(local_ms=1000.0)
-        # 201ms ahead of local once the lead (the 50 ms floor: no lead_ms) is
-        # taken off -- past the 200ms future-slack tolerance, so this reads as
-        # a stale or misrouted message, not a fast controller
-        assert node._resolve_go_anchor({"go_mtc_ms": 1251.0}) == self._led(1000.0)
+        # 201ms ahead of local once the lead (the floor: no lead_ms) is taken
+        # off -- past the 200ms future-slack tolerance, so this reads as a
+        # stale or misrouted message, not a fast controller
+        tol = NodeEngine._GO_ANCHOR_FUTURE_TOL_MS
+        assert node._resolve_go_anchor(
+            {"go_mtc_ms": 1000.0 + GO_LEAD_FLOOR_MS + tol - 1.0}
+        ) != self._led(1000.0)
+        assert node._resolve_go_anchor(
+            {"go_mtc_ms": 1000.0 + GO_LEAD_FLOOR_MS + tol + 1.0}
+        ) == self._led(1000.0)
 
     def test_falls_back_to_local_when_lag_looks_like_a_24h_wrap_asymmetry(self):
         # the controller resets its 24h wrap accumulator on load AND stop;

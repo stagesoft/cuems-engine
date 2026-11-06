@@ -25,6 +25,7 @@ from unittest.mock import MagicMock, patch
 from cuemsutils.cues import AudioCue, VideoCue
 from cuemsutils.tools.CTimecode import CTimecode
 
+from cuemsengine.cues import go_lead
 from cuemsengine.cues.arm_cue import arm_cue
 from cuemsengine.cues.CueHandler import CueHandler, _SetupGuard
 from cuemsengine.cues.run_cue import installed_guard, run_cue
@@ -94,19 +95,36 @@ class TestGoLead:
         assert len(lines) == 1
         return lines[0]
 
-    def test_from_a_node(self):
-        c = self._controller()
-        c._required_nodes = {"node01"}
-        c._note_node_latency("node01", 42.7)
-        assert self._line(c) == (
-            "GO lead: press 79253.0 ms (interp), L 62.7 ms, anchor 79320.0 ms "
-            "(ceil +4.3 ms), lead_ms 62.7, L from node01 42.7 ms"
+    @staticmethod
+    def _expected(lead, source):
+        press = 79253.0
+        anchor = go_lead.ceil_frame(press + lead)
+        return (
+            f"GO lead: press {press:.1f} ms (interp), L {lead:.1f} ms, anchor "
+            f"{anchor:.1f} ms (ceil +{anchor - (press + lead):.1f} ms), "
+            f"lead_ms {lead:.1f}, {source}"
         )
 
+    def test_from_a_node(self):
+        """A node above the floor (85.3 ms latency + a 1024-frame period)."""
+        c = self._controller()
+        c._required_nodes = {"node01"}
+        out = 85.3 + 1024 / 48
+        c._note_node_latency("node01", out)
+        lead = out + go_lead.GO_LEAD_DELTA_MS + go_lead.GO_LEAD_MARGIN_MS
+        assert lead > go_lead.GO_LEAD_FLOOR_MS
+        assert self._line(c) == self._expected(lead, f"L from node01 {out:.1f} ms")
+
+    def test_the_usual_rig_is_at_the_floor(self):
+        """42.7 + 30 + 5 = 77.7 ms is under the 80 ms floor (step 3)."""
+        c = self._controller()
+        c._required_nodes = {"node01"}
+        c._note_node_latency("node01", 32.0 + 512 / 48)
+        assert self._line(c) == self._expected(go_lead.GO_LEAD_FLOOR_MS, "L floor")
+
     def test_at_the_floor(self):
-        assert self._line(self._controller()) == (
-            "GO lead: press 79253.0 ms (interp), L 50.0 ms, anchor 79320.0 ms "
-            "(ceil +17.0 ms), lead_ms 50.0, L floor"
+        assert self._line(self._controller()) == self._expected(
+            go_lead.GO_LEAD_FLOOR_MS, "L floor"
         )
 
 
