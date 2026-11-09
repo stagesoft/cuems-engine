@@ -376,7 +376,8 @@ class StartGate:
             seeded = bool(getattr(cue, "_pass_seeded", False))
             cue_id = str(getattr(cue, "id", getattr(player, "uuid", "?")))
             first_seeded = False
-            if seeded and start.target > LATE_START_TOLERANCE_SAMPLES:
+            lost = start.target > LATE_START_TOLERANCE_SAMPLES and not start.snap
+            if seeded and lost:
                 if cue_id not in self._seeded_warned:
                     self._seeded_warned.add(cue_id)
                     first_seeded = True
@@ -384,6 +385,15 @@ class StartGate:
             Logger.debug(
                 f"Audio cue {cue_id} started on time (START target "
                 f"{start.target} samples at {start.rate} Hz)"
+            )
+            return
+        if start.snap:
+            # the player snapped a start <= 2 ms past sample 0 (MTC jitter over
+            # the padded window's edge) to sample 0: nothing lost, said at INFO
+            Logger.info(
+                f"cue {cue_id} on node {self.node_name} started "
+                f"{start.late_ms:.1f} ms late, head kept (snapped to sample 0: "
+                f"START target {start.target} samples at {start.rate} Hz)"
             )
             return
         text = (

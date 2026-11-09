@@ -31,9 +31,11 @@ LOOP_MODES = ("pending", "once", "wrap", "off")
 
 # 869feynrj (cuems-RELATIONS Plans/2026-11-03-audio-first-pass-head-869feynrj.md
 # §4.1d-g), CAPS ``selfgate`` only, each line in one write:
-#   b"[<slug>] [OK] START <start_ms_mod_day> <target_samples> <file_rate>\n"
+#   b"[<slug>] [OK] START <start_ms_mod_day> <target_samples> <file_rate>[ snap]\n"
 # at the first start since each /mtcfollow 1 received in HOLD (target <= 0:
-# on time, sample 0 at its frame; > 0: that many file samples of head lost);
+# on time, sample 0 at its frame; > 0: that many file samples late, the head
+# lost, or kept when the player snapped a start <= 2 ms past sample 0 to
+# sample 0: the trailing "snap", 869feynrj step 5);
 #   b"[<slug>] [OK] CANCEL <seq> <hold|play|pastend> <ms_of_output>\n"
 # the ack of every /cancelstart, echoing its seq;
 #   b"[<slug>] [OK] LATENCY <frames> <rate> <period_frames>[ override]\n"
@@ -61,12 +63,13 @@ class StartLine:
     """A START line (§4.1e): the player's first start since a follow."""
 
     start_ms: int  # the cue start, MTC ms modulo 24 h
-    target: int  # signed file samples: <= 0 on time, > 0 head lost
+    target: int  # signed file samples: <= 0 on time, > 0 late
     rate: int  # the file's sample rate
+    snap: bool = False  # late but snapped to sample 0: the head kept
 
     @property
     def late_ms(self) -> float:
-        """How much head was lost, in ms (0 when on time)."""
+        """How late the start is, in ms (0 when on time)."""
         if self.target <= 0 or self.rate <= 0:
             return 0.0
         return self.target * 1000.0 / self.rate
@@ -115,7 +118,8 @@ def parse_start(line: bytes) -> StartLine | None:
     if parts is None or len(parts) < 3:
         return None
     try:
-        return StartLine(int(parts[0]), int(parts[1]), int(parts[2]))
+        snap = len(parts) >= 4 and parts[3] == "snap"
+        return StartLine(int(parts[0]), int(parts[1]), int(parts[2]), snap)
     except ValueError:
         return None
 

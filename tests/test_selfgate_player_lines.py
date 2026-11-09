@@ -42,6 +42,15 @@ class TestParsers:
     def test_start_line_late_in_ms(self):
         s = parse_start(SLUG + b" [OK] START 600080 2205 44100\n")
         assert s.target == 2205 and s.late_ms == pytest.approx(50.0)
+        assert s.snap is False
+
+    def test_start_line_snap_field(self):
+        # 869feynrj step 5: a trailing "snap" = late but started at sample 0
+        s = parse_start(SLUG + b" [OK] START 600080 57 44100 snap\n")
+        assert s == StartLine(600080, 57, 44100, True)
+        assert s.late_ms == pytest.approx(57000 / 44100)
+        # an unknown 4th field is ignored, as before
+        assert parse_start(SLUG + b" [OK] START 600080 57 44100 other\n").snap is False
 
     @pytest.mark.parametrize("state", ["hold", "play", "pastend"])
     def test_cancel_line(self, state):

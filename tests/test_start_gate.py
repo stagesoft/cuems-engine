@@ -323,6 +323,18 @@ class TestStartLines:
         text = str(log.warning.call_args)
         assert "cue cue-1 on node node01 started 10.0 ms late (head lost" in text
 
+    def test_snapped_start_is_info_head_kept(self, gate):
+        """869feynrj step 5: a START with the player's snap field (late <= 2 ms,
+        started at sample 0) is an INFO, never a WARNING, seeded or not."""
+        gate.set_node_name("node01")
+        for seeded in (False, True):
+            cue, player, client = _committed(gate, _Cue(seeded=seeded))
+            with patch(LOG) as log:
+                gate.on_line(player, "start", StartLine(1000, 57, 44100, True))
+            log.warning.assert_not_called()
+            text = str(log.info.call_args)
+            assert "started 1.3 ms late, head kept (snapped to sample 0" in text
+
     def test_seeded_late_starts_info_and_one_warning_per_load(self, gate):
         cue, player, client = _committed(gate, _Cue(seeded=True))
         with patch(LOG) as log:
