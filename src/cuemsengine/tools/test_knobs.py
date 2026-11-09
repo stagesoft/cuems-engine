@@ -36,6 +36,12 @@ in the release package:
     (setnextcue + go of the cue), actionstop, actionpause, actionfadeout. With
     several offsets the n-th GO since engine start uses offset[n mod len],
     counted like the phase sweep.
+``CUEMS_TEST_MTC_JUMP=<after_ms>:<delta_ms>[,...]`` (controller, R11)
+    on every operator GO, once the interpolated MTC passes the GO's anchor
+    + <after_ms>, the MTC generator is moved by <delta_ms> (negative: back)
+    with ``MTCSender_setTime``: a real jump every node sees, during a pass.
+    With several pairs the n-th GO uses pair[n mod len], counted like the
+    phase sweep.
 """
 
 import os
@@ -56,6 +62,7 @@ KNOB_NAMES = (
     "CUEMS_TEST_FORCE_LEAD_MS",
     "CUEMS_TEST_HOLD_COMMAND_LOCK_MS",
     "CUEMS_TEST_CANCEL_AT",
+    "CUEMS_TEST_MTC_JUMP",
 )
 FRAME_MS = 40.0  # CUEMS MTC is always 25 fps
 CANCEL_ACTIONS = (
@@ -213,6 +220,27 @@ def cancel_at() -> tuple[str, float, int, int] | None:
         _counts["__cancel_at__"] = n + 1
     k = n % len(offsets)
     return action, offsets[k], k + 1, len(offsets)
+
+
+def mtc_jump_next() -> tuple[float, float, int, int] | None:
+    """R11, once per operator GO: (after ms from the anchor, delta ms, k, len)
+    -- the pair list taken in turn, k its 1-based index -- or None. Each call
+    is one GO: it advances the counter."""
+    raw = _get("CUEMS_TEST_MTC_JUMP")
+    if raw is None:
+        return None
+    try:
+        pairs = [tuple(float(x) for x in p.split(":")) for p in raw.split(",")]
+    except ValueError:
+        pairs = []
+    if not pairs or any(len(p) != 2 or p[0] < 0 for p in pairs):
+        Logger.warning(f"TEST KNOB: CUEMS_TEST_MTC_JUMP={raw!r} ignored")
+        return None
+    with _lock:
+        n = _counts.get("__mtc_jump__", 0)
+        _counts["__mtc_jump__"] = n + 1
+    k = n % len(pairs)
+    return pairs[k][0], pairs[k][1], k + 1, len(pairs)
 
 
 def reset_for_tests() -> None:

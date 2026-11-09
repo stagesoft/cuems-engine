@@ -37,6 +37,7 @@ KNOBS = (
     "CUEMS_TEST_FORCE_LEAD_MS",
     "CUEMS_TEST_HOLD_COMMAND_LOCK_MS",
     "CUEMS_TEST_CANCEL_AT",
+    "CUEMS_TEST_MTC_JUMP",
 )
 
 
@@ -215,6 +216,60 @@ class TestControllerKnobs:
         c = _controller(_Clock(5003.0))
         value = _go(c)
         assert value["lead_ms"] == go_lead.GO_LEAD_FLOOR_MS
+
+
+class _Ticking:
+    """An interpolated MTC that advances 1 ms per reading."""
+
+    def __init__(self, ms):
+        self.ms = float(ms)
+
+    def __call__(self):
+        v = self.ms
+        self.ms += 1.0
+        return v
+
+
+class TestMtcJump:
+    """R11: CUEMS_TEST_MTC_JUMP moves the MTC generator mid-pass."""
+
+    def test_parsing_takes_the_pairs_in_turn(self, knobs):
+        knobs(MTC_JUMP="1500:-1000,2500:3000")
+        got = [test_knobs.mtc_jump_next() for _ in range(3)]
+        assert got == [
+            (1500.0, -1000.0, 1, 2),
+            (2500.0, 3000.0, 2, 2),
+            (1500.0, -1000.0, 1, 2),
+        ]
+
+    @pytest.mark.parametrize("value", ["x:1", "100", "-5:100", "100:5:7", ""])
+    def test_a_bad_value_is_ignored(self, knobs, value):
+        knobs(MTC_JUMP=value)
+        assert test_knobs.mtc_jump_next() is None
+
+    def test_inert_without_the_master_switch(self, monkeypatch):
+        monkeypatch.setenv("CUEMS_TEST_MTC_JUMP", "100:100")
+        assert test_knobs.mtc_jump_next() is None
+
+    def test_the_go_moves_the_generator_after_the_delay(self, knobs):
+        knobs(MTC_JUMP="100:-2000")
+        c = _controller(_Ticking(5003.0))
+        c.mtcmaster = object()
+        with patch("cuemsengine.ControllerEngine.libmtcmaster") as lib:
+            value = _go(c)
+            for t in threading.enumerate():
+                if t.name == "TestMtcJump":
+                    t.join(5)
+        anchor = value["go_mtc_ms"]
+        (master, nanos), _ = lib.MTCSender_setTime.call_args
+        assert master is c.mtcmaster
+        # read at anchor + 100 (+ the 1 ms tick of the reading itself), then -2000
+        assert nanos / 1e6 == pytest.approx(anchor + 100 - 2000, abs=2.0)
+
+    def test_without_the_knob_no_thread(self):
+        c = _controller(_Clock(5003.0))
+        c.mtcmaster = object()
+        assert c._test_mtc_jump(6000.0) is None
 
 
 def _node():

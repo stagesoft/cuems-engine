@@ -1646,6 +1646,8 @@ class ControllerEngine(BaseEngine):
                 anchor = go_lead.ceil_frame(now + lead)
                 go_value["go_mtc_ms"] = anchor
                 self._log_go_lead(now, lead, anchor)
+                # R11 (test knob, inert in production): an MTC jump mid-pass.
+                self._test_mtc_jump(anchor)
             else:
                 Logger.error(
                     "GO: controller MTC listener is not receiving -- sending GO "
@@ -1673,6 +1675,40 @@ class ControllerEngine(BaseEngine):
             f"{anchor:.1f} ms (ceil +{anchor - (press_ms + lead):.1f} ms), "
             f"lead_ms {lead:.1f}, {who}"
         )
+
+    def _test_mtc_jump(self, anchor: float) -> threading.Thread | None:
+        """R11 (869feynrj step 5, test knob CUEMS_TEST_MTC_JUMP, inert without
+        CUEMS_TEST_KNOBS=1): once the interpolated MTC passes anchor + after,
+        move the MTC generator by delta with MTCSender_setTime (it pauses,
+        sends the new full-frame position and resumes), so every node sees one
+        real jump during the pass. Off the GO's path: a daemon thread."""
+        plan = test_knobs.mtc_jump_next()
+        if plan is None or getattr(self, "mtcmaster", None) is None:
+            return None
+        after, delta, k, n = plan
+        due = anchor + after
+
+        def run():
+            deadline = time.monotonic() + 30.0
+            while self._interpolated_mtc_ms() < due:
+                if time.monotonic() > deadline:
+                    Logger.warning(
+                        f"TEST KNOB: MTC jump {k}/{n} not done: MTC never "
+                        f"reached {due:.1f} ms"
+                    )
+                    return
+                time.sleep(0.002)
+            cur = self._interpolated_mtc_ms()
+            target = max(0.0, cur + delta) % 86_400_000.0
+            libmtcmaster.MTCSender_setTime(self.mtcmaster, int(round(target * 1e6)))
+            Logger.warning(
+                f"TEST KNOB: MTC jump {k}/{n} at anchor+{cur - anchor:.1f} ms: "
+                f"{cur:.1f} -> {target:.1f} ms (delta {delta:+.1f} ms)"
+            )
+
+        t = threading.Thread(target=run, name="TestMtcJump", daemon=True)
+        t.start()
+        return t
 
     def _interpolated_mtc_ms(self) -> float:
         """MtcListener.interpolated_ms, or the whole-frame main_tc."""
