@@ -31,23 +31,37 @@ Runs as the two systemd services above. On the dev/deploy boxes the engine often
 
 **Commits must be GPG-signed** (`commit.gpgsign=true`; the repo enforces it). On a "gpg failed to sign" error, retry the commit — never `--no-gpg-sign`.
 
-## Constitution
+## Engineering rules
 
-The full project constitution lives at `.specify/memory/constitution.md` (v1.1.0). Key rules:
+The Spec Kit constitution (`.specify/memory/constitution.md`, v1.1.0) is the input of the Spec Kit tools. For any work in
+this repo the rules below apply; the method across repos is `cuems-RELATIONS/process/METHOD.md`.
 
-- **TDD is NON-NEGOTIABLE**: write failing test → confirm failure → implement → green → refactor.
+- **Rig-proven development** (not plain TDD). Write the failing test first wherever a unit surface exists, and prove
+  every runtime change on the test rigs before it is accepted. Tests alone are never acceptance: a change is accepted
+  only when its rig rows pass on a real cluster (where no unit surface exists, the failing rig row comes first).
+- **Integration against real subsystems, not mocks**, unless a subsystem is a third-party service with no test double.
 - **SOLID** applies to every module, class, and function.
-- **No new runtime dependency** without documented justification and team review.
 - **YAGNI**: every design decision justified by a current, concrete requirement.
 - **Observability**: structured logging for all engine events; silent failures forbidden.
 
-### Documentation artifact layout (mandatory)
+## Changes and review
+
+Engine changes reach `rc_1` through the engine maintainer, the owner of its design:
+
+- A contributor's change is a pull request the maintainer reviews, and runs on a real cluster before merging when it
+  touches runtime.
+- The maintainer's own changes meet the same bar: tests where a unit surface exists, a run on the test rigs before merge
+  for anything that touches runtime, and a review by a model that did not write them (cuems-process plan-review /
+  change-reviewer). Documentation-only changes need the review, not a rig run.
+- New runtime dependencies: a written justification in the plan, and the same review.
+
+## Where documents live
 
 | Location | Purpose |
 |---|---|
-| `specs/NNN-feature/` | Per-feature spec, plan, tasks, design notes. Owned by the feature branch. |
-| `specs/planning/` | Cross-cutting planning docs spanning multiple features. Dev-internal only. |
-| `docs/` (top-level) | End-user docs and generated API reference ONLY. Hand-written dev planning artifacts MUST NOT go here. |
+| `specs/NNN-feature/` | Spec Kit artefacts (spec, tasks, design notes) for a feature branch. |
+| cuems-RELATIONS `Plans/` | Plans, their reviews and the tracker (`Plans/STATUS.md`). Every plan goes there. |
+| `docs/` (top-level) | End-user docs and generated API reference only. |
 
 ## MTC timecode lifecycle
 
