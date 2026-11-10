@@ -591,6 +591,13 @@ class CueHandler:
                     "or superseded"
                 )
                 return False
+            if not self._child_current_locked(cue, target, go_gen):
+                # Review C2, the audio side of S0-11.
+                Logger.info(
+                    f"Audio cue {target.id}: follow commit refused, the CueList "
+                    "child was disabled, stopped or replaced since the setup"
+                )
+                return False
             if not getattr(target, "_reveal_ready", False):
                 Logger.info(
                     f"Audio cue {target.id}: follow commit refused, its start "
@@ -2232,6 +2239,7 @@ class CueHandler:
                 else:
                     gate = self._reveal_wait(cue, mtc, go_gen)
             if gate != "stopped":
+                skip_child = None
                 # Commit under the same lock the stop walk takes, so a cancel
                 # landing inside the 20ms poll gap cannot leak a reveal past it.
                 with self._lock:
@@ -2245,6 +2253,16 @@ class CueHandler:
                         # without its stamp.
                         cue._revealed_at = monotonic()
                         child = self._owned_cuelist_child(cue, go_gen)
+                        if child is not None and not self._child_current_locked(
+                            cue, child, go_gen
+                        ):
+                            # Review C2: the child was disabled, stopped,
+                            # paused or GO'd on its own since the setup; the
+                            # reveal must neither reach it (a reveal-time
+                            # follow) nor fall through to the next enabled
+                            # child, which was never set up.
+                            skip_child = child
+                            child = None
                         if child is not None:
                             # S0-21: its child is on stage from here on.
                             child._revealed = True
@@ -2264,7 +2282,14 @@ class CueHandler:
                 if do_reveal:
                     revealed_at = cue._revealed_at
                     follow.revealed = True
-                    reveal_cue(cue, mtc, start_ms)
+                    if skip_child is None:
+                        reveal_cue(cue, mtc, start_ms)
+                    else:
+                        Logger.info(
+                            f"CueList {cue.id}: child {skip_child.id} was "
+                            "disabled, stopped or replaced since the setup; "
+                            "not revealed"
+                        )
                     if follow_target is not None:
                         self._expect_start(cue, follow_target)
                     armed_at = getattr(cue, "_armed_at", None)
@@ -2459,7 +2484,32 @@ class CueHandler:
             child._revealed = False
             child._ever_played = True
             child._cuelist_pass = (id(cue), go_gen)
+            # Review C2: this pass takes the child over, as go() does for a
+            # top-level pass: a stop flag left by an earlier pass of its own
+            # is cleared, and its generation recorded, so a disable, stop,
+            # pause or own GO from here on is seen by _child_current_locked.
+            child._stop_requested = False
+            child._cuelist_child_gen = getattr(child, "_go_generation", 0)
             cue._marked_child = child
+
+    def _child_current_locked(self, cue: Cue, target: Cue, go_gen: int) -> bool:
+        """Review C2: may this pass of ``cue`` still commit to / reveal
+        ``target``? Always for the cue's own pass. For a CueList's child: it
+        is the child this pass marked at its setup, still enabled, not
+        stopped or paused since (``_stop_requested``: the setup cleared it),
+        and not taken by a pass of its own (its generation is the one the
+        setup recorded; a disable's cancel_parked bumps it too). The parent's
+        own flags are the caller's check. Call with self._lock held."""
+        if cue is target:
+            return True
+        if self._owned_cuelist_child(cue, go_gen) is not target:
+            return False
+        return (
+            getattr(target, "enabled", True) is not False
+            and not getattr(target, "_stop_requested", False)
+            and getattr(target, "_go_generation", 0)
+            == getattr(target, "_cuelist_child_gen", None)
+        )
 
     @staticmethod
     def _owned_cuelist_child(cue: Cue, go_gen: int) -> Cue | None:
