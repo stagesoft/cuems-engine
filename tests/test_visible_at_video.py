@@ -428,6 +428,8 @@ def committed(ch):
 
     def commit(cue, parent=None):
         owner = parent if parent is not None else cue
+        if parent is not None:
+            ch._mark_cuelist_child(parent, parent._go_generation)  # its setup
         cue._osc = _Client(ch._lock)
         cue._visible_at_ready = True
         cue._start_mtc = CTimecode(framerate=25, start_seconds=1.0)
@@ -793,3 +795,212 @@ class TestWire:
         assert send(_vis("L1"), 1) == (_vis("L1"), ",i", [1])
         assert send(_vis("L1"), 0) == (_vis("L1"), ",i", [0])
         assert send(_vis("L1"), 0) == (_vis("L1"), ",i", [0])
+
+
+# ---------------------------------------- review fixes (C1, C2, C3, 2026-11-10)
+# cuems-RELATIONS baselines/869feynrj-step5/reviews/engine-visible-at-marked.md
+
+
+class TestCueListOwnership:
+    """C3: a CueList parent reaches only the gate ITS pass armed on its
+    child. A newer, independent pass of the child is not the parent's."""
+
+    def test_after_the_parents_pass_a_stop_of_it_spares_the_childs_own_gate(self, ch):
+        mtc = _Mtc(1000.0)
+        child = _video(0.0)
+        child._osc = _Client(ch._lock, mtc)
+        parent = _cuelist(child, prewait_ms=2000.0)
+        _drive(ch, parent, mtc, 1000.0, VC_NEW)  # the parent's pass, revealed
+        assert len(child._osc.visible_at(1)) == len(LAYERS)
+        assert getattr(parent, "_visible_at_child", None) is None
+        # the child GO'd on its own: its own pass commits its own gate
+        child._go_generation = 7
+        child._stop_requested = False
+        child._start_mtc = CTimecode(framerate=25, start_seconds=9.0)
+        child._visible_at_ready = True
+        assert ch._commit_follow(child, child, 7)
+        child._osc.sent.clear()
+        parent._go_epoch = 0
+        AH._handle_pause(ch, None, parent, MagicMock())
+        assert child._osc.visible_at(0) == []
+        assert child._visible_at_gen == 7
+
+    def test_a_stale_reference_is_refused_by_ownership(self, ch, committed):
+        """Even with the parent's reference still set (its pass never closed
+        the account), the child's newer gate is not the parent's."""
+        child = _video()
+        parent = _cuelist(child)
+        client = committed(child, parent)
+        assert parent._visible_at_child is child
+        # the child's own pass re-commits its gate
+        child._go_generation = 7
+        assert ch._commit_follow(child, child, 7)
+        client.sent.clear()
+        with ch._lock:
+            ch.cancel_start_locked(parent, "cancel")
+        assert _zeros(client) == []
+        assert child._visible_at_gen == 7
+
+    def test_the_parents_cancel_clears_its_reference(self, ch, committed):
+        child = _video()
+        parent = _cuelist(child)
+        client = committed(child, parent)
+        with ch._lock:
+            ch.cancel_start_locked(parent, "cancel")
+        assert _zeros(client) == ZEROS
+        assert getattr(parent, "_visible_at_child", None) is None
+
+
+def _marked(ch, child, gen=1):
+    """A CueList parent whose pass has set the child up (the setup marks
+    it, S0-21), with the child's setup done."""
+    parent = _cuelist(child, gen=gen)
+    ch._mark_cuelist_child(parent, gen)
+    child._osc = _Client(ch._lock)
+    child._visible_at_ready = True
+    child._start_mtc = CTimecode(framerate=25, start_seconds=1.0)
+    return parent
+
+
+class TestCueListChildGuard:
+    """C2: between the parent's setup and its commit (up to 5 s for a
+    chain cue) the child can be disabled (NodeEngine ->
+    cancel_parked(child): the setup marked it _playing, so it IS flagged),
+    stopped or paused, or GO'd on its own. The commit and the parent's
+    /visible 1 healer must then leave it alone."""
+
+    def test_a_marked_child_commits(self, ch):
+        child = _video()
+        parent = _marked(ch, child)
+        assert ch._commit_follow(parent, child, 1) is True
+        assert len(child._osc.visible_at(1)) == len(LAYERS)
+
+    def test_disabled_and_cancelled_after_the_setup(self, ch):
+        child = _video()
+        parent = _marked(ch, child)
+        child.enabled = False
+        assert ch.cancel_parked(child) is True  # what the disable does
+        assert ch._commit_follow(parent, child, 1) is False
+        assert child._osc.visible_at() == []
+
+    def test_disabled_only(self, ch):
+        child = _video()
+        parent = _marked(ch, child)
+        child.enabled = False
+        assert ch._commit_follow(parent, child, 1) is False
+        assert child._osc.visible_at() == []
+
+    def test_paused_after_the_setup(self, ch):
+        child = _video()
+        parent = _marked(ch, child)
+        child._go_epoch = 0
+        AH._handle_pause(ch, None, child, MagicMock())
+        assert ch._commit_follow(parent, child, 1) is False
+        assert child._osc.visible_at() == []
+
+    def test_a_newer_own_pass_of_the_child(self, ch):
+        child = _video()
+        parent = _marked(ch, child)
+        child._go_generation += 1
+        assert ch._commit_follow(parent, child, 1) is False
+
+    def test_a_stale_stop_flag_from_an_earlier_own_pass_does_not_refuse(self, ch):
+        """The parent's setup takes the child over (as go() does for a
+        top-level pass): a stop flag left by the child's own earlier pass
+        must not refuse the parent's commit."""
+        child = _video()
+        child._stop_requested = True
+        parent = _marked(ch, child)
+        assert child._stop_requested is False
+        assert ch._commit_follow(parent, child, 1) is True
+
+    def test_the_healer_skips_a_child_disabled_after_the_setup(self):
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        child = _video(0.0)
+        other = _video(0.0)
+        child._osc = _Client(ch._lock, mtc)
+        other._osc = _Client(ch._lock, mtc)
+        parent = CueList(
+            {"id": str(uuid.uuid4()), "name": "cl", "contents": [child, other]}
+        )
+        parent.prewait = CTimecode(start_seconds=2.0)
+        parent.post_go = "pause"
+        parent._local = True
+        parent.enabled = True
+        parent.loaded = True
+        parent._target_object = None
+        parent._stop_requested = False
+        parent._go_generation = 1
+        parent._revealed = False
+        parent._playing = True
+
+        def disable(now):
+            if now >= 2000.0 and child.enabled:
+                child.enabled = False
+                ch.cancel_parked(child)
+
+        _drive(ch, parent, mtc, 1000.0, VC_NEW, on_sleep=disable)
+        assert child._osc.visible_at() == []
+        assert [p for _, p, *_ in child._osc.sent if p.endswith("/visible")] == []
+        # nor does the reveal fall through to the next enabled child, which
+        # was never set up
+        assert other._osc.sent == []
+
+
+class TestReGoOfARevealedCue:
+    """C1, Ion 2026-11-10 = (a): a GO-again of a cue whose layer the gate
+    revealed opens a new account; a cancel of the new pass before its reveal
+    sends visible_at 0 and the VC hides the layer (D5: the cancel is final,
+    nothing is left frozen on screen)."""
+
+    def test_the_new_pass_commits_again_and_its_cancel_hides(self):
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        cue = _video(2000.0)
+        cue._osc = _Client(ch._lock, mtc)
+        _drive(ch, cue, mtc, 1000.0, VC_NEW)
+        assert cue._revealed is True
+        assert len(cue._osc.visible_at(1)) == len(LAYERS)
+
+        ch.go_threaded = MagicMock()
+        thread = CueHandler.go(ch, cue, mtc, mtc.now)
+        assert thread is not None
+        thread.join(2)
+        assert cue._superseded_playing is True
+        assert cue._osc.visible_at(0) == []  # a pass on stage is left alone
+        args, kwargs = ch.go_threaded.call_args
+
+        cancelled = []
+
+        def cancel(now):
+            if len(cue._osc.visible_at(1)) == 2 * len(LAYERS) and not cancelled:
+                cancelled.append(now)
+                assert ch.cancel_parked(cue) is True
+
+        ch.go_threaded = CueHandler.go_threaded.__get__(ch)
+        events = {"reveal": []}
+
+        def reveal(c, m, start_ms):
+            events["reveal"].append(mtc.now)
+            return reveal_cue(c, m, start_ms)
+
+        p1, p2, p3, p4 = _patched(VC_NEW)
+        with (
+            p1,
+            p2,
+            p3,
+            p4,
+            patch(
+                "cuemsengine.cues.CueHandler.sleep",
+                side_effect=lambda s: (mtc.advance(s), cancel(mtc.now)),
+            ),
+            patch("cuemsengine.cues.CueHandler.reveal_cue", side_effect=reveal),
+            patch("cuemsengine.cues.CueHandler.loop_cue"),
+            patch("cuemsengine.cues.CueHandler.blank_cue"),
+        ):
+            ch.go_threaded(*args, **kwargs)
+        sent = cue._osc.visible_at()
+        assert [v for *_, v, _ in sent] == [1, 1, 1, 1, 0, 0]
+        assert all(locked for *_, locked in sent)
+        assert cancelled and events["reveal"] == []
