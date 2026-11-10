@@ -744,6 +744,12 @@ class CueHandler:
                     "or superseded"
                 )
                 return False
+            if not self._child_current_locked(cue, target, go_gen):
+                Logger.info(
+                    f"Video cue {target.id}: follow commit refused, the CueList "
+                    "child was disabled, stopped or replaced since the setup"
+                )
+                return False
             if not getattr(target, "_visible_at_ready", False):
                 Logger.info(
                     f"Video cue {target.id}: follow commit refused, its setup "
@@ -2433,9 +2439,9 @@ class CueHandler:
                         ):
                             # Review C2: the child was disabled, stopped,
                             # paused or GO'd on its own since the setup; the
-                            # reveal must neither reach it (a reveal-time
-                            # follow) nor fall through to the next enabled
-                            # child, which was never set up.
+                            # reveal must neither reach it (a video healer, a
+                            # legacy audio follow) nor fall through to the
+                            # next enabled child, which was never set up.
                             skip_child = child
                             child = None
                         if child is not None:
