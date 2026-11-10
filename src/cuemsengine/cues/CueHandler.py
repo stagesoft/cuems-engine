@@ -564,15 +564,36 @@ class CueHandler:
         """The VideoCue whose ``visible_at`` gate a stop of ``cue`` reaches
         (the cue, or the child a CueList's pass committed), while that gate
         is an open account: armed by a follow commit, neither cancelled nor
-        revealed by the engine since. None otherwise."""
-        target = (
-            getattr(cue, "_visible_at_child", None) if isinstance(cue, CueList) else cue
-        )
+        revealed by the engine since. None otherwise.
+
+        A CueList reaches its child's gate only while that gate is the one
+        ITS pass armed (review C3): the child's ``_visible_at_pass`` must be
+        (the parent, the parent's committing generation). A newer pass of
+        the child on its own is not the parent's to cancel."""
+        if isinstance(cue, CueList):
+            target = getattr(cue, "_visible_at_child", None)
+            owner = (id(cue), getattr(cue, "_visible_at_child_gen", None))
+            if target is None or getattr(target, "_visible_at_pass", None) != owner:
+                return None
+        else:
+            target = cue
         if not isinstance(target, VideoCue):
             return None
         if getattr(target, "_visible_at_gen", None) is None:
             return None
         return target
+
+    @staticmethod
+    def _close_visible_at(target: Cue, parent: Cue | None = None) -> None:
+        """Close a gate's account (cancel, the engine's reveal, the layers'
+        release): the cue's record and, for a CueList's child, the parent's
+        reference to it (review C3). Call with self._lock held."""
+        target._visible_at_gen = None
+        target._visible_at_layers = None
+        target._visible_at_pass = None
+        if parent is not None:
+            parent._visible_at_child = None
+            parent._visible_at_child_gen = None
 
     def _cancel_visible_at_locked(self, cue: Cue) -> bool:
         """``visible_at 0`` to the layers of a pending (or just gate-revealed)
@@ -587,8 +608,7 @@ class CueHandler:
             if target is None:
                 return False
             layers = list(getattr(target, "_visible_at_layers", None) or [])
-            target._visible_at_gen = None
-            target._visible_at_layers = None
+            self._close_visible_at(target, cue if cue is not target else None)
             client = getattr(target, "_osc", None)
             if client is None or not layers:
                 return False
@@ -706,7 +726,15 @@ class CueHandler:
         layers (`_visible_at_ready`). The gate is recorded on the cue
         (`_visible_at_gen`, `_visible_at_layers`; a CueList parent keeps
         `_visible_at_child`) until a cancel, the engine's reveal or the
-        layers' release closes it."""
+        layers' release closes it.
+
+        A GO-again of a cue whose layer the gate already revealed opens a
+        new account too, although the VC leaves a visible layer as it is
+        (`VideoLayer.cpp:551-552`): a cancel of the new pass before its
+        reveal then sends ``visible_at 0`` and the VC hides the layer, which
+        by then holds the new pass's frame 0. Intended (review C1, Ion
+        2026-11-10 = (a); D5: the cancel is final, a cancelled cue leaves
+        nothing frozen on screen)."""
         with self._lock:
             if getattr(cue, "_stop_requested", False) or (
                 getattr(cue, "_go_generation", 0) != go_gen
@@ -742,8 +770,12 @@ class CueHandler:
                 return False
             target._visible_at_gen = go_gen
             target._visible_at_layers = sent
+            # Whose pass armed it (review C3): a CueList parent reaches it
+            # only while this stays (the parent, this generation).
+            target._visible_at_pass = (id(cue), go_gen)
             if cue is not target:
                 cue._visible_at_child = target
+                cue._visible_at_child_gen = go_gen
         start = target._start_mtc.milliseconds_exact
         at = f"{sent_at:.1f}" if sent_at is not None else "?"
         Logger.info(
@@ -1415,9 +1447,9 @@ class CueHandler:
                             f" {cue.id} ({reason}): {e}"
                         )
             cue._layer_ids = []
-            # 869feynrj §4.6: the layers are gone, and so is any gate on them.
-            cue._visible_at_gen = None
-            cue._visible_at_layers = None
+            # 869feynrj §4.6: the layers are gone, and so is any gate on them
+            # (a CueList parent's reference fails its ownership check now).
+            self._close_visible_at(cue)
             Logger.debug(
                 f"{what} video cue {cue.id} ({reason}): unloaded {unloaded};"
                 f" skipped {skipped} (no longer tracked: removed by reset or quit)"
@@ -2415,8 +2447,10 @@ class CueHandler:
                             # now hides it the usual way (/visible 0 and the
                             # unload, or the reset), and a visible_at 0
                             # would be the race's WARNING in the VC (D5).
-                            follow_target._visible_at_gen = None
-                            follow_target._visible_at_layers = None
+                            self._close_visible_at(
+                                follow_target,
+                                cue if cue is not follow_target else None,
+                            )
                         # Committed or legacy reveal, decided here under the
                         # lock and handed to reveal_audioCue (review fix 7):
                         # read there, _follow_committed may already be a
