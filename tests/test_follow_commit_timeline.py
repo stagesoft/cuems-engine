@@ -621,6 +621,11 @@ class TestCueListChildGuard:
         ev = _drive(
             ch, parent, mtc, 1000.0, _player(OLD), audio=child, on_sleep=disable
         )
-        assert ev["reveal"], "the parent still reaches its reveal"
+        # The parent's pass reaches its reveal point (its reveal section sets
+        # _revealed) and the guard then sends no reveal at all: without the
+        # guard reveal_cue runs (ev["reveal"] not empty) and reveal_cueList
+        # gives `other` a reveal-time /mtcfollow 1.
+        assert parent._revealed is True
+        assert ev["reveal"] == []
         assert child._osc.times("/mtcfollow") == []
         assert other._osc.sent == []
