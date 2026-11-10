@@ -518,3 +518,109 @@ class TestLegacyEndOfPass:
 
     def test_a_superseded_pass_sends_no_follow_off(self):
         assert self._loop(cue_gen=2, pass_gen=1) == []
+
+
+class TestCueListChildGuard:
+    """Review C2 (cuems-RELATIONS baselines/869feynrj-step5/reviews/
+    engine-visible-at-marked.md), the audio side of S0-11: a CueList child
+    disabled (cancel_parked: the setup marked it _playing, so it is flagged),
+    paused or GO'd on its own between the parent's setup and start - F gets
+    no /mtcfollow 1, neither from the commit nor from the reveal."""
+
+    def _marked(self, ch, mtc=None):
+        mtc = mtc or _Mtc(0.0)
+        child = _audio()
+        child._osc = _Client(mtc, ch._lock)
+        child._reveal_ready = True
+        child._start_mtc = CTimecode(framerate=25, start_seconds=1.0)
+        parent = _cuelist(child)
+        ch._mark_cuelist_child(parent, 1)
+        return parent, child
+
+    def _commit(self, ch, parent, child, player):
+        with patch.object(PLAYER_HANDLER, "audio_player", lambda c: player):
+            return ch._commit_follow(parent, child, 1)
+
+    def test_a_marked_child_commits(self):
+        ch = _ch()
+        parent, child = self._marked(ch)
+        assert self._commit(ch, parent, child, _player()) is True
+        assert child._osc.times("/mtcfollow", 1) == [0.0]
+
+    def test_disabled_and_cancelled_after_the_setup(self):
+        ch = _ch()
+        parent, child = self._marked(ch)
+        child.enabled = False
+        player = _player()
+        with patch.object(PLAYER_HANDLER, "audio_player", lambda c: player):
+            assert ch.cancel_parked(child) is True
+        assert self._commit(ch, parent, child, player) is False
+        assert child._osc.times("/mtcfollow") == [] and player.may_follow is False
+
+    def test_paused_after_the_setup(self):
+        ch = _ch()
+        parent, child = self._marked(ch)
+        child._stop_requested = True  # what an ActionCue pause sets
+        assert self._commit(ch, parent, child, _player()) is False
+        assert child._osc.times("/mtcfollow") == []
+
+    def test_a_newer_own_pass_of_the_child(self):
+        ch = _ch()
+        parent, child = self._marked(ch)
+        child._go_generation += 1
+        assert self._commit(ch, parent, child, _player()) is False
+
+    def test_disabled_mid_window_sends_no_follow_at_all(self):
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        child = _audio(9999.0)
+        child._osc = _Client(mtc, ch._lock)
+        parent = _cuelist(child, prewait_ms=2000.0)
+
+        def disable(now):
+            if now >= 2000.0 and child.enabled:
+                child.enabled = False
+                ch.cancel_parked(child)
+
+        ev = _drive(ch, parent, mtc, 1000.0, _player(), audio=child, on_sleep=disable)
+        assert ev["commit"] == []
+        assert child._osc.times("/mtcfollow") == []
+
+    def test_the_reveal_skips_a_child_disabled_after_the_setup(self):
+        """The reveal guard, type-agnostic: an older player's child gets its
+        follow at the reveal (no commit), so only the guard stops it; and
+        reveal_cueList must not fall through to the next enabled child,
+        which was never set up."""
+        ch = _ch()
+        mtc = _Mtc(1000.0)
+        child = _audio(0.0)
+        other = _audio(0.0)
+        child._osc = _Client(mtc, ch._lock)
+        other._osc = _Client(mtc, ch._lock)
+        parent = CueList(
+            {"id": str(uuid.uuid4()), "name": "cl", "contents": [child, other]}
+        )
+        parent.prewait = CTimecode(start_seconds=2.0)
+        parent.post_go = "pause"
+        parent._local = True
+        parent.loaded = True
+        parent._target_object = None
+        parent._stop_requested = False
+        parent._go_generation = 1
+        parent._revealed = False
+        # Without a commit a CueList reveals as soon as its setup is done (its
+        # own _start_mtc is the cuems-utils default 0); a start of its own
+        # opens the window the guard is about.
+        parent._start_mtc = CTimecode(framerate=25, start_seconds=3.0)
+
+        def disable(now):
+            if now >= 2000.0 and child.enabled:
+                child.enabled = False
+                ch.cancel_parked(child)
+
+        ev = _drive(
+            ch, parent, mtc, 1000.0, _player(OLD), audio=child, on_sleep=disable
+        )
+        assert ev["reveal"], "the parent still reaches its reveal"
+        assert child._osc.times("/mtcfollow") == []
+        assert other._osc.sent == []
