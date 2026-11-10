@@ -423,13 +423,15 @@ def ch():
 
 @pytest.fixture
 def committed(ch):
-    """commit(cue) runs this pass's follow commit, as start - F would."""
+    """commit(cue[, parent]) runs this pass's follow commit, as start - F
+    would; a CueList child is committed by its parent's pass."""
 
-    def commit(cue):
+    def commit(cue, parent=None):
+        owner = parent if parent is not None else cue
         cue._osc = _Client(ch._lock)
         cue._visible_at_ready = True
         cue._start_mtc = CTimecode(framerate=25, start_seconds=1.0)
-        assert ch._commit_follow(cue, cue, cue._go_generation)
+        assert ch._commit_follow(owner, cue, owner._go_generation)
         cue._osc.sent.clear()
         return cue._osc
 
@@ -492,8 +494,9 @@ class TestCascadeAndDisable:
 
     def test_a_cuelist_reaches_its_committed_child(self, ch, committed):
         child = _video()
-        client = committed(child)
-        assert ch.cancel_parked(_cuelist(child)) is True
+        cl = _cuelist(child)
+        client = committed(child, cl)
+        assert ch.cancel_parked(cl) is True
         assert _zeros(client) == ZEROS
 
 
@@ -526,8 +529,8 @@ class TestStop:
 
     def test_a_cuelist_child_is_reached_once(self, ch, committed):
         child = _video()
-        client = committed(child)
         cl = _cuelist(child)
+        client = committed(child, cl)
         ch._armed_cues = [cl, child]
         ch._armed_cues_set = {cl.id, child.id}
         ch.stop_all_cues()
@@ -567,8 +570,8 @@ class TestActionStops:
 
     def test_a_cuelist_target_reaches_its_child(self, ch, committed):
         child = _video()
-        client = committed(child)
         cl = _cuelist(child)
+        client = committed(child, cl)
         cl._go_epoch = 0
         with patch("cuemsengine.cues.ActionHandler.time.sleep"):
             self._run(AH._handle_stop, ch, None, cl, MagicMock())

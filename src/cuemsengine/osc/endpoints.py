@@ -146,7 +146,16 @@ OSC_VIDEOPLAYER_LAYER_CONF = {
         ValueType.Int,
         None,
     ],  # 1 = enable, 0 = disable
-    "/videocomposer/layer/{}/visible": [ValueType.Int, None, -1],
+    # 869feynrj §4.4, §4.6: /visible and /visible_at with the repetition
+    # filter OFF. /visible 1 at the reveal is the healer of a lost visible_at
+    # and must reach the wire even when the last value pushed was 1;
+    # visible_at 1 / 0 are the follow commit and the cancel (a superseding
+    # pass re-sends the same value). visible_at has no default, so creating
+    # the endpoint pushes nothing (only visible's -1 goes out, as before).
+    # visible_at is sent only to a videocomposer whose caps file lists
+    # "visible_at".
+    "/videocomposer/layer/{}/visible": [ValueType.Int, None, -1, False],
+    "/videocomposer/layer/{}/visible_at": [ValueType.Int, None, None, False],
     "/videocomposer/layer/{}/autounload": [ValueType.Int, None],  # 0 or 1
     # 869ejxng3 + 1amfwm7e6cw (plan §4.2): /loop is a list, [1, passes] in wrap
     # mode (passes <= 0 -> -1), [1] / [0] on the legacy and CueList paths (on
