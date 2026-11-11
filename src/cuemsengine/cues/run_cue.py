@@ -702,6 +702,10 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
 
 def _run_videoCue_held(cue: VideoCue, mtc, frozen_mtc_ms, layer_ids, media_dims):
     """run_videoCue's state changes and sends, inside the setup section."""
+    # 869feynrj §4.6: set once this setup has sent every layer's /offset and
+    # /mtcfollow to a videocomposer that takes visible_at; the follow commit
+    # (start - F) sends visible_at 1 only then. Reset per pass.
+    cue._visible_at_ready = False
 
     # The timeline is stamped BEFORE the layer check (869fgq3xv): a cue with
     # no layers on this node (every output dark) still has a body. Downstream
@@ -826,7 +830,12 @@ def _run_videoCue_held(cue: VideoCue, mtc, frozen_mtc_ms, layer_ids, media_dims)
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
         # at the cue's start_mtc) — this is what makes prewait/postwait gaps real.
+        # With a videocomposer that takes visible_at (869feynrj §4.6) the
+        # follow commit at start - F arms its self-gated reveal instead, and
+        # the reveal's /visible 1 only heals a lost visible_at.
         client.set_value(f"{layer_path}/mtcfollow", 1)
+
+    cue._visible_at_ready = loop_mode.vc_visible_at(PLAYER_HANDLER.video_caps)
 
     Logger.info(
         f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s),"
@@ -871,6 +880,11 @@ def reveal_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @reveal_cue.register
 def reveal_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
+    """``/visible 1`` to every layer, as always. After a ``visible_at 1``
+    (869feynrj §4.6) it is a healer: the videocomposer takes it as covered
+    while the gate is pending and as a no-op once the gate revealed the layer
+    (cuems-videocomposer VideoLayer.cpp:527-546), so only a lost
+    ``visible_at`` falls back to this reveal's onset."""
     layer_ids = getattr(cue, "_layer_ids", [])
     if not layer_ids or getattr(cue, "_osc", None) is None:
         return

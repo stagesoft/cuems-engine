@@ -1369,6 +1369,7 @@ class NodeEngine(BaseEngine):
         self._legacy_period = []
         cues = self._loop_period_cues()
         self._check_video_caps(cues)
+        self._check_visible_at(self.script.cuelist if self.script else None)
         if not cues:
             return None
         cancel = Event()
@@ -1570,6 +1571,31 @@ class NodeEngine(BaseEngine):
                 "videocomposer without the loop_period capability (no valid "
                 f"{caps_path()}): looping video cue(s) {videos} run in legacy mode "
                 "(re-anchored every pass on P; an A/V pair stays within one pass)"
+            )
+
+    @staticmethod
+    def _check_visible_at(cuelist) -> None:
+        """One INFO per load when this node plays video and its videocomposer
+        does not take ``visible_at`` (869feynrj §4.6 "Skew"): its VideoCues
+        then reveal as today, ``/visible 1`` at the polled reveal. Reads the
+        caps _check_video_caps has just refreshed."""
+        if loop_mode.vc_visible_at(PLAYER_HANDLER.video_caps):
+            return
+
+        def has_local_video(node) -> bool:
+            for cue in getattr(node, "contents", None) or []:
+                if isinstance(cue, CueList):
+                    if has_local_video(cue):
+                        return True
+                elif isinstance(cue, VideoCue) and getattr(cue, "_local", False):
+                    return True
+            return False
+
+        if cuelist is not None and has_local_video(cuelist):
+            Logger.info(
+                "videocomposer without the visible_at capability (no token in "
+                f"{caps_path()}): video cues reveal at the polled reveal "
+                "(/visible 1), not on their first frame"
             )
 
     @staticmethod
