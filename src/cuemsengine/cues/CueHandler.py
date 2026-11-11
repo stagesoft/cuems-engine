@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from threading import Event, Lock, Thread, current_thread
+from threading import Event, Lock, Thread, current_thread, local
 from time import monotonic, sleep
 from typing import Callable
 
@@ -18,12 +19,22 @@ from cuemsutils.tools.CTimecode import CTimecode
 
 from ..comms.NodeCommunications import NodeCommunications
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..players.StartGate import START_GATE
 from ..tools import MtcListener
+from . import go_lead, loop_mode
 from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
 from .loop_mode import wrap_active
-from .run_cue import blank_cue, reveal_cue, run_cue
+from .run_cue import (
+    blank_cue,
+    current_pass,
+    first_enabled_child,
+    installed_guard,
+    installed_pass,
+    reveal_cue,
+    run_cue,
+)
 
 
 @dataclass
@@ -76,6 +87,73 @@ class _FollowOut:
     fired: bool = False
     yielded: bool = False
     error: bool = False
+
+
+# 869feynrj §4.5e: whether the pass a go() starts was SEEDED (go_at_end,
+# ActionCue play / fade_in, a cross-node follow: anchors already past when the
+# target is set up, Phase B's) or not (an operator GO, a chain cue, a rejoin).
+# A late START of a seeded pass is INFO plus one WARNING per cue per load; of
+# any other, a WARNING. Thread-local, set around the go() call by go_from and by
+# a cue's thread around its continuation dispatch, so go()'s signature (and
+# every caller's) is unchanged.
+_DISPATCH = local()
+
+
+@contextmanager
+def _dispatch_tag(seeded: bool):
+    previous = getattr(_DISPATCH, "seeded", False)
+    _DISPATCH.seeded = bool(seeded)
+    try:
+        yield
+    finally:
+        _DISPATCH.seeded = previous
+
+
+class _SetupGuard:
+    """The held setup's re-check (869feynrj S0-2): run_cue's sends happen in
+    section(), under CueHandler._lock, and only while the pass that set the
+    cue up is still its owner (not stopped, generation unchanged). A stale
+    thread never sends anything to a player. Installed per thread by
+    run_cue.installed_guard; a CueList's child is set up under its parent's."""
+
+    def __init__(self, lock, cue: Cue, go_gen: int):
+        self._lock = lock
+        self._cue = cue
+        self._gen = go_gen
+        self.entered = False
+        self.refused = False
+
+    @contextmanager
+    def section(self, setup_cue: Cue | None = None):
+        """Yields whether the setup may send; holds the lock meanwhile. A
+        setup that ran logs its hold (869feynrj step 3, plan §13): ``setup
+        under lock: <t> ms (<type>, cue <id8>[, <n> layers])``, naming
+        ``setup_cue`` (a CueList's child) or the pass's own cue."""
+        held_ms = None
+        ok = False
+        try:
+            with self._lock:
+                t0 = monotonic()
+                self.entered = True
+                ok = not getattr(self._cue, "_stop_requested", False) and (
+                    getattr(self._cue, "_go_generation", 0) == self._gen
+                )
+                if not ok:
+                    self.refused = True
+                try:
+                    yield ok
+                finally:
+                    held_ms = (monotonic() - t0) * 1000
+        finally:
+            if ok and held_ms is not None:
+                what = setup_cue if setup_cue is not None else self._cue
+                layers = ""
+                if isinstance(what, VideoCue):
+                    layers = f", {len(getattr(what, '_layer_ids', None) or [])} layers"
+                Logger.info(
+                    f"setup under lock: {held_ms:.1f} ms ({type(what).__name__}, "
+                    f"cue {str(what.id)[:8]}{layers})"
+                )
 
 
 class CueHandler:
@@ -198,6 +276,21 @@ class CueHandler:
     # invisibly for the whole of their prewaits. Configurable per deployment;
     # 5s covers 4K decode-at-offset with room to spare.
     _RUN_AHEAD_MS = 5000
+
+    # ---- self-gated audio start (869feynrj, CAPS selfgate) ---------------
+    # The follow commit goes out at start - F, F per node (go_lead.
+    # follow_lead_ms): max(_FOLLOW_LEAD_MS, this node's out_latency_ms + 2
+    # polls + 5 + margin), due from the ROUNDED start label the player gets.
+    # The GO lead L (go_lead.go_lead_ms) is the controller's; its floor and
+    # cap are here too for the node's fallback. delta and the floor were
+    # measured in step 3 and fixed by Ion (go_lead.py).
+    _FOLLOW_LEAD_MS = go_lead.FOLLOW_LEAD_MS
+    _GO_LEAD_FLOOR_MS = go_lead.GO_LEAD_FLOOR_MS
+    _GO_LEAD_MAX_MS = go_lead.GO_LEAD_MAX_MS
+    # This node's output latency + one JACK period (ms), set by NodeEngine
+    # from settings / a JACK query / the players' LATENCY lines (§4.5d).
+    # None: unknown (F is then _FOLLOW_LEAD_MS).
+    out_latency_ms: float | None = None
 
     # ---- chain epoch -----------------------------------------------------
     # Class-level DEFAULTS only: the first bump shadows them with an instance
@@ -365,7 +458,12 @@ class CueHandler:
         )
 
     def _wait_mtc(
-        self, cue: Cue, mtc: MtcListener, target_ms: float, go_gen: int = 0
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        target_ms: float,
+        go_gen: int = 0,
+        clock: Callable[[], float] | None = None,
     ) -> str:
         """Block until live MTC reaches target_ms; return 'reached' or 'stopped'.
 
@@ -374,8 +472,16 @@ class CueHandler:
         newer GO/reload (`_go_generation` changed). Deliberately does NOT bail on
         a recoverable MTC stall — it self-recovers (fires late when timecode
         resumes). milliseconds_exact is wrap-accumulated → 24h-safe.
+
+        clock: reads the MTC position; the whole-frame main_tc when None. The
+        follow commit passes the interpolated reading (869feynrj §4.5b).
         """
-        while mtc.main_tc.milliseconds_exact < target_ms:
+        if clock is None:
+
+            def clock():
+                return mtc.main_tc.milliseconds_exact
+
+        while clock() < target_ms:
             if (
                 getattr(cue, "_stop_requested", False)
                 or getattr(cue, "_go_generation", 0) != go_gen
@@ -391,6 +497,394 @@ class CueHandler:
         ):
             return "stopped"
         return "reached"
+
+    @staticmethod
+    def _interpolated_clock(mtc: MtcListener) -> Callable[[], float]:
+        """The interpolated MTC reading (MtcListener.interpolated_ms, 869feynrj
+        §4.5b) as a clock for _wait_mtc; the whole-frame main_tc for an MTC
+        object without one (test doubles)."""
+        fn = getattr(mtc, "interpolated_ms", None)
+
+        def read() -> float:
+            if callable(fn):
+                try:
+                    value = fn()
+                except Exception:
+                    value = None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    return float(value)
+            return mtc.main_tc.milliseconds_exact
+
+        return read
+
+    def _follow_lead_ms(self) -> float:
+        """F on this node (869feynrj §4.2 step 2, review 4 M2)."""
+        return go_lead.follow_lead_ms(self.out_latency_ms)
+
+    @staticmethod
+    def _selfgate_target(cue: Cue):
+        """(the AudioCue a stop of ``cue`` reaches, its player) when that
+        player is selfgate, else (None, None). A CueList reaches its first
+        enabled child (S0-11)."""
+        target = first_enabled_child(cue) if isinstance(cue, CueList) else cue
+        if not isinstance(target, AudioCue):
+            return None, None
+        player = PLAYER_HANDLER.audio_player(target)
+        if not loop_mode.player_selfgate(player):
+            return None, None
+        return target, player
+
+    def cancel_start_locked(self, cue: Cue, kind: str) -> bool:
+        """``/cancelstart`` to the selfgate player of ``cue`` if it may
+        follow (869feynrj §4.3). The caller holds self._lock, in the section
+        that sets the cue's stop flags, so the decision and the datagram are
+        one step and a stale thread never sends.
+
+        kind: "cancel" for a pass the engine has not revealed (its START, if
+        the player began, is a WARNING); "stop_of_playing" for STOP (always,
+        D10) and for the stops of a playing cue (D12): no WARNING, the player
+        fades over fade_ms and the disconnect waits for it. Nothing is sent
+        to an older player. Never raises; True if one went out.
+
+        A VideoCue (or a CueList's video child) whose ``visible_at`` gate this
+        pass armed and the engine has not revealed gets ``visible_at 0`` in
+        the same section, whatever the kind (§4.6, D5)."""
+        sent = False
+        try:
+            target, player = self._selfgate_target(cue)
+            if target is not None:
+                client = getattr(target, "_osc", None)
+                sent = START_GATE.cancel(target, player, client, kind) is not None
+        except Exception as e:
+            Logger.error(f"Cue {cue.id}: /cancelstart not sent: {e}")
+        return self._cancel_visible_at_locked(cue) or sent
+
+    @staticmethod
+    def _visible_at_target(cue: Cue) -> Cue | None:
+        """The VideoCue whose ``visible_at`` gate a stop of ``cue`` reaches
+        (the cue, or the child a CueList's pass committed), while that gate
+        is an open account: armed by a follow commit, neither cancelled nor
+        revealed by the engine since. None otherwise.
+
+        A CueList reaches its child's gate only while that gate is the one
+        ITS pass armed (review C3): the child's ``_visible_at_pass`` must be
+        (the parent, the parent's committing generation). A newer pass of
+        the child on its own is not the parent's to cancel."""
+        if isinstance(cue, CueList):
+            target = getattr(cue, "_visible_at_child", None)
+            owner = (id(cue), getattr(cue, "_visible_at_child_gen", None))
+            if target is None or getattr(target, "_visible_at_pass", None) != owner:
+                return None
+        else:
+            target = cue
+        if not isinstance(target, VideoCue):
+            return None
+        if getattr(target, "_visible_at_gen", None) is None:
+            return None
+        return target
+
+    @staticmethod
+    def _close_visible_at(target: Cue, parent: Cue | None = None) -> None:
+        """Close a gate's account (cancel, the engine's reveal, the layers'
+        release): the cue's record and, for a CueList's child, the parent's
+        reference to it (review C3). Call with self._lock held."""
+        target._visible_at_gen = None
+        target._visible_at_layers = None
+        target._visible_at_pass = None
+        if parent is not None:
+            parent._visible_at_child = None
+            parent._visible_at_child_gen = None
+
+    def _cancel_visible_at_locked(self, cue: Cue) -> bool:
+        """``visible_at 0`` to the layers of a pending (or just gate-revealed)
+        pass of ``cue`` (869feynrj §4.3, §4.6): the videocomposer drops the
+        gate, or hides a layer it revealed a few ms before this cancel, with
+        its WARNING ``visible_at cancelled after <ms> ms visible``
+        (cuems-videocomposer VideoLayer.cpp:558-567). The caller holds
+        self._lock, in the section that sets the stop flags. Sent once: the
+        account is closed here. Never raises; True if one went out."""
+        try:
+            target = self._visible_at_target(cue)
+            if target is None:
+                return False
+            layers = list(getattr(target, "_visible_at_layers", None) or [])
+            self._close_visible_at(target, cue if cue is not target else None)
+            client = getattr(target, "_osc", None)
+            if client is None or not layers:
+                return False
+            sent = 0
+            for layer_id in layers:
+                try:
+                    client.set_value(f"/videocomposer/layer/{layer_id}/visible_at", 0)
+                    sent += 1
+                except Exception as e:
+                    Logger.error(
+                        f"Video cue {target.id}: visible_at 0 not sent to layer "
+                        f"{layer_id}: {e}"
+                    )
+            Logger.info(
+                f"Video cue {target.id}: visible_at 0 to {sent} layer(s) "
+                "(pass cancelled before its reveal)"
+            )
+            return sent > 0
+        except Exception as e:
+            Logger.error(f"Cue {cue.id}: visible_at 0 not sent: {e}")
+            return False
+
+    def _follow_commit_target(self, cue: Cue) -> Cue | None:
+        """The AudioCue whose selfgate player this pass commits a follow to:
+        the cue itself, or a CueList's first enabled child, played at the
+        parent's start (S0-11). None for any other cue or an older player."""
+        target = cue
+        if isinstance(cue, CueList):
+            target = first_enabled_child(cue)
+            if target is None or not getattr(target, "_local", False):
+                return None
+        if getattr(target, "_start_mtc", None) is None:
+            return None
+        if isinstance(target, VideoCue):
+            # 869feynrj §4.6: the commit is visible_at 1 to every layer, on a
+            # videocomposer that takes it; a dark cue (no layer on this
+            # node) has nothing to gate.
+            if (
+                not getattr(target, "_layer_ids", None)
+                or getattr(target, "_osc", None) is None
+                or not loop_mode.vc_visible_at(PLAYER_HANDLER.video_caps)
+            ):
+                return None
+            return target
+        if not isinstance(target, AudioCue):
+            return None
+        if not loop_mode.player_selfgate(PLAYER_HANDLER.audio_player(target)):
+            return None
+        return target
+
+    def _commit_follow(
+        self, cue: Cue, target: Cue, go_gen: int, mtc: MtcListener | None = None
+    ) -> bool:
+        """The follow commit (869feynrj §4.2 step 2): ``/mtcfollow 1`` to a
+        selfgate player at start - F, decided AND sent under _lock (S0-3), so
+        a cancel deciding in the same lock either precedes it (and the commit
+        is refused) or follows it (and its /cancelstart goes out after the
+        follow). Refused when the pass was stopped, superseded, or its start
+        was never sent (`_reveal_ready`, review 2 F11: a follow without its
+        start would play from offset 0). A VideoCue target goes to
+        _commit_visible_at (§4.6)."""
+        if isinstance(target, VideoCue):
+            return self._commit_visible_at(cue, target, go_gen, mtc)
+        with self._lock:
+            if getattr(cue, "_stop_requested", False) or (
+                getattr(cue, "_go_generation", 0) != go_gen
+            ):
+                Logger.info(
+                    f"Cue {cue.id}: follow commit refused, the pass was stopped "
+                    "or superseded"
+                )
+                return False
+            if not self._child_current_locked(cue, target, go_gen):
+                # Review C2, the audio side of S0-11.
+                Logger.info(
+                    f"Audio cue {target.id}: follow commit refused, the CueList "
+                    "child was disabled, stopped or replaced since the setup"
+                )
+                return False
+            if not getattr(target, "_reveal_ready", False):
+                Logger.info(
+                    f"Audio cue {target.id}: follow commit refused, its start "
+                    "was never sent (setup aborted)"
+                )
+                return False
+            player = PLAYER_HANDLER.audio_player(target)
+            client = getattr(target, "_osc", None)
+            if client is None or not loop_mode.player_selfgate(player):
+                return False
+            sent_at = self._interpolated_clock(mtc)() if mtc is not None else None
+            if not START_GATE.commit_follow(target, player, client, go_gen):
+                return False
+            cue._follow_gen = go_gen
+            target._follow_committed = True
+        # 869feynrj step 3: m = this node's interpolated MTC at the send.
+        start = target._start_mtc.milliseconds_exact
+        at = f"{sent_at:.1f}" if sent_at is not None else "?"
+        Logger.info(
+            f"follow commit: cue {str(target.id)[:8]} at mtc {at} ms, start "
+            f"{start:.1f} ms, F {self._follow_lead_ms():.1f} ms"
+        )
+        return True
+
+    def _commit_visible_at(
+        self, cue: Cue, target: VideoCue, go_gen: int, mtc: MtcListener | None
+    ) -> bool:
+        """The follow commit of a VideoCue (869feynrj §4.6): ``visible_at 1``
+        to every layer, at start - F, decided AND sent under _lock like the
+        audio cues' ``/mtcfollow 1`` (S0-3), so a cancel deciding in the same
+        lock either precedes it (no gate) or follows it (its ``visible_at 0``
+        goes out after the gate). The videocomposer then reveals each layer on
+        the first presented frame with content time >= 0
+        (RemoteCommandRouter.cpp:134-136, VideoLayer.cpp:548-557). Refused
+        when the pass was stopped, superseded, or its setup never reached the
+        layers (`_visible_at_ready`). The gate is recorded on the cue
+        (`_visible_at_gen`, `_visible_at_layers`; a CueList parent keeps
+        `_visible_at_child`) until a cancel, the engine's reveal or the
+        layers' release closes it.
+
+        A GO-again of a cue whose layer the gate already revealed opens a
+        new account too, although the VC leaves a visible layer as it is
+        (`VideoLayer.cpp:551-552`): a cancel of the new pass before its
+        reveal then sends ``visible_at 0`` and the VC hides the layer, which
+        by then holds the new pass's frame 0. Intended (review C1, Ion
+        2026-11-10 = (a); D5: the cancel is final, a cancelled cue leaves
+        nothing frozen on screen)."""
+        with self._lock:
+            if getattr(cue, "_stop_requested", False) or (
+                getattr(cue, "_go_generation", 0) != go_gen
+            ):
+                Logger.info(
+                    f"Cue {cue.id}: follow commit refused, the pass was stopped "
+                    "or superseded"
+                )
+                return False
+            if not self._child_current_locked(cue, target, go_gen):
+                Logger.info(
+                    f"Video cue {target.id}: follow commit refused, the CueList "
+                    "child was disabled, stopped or replaced since the setup"
+                )
+                return False
+            if not getattr(target, "_visible_at_ready", False):
+                Logger.info(
+                    f"Video cue {target.id}: follow commit refused, its setup "
+                    "never reached the layers"
+                )
+                return False
+            client = getattr(target, "_osc", None)
+            layer_ids = list(getattr(target, "_layer_ids", None) or [])
+            if client is None or not layer_ids:
+                return False
+            sent_at = self._interpolated_clock(mtc)() if mtc is not None else None
+            sent = []
+            for layer_id in layer_ids:
+                try:
+                    client.set_value(f"/videocomposer/layer/{layer_id}/visible_at", 1)
+                    sent.append(layer_id)
+                except Exception as e:
+                    # The reveal's /visible 1 heals this layer.
+                    Logger.warning(
+                        f"Video cue {target.id}: visible_at 1 not sent to layer "
+                        f"{layer_id}: {e}"
+                    )
+            if not sent:
+                return False
+            target._visible_at_gen = go_gen
+            target._visible_at_layers = sent
+            # Whose pass armed it (review C3): a CueList parent reaches it
+            # only while this stays (the parent, this generation).
+            target._visible_at_pass = (id(cue), go_gen)
+            if cue is not target:
+                cue._visible_at_child = target
+                cue._visible_at_child_gen = go_gen
+        start = target._start_mtc.milliseconds_exact
+        at = f"{sent_at:.1f}" if sent_at is not None else "?"
+        Logger.info(
+            f"follow commit: video cue {str(target.id)[:8]} visible_at 1 on "
+            f"{len(sent)} layer(s) at mtc {at} ms, start {start:.1f} ms, "
+            f"F {self._follow_lead_ms():.1f} ms"
+        )
+        return True
+
+    def _run_timeline(
+        self,
+        cue: Cue,
+        mtc: MtcListener,
+        arrival_ms: float,
+        start_ms: float,
+        go_gen: int,
+    ) -> tuple[str, Cue | None]:
+        """Setup, illumination and the follow commit of one pass, as three
+        events taken in due-time order (869feynrj §4.2, review 4 M3):
+
+        - setup at max(now, start - _RUN_AHEAD_MS), NOT gated on the arrival
+          (review #1: a led operator GO's arrival is the start itself);
+        - illumination at the arrival (a cue lights when it arrives);
+        - the follow commit at start label - F, for a selfgate AudioCue (or a
+          CueList's selfgate child) only, always after the setup (it needs
+          the start sent).
+
+        Ties: setup, then commit, then illumination. Returns ("ready",
+        follow target or None), ("stopped", None) or ("failed", None) when
+        run_cue raised (logged, illumination ended)."""
+        pending = {"setup": start_ms - self._RUN_AHEAD_MS, "illum": arrival_ms}
+        rank = {"setup": 0, "commit": 1, "illum": 2}
+        target = None
+        while pending:
+            name = min(pending, key=lambda n: (pending[n], rank[n]))
+            due = pending.pop(name)
+            if name == "illum":
+                if self._wait_mtc(cue, mtc, due, go_gen) == "stopped":
+                    return "stopped", None
+                # Illuminate (sequence-view highlight) at the cue's ARRIVAL —
+                # the start of its prewait — NOT at dispatch. Under Auto
+                # continue every cue arrives at the trigger, so the whole chain
+                # lights together and each cue stays lit for prewait +
+                # max(body, postwait).
+                try:
+                    self.communications_thread.add_cue(
+                        cue.id, str(start_ms), timeout=0.1
+                    )
+                except Exception:
+                    pass
+            elif name == "setup":
+                # Park until the held setup is actually needed. Unrolling the
+                # chain at the trigger would otherwise run every cue's run_cue
+                # at GO — for video that is N layers decoding invisibly for
+                # the whole of their prewaits. A start already inside the
+                # window returns at once.
+                if self._wait_mtc(cue, mtc, due, go_gen) == "stopped":
+                    return "stopped", None
+                # Set up HELD at start_ms (video invisible / audio
+                # not-following / action not-yet-run / dmx self-scheduled from
+                # absolute mtc_time), close enough to the slot that the frame
+                # is ready. Its sends re-check the pass under _lock (S0-2).
+                guard = _SetupGuard(self._lock, cue, go_gen)
+                try:
+                    with installed_guard(guard):
+                        run_cue(cue, mtc, start_ms)
+                except Exception as e:
+                    # Illumination may have happened above, so a failure here
+                    # would leave the cue lit forever with a dead thread.
+                    Logger.error(
+                        f"run_cue failed for {cue.__class__.__name__} "
+                        f"{cue.id}: {e}. The cue will not play."
+                    )
+                    self._end_illumination(cue)
+                    return "failed", None
+                if guard.refused:
+                    return "stopped", None
+                if isinstance(cue, DmxCue):
+                    # DMX has no reveal: the scene is already on its way with
+                    # an absolute mtc_time and the player self-schedules it.
+                    # From here it is committed and the stop walk must not
+                    # treat it as still cancellable.
+                    with self._lock:
+                        cue._revealed = True
+                        cue._revealed_at = monotonic()
+                elif isinstance(cue, CueList):
+                    self._mark_cuelist_child(cue, go_gen)
+                target = self._follow_commit_target(cue)
+                if target is not None:
+                    pending["commit"] = (
+                        target._start_mtc.milliseconds_exact - self._follow_lead_ms()
+                    )
+            elif name == "commit":
+                if (
+                    self._wait_mtc(
+                        cue, mtc, due, go_gen, clock=self._interpolated_clock(mtc)
+                    )
+                    == "stopped"
+                ):
+                    return "stopped", None
+                if not self._commit_follow(cue, target, go_gen, mtc):
+                    target = None
+        return "ready", target
 
     def _arm_ahead(
         self,
@@ -607,7 +1101,10 @@ class CueHandler:
                     # Checked FIRST, on entry and on every wake.
                     stale = True
                 elif hasattr(cue, "loaded") and cue.loaded:
-                    if not cue.enabled:
+                    # A disabled cue takes effect from the next round (Q-S0-A
+                    # = (A), S0-21): a cue still playing is never disarmed
+                    # here; disarm() / STOP clear _playing when it ends.
+                    if not cue.enabled and not getattr(cue, "_playing", False):
                         needs_disarm = True
                 elif in_flight is not None:
                     if not init:
@@ -862,7 +1359,25 @@ class CueHandler:
         ``project_changed``, ``load``, ``ready_script``, ``shutdown``) and is
         logged: a disarm, the automatic one at cue end included, must never
         be silent.
+
+        A selfgate player that may still follow gets ``/cancelstart`` first
+        (869feynrj §4.3 "any disarm", D12), so a disarm of a playing cue fades
+        instead of clicking; the disconnect waits for the fade
+        (PlayerHandler). Not at a natural end (``cue_end``): the pass is over.
         """
+        if reason != "cue_end" and (
+            self._selfgate_target(cue)[0] is not None
+            or self._visible_at_target(cue) is not None
+        ):
+            with self._lock:
+                self.cancel_start_locked(
+                    cue,
+                    (
+                        "stop_of_playing"
+                        if getattr(cue, "_revealed", False)
+                        else "cancel"
+                    ),
+                )
         cue._playing = False
         if hasattr(cue, "loaded") and cue.loaded:
             self.remove_armed_cue(cue)
@@ -938,6 +1453,9 @@ class CueHandler:
                             f" {cue.id} ({reason}): {e}"
                         )
             cue._layer_ids = []
+            # 869feynrj §4.6: the layers are gone, and so is any gate on them
+            # (a CueList parent's reference fails its ownership check now).
+            self._close_visible_at(cue)
             Logger.debug(
                 f"{what} video cue {cue.id} ({reason}): unloaded {unloaded};"
                 f" skipped {skipped} (no longer tracked: removed by reset or quit)"
@@ -973,6 +1491,35 @@ class CueHandler:
                 cue._go_generation = getattr(cue, "_go_generation", 0) + 1
                 cue._go_epoch = self._chain_epoch
                 cue._playing = False
+            # 869feynrj D10: every selfgate player that may follow gets
+            # /cancelstart (kind stop_of_playing: STOP never warns), playing
+            # ones included, so STOP fades in ~5 ms instead of the disconnect's
+            # click. Walked over the PLAYER table, not _armed_cues (S0-4): the
+            # kill goes player by player. The second stop_all_cues of a STOP
+            # or a load (ready_script -> disarm_all) finds the players killed
+            # and may_follow cleared, and sends nothing.
+            self._stop_cancel_all_locked()
+            # 869feynrj §4.6: a video gate still pending (a pass the engine
+            # has not revealed) is dropped here, before the reset/unload, so
+            # frame 0 cannot flash between the flags and the blackout. Sent
+            # once: the second stop_all_cues finds the account closed.
+            for cue in list(self._armed_cues):
+                self._cancel_visible_at_locked(cue)
+
+    def _stop_cancel_all_locked(self) -> None:
+        """D10's sends; the caller holds self._lock. Never raises."""
+        try:
+            players = PLAYER_HANDLER.live_audio_players()
+        except Exception as e:
+            Logger.error(f"STOP: could not list the audio players: {e}")
+            return
+        for cue, player, client in players:
+            if not loop_mode.player_selfgate(player):
+                continue
+            try:
+                START_GATE.cancel(cue, player, client, "stop_of_playing")
+            except Exception as e:
+                Logger.error(f"STOP: /cancelstart to cue {cue.id} failed: {e}")
 
     def cancel_pending_descendants(self, cue: Cue) -> int:
         """Cancel the cues an Auto-continue chain dispatched behind `cue`.
@@ -1024,6 +1571,8 @@ class CueHandler:
                         node._go_generation = getattr(node, "_go_generation", 0) + 1
                         node._go_epoch = epoch
                         node._playing = False
+                        # 869feynrj §4.3: its player may already follow.
+                        self.cancel_start_locked(node, "cancel")
                         cancelled.append(node)
                 elif is_local and owned:
                     # Disabled: nothing to cancel, but claim it so enabling it
@@ -1065,15 +1614,20 @@ class CueHandler:
         The cue keeps a stamp of the pass it was cancelled out of, so
         re-enabling it before its slot puts it back (rejoin_chain).
         """
-        if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
-            return False
         with self._lock:
+            # Tested in the same section that sets the flags (869feynrj S0-1):
+            # tested before the lock, a reveal landing in between was flagged
+            # after it went on stage, never disarmed, and played to its end.
+            if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
+                return False
             self._chain_epoch = self._chain_epoch + 1
             epoch = self._chain_epoch
             cue._stop_requested = True
             cue._go_generation = getattr(cue, "_go_generation", 0) + 1
             cue._go_epoch = epoch
             cue._playing = False
+            # 869feynrj §4.3: its player may already follow.
+            self.cancel_start_locked(cue, "cancel")
             # Remember where it would have played, so a re-enable can put it
             # back at the same anchor instead of losing the slot.
             arrival = getattr(cue, "_dispatch_arrival_ms", None)
@@ -1424,8 +1978,23 @@ class CueHandler:
             # Only past every refusal: a dispatch that is refused must not
             # cancel the follow of the pass still playing.
             self._take_follow_on_restart_locked(cue)
+            # 869feynrj: this pass replaces one that is on stage (a re-GO of a
+            # playing cue). Its follow commit then reaches a playing player,
+            # which prints no START: the reveal skips the lost-follow check.
+            cue._superseded_playing = bool(
+                getattr(cue, "_revealed", False) and getattr(cue, "_playing", False)
+            )
+            if not getattr(cue, "_revealed", False):
+                # §4.3 row 1: the pass this GO supersedes produced no output,
+                # but its player may already follow it: cancel that pending
+                # start here, for the OLD pass, before the new thread exists
+                # (its own follow commit comes later; the filter is off,
+                # §4.4). A pass on stage is left alone: the new start replaces
+                # it (and an equal start is a no-op in the player, §4.1c).
+                self.cancel_start_locked(cue, "cancel")
 
             cue._go_epoch = chain_epoch
+            cue._pass_seeded = bool(getattr(_DISPATCH, "seeded", False))
             # Recorded here, not in the spawned thread: a disable arriving in
             # between has to find this cue's anchor to stamp a rejoin with, and
             # in a loop project it would otherwise read the PREVIOUS cycle's.
@@ -1542,15 +2111,18 @@ class CueHandler:
             if skipped_disabled:
                 self.stamp_pass(skipped_disabled, seed_ms)
             return None
-        if skipped_disabled:
-            return self.go(
-                cue,
-                mtc,
-                seed_ms + sigma_ms,
-                stamp_skipped=skipped_disabled,
-                **guards,
-            )
-        return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
+        # A seeded dispatch (869feynrj §4.5e), never led (S0-13: L per hop
+        # would drift every go_at_end chain by L per cue).
+        with _dispatch_tag(True):
+            if skipped_disabled:
+                return self.go(
+                    cue,
+                    mtc,
+                    seed_ms + sigma_ms,
+                    stamp_skipped=skipped_disabled,
+                    **guards,
+                )
+            return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
         """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
@@ -1662,16 +2234,19 @@ class CueHandler:
         """
         follow = _FollowOut()
         try:
-            self._run_cue_pass(
-                cue,
-                mtc,
-                frozen_mtc_ms,
-                go_gen,
-                chain_epoch,
-                unroll,
-                arm_epoch,
-                follow,
-            )
+            # The pass context (run_cue.installed_pass): the readers on this
+            # thread compare against this pass, not the cue's attributes.
+            with installed_pass(go_gen, cue):
+                self._run_cue_pass(
+                    cue,
+                    mtc,
+                    frozen_mtc_ms,
+                    go_gen,
+                    chain_epoch,
+                    unroll,
+                    arm_epoch,
+                    follow,
+                )
         except Exception:
             follow.error = True
             raise
@@ -1751,13 +2326,15 @@ class CueHandler:
                         f"Unrolling post_go chain: dispatching {next_cue.id} "
                         f"at the trigger"
                     )
-                    post_go_thread = self.go(
-                        next_cue,
-                        mtc,
-                        next_arrival,
-                        chain_epoch=chain_epoch,
-                        arm_epoch=arm_epoch,
-                    )
+                    # A chain cue's pass is seeded iff its head's is (§4.5e).
+                    with _dispatch_tag(getattr(cue, "_pass_seeded", False) is True):
+                        post_go_thread = self.go(
+                            next_cue,
+                            mtc,
+                            next_arrival,
+                            chain_epoch=chain_epoch,
+                            arm_epoch=arm_epoch,
+                        )
             except Exception as e:
                 # The chain is downstream work; losing it must not cost THIS
                 # cue its own reveal.
@@ -1817,54 +2394,33 @@ class CueHandler:
                 )
                 return
 
-            # Illuminate (sequence-view highlight) at the cue's ARRIVAL — the
-            # start of its prewait — NOT at dispatch. Under Auto continue every
-            # cue arrives at the trigger, so the whole chain lights together and
-            # each cue stays lit for prewait + max(body, postwait).
-            if self._wait_mtc(cue, mtc, arrival_ms, go_gen) != "stopped":
-                try:
-                    self.communications_thread.add_cue(
-                        cue.id, str(start_ms), timeout=0.1
-                    )
-                except Exception:
-                    pass
-
-            # Park until the held setup is actually needed. Unrolling the chain
-            # at the trigger would otherwise run every cue's run_cue at GO —
-            # for video that is N layers decoding invisibly for the whole of
-            # their prewaits. A start already inside the window returns at once.
-            parked = self._wait_mtc(cue, mtc, start_ms - self._RUN_AHEAD_MS, go_gen)
-
-            if parked != "stopped":
-                # Set up HELD at start_ms (video invisible / audio not-following
-                # / action not-yet-run / dmx self-scheduled from absolute
-                # mtc_time), close enough to the slot that the frame is ready.
-                try:
-                    run_cue(cue, mtc, start_ms)
-                except Exception as e:
-                    # Illumination happens above, so a failure here would leave
-                    # the cue lit forever with a dead thread behind it.
-                    Logger.error(
-                        f"run_cue failed for {cue.__class__.__name__} "
-                        f"{cue.id}: {e}. The cue will not play."
-                    )
-                    self._end_illumination(cue)
-                    return
-                if isinstance(cue, DmxCue):
-                    # DMX has no reveal: the scene is already on its way with an
-                    # absolute mtc_time and the player self-schedules it. From
-                    # here it is committed and the stop walk must not treat it
-                    # as still cancellable.
-                    with self._lock:
-                        cue._revealed = True
-                        cue._revealed_at = monotonic()
+            # Setup, illumination and the follow commit, in due-time order
+            # (869feynrj §4.2).
+            phase, follow_target = self._run_timeline(
+                cue, mtc, arrival_ms, start_ms, go_gen
+            )
+            if phase == "failed":
+                return
 
             # MTC-gated reveal: wait until live MTC reaches start_ms, then reveal
-            # (video /visible; audio /mtcfollow; action EXECUTE; dmx no-op). This
+            # (video /visible; audio /mtcfollow, or nothing more for a
+            # follow-committed selfgate player; action EXECUTE; dmx no-op). This
             # is what makes prewait/body/postwait real timeline gaps, honored
-            # identically on every node. Skipped when the park was cancelled —
-            # run_cue never ran, so _start_mtc holds no anchor to wait on.
-            if parked != "stopped" and self._reveal_wait(cue, mtc, go_gen) != "stopped":
+            # identically on every node. Skipped when the pass was stopped
+            # before its setup — _start_mtc then holds no anchor to wait on.
+            # A CueList whose child committed its follow reveals at the
+            # child's start, not at once, so a cascade or a disable still
+            # reaches the child until it is on stage (review 4 m9).
+            gate = "stopped"
+            if phase == "ready":
+                if isinstance(cue, CueList) and follow_target is not None:
+                    gate = self._wait_mtc(
+                        cue, mtc, follow_target._start_mtc.milliseconds_exact, go_gen
+                    )
+                else:
+                    gate = self._reveal_wait(cue, mtc, go_gen)
+            if gate != "stopped":
+                skip_child = None
                 # Commit under the same lock the stop walk takes, so a cancel
                 # landing inside the 20ms poll gap cannot leak a reveal past it.
                 with self._lock:
@@ -1877,10 +2433,55 @@ class CueHandler:
                         # "not started yet" must never see _revealed set
                         # without its stamp.
                         cue._revealed_at = monotonic()
+                        child = self._owned_cuelist_child(cue, go_gen)
+                        if child is not None and not self._child_current_locked(
+                            cue, child, go_gen
+                        ):
+                            # Review C2: the child was disabled, stopped,
+                            # paused or GO'd on its own since the setup; the
+                            # reveal must neither reach it (a video healer, a
+                            # legacy audio follow) nor fall through to the
+                            # next enabled child, which was never set up.
+                            skip_child = child
+                            child = None
+                        if child is not None:
+                            # S0-21: its child is on stage from here on.
+                            child._revealed = True
+                            child._revealed_at = cue._revealed_at
+                        if isinstance(follow_target, VideoCue):
+                            # 869feynrj §4.6: on stage from here on; a stop
+                            # now hides it the usual way (/visible 0 and the
+                            # unload, or the reset), and a visible_at 0
+                            # would be the race's WARNING in the VC (D5).
+                            self._close_visible_at(
+                                follow_target,
+                                cue if cue is not follow_target else None,
+                            )
+                        # Committed or legacy reveal, decided here under the
+                        # lock and handed to reveal_audioCue (review fix 7):
+                        # read there, _follow_committed may already be a
+                        # newer pass's (its setup resets it).
+                        ctx = current_pass()
+                        if ctx is not None:
+                            ctx.follow_committed = (
+                                follow_target is not None
+                                and getattr(follow_target, "_follow_committed", False)
+                                is True
+                                and getattr(cue, "_follow_gen", None) == go_gen
+                            )
                 if do_reveal:
                     revealed_at = cue._revealed_at
                     follow.revealed = True
-                    reveal_cue(cue, mtc, start_ms)
+                    if skip_child is None:
+                        reveal_cue(cue, mtc, start_ms)
+                    else:
+                        Logger.info(
+                            f"CueList {cue.id}: child {skip_child.id} was "
+                            "disabled, stopped or replaced since the setup; "
+                            "not revealed"
+                        )
+                    if isinstance(follow_target, AudioCue):
+                        self._expect_start(cue, follow_target)
                     armed_at = getattr(cue, "_armed_at", None)
                     if armed_at is not None:
                         # Both sides of the pre-arm policy in one number: a
@@ -1981,7 +2582,12 @@ class CueHandler:
             # Hide output at body end WITHOUT disarming (cue must stay in
             # _armed_cues so STOP can reach this wait — disarming here would
             # let the tail expire and ghost-fire after an operator STOP).
-            blank_cue(cue, mtc)
+            # Decided and sent under the lock, against this pass (869feynrj
+            # §4.6): a /visible 0 drops a pending visible_at gate in the VC,
+            # so a re-GO landing since the check above must not be blanked.
+            with self._lock:
+                if getattr(cue, "_go_generation", 0) == go_gen:
+                    blank_cue(cue, mtc)
             self._wait_mtc(cue, mtc, fire_seed_ms, go_gen)
             if getattr(cue, "_go_generation", 0) != go_gen:
                 # Real STOP (stop_all_cues bumps gen) / newer GO owns the cue:
@@ -2042,6 +2648,7 @@ class CueHandler:
             )
 
         self._wait_wrap_player_end(cue, mtc, go_gen)
+        self._end_cuelist_child(cue, mtc, go_gen)
         self.disarm(cue, reason="cue_end")
 
         if cue.post_go == "go_at_end" and go_at_end_thread:
@@ -2050,6 +2657,118 @@ class CueHandler:
         if cue.post_go == "go" and cue._target_object and not cue._stop_requested:
             if post_go_thread:
                 self.wait_for_cue(post_go_thread)
+
+    def _mark_cuelist_child(self, cue: Cue, go_gen: int) -> None:
+        """A CueList's child bypasses go(), so nothing marked it as owned by
+        a pass: a disable of a playing CueList disarmed (cut) its child
+        (S0-21, Q-S0-A = (A): no disable path stops a playing cue). Its pass
+        marks it here, at the setup: playing (the disable guard reads it)
+        and not yet revealed (a cancel still reaches a pending child); the
+        parent's reveal sets the child's _revealed, and the parent's pass
+        clears both at the child's end (_end_cuelist_child). Also cleared,
+        like any cue's, by disarm() and STOP."""
+        with self._lock:
+            if getattr(cue, "_stop_requested", False) or (
+                getattr(cue, "_go_generation", 0) != go_gen
+            ):
+                return
+            child = first_enabled_child(cue)
+            if child is None or not getattr(child, "_local", False):
+                return
+            child._playing = True
+            child._revealed = False
+            child._ever_played = True
+            child._cuelist_pass = (id(cue), go_gen)
+            # Review C2: this pass takes the child over, as go() does for a
+            # top-level pass: a stop flag left by an earlier pass of its own
+            # is cleared, and its generation recorded, so a disable, stop,
+            # pause or own GO from here on is seen by _child_current_locked.
+            child._stop_requested = False
+            child._cuelist_child_gen = getattr(child, "_go_generation", 0)
+            cue._marked_child = child
+
+    def _child_current_locked(self, cue: Cue, target: Cue, go_gen: int) -> bool:
+        """Review C2: may this pass of ``cue`` still commit to / reveal
+        ``target``? Always for the cue's own pass. For a CueList's child: it
+        is the child this pass marked at its setup, still enabled, not
+        stopped or paused since (``_stop_requested``: the setup cleared it),
+        and not taken by a pass of its own (its generation is the one the
+        setup recorded; a disable's cancel_parked bumps it too). The parent's
+        own flags are the caller's check. Call with self._lock held."""
+        if cue is target:
+            return True
+        if self._owned_cuelist_child(cue, go_gen) is not target:
+            return False
+        return (
+            getattr(target, "enabled", True) is not False
+            and not getattr(target, "_stop_requested", False)
+            and getattr(target, "_go_generation", 0)
+            == getattr(target, "_cuelist_child_gen", None)
+        )
+
+    @staticmethod
+    def _owned_cuelist_child(cue: Cue, go_gen: int) -> Cue | None:
+        """The child this pass of a CueList marked, while the mark is still
+        this pass's (a newer pass of the CueList re-marks it). Call with
+        self._lock held."""
+        if not isinstance(cue, CueList):
+            return None
+        child = getattr(cue, "_marked_child", None)
+        if child is None or getattr(child, "_cuelist_pass", None) != (id(cue), go_gen):
+            return None
+        return child
+
+    def _end_cuelist_child(self, cue: Cue, mtc: MtcListener, go_gen: int) -> None:
+        """The end of a CueList child's pass (S0-21). loop_cueList is a no-op,
+        so the parent's thread reaches its end right after the reveal while
+        the child still plays: it waits here for the child's body end
+        (_end_mtc, set at its setup), then clears the child's playing and
+        revealed marks -- only while this pass still owns them (a re-GO of
+        the CueList re-marks the child and its own end clears it). A STOP
+        clears them itself; a pause (its /cancelstart already silenced the
+        child) ends the wait at once. Without this a later disable never
+        disarmed the child: its player and JACK client stayed until STOP,
+        and a cross-node follow read it as still on stage."""
+        if not isinstance(cue, CueList):
+            return
+        with self._lock:
+            child = self._owned_cuelist_child(cue, go_gen)
+        if child is None:
+            return
+        start = getattr(child, "_start_mtc", None)
+        end = getattr(child, "_end_mtc", None)
+        try:
+            start_ms = start.milliseconds_exact if start is not None else None
+            end_ms = end.milliseconds_exact if end is not None else None
+        except AttributeError:
+            start_ms = end_ms = None
+        if end_ms is not None and (start_ms is None or end_ms > start_ms):
+            self._wait_mtc(cue, mtc, end_ms, go_gen)
+        with self._lock:
+            if getattr(cue, "_go_generation", 0) != go_gen:
+                return
+            if self._owned_cuelist_child(cue, go_gen) is not child:
+                return
+            child._playing = False
+            child._revealed = False
+            child._cuelist_pass = None
+
+    def _expect_start(self, cue: Cue, target: Cue) -> None:
+        """At the reveal of a follow-committed pass (869feynrj §8): the
+        player's START line is due by start + one period + latency; the
+        start gate re-sends /mtcfollow 1 once if it never comes (a lost
+        follow). Not when this pass superseded one still on stage: a
+        /mtcfollow 1 in PLAY prints no START."""
+        if getattr(cue, "_superseded_playing", False):
+            return
+        try:
+            START_GATE.expect_start(
+                target,
+                PLAYER_HANDLER.audio_player(target),
+                getattr(target, "_osc", None),
+            )
+        except Exception as e:
+            Logger.warning(f"Audio cue {target.id}: START check not armed: {e}")
 
     # ---------------------------
     # Cross-node Auto follow (869fc8ytz)
@@ -2258,6 +2977,11 @@ class CueHandler:
             new_gen = gen + 1
             cue._go_generation = new_gen
             cue._playing = False
+            # 869feynrj §4.3, D12: a pending start is cancelled; a cue on stage
+            # (< grace_s) fades before the disarm below cuts it.
+            self.cancel_start_locked(
+                cue, "stop_of_playing" if age is not None else "cancel"
+            )
         self.cancel_pending_descendants(cue)
         self._end_illumination(cue)
         # Let the cue's own loop see the flag and leave (polls every 20 ms),

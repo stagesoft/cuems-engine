@@ -3,8 +3,11 @@
 # SPDX-FileContributor: Adrià Masip <adria@stagelab.coop>
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 
+import threading
+from contextlib import contextmanager
 from functools import singledispatch
 from time import monotonic
+from types import SimpleNamespace
 
 from cuemsutils.cues import ActionCue, AudioCue, CueList, DmxCue, VideoCue
 from cuemsutils.cues.Cue import Cue
@@ -12,8 +15,82 @@ from cuemsutils.log import Logger
 from cuemsutils.tools.CTimecode import CTimecode
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..players.StartGate import START_GATE
 from ..tools.MtcListener import MtcListener
 from . import loop_mode
+
+# ---------------------------------------------------------------------------
+# The held setup re-checks its pass before it sends (869feynrj S0-2).
+#
+# The cue's thread parks until start - _RUN_AHEAD_MS and then runs run_cue with
+# no lock: a cancel landing in that window was followed by /start_tod, /loop,
+# /volmaster (and a DMX scene, a video /offset + /mtcfollow) from a pass that
+# no longer existed. The thread installs a guard (CueHandler._SetupGuard) for
+# the duration of run_cue; every run_* function computes what it can outside
+# the lock (JACK queries, media probes, a CueList child's arm) and then does
+# its state changes and its sends inside _setup_section(), which holds
+# CueHandler._lock and yields False when the pass was stopped or superseded.
+# Thread-local, so run_cue keeps its (cue, mtc, start) signature and a
+# CueList's child is set up under its parent's guard. Without a guard (tests,
+# direct calls) the section yields True and takes no lock.
+# ---------------------------------------------------------------------------
+_SETUP_GUARD = threading.local()
+
+
+@contextmanager
+def installed_guard(guard):
+    """Install ``guard`` for the run_cue calls made by this thread."""
+    previous = getattr(_SETUP_GUARD, "guard", None)
+    _SETUP_GUARD.guard = guard
+    try:
+        yield guard
+    finally:
+        _SETUP_GUARD.guard = previous
+
+
+@contextmanager
+def _setup_section(cue=None):
+    """``cue``: what this section sets up (a CueList's child inside its
+    parent's guard), named by the guard's step-3 hold line."""
+    guard = getattr(_SETUP_GUARD, "guard", None)
+    if guard is None:
+        yield True
+        return
+    with guard.section(cue) as ok:
+        yield ok
+
+
+# The pass this thread runs (869feynrj): the cue that owns it (a CueList's
+# child plays inside its parent's pass), its go generation, and the reveal's
+# decision taken under CueHandler._lock (follow committed or not). Installed
+# by CueHandler.go_threaded for the whole pass, so a reader on the same thread
+# (reveal_audioCue, loop_audioCue) compares against THIS pass and not against
+# the cue's attributes, which a newer pass may already have reset.
+_PASS = threading.local()
+
+
+@contextmanager
+def installed_pass(go_gen: int, owner=None):
+    """Install the pass context for this thread (see _PASS)."""
+    previous = getattr(_PASS, "ctx", None)
+    ctx = SimpleNamespace(gen=go_gen, owner=owner, follow_committed=None)
+    _PASS.ctx = ctx
+    try:
+        yield ctx
+    finally:
+        _PASS.ctx = previous
+
+
+def current_pass():
+    """The pass context of this thread, or None (tests, direct calls)."""
+    return getattr(_PASS, "ctx", None)
+
+
+def _skipped(cue) -> None:
+    Logger.info(
+        f"{type(cue).__name__} {cue.id}: held setup skipped, the pass was stopped "
+        "or superseded since it was dispatched"
+    )
 
 
 @singledispatch
@@ -31,6 +108,11 @@ def run_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
                        This ensures perfect sync between audio and video cues.
     """
     pass
+
+
+def first_enabled_child(cue) -> Cue | None:
+    """First enabled child of a CueList, or None (public name for CueHandler)."""
+    return _first_enabled_child(cue)
 
 
 def _first_enabled_child(cue: CueList) -> Cue | None:
@@ -132,18 +214,52 @@ def run_actionCue(cue: ActionCue, mtc: MtcListener, frozen_mtc_ms: float = None)
     # fire at dispatch (a full body early) instead of at its own timeline slot.
     # The action is EXECUTED in reveal_cue() once live MTC reaches _start_mtc.
     if frozen_mtc_ms is not None:
-        cue._start_mtc = CTimecode(
+        start_mtc = CTimecode(
             framerate=mtc.main_tc.framerate, start_seconds=frozen_mtc_ms / 1000
         )
     else:
-        cue._start_mtc = CTimecode(
+        start_mtc = CTimecode(
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
+    with _setup_section(cue) as ok:
+        if not ok:
+            _skipped(cue)
+            return
+        cue._start_mtc = start_mtc
     return
 
 
-def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: list):
-    """Check a player's mixer wiring at GO and fix it edge by edge.
+def _timed_wiring_check(
+    cue, mixer, player_name: str, selected_outputs: list, where: str
+) -> bool:
+    """_verify_audio_wiring_at_go with its step-3 line (869feynrj S0-18):
+    ``wiring check at <arm|GO>: <t> ms (<ok|repaired|failed>)``. A check
+    that raises is logged failed and re-raised. True when the graph is
+    right."""
+    t0 = monotonic()
+    status = "failed"
+    try:
+        status = _verify_audio_wiring_at_go(
+            cue, mixer, player_name, selected_outputs, where=where, status=True
+        )
+    finally:
+        Logger.info(
+            f"wiring check at {where}: {(monotonic() - t0) * 1000:.1f} ms ({status})"
+        )
+    return status in ("ok", "repaired")
+
+
+def _verify_audio_wiring_at_go(
+    cue,
+    mixer,
+    player_name: str,
+    selected_outputs: list,
+    where: str = "GO",
+    status: bool = False,
+):
+    """Check a player's mixer wiring at GO (or at arm) and fix it edge by edge.
+    Returns True when the graph is right (already, or after the repair); with
+    ``status=True`` one of "ok", "repaired", "failed" instead.
 
     Never a full rewire (869fbyjzx): a GO can reach this while the cue is
     audible (a fresh GO, or a 'play' action, on a cue that is still
@@ -159,23 +275,23 @@ def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: l
     )
     if diff is None:
         Logger.error(
-            f"Audio cue {cue.id}: no mixer input for its outputs at GO "
+            f"Audio cue {cue.id}: no mixer input for its outputs at {where} "
             f"({selected_outputs}) — cue will be SILENT despite showing "
             f"armed (mixer inputs unavailable)."
         )
-        return
+        return "failed" if status else False
     missing, stray = diff
     if not missing and not stray:
         Logger.debug(f"Audio cue {cue.id}: graph already wired, skipping connect")
-        return
+        return "ok" if status else True
     Logger.warning(
-        f"Audio cue {cue.id}: graph not wired correctly at GO "
+        f"Audio cue {cue.id}: graph not wired correctly at {where} "
         f"(missing: {missing}; stray: {stray}); repairing edge by edge"
     )
     connected_ok, strays_left = mixer.repair_player_connections(missing, stray)
     if not connected_ok:
         Logger.error(
-            f"Audio cue {cue.id}: mixer repair failed at GO — cue will be "
+            f"Audio cue {cue.id}: mixer repair failed at {where} — cue will be "
             f"SILENT despite showing armed (a mixer connection could not be "
             f"made)."
         )
@@ -184,6 +300,104 @@ def _verify_audio_wiring_at_go(cue, mixer, player_name: str, selected_outputs: l
             f"Audio cue {cue.id}: stray edge(s) still connected after repair: "
             f"{strays_left} — the cue may sound doubled and outside the mixer."
         )
+    ok = bool(connected_ok) and not strays_left
+    if status:
+        return "repaired" if ok else "failed"
+    return ok
+
+
+def _audio_wiring_target(cue):
+    """(mixer, JACK client name, the JACK ports its outputs resolve to) of an
+    AudioCue's player, or None without a mixer."""
+    mixer = PLAYER_HANDLER.get_audio_mixer()
+    if not mixer:
+        return None
+    uuid_slug = "".join(str(cue.id).split("-"))
+    # Actual JACK client name is Audio_Player-{uuid} with ports
+    # "outport 0", "outport 1"
+    player_name = f"Audio_Player-{uuid_slug}"
+    # Resolve JACK port names from cue output IDs via audio output lookup
+    selected_outputs = []
+    if hasattr(cue, "outputs") and cue.outputs:
+        for output in cue.outputs:
+            output_name = output.get("output_name", "")
+            if len(output_name) > 37:
+                output_id = output_name[37:]
+                port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
+                if port_name:
+                    selected_outputs.append(port_name)
+                else:
+                    selected_outputs.append(output_id)
+    return mixer, player_name, selected_outputs
+
+
+def verify_audio_wiring_at_arm(cue) -> None:
+    """869feynrj §4.5a (preload at arm, CAPS selfgate only): the mixer wiring
+    check, done once at the end of a successful arm instead of at every GO.
+    A selfgate player is built with RTAUDIO_JACK_DONT_CONNECT (S0-20), so no
+    RtAudio auto-connect can appear after the arm's own wiring; a GO keeps
+    only the cheap port_exists of outport 0. The result is kept on the cue
+    (``_wiring_ok``): a check that failed or raised is not trusted, and the
+    next GO runs the full diff and repair (review fix 5). Never raises."""
+    cue._wiring_ok = False
+    try:
+        target = _audio_wiring_target(cue)
+        if target is None:
+            cue._wiring_ok = True  # no mixer on this node: nothing to wire
+            return
+        mixer, player_name, selected_outputs = target
+        cue._wiring_ok = _timed_wiring_check(
+            cue, mixer, player_name, selected_outputs, "arm"
+        )
+    except Exception as e:
+        Logger.warning(f"Audio cue {cue.id}: wiring check at arm failed: {e}")
+
+
+def _audio_ports_ok_at_go(cue, selfgate: bool = False) -> bool:
+    """The JACK half of an audio GO, outside any lock. False only when the
+    player's outport 0 is gone (it died between arm and GO).
+
+    selfgate (869feynrj §4.5a, review 2 F10): the wiring was checked at arm;
+    only the port check stays, unless that check did not succeed
+    (``_wiring_ok`` not True): then the full diff and repair run here and
+    their result is kept. An older player keeps the GO-time diff and
+    edge-by-edge repair (869fbyjzx): its RtAudio may auto-connect when the
+    stream starts, so its GO OSC is byte-identical to before."""
+    # Verify mixer graph; only repair if drifted. Arm already wired it; the
+    # unconditional reconnect at GO costs ~21-28 ms (measured) without
+    # touching the audio path.
+    try:
+        target = _audio_wiring_target(cue)
+        if target is None:
+            return True
+        mixer, player_name, selected_outputs = target
+        Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
+
+        # If the player's outport 0 is missing, the subprocess died between
+        # arm and GO. connect_player_to_outputs would block 15 s in its
+        # port-wait loop before failing; abort fast instead.
+        channel_0 = f"{player_name}:outport 0"
+        if not mixer.conn_man.port_exists(channel_0):
+            Logger.error(
+                f"Audio cue {cue.id}: player JACK ports missing at GO "
+                f"({channel_0}); subprocess likely crashed between arm "
+                f"and GO. Aborting cue."
+            )
+            return False
+
+        if not selfgate:
+            _timed_wiring_check(cue, mixer, player_name, selected_outputs, "GO")
+        elif getattr(cue, "_wiring_ok", None) is not True:
+            Logger.warning(
+                f"Audio cue {cue.id}: its wiring check at arm did not succeed; "
+                "checking and repairing it at GO"
+            )
+            cue._wiring_ok = _timed_wiring_check(
+                cue, mixer, player_name, selected_outputs, "GO"
+            )
+    except Exception as e:
+        Logger.warning(f"Could not validate/connect player to mixer: {e}")
+    return True
 
 
 @run_cue.register
@@ -197,21 +411,10 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with
         chained cues
     """
-    # Set True only once /offset is sent below. If setup aborts early (e.g. mixer
-    # / JACK ports missing), reveal_audioCue sees this False and no-ops instead of
-    # asserting mtcfollow on a player that never got set up.
-    cue._reveal_ready = False
-    # Wrap mode (869ejxng3, plan §4.5), all reset per GO: _player_wraps is set
-    # only by the player's wrap ack, so an abort below leaves it False; the
-    # fallback is latched for this GO only (M6).
-    cue._player_wraps = False
-    cue._wrap_requested = False
-    cue._wrap_fallback = False
-    cue._wrap_reveal_t = None
     player = PLAYER_HANDLER.audio_player(cue)
     capable = loop_mode.player_capable(player)
-    cue._audio_capable = capable
-    cue._audio_dayalign = loop_mode.player_dayalign(player)
+    dayalign = loop_mode.player_dayalign(player)
+    selfgate = loop_mode.player_selfgate(player)
     period = loop_mode.period_of(cue)
 
     # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
@@ -224,121 +427,102 @@ def run_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         # Frozen path: only have a float ms snapshot (CueHandler captured it
         # before this point); reconstruct via canonicalized __init__ which
         # routes through HMSF + tc_to_frames, drop-frame correct.
-        cue._start_mtc = CTimecode(
+        start_mtc = CTimecode(
             framerate=mtc.main_tc.framerate, start_seconds=mtc_ms / 1000
         )
     else:
         # Live MTC path: frame-domain construction skips the lossy
         # ms→seconds→frames round-trip entirely (mirrors loop_cue.py:107,224).
-        cue._start_mtc = CTimecode(
+        start_mtc = CTimecode(
             framerate=mtc.main_tc.framerate, frames=mtc.main_tc.frames
         )
 
     if period is not None:
         # The pass ends on the file's real length P (one rounding, from the
         # absolute instant, G20), not on the stored duration rounded to frames.
-        cue._end_mtc = loop_mode.tc_at(
-            mtc.main_tc.framerate, cue._start_mtc.milliseconds_exact + period.ms
+        end_mtc = loop_mode.tc_at(
+            mtc.main_tc.framerate, start_mtc.milliseconds_exact + period.ms
         )
     else:
         # Convert duration to MTC framerate to prevent drift when looping
         duration = CTimecode(cue.media.duration).return_in_other_framerate(
             mtc.main_tc.framerate
         )
-        cue._end_mtc = cue._start_mtc + duration
+        end_mtc = start_mtc + duration
 
     # Audio player formula: file_position = MTC + offset, offset = -start_mtc;
     # a dayalign player gets the start itself, modulo 24 h (/start_tod)
+    ports_ok = _audio_ports_ok_at_go(cue, selfgate)
 
-    # Verify mixer graph; only repair if drifted. Arm already wired it; the
-    # unconditional reconnect at GO costs ~21-28 ms (measured) without
-    # touching the audio path.
-    try:
-        mixer = PLAYER_HANDLER.get_audio_mixer()
-        if mixer:
-            uuid_slug = "".join(str(cue.id).split("-"))
-            # Actual JACK client name is Audio_Player-{uuid} with ports
-            # "outport 0", "outport 1"
-            player_name = f"Audio_Player-{uuid_slug}"
+    with _setup_section(cue) as ok:
+        if not ok:
+            _skipped(cue)
+            return
+        # Set True only once /offset is sent below. If setup aborts early
+        # (e.g. mixer / JACK ports missing), the follow commit and
+        # reveal_audioCue see this False and send no follow to a player that
+        # never got set up.
+        cue._reveal_ready = False
+        # 869feynrj §4.2: set by this pass's follow commit, read by its reveal.
+        cue._follow_committed = False
+        # Wrap mode (869ejxng3, plan §4.5), all reset per GO: _player_wraps is
+        # set only by the player's wrap ack, so an abort below leaves it False;
+        # the fallback is latched for this GO only (M6).
+        cue._player_wraps = False
+        cue._wrap_requested = False
+        cue._wrap_fallback = False
+        cue._wrap_reveal_t = None
+        cue._audio_capable = capable
+        cue._audio_dayalign = dayalign
+        cue._start_mtc = start_mtc
+        cue._end_mtc = end_mtc
+        if not ports_ok:
+            return
 
-            # Resolve JACK port names from cue output IDs via audio output
-            # lookup
-            selected_outputs = []
-            if hasattr(cue, "outputs") and cue.outputs:
-                for output in cue.outputs:
-                    output_name = output.get("output_name", "")
-                    if len(output_name) > 37:
-                        output_id = output_name[37:]
-                        port_name = PLAYER_HANDLER.resolve_audio_port(output_id)
-                        if port_name:
-                            selected_outputs.append(port_name)
-                        else:
-                            selected_outputs.append(output_id)
-
-            Logger.debug(f"Audio cue {cue.id} selected outputs: {selected_outputs}")
-
-            # If the player's outport 0 is missing, the subprocess died between
-            # arm and GO. connect_player_to_outputs would block 15 s in its
-            # port-wait loop before failing; abort fast instead.
-            channel_0 = f"{player_name}:outport 0"
-            if not mixer.conn_man.port_exists(channel_0):
-                Logger.error(
-                    f"Audio cue {cue.id}: player JACK ports missing at GO "
-                    f"({channel_0}); subprocess likely crashed between arm "
-                    f"and GO. Aborting cue."
-                )
-                return
-
-            _verify_audio_wiring_at_go(cue, mixer, player_name, selected_outputs)
-    except Exception as e:
-        Logger.warning(f"Could not validate/connect player to mixer: {e}")
-
-    # Define the start - use MTC framerate for consistent timing with video
-    try:
-        key, value = loop_mode.start_message(cue, cue._start_mtc.milliseconds_exact)
-        cue._osc.set_value(key, value)
-        Logger.info(
-            f"start {value} to {key}:{cue._osc.get_node(key).parameter.value}",
-            extra={"caller": cue.__class__.__name__},
-        )
-    except Exception as e:
-        Logger.warning(
-            f"Error setting offset in run_audioCue: {e}",
-            extra={"caller": cue.__class__.__name__},
-        )
-    else:
-        # Setup reached the offset send → safe for reveal_cue to start following.
-        cue._reveal_ready = True
-        _send_loop_mode(cue, capable, period)
-
-    # /mtcfollow is DEFERRED to reveal_cue() (MTC-gated reveal). The offset above
-    # is harmless while not following; reveal_cue turns following on at
-    # start_mtc, where the seek position is ~0.
-    # NOTE: the deferral used to be REQUIRED — following early with a
-    # future-negative offset hit the audioplayer's "Out of file boundaries" path
-    # and TERMINATED the cue before it played. Fixed in cuems-audioplayer
-    # (869dyufeh): a negative seek now holds silence and self-gates. The deferral
-    # is kept as belt-and-suspenders until the fixed player binary is fleet-wide;
-    # once it is, this reveal-time /mtcfollow can be dropped (audio becomes
-    # symmetric with video).
-
-    # Apply master volume from cue settings
-    try:
-        master_vol = getattr(cue, "master_vol", None)
-        if master_vol is not None:
-            # UI uses 0-100 percentage, audioplayer expects 0.0-1.0 gain
-            # Convert and clamp to valid range
-            vol_value = max(0.0, min(1.0, float(master_vol) / 100.0))
-            cue._osc.set_value("/volmaster", vol_value)
+        # Define the start - use MTC framerate for consistent timing with video
+        try:
+            key, value = loop_mode.start_message(cue, cue._start_mtc.milliseconds_exact)
+            cue._osc.set_value(key, value)
             Logger.info(
-                f"master_vol {master_vol}% -> {vol_value} set on audio cue {cue.id}",
+                f"start {value} to {key}:{cue._osc.get_node(key).parameter.value}",
                 extra={"caller": cue.__class__.__name__},
             )
-    except Exception as e:
-        Logger.warning(
-            f"Error setting master volume in run_audioCue: {e}",
-            extra={"caller": cue.__class__.__name__},
-        )
+        except Exception as e:
+            Logger.warning(
+                f"Error setting offset in run_audioCue: {e}",
+                extra={"caller": cue.__class__.__name__},
+            )
+        else:
+            # Setup reached the offset send → safe to start following.
+            cue._reveal_ready = True
+            _send_loop_mode(cue, capable, period)
+
+        # /mtcfollow is not sent here. A selfgate player (869feynrj) gets it at
+        # the FOLLOW COMMIT, start - F, under CueHandler._lock: it then starts
+        # itself at sample 0. Any other player gets it at the MTC-gated reveal
+        # (reveal_cue), as before; following early with a future-negative
+        # offset used to terminate the cue in the audioplayer (869dyufeh, fixed
+        # in 0.0.3-10), so older players keep the reveal-time follow.
+
+        # Apply master volume from cue settings (at every GO, S0-15: a FadeCue
+        # may have moved the player's level since the arm)
+        try:
+            master_vol = getattr(cue, "master_vol", None)
+            if master_vol is not None:
+                # UI uses 0-100 percentage, audioplayer expects 0.0-1.0 gain
+                # Convert and clamp to valid range
+                vol_value = max(0.0, min(1.0, float(master_vol) / 100.0))
+                cue._osc.set_value("/volmaster", vol_value)
+                Logger.info(
+                    f"master_vol {master_vol}% -> {vol_value} set on audio cue "
+                    f"{cue.id}",
+                    extra={"caller": cue.__class__.__name__},
+                )
+        except Exception as e:
+            Logger.warning(
+                f"Error setting master volume in run_audioCue: {e}",
+                extra={"caller": cue.__class__.__name__},
+            )
 
 
 def _send_loop_mode(cue, capable: bool, period) -> None:
@@ -387,6 +571,16 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
         frozen_mtc_ms: Optional frozen MTC timestamp for perfect sync with
         chained cues
     """
+    with _setup_section(cue) as ok:
+        if not ok:
+            _skipped(cue)
+            return
+        _run_dmxCue_held(cue, mtc, frozen_mtc_ms)
+
+
+def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
+    """run_dmxCue's body: the scene send IS the DMX commit, so all of it runs
+    inside the setup section (869feynrj S0-2)."""
     try:
         # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
         # chains)
@@ -492,6 +686,26 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     Logger.info(f"Running video cue {cue.id}")
 
     layer_ids = getattr(cue, "_layer_ids", [])
+    # The media probe (os.stat, a cached ffprobe fallback, 869fat84r) stays
+    # outside the setup section's lock (869feynrj S0-2).
+    media_dims = (
+        PLAYER_HANDLER.cue_media_dimensions(cue)
+        if layer_ids and getattr(cue, "_osc", None) is not None
+        else (None, None)
+    )
+    with _setup_section(cue) as ok:
+        if not ok:
+            _skipped(cue)
+            return
+        _run_videoCue_held(cue, mtc, frozen_mtc_ms, layer_ids, media_dims)
+
+
+def _run_videoCue_held(cue: VideoCue, mtc, frozen_mtc_ms, layer_ids, media_dims):
+    """run_videoCue's state changes and sends, inside the setup section."""
+    # 869feynrj §4.6: set once this setup has sent every layer's /offset and
+    # /mtcfollow to a videocomposer that takes visible_at; the follow commit
+    # (start - F) sends visible_at 1 only then. Reset per pass.
+    cue._visible_at_ready = False
 
     # The timeline is stamped BEFORE the layer check (869fgq3xv): a cue with
     # no layers on this node (every output dark) still has a body. Downstream
@@ -568,7 +782,7 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
     # comes from the arm, by layer id: with an unrouted output skipped, layer
     # i is no longer output i (869fgq3xv).
     layer_outputs = getattr(cue, "_layer_outputs", None) or {}
-    media_w, media_h = PLAYER_HANDLER.cue_media_dimensions(cue)
+    media_w, media_h = media_dims
 
     for layer_id in layer_ids:
         layer_path = f"/videocomposer/layer/{layer_id}"
@@ -616,7 +830,12 @@ def run_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
         # videocomposer decode the frame at this MTC position, but the layer
         # stays hidden. /visible is DEFERRED to reveal_cue() (MTC-gated reveal
         # at the cue's start_mtc) — this is what makes prewait/postwait gaps real.
+        # With a videocomposer that takes visible_at (869feynrj §4.6) the
+        # follow commit at start - F arms its self-gated reveal instead, and
+        # the reveal's /visible 1 only heals a lost visible_at.
         client.set_value(f"{layer_path}/mtcfollow", 1)
+
+    cue._visible_at_ready = loop_mode.vc_visible_at(PLAYER_HANDLER.video_caps)
 
     Logger.info(
         f"Video cue {cue.id} set up (held invisible): {len(layer_ids)} layer(s),"
@@ -661,6 +880,11 @@ def reveal_cue(cue: Cue, mtc: MtcListener, frozen_mtc_ms: float = None):
 
 @reveal_cue.register
 def reveal_videoCue(cue: VideoCue, mtc, frozen_mtc_ms: float = None):
+    """``/visible 1`` to every layer, as always. After a ``visible_at 1``
+    (869feynrj §4.6) it is a healer: the videocomposer takes it as covered
+    while the gate is pending and as a no-op once the gate revealed the layer
+    (cuems-videocomposer VideoLayer.cpp:527-546), so only a lost
+    ``visible_at`` falls back to this reveal's onset."""
     layer_ids = getattr(cue, "_layer_ids", [])
     if not layer_ids or getattr(cue, "_osc", None) is None:
         return
@@ -683,6 +907,31 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
         # don't assert mtcfollow on a player that never got set up.
         Logger.info(f"Audio cue {cue.id} reveal skipped (setup aborted)")
         return
+    ctx = current_pass()
+    if ctx is not None and ctx.follow_committed is not None:
+        # Decided in go_threaded's reveal section, under CueHandler._lock: a
+        # newer pass's setup may have reset _follow_committed since.
+        committed = ctx.follow_committed
+    else:
+        committed = getattr(cue, "_follow_committed", False) is True
+    if committed:
+        # 869feynrj §4.2 step 3: a selfgate player got /mtcfollow 1 at the
+        # follow commit (start - F) and started itself at sample 0. The
+        # reveal re-sends no start (one in PLAY is a reset job, §2.3) and no
+        # follow; only /loop in wrap mode, which heals a lost setup /loop
+        # (review #11), and the wrap-ack clock starts here as before.
+        if loop_mode.wrap_active(cue):
+            try:
+                cue._osc.set_value(
+                    "/loop", loop_mode.loop_args(cue, loop_mode.period_of(cue))
+                )
+            except Exception as e:
+                Logger.warning(f"reveal_audioCue: /loop failed: {e}")
+            cue._wrap_reveal_t = monotonic()
+        Logger.info(
+            f"Audio cue {cue.id} revealed: started by itself (follow committed)"
+        )
+        return
     # Re-assert offset (MTC is now at start_mtc → seek position ~0), then follow.
     try:
         start = getattr(cue, "_start_mtc", None)
@@ -700,7 +949,24 @@ def reveal_audioCue(cue: AudioCue, mtc, frozen_mtc_ms: float = None):
             Logger.warning(f"reveal_audioCue: /loop failed: {e}")
         cue._wrap_reveal_t = monotonic()
     try:
-        cue._osc.set_value("/mtcfollow", 1)
+        player = PLAYER_HANDLER.audio_player(cue)
+        if loop_mode.player_selfgate(player):
+            # A selfgate player whose follow commit did not happen (its send
+            # failed): this reveal-time follow goes through the start gate, so
+            # the player is marked following and every later stop (STOP,
+            # pause, stop, a cancel) still reaches it with /cancelstart; sent
+            # only while the pass that owns it is current.
+            gen = ctx.gen if ctx is not None else None
+            owner = ctx.owner if ctx is not None and ctx.owner is not None else cue
+
+            def still_current():
+                return not getattr(owner, "_stop_requested", False) and (
+                    gen is None or getattr(owner, "_go_generation", 0) == gen
+                )
+
+            START_GATE.send_follow(player, cue._osc, cue, gen, still_current)
+        else:
+            cue._osc.set_value("/mtcfollow", 1)
     except Exception as e:
         Logger.warning(f"reveal_audioCue: /mtcfollow failed: {e}")
     Logger.info(f"Audio cue {cue.id} revealed: following MTC")

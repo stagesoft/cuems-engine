@@ -19,6 +19,8 @@ from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
+from .cues import go_lead
+from .tools import test_knobs
 
 # Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
 # disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
@@ -139,11 +141,21 @@ class ControllerEngine(BaseEngine):
         self._run_seq: int = time.time_ns() // 1_000_000
         self._run_seq_lock = threading.Lock()
 
+        # 869feynrj §4.5d (D8): each node's output latency + one JACK period
+        # (out_latency_ms in its armed_ready, and the out_latency STATUS on a
+        # new maximum), the maximum per node for the load. The GO lead L is
+        # computed from it per operator GO. Reset at every load and unload.
+        self._node_out_latency: dict[str, float] = {}
+        self._lead_logged: set = set()
+
         super().__init__(**kwargs)
         self.set_editor_request("")
         self.set_node_operation_callback()
 
     def start(self):
+        # The rig-row knobs this controller honours (869feynrj step 5): one
+        # WARNING when any is active, nothing otherwise.
+        test_knobs.announce()
         self.create_timecode()
         self.set_comms()
         # Always re-detect after create_timecode(): the MtcMaster sender port
@@ -604,6 +616,7 @@ class ControllerEngine(BaseEngine):
                     armed_now = set(self._armed_nodes)
                     required = set(self._required_nodes)
                 Logger.info(f"Node {sender} armed ({len(armed_now)}/{len(required)})")
+                self._note_node_latency(sender, operation.data.get("out_latency_ms"))
                 legacy = operation.data.get("legacy_period")
                 if legacy:
                     # 869ejxng3 §4.2: the operator sees a mixed-mode cluster
@@ -676,8 +689,78 @@ class ControllerEngine(BaseEngine):
             Logger.info(f"Mixer status from {node_uuid}: {updated} channel(s) updated")
         elif operation.target == "follow":
             self._relay_follow(operation)
+        elif operation.target == "out_latency":
+            # 869feynrj §4.5d: a node saw a larger output latency after its
+            # armed_ready (an audio cue armed later, N3).
+            if operation.sender not in self._adopted_nodes:
+                Logger.debug(
+                    f"Ignoring out_latency from non-adopted {operation.sender}"
+                )
+                return
+            data = operation.data if isinstance(operation.data, dict) else {}
+            self._note_node_latency(operation.sender, data.get("out_latency_ms"))
         else:
             Logger.debug(f"Unknown status target: {operation.target}")
+
+    def _note_node_latency(self, node: str, ms) -> None:
+        """Keep the per-node maximum of out_latency_ms for this load."""
+        if not isinstance(ms, (int, float)) or isinstance(ms, bool) or ms <= 0:
+            return
+        latencies = self._latencies()
+        previous = latencies.get(node)
+        if previous is None or ms > previous:
+            latencies[node] = float(ms)
+            Logger.info(f"Node {node}: output latency {ms:.1f} ms")
+
+    def _go_lead_ms(self) -> float:
+        """L for this operator GO (869feynrj §4.5d): max(floor, max over the
+        required nodes of out_latency_ms + delta + margin), capped. A node
+        that reported no latency (an older node engine) does not raise L
+        (INFO once per load); the cap names the node that asked for more
+        (WARNING once per load and node)."""
+        required = set(getattr(self, "_required_nodes", ()) or ())
+        known = self._latencies()
+        logged = self.__dict__.setdefault("_lead_logged", set())
+        latencies = {n: known.get(n) for n in required}
+        for node, lat in latencies.items():
+            if lat is None and ("none", node) not in logged:
+                logged.add(("none", node))
+                Logger.info(
+                    f"Node {node} reports no output latency (an older node "
+                    "engine, or none known there): it does not raise the GO "
+                    "lead"
+                )
+        lead, capped_by, wanted = go_lead.go_lead_ms(latencies)
+        forced = test_knobs.forced_lead_ms()
+        if forced is not None:
+            # R15 / R16 (test knob, inert in production): L forced after the
+            # cap; lead_ms in the GO payload carries it.
+            Logger.warning(f"TEST KNOB: L forced to {forced:.1f} ms")
+            lead = forced
+        if lead > go_lead.OLD_NODE_ACCEPT_MS and "old_nodes" not in logged:
+            logged.add("old_nodes")
+            Logger.warning(
+                f"GO lead {lead:.0f} ms is above {go_lead.OLD_NODE_ACCEPT_MS:.0f} "
+                "ms: older node engines (rc6-7, no lead_ms) reject an anchor led "
+                "this far and start on their own MTC, L early; run the same "
+                "engine on every node of the cluster"
+            )
+        if capped_by is not None and ("cap", capped_by) not in logged:
+            logged.add(("cap", capped_by))
+            Logger.warning(
+                f"GO lead capped at {lead:.0f} ms: node {capped_by} asks for "
+                f"{wanted:.0f} ms (output latency "
+                f"{known.get(capped_by, 0):.0f} ms); its audio starts will be "
+                "late by the difference"
+            )
+        return lead
+
+    def _latencies(self) -> dict:
+        return self.__dict__.setdefault("_node_out_latency", {})
+
+    def _reset_node_latency(self) -> None:
+        self._node_out_latency = {}
+        self._lead_logged = set()
 
     def _bump_run_seq(self, why: str) -> None:
         """A run ends here (STOP, load, unload): follow messages sent for it
@@ -1396,6 +1479,7 @@ class ControllerEngine(BaseEngine):
         Logger.info(f"Loading project {project_name}")
         self._bump_run_seq("load")
         self._clear_playback_state()
+        self._reset_node_latency()
         self.reset_script()
         # Before anything can fail. load_project_config() and read_script()
         # both return False further down, and without this the previous
@@ -1543,10 +1627,27 @@ class ControllerEngine(BaseEngine):
         # Always a dict (869fc8ytz): it carries the run counter that
         # cross-node follow messages are checked against. Nodes read nothing
         # else from the GO value, so the caller's own `value` is not passed on.
-        go_value = {"run_seq": self._run_seq}
+        #
+        # 869feynrj §4.5b-d, D11: the anchor is LED -- the interpolated MTC at
+        # the press + L, ceiled to the next MTC frame -- so the cues of this
+        # GO are set up and their follows committed before their start, and
+        # every start stays on the 40 ms grid. lead_ms rides along so a node
+        # checks plausibility against the press instant and its own fallback
+        # leads by the same L. The one other place L is applied is that
+        # fallback (S0-13): seeds are never led.
+        lead = self._go_lead_ms()
+        go_value = {"run_seq": self._run_seq, "lead_ms": round(lead, 3)}
         if self.mtc_listener is not None:
             if self.mtc_listener.is_receiving():
-                go_value["go_mtc_ms"] = self.mtc_listener.main_tc.milliseconds_exact
+                # R1 (test knob, inert in production): the press lands on a
+                # set phase of its MTC frame.
+                test_knobs.wait_for_phase(self._interpolated_mtc_ms)
+                now = self._interpolated_mtc_ms()
+                anchor = go_lead.ceil_frame(now + lead)
+                go_value["go_mtc_ms"] = anchor
+                self._log_go_lead(now, lead, anchor)
+                # R11 (test knob, inert in production): an MTC jump mid-pass.
+                self._test_mtc_jump(anchor)
             else:
                 Logger.error(
                     "GO: controller MTC listener is not receiving -- sending GO "
@@ -1561,6 +1662,66 @@ class ControllerEngine(BaseEngine):
 
         Logger.info("GO command processed")
         return True
+
+    def _log_go_lead(self, press_ms: float, lead: float, anchor: float) -> None:
+        """869feynrj step 3: one line per operator GO that ships a led anchor
+        (fixed wording, ms with one decimal)."""
+        required = set(getattr(self, "_required_nodes", ()) or ())
+        known = self._latencies()
+        source = go_lead.lead_source({n: known.get(n) for n in required})
+        who = f"L from {source[0]} {source[1]:.1f} ms" if source else "L floor"
+        Logger.info(
+            f"GO lead: press {press_ms:.1f} ms (interp), L {lead:.1f} ms, anchor "
+            f"{anchor:.1f} ms (ceil +{anchor - (press_ms + lead):.1f} ms), "
+            f"lead_ms {lead:.1f}, {who}"
+        )
+
+    def _test_mtc_jump(self, anchor: float) -> threading.Thread | None:
+        """R11 (869feynrj step 5, test knob CUEMS_TEST_MTC_JUMP, inert without
+        CUEMS_TEST_KNOBS=1): once the interpolated MTC passes anchor + after,
+        move the MTC generator by delta with MTCSender_setTime (it pauses,
+        sends the new full-frame position and resumes), so every node sees one
+        real jump during the pass. Off the GO's path: a daemon thread."""
+        plan = test_knobs.mtc_jump_next()
+        if plan is None or getattr(self, "mtcmaster", None) is None:
+            return None
+        after, delta, k, n = plan
+        due = anchor + after
+
+        def run():
+            deadline = time.monotonic() + 30.0
+            while self._interpolated_mtc_ms() < due:
+                if time.monotonic() > deadline:
+                    Logger.warning(
+                        f"TEST KNOB: MTC jump {k}/{n} not done: MTC never "
+                        f"reached {due:.1f} ms"
+                    )
+                    return
+                time.sleep(0.002)
+            cur = self._interpolated_mtc_ms()
+            target = max(0.0, cur + delta) % 86_400_000.0
+            libmtcmaster.MTCSender_setTime(self.mtcmaster, int(round(target * 1e6)))
+            Logger.warning(
+                f"TEST KNOB: MTC jump {k}/{n} at anchor+{cur - anchor:.1f} ms: "
+                f"{cur:.1f} -> {target:.1f} ms (delta {delta:+.1f} ms)"
+            )
+
+        t = threading.Thread(target=run, name="TestMtcJump", daemon=True)
+        t.start()
+        return t
+
+    def _interpolated_mtc_ms(self) -> float:
+        """MtcListener.interpolated_ms, or the whole-frame main_tc."""
+        listener = self.mtc_listener
+        fn = getattr(listener, "interpolated_ms", None)
+        if callable(fn):
+            try:
+                value = fn()
+            except Exception:
+                value = None
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+        return listener.main_tc.milliseconds_exact
 
     def _setnextcue_handler(self, value):
         """
@@ -2049,6 +2210,7 @@ class ControllerEngine(BaseEngine):
         with self._cluster_lock:
             self._required_nodes.clear()
             self._adopted_nodes.clear()
+        self._reset_node_latency()
         self._clear_load_diagnosis()
         self.remove_show_lock_file()
         # A real unload, not a STOP: a node's STOP re-arms the project it

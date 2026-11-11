@@ -12,8 +12,10 @@ from cuemsutils.cues.FadeCue import FadeCue
 from cuemsutils.log import Logger
 
 from ..players.PlayerHandler import PLAYER_HANDLER
+from ..players.StartGate import START_GATE
 from ..tools.MtcListener import CTimecode, MtcListener
 from . import loop_mode
+from .run_cue import current_pass
 
 # Node-side throttle constant for future cue percentage updates sent to the
 # Controller via NNG (Tier 1 of the two-tier throttle strategy).
@@ -133,6 +135,12 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
     )
     go_gen = getattr(cue, "_go_generation", 0)
     period = loop_mode.period_of(cue)
+    # The pass this thread runs (go_threaded's context): its own generation.
+    # go_gen above is read at loop entry, after the reveal; a GO landing in
+    # between (H3) makes it the NEW pass's, so the end-of-pass /mtcfollow 0
+    # compares against the pass's own (869feynrj, review fix 6).
+    ctx = current_pass()
+    pass_gen = ctx.gen if ctx is not None and ctx.owner is cue else go_gen
 
     def stale() -> bool:
         return getattr(cue, "_go_generation", 0) != go_gen
@@ -254,11 +262,22 @@ def loop_audioCue(cue: AudioCue, mtc: MtcListener, on_last_loop=None):
             )
         elif cue._local:
             try:
-                cue._osc.set_value("/mtcfollow", 0)
-                Logger.info(
-                    "Audio mtcfollow disabled",
-                    extra={"caller": cue.__class__.__name__},
-                )
+                # Through the start gate (869feynrj §4.2): may_follow is
+                # cleared with it, and a pass superseded meanwhile sends
+                # nothing -- its /mtcfollow 0 would undo the new pass's follow.
+                if START_GATE.follow_off(
+                    PLAYER_HANDLER.audio_player(cue),
+                    cue._osc,
+                    still_current=lambda: getattr(cue, "_go_generation", 0) == pass_gen,
+                ):
+                    Logger.info(
+                        "Audio mtcfollow disabled",
+                        extra={"caller": cue.__class__.__name__},
+                    )
+                else:
+                    Logger.info(
+                        f"Audio loop {cue.id} superseded at its end: no /mtcfollow 0"
+                    )
             except Exception as e:
                 Logger.warning(
                     f"Error disabling mtcfollow: {e}",

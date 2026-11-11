@@ -6,6 +6,7 @@
 import dataclasses
 import os
 import shutil
+import socket
 import subprocess
 import threading
 from threading import Event, Lock, Thread
@@ -18,7 +19,7 @@ from cuemsutils.log import Logger, logged
 from cuemsutils.tools import media_sidecars
 
 from .core.BaseEngine import BaseEngine
-from .cues import loop_mode
+from .cues import go_lead, loop_mode
 from .cues.CueHandler import CUE_HANDLER, _ArmWalk
 from .cues.FollowRelay import FollowRelay
 from .osc.helpers import add_prefix_to_all
@@ -36,6 +37,7 @@ from .players.PlayerHandler import (
     _positive_int,
     check_orphan_binary_names,
 )
+from .players.StartGate import START_GATE
 from .players.VideoCaps import caps_path
 from .tools import test_knobs
 from .tools.CuemsDeploy import CuemsDeploy
@@ -137,6 +139,14 @@ class NodeEngine(BaseEngine):
     _GO_ANCHOR_FUTURE_TOL_MS = 200.0
     _GO_ANCHOR_MAX_LAG_MS = 10_000.0
 
+    # 869feynrj §4.5d: this node's output latency + one JACK period (ms), the
+    # maximum seen since start (settings override, a JACK query at start,
+    # every player's LATENCY line), and the largest value already reported
+    # to the controller (armed_ready, or the out_latency STATUS).
+    _out_latency_ms: float | None = None
+    _out_latency_reported: float | None = None
+    _out_latency_warned_load = False
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._command_lock = threading.Lock()
@@ -176,6 +186,8 @@ class NodeEngine(BaseEngine):
     def start(self):
         self._log_versions()
         PLAYER_HANDLER.refresh_video_caps()
+        START_GATE.set_node_name(socket.gethostname())
+        START_GATE.set_latency_listener(self._on_player_latency)
         CUE_HANDLER.set_nng_comms(self.nng_hub_address, self.cm.node_uuid)
         self.deploy_manager.loop = CUE_HANDLER.communications_thread.event_loop
         # Creates command dictionary and OSCQuery client
@@ -314,6 +326,7 @@ class NodeEngine(BaseEngine):
             value: The command value
             address: The original OSC address (optional)
         """
+        arrived = monotonic()
         Logger.info(f"NNG command received: {command_name} = {repr(value)}")
 
         if command_name == "player_control" and address:
@@ -322,7 +335,7 @@ class NodeEngine(BaseEngine):
             self._handle_player_control_message(address, value)
         else:
             # Handle standard commands (go, load, stop)
-            self.run_command(command_name, value)
+            self.run_command(command_name, value, arrived=arrived)
 
     def _handle_player_control_message(self, address: str, value):
         """Handle player control messages received via NNG.
@@ -550,27 +563,69 @@ class NodeEngine(BaseEngine):
             Logger.debug(f"Recieved unused OSCQuery path: {str(parameter.node)}")
             return
 
-    def run_command(self, command, value):
+    # The GO commands timed by step 3 (S0-19): an operator GO, and the
+    # power-bridge's /gocue (setnextcue + go).
+    _TIMED_GO_COMMANDS = ("go", "gocue")
+
+    def run_command(self, command, value, arrived: float | None = None):
+        """Run one command under _command_lock. ``arrived``: monotonic()
+        at the NNG handler's entry (now when not given). A GO logs how long
+        it waited for the lock and how long it held it (869feynrj step 3)."""
+        if arrived is None:
+            arrived = monotonic()
+        timed = command in self._TIMED_GO_COMMANDS
         with self._command_lock:
-            Logger.debug(f"NodeEngine executing command: {command}({repr(value)})")
-            if command in self.commands_dict.keys():
-                handler = self.commands_dict[command]
-                if handler is not None:
-                    try:
-                        handler(value)
-                    finally:
-                        if command in ("stop", "load", "unload") and self._follow_relay:
-                            # The receive hook counted it received; until
-                            # here this node's epochs still belonged to the
-                            # run it ends (869fc8ytz).
-                            self._follow_relay.stop_applied()
-                    return True
-                else:
-                    Logger.warning(f"Command {command} has no handler")
-                    return False
+            acquired = monotonic()
+            if timed:
+                self._go_what = []
+                hold = test_knobs.hold_command_lock_ms()
+                if hold:
+                    # R10 (test knob, inert in production): this GO's handling
+                    # is slower than L.
+                    Logger.warning(f"TEST KNOB: holding the command lock {hold:.1f} ms")
+                    sleep(hold / 1000.0)
+                    self._go_note("test hold", hold)
+            try:
+                return self._run_command_locked(command, value)
+            finally:
+                if timed:
+                    self._log_go_timing(arrived, acquired, monotonic())
+
+    def _run_command_locked(self, command, value):
+        Logger.debug(f"NodeEngine executing command: {command}({repr(value)})")
+        if command in self.commands_dict.keys():
+            handler = self.commands_dict[command]
+            if handler is not None:
+                try:
+                    handler(value)
+                finally:
+                    if command in ("stop", "load", "unload") and self._follow_relay:
+                        # The receive hook counted it received; until
+                        # here this node's epochs still belonged to the
+                        # run it ends (869fc8ytz).
+                        self._follow_relay.stop_applied()
+                return True
             else:
-                Logger.error(f"Command {command} not found")
+                Logger.warning(f"Command {command} has no handler")
                 return False
+        else:
+            Logger.error(f"Command {command} not found")
+            return False
+
+    def _go_note(self, what: str, ms: float | None = None) -> None:
+        """Name what a GO did under _command_lock, for its timing line."""
+        parts = getattr(self, "_go_what", None)
+        if isinstance(parts, list):
+            parts.append(what if ms is None else f"{what} {ms:.1f} ms")
+
+    def _log_go_timing(self, arrived: float, acquired: float, released: float):
+        """869feynrj step 3 (S0-19): one line per GO handled."""
+        parts = getattr(self, "_go_what", None) or ["go"]
+        self._go_what = None
+        Logger.info(
+            f"GO timing: command lock waited {(acquired - arrived) * 1000:.1f} ms, "
+            f"held {(released - acquired) * 1000:.1f} ms ({', '.join(parts)})"
+        )
 
     #########################
     # Player logic
@@ -698,6 +753,95 @@ class NodeEngine(BaseEngine):
             self.cm.node_conf["audioplayer"]["path"],
             audio_args,
         )
+        self._init_out_latency()
+
+    # 869feynrj §4.5d: this node's output latency, known independently of
+    # armed players (review 3 N3), carried to the controller for L.
+    def _init_out_latency(self) -> None:
+        """At node start: the settings override when set, else a JACK query
+        of the playback ports; latency + one JACK period from every source
+        (review 4 m1). Never raises."""
+        jack_lat = None
+        try:
+            mixer = PLAYER_HANDLER.get_audio_mixer()
+            conn_man = getattr(mixer, "conn_man", None) if mixer else None
+            if conn_man is not None:
+                answer = conn_man.playback_latency()
+                if (
+                    isinstance(answer, tuple)
+                    and len(answer) == 3
+                    and all(isinstance(x, int) for x in answer)
+                    and answer[1] > 0
+                ):
+                    jack_lat = answer
+        except Exception as e:
+            Logger.warning(f"Output latency: JACK query failed: {e}")
+        override = None
+        try:
+            value = self.cm.node_conf["audioplayer"].get("output_latency_ms")
+            if isinstance(value, int) and not isinstance(value, bool):
+                override = float(value)
+        except Exception:
+            override = None
+        if override is not None:
+            period_ms = (
+                jack_lat[2] * 1000.0 / jack_lat[1]
+                if jack_lat is not None
+                else 512 * 1000.0 / 48000
+            )
+            self._note_out_latency(override + period_ms, "settings output_latency_ms")
+        elif jack_lat is not None:
+            frames, rate, period = jack_lat
+            self._note_out_latency(
+                (frames + period) * 1000.0 / rate, "JACK playback latency"
+            )
+        else:
+            Logger.info(
+                "Output latency not known yet (no settings override, no JACK "
+                "answer): the first player's LATENCY line will tell"
+            )
+
+    def _on_player_latency(self, player, latency) -> None:
+        """START_GATE's latency listener: a player's LATENCY line."""
+        self._note_out_latency(latency.out_latency_ms, "player LATENCY line")
+
+    def _note_out_latency(self, ms: float, source: str) -> None:
+        """Keep the maximum; tell the controller when it grows (an additive
+        STATUS, so an audio cue armed after the load still raises L, N3).
+        Never blocks: it runs on a player's stdout reader too."""
+        if not isinstance(ms, (int, float)) or isinstance(ms, bool) or ms <= 0:
+            return
+        current = self._out_latency_ms
+        if current is not None and ms <= current:
+            return
+        self._out_latency_ms = float(ms)
+        CUE_HANDLER.out_latency_ms = float(ms)
+        Logger.info(
+            f"Output latency {ms:.1f} ms (latency + one period, from the {source});"
+            f" follow lead F {go_lead.follow_lead_ms(ms):.0f} ms"
+        )
+        # Reported when nothing was yet (no latency known at armed_ready: the
+        # first LATENCY line must still reach the controller, N3) or larger.
+        reported = self._out_latency_reported
+        if reported is None or ms > reported + 0.05:
+            self._send_out_latency(ms)
+
+    def _send_out_latency(self, ms: float) -> None:
+        from .comms.NodesHub import ActionType, NodeOperation, OperationType
+
+        try:
+            CUE_HANDLER.communications_thread.send_operation_nowait(
+                NodeOperation(
+                    type=OperationType.STATUS,
+                    action=ActionType.UPDATE,
+                    sender=self.cm.node_uuid,
+                    target="out_latency",
+                    data={"out_latency_ms": round(float(ms), 3)},
+                )
+            )
+            self._out_latency_reported = float(ms)
+        except Exception as e:
+            Logger.warning(f"Could not report the output latency: {e}")
 
     def _report_mixer_status(self, output_index: str = "0") -> None:
         """Snapshot the local mixer's authoritative gain to the controller.
@@ -921,6 +1065,9 @@ class NodeEngine(BaseEngine):
             return False
 
         self._teardown_project("load")
+        # 869feynrj: the once-per-load lines may be said again.
+        START_GATE.reset_for_load()
+        self._out_latency_warned_load = False
 
         # Clear the engine's 24h MTC wrap accumulator on this project transition,
         # co-orchestrated with the DMX blackout + videocomposer reset above (which
@@ -1222,6 +1369,7 @@ class NodeEngine(BaseEngine):
         self._legacy_period = []
         cues = self._loop_period_cues()
         self._check_video_caps(cues)
+        self._check_visible_at(self.script.cuelist if self.script else None)
         if not cues:
             return None
         cancel = Event()
@@ -1426,6 +1574,31 @@ class NodeEngine(BaseEngine):
             )
 
     @staticmethod
+    def _check_visible_at(cuelist) -> None:
+        """One INFO per load when this node plays video and its videocomposer
+        does not take ``visible_at`` (869feynrj §4.6 "Skew"): its VideoCues
+        then reveal as today, ``/visible 1`` at the polled reveal. Reads the
+        caps _check_video_caps has just refreshed."""
+        if loop_mode.vc_visible_at(PLAYER_HANDLER.video_caps):
+            return
+
+        def has_local_video(node) -> bool:
+            for cue in getattr(node, "contents", None) or []:
+                if isinstance(cue, CueList):
+                    if has_local_video(cue):
+                        return True
+                elif isinstance(cue, VideoCue) and getattr(cue, "_local", False):
+                    return True
+            return False
+
+        if cuelist is not None and has_local_video(cuelist):
+            Logger.info(
+                "videocomposer without the visible_at capability (no token in "
+                f"{caps_path()}): video cues reveal at the polled reveal "
+                "(/visible 1), not on their first frame"
+            )
+
+    @staticmethod
     def _check_video_period(cue) -> None:
         """A looping VideoCue's period at load (§4.4): without a video frame
         count or rate it runs legacy (WARNING, R21); a variable frame rate is
@@ -1514,8 +1687,13 @@ class NodeEngine(BaseEngine):
                 "the STOP/load that caused it"
             )
             return
-        # If cue was disabled while we were arming, disarm now.
-        if not cue.enabled and CUE_HANDLER.find_armed_cue(cue):
+        # If cue was disabled while we were arming, disarm now -- unless it
+        # is playing (a disable never stops a playing cue, 869feynrj S0-21).
+        if (
+            not cue.enabled
+            and CUE_HANDLER.find_armed_cue(cue)
+            and not getattr(cue, "_playing", False)
+        ):
             CUE_HANDLER.disarm(cue, reason="disabled")
             Logger.info(f"Disarmed cue {cue.id} — disabled during async arm")
             return
@@ -1629,6 +1807,18 @@ class NodeEngine(BaseEngine):
             legacy = list(getattr(self, "_legacy_period", None) or [])
             if legacy:
                 data["legacy_period"] = legacy
+            # 869feynrj §4.5d: additive; an old controller reads only "armed".
+            out_latency = getattr(self, "_out_latency_ms", None)
+            if out_latency is not None:
+                data["out_latency_ms"] = round(float(out_latency), 3)
+                self._out_latency_reported = float(out_latency)
+            elif not getattr(self, "_out_latency_warned_load", False):
+                self._out_latency_warned_load = True
+                Logger.warning(
+                    "No output latency known on this node (settings, JACK, a "
+                    "player's LATENCY line): the controller's GO lead uses its "
+                    "floor for this node"
+                )
             operation = NodeOperation(
                 type=OperationType.STATUS,
                 action=ActionType.UPDATE,
@@ -2085,35 +2275,55 @@ class NodeEngine(BaseEngine):
         """Resolve the GO_mtc anchor for this GO.
 
         Prefers the controller's own GO instant, shipped as
-        value == {"go_mtc_ms": <float>} by ControllerEngine.go_script.
-        Falls back to this node's own live MTC read (today's behaviour,
-        and the only thing an older controller ever sends) whenever
-        `value` doesn't carry a usable one, or the controller's instant
-        looks implausible against this node's own MTC.
+        value == {"go_mtc_ms": <float>, "lead_ms": <float>, ...} by
+        ControllerEngine.go_script. Falls back to this node's own MTC
+        whenever `value` doesn't carry a usable one, or the controller's
+        instant looks implausible against this node's own MTC.
 
         Badajoz, 2026-09-25: a node whose setnextcue pre-arm held
         _command_lock for ~500ms read its own MTC ~520ms later than the
         other two boxes at GO time and anchored its whole Auto-continue
         chain late. MTC-following cannot correct a wrong anchor -- only
         agreeing on one does.
+
+        869feynrj §4.5c-d, D11: the controller's anchor is LED, interpolated
+        MTC + L ceiled to the next frame, so the plausibility check runs
+        against anchor - lead_ms (the instant of the press); a controller
+        that sends no lead_ms (older) is checked against anchor - the floor.
+        The fallback is this node's interpolated MTC + the same lead, ceiled
+        to the next frame: the only other place L is applied (S0-13).
         """
         local = self.mtc_listener.main_tc.milliseconds_exact
+        lead = go_lead.GO_LEAD_FLOOR_MS
         if isinstance(value, dict):
+            shipped = value.get("lead_ms")
+            if (
+                isinstance(shipped, (int, float))
+                and not isinstance(shipped, bool)
+                and shipped >= 0
+            ):
+                lead = float(shipped)
             ctrl = value.get("go_mtc_ms")
             if isinstance(ctrl, (int, float)) and not isinstance(ctrl, bool):
-                lag = local - ctrl
+                lag = local - (ctrl - lead)
                 if -self._GO_ANCHOR_FUTURE_TOL_MS <= lag <= self._GO_ANCHOR_MAX_LAG_MS:
                     Logger.info(
                         f"GO anchored at controller instant {ctrl:.1f}ms "
-                        f"(node lag {lag:.1f}ms)"
+                        f"(lead {lead:.0f}ms, node lag {lag:.1f}ms)"
                     )
                     return ctrl
                 Logger.warning(
-                    f"GO anchor from controller ({ctrl:.1f}ms) implausible "
-                    f"against local MTC ({local:.1f}ms, lag {lag:.1f}ms) -- "
-                    "using local MTC instead"
+                    f"GO anchor from controller ({ctrl:.1f}ms, lead {lead:.0f}ms) "
+                    f"implausible against local MTC ({local:.1f}ms, lag "
+                    f"{lag:.1f}ms) -- using local MTC instead"
                 )
-        return local
+        now = CUE_HANDLER._interpolated_clock(self.mtc_listener)()
+        anchor = go_lead.ceil_frame(now + lead)
+        Logger.info(
+            f"GO anchored at local MTC {now:.1f}ms + lead {lead:.0f}ms -> "
+            f"{anchor:.0f}ms"
+        )
+        return anchor
 
     def go_script(self, value):
         try:
@@ -2134,6 +2344,10 @@ class NodeEngine(BaseEngine):
             Logger.warning("No MTC listener, cannot process GO command.")
             return
 
+        # The last GO value seen (the R4 test knob's supersede re-sends its
+        # run_seq and lead_ms).
+        self._last_go_value = value if isinstance(value, dict) else None
+
         # Determine the cue to go
         if not self.ongoing_cue:
             # First GO - use next_cue_pointer (may have been overridden by
@@ -2151,6 +2365,7 @@ class NodeEngine(BaseEngine):
                 # No next cue - script has finished. Do not stop timecode or
                 # reset state.
                 Logger.info("No more cues. Press STOP to restart.")
+                self._go_note("no more cues")
                 return
 
         # Capture the GO instant ONCE. Reused as the walk seed (base for the Σ
@@ -2213,6 +2428,7 @@ class NodeEngine(BaseEngine):
             # the UI / power-bridge GO is a bare GO). Medina sala1,
             # 2026-09-30: the node's first cue fired 240 ms late otherwise.
             self._prearm_after_advance()
+            self._go_note("no local cue")
             return
 
         if walked:
@@ -2227,11 +2443,14 @@ class NodeEngine(BaseEngine):
             # waited on may have finished, and the skip line must not then
             # call a slow arm a failed one.
             was_in_flight = CUE_HANDLER.describe_arm_in_flight(cue_to_go)
+            t_arm = monotonic()
             CUE_HANDLER.arm(cue_to_go, init=True)
+            self._go_note("rearm", (monotonic() - t_arm) * 1000)
             if not CUE_HANDLER.find_armed_cue(cue_to_go):
                 self._skip_unarmed_cue(
                     cue_to_go, skipped_disabled, GO_mtc, was_in_flight
                 )
+                self._go_note("skipped")
                 return
 
         # Update state
@@ -2240,12 +2459,19 @@ class NodeEngine(BaseEngine):
 
         # Start the cue at its arrival = GO_mtc + Σ(preceding cues). go_threaded
         # adds this cue's own prewait to derive the reveal anchor (start).
+        # go() returns after the synchronous lookahead (_arm_ahead), which
+        # runs on this thread, under _command_lock.
+        t_go = monotonic()
         main_thread = CUE_HANDLER.go(
             cue_to_go,
             self.mtc_listener,
             GO_mtc + sigma_ms,
             stamp_skipped=skipped_disabled,
         )
+        self._go_note("go+lookahead", (monotonic() - t_go) * 1000)
+        if main_thread is not None:
+            # R4 (test knob, inert in production).
+            self._test_cancel_at(cue_to_go, GO_mtc + sigma_ms)
         if main_thread is None:
             # Either a STOP landed while go() was re-arming this cue (the
             # chain-epoch barrier then refuses the dispatch — that is the F4
@@ -2260,7 +2486,10 @@ class NodeEngine(BaseEngine):
         # Update next cue pointer
         self.next_cue_pointer = self.ongoing_cue.get_next_cue()
         # Drift baseline; consumed by BaseEngine.timecode = mtc - go_offset.
-        # The GO press instant itself (not the first local cue's arrival).
+        # GO_mtc is the LED anchor (869feynrj §4.5: the press + L, ceiled to
+        # the next frame), i.e. the instant a prewait-0 cue's sample 0 sounds:
+        # the node timecode reads 0 there, aligned with the media, and -L
+        # between the press and that instant.
         self.go_offset = GO_mtc
 
         # Broadcast nextcue to UI
@@ -2270,6 +2499,121 @@ class NodeEngine(BaseEngine):
             f"Cue {cue_to_go.id} started. Next cue:"
             f'{self.next_cue_pointer.id if self.next_cue_pointer else "none"}'
         )
+
+    # ---- R4 test knob: a cancel at start + offset, by the real path --------
+    _test_injecting = False
+
+    def _test_cancel_at(self, cue_to_go, arrival_ms: float) -> None:
+        """CUEMS_TEST_CANCEL_AT (869feynrj step 5, R4): schedule one cancel of
+        this operator GO's pass. Never for a GO the knob injected itself."""
+        if self._test_injecting:
+            return
+        plan = self._test_cancel_plan(cue_to_go, arrival_ms)
+        if plan is None:
+            return
+        threading.Thread(
+            target=self._test_cancel_fire,
+            args=plan,
+            daemon=True,
+            name=f"TestCancelAt:{plan[2].id}",
+        ).start()
+
+    def _test_cancel_plan(self, cue_to_go, arrival_ms: float):
+        """(action, offset, target, mtc to fire at, k, len): the first local,
+        enabled AudioCue of the pass (the GO's cue and its Auto-continue
+        chain), at its start label (arrival + prewait, rounded to the 40 ms
+        grid as the player gets it) + this GO's offset (the k-th of len, taken
+        in turn). None when the knob is off or there is no such cue."""
+        spec = test_knobs.cancel_at()
+        if spec is None:
+            return None
+        action, offset, k, count = spec
+        node, walked = cue_to_go, 0
+        while node is not None and walked < 1024:
+            if (
+                isinstance(node, AudioCue)
+                and getattr(node, "_local", False)
+                and getattr(node, "enabled", False)
+            ):
+                start = arrival_ms + node.prewait.milliseconds_exact
+                label = round(start / go_lead.FRAME_MS) * go_lead.FRAME_MS
+                return action, offset, node, label + offset, k, count
+            if getattr(node, "post_go", None) != "go":
+                break
+            node = getattr(node, "_target_object", None)
+            walked += 1
+        Logger.warning(
+            f"TEST KNOB: cancel {action}: no local AudioCue in this GO's pass"
+        )
+        return None
+
+    def _test_cancel_fire(
+        self,
+        action: str,
+        offset: float,
+        target,
+        at_ms: float,
+        k: int = 1,
+        count: int = 1,
+    ):
+        """Wait for the node's interpolated MTC to reach ``at_ms`` (1 ms
+        resolution), then inject the cancel through the path the real command
+        takes: STOP / cue_enabled / setnextcue + go through the bus receive
+        hook and the NNG handler, the actions through the ActionHandler."""
+        clock = CUE_HANDLER._interpolated_clock(self.mtc_listener)
+        late = clock() - at_ms
+        if late > 1.0:
+            # e.g. an offset below -L on a prewait-0 cue: before the GO itself
+            Logger.warning(
+                f"TEST KNOB: cancel {action} at start{offset:+.1f} ms was already "
+                f"{late:.1f} ms past when the GO was handled; firing now (use a "
+                "cue with a prewait for this offset)"
+            )
+        while clock() < at_ms:
+            sleep(0.0005)
+        Logger.warning(
+            f"TEST KNOB: cancel {action} at start{offset:+.1f} ms (mtc {clock():.1f}) "
+            f"(offset {k}/{count})"
+        )
+        self._test_injecting = True
+        try:
+            if action == "stop":
+                self._test_inject("stop", None)
+            elif action == "disable":
+                self._test_inject("cue_enabled", f"{target.id} 0")
+            elif action == "supersede":
+                last = getattr(self, "_last_go_value", None) or {}
+                relay = self._follow_relay
+                value = {
+                    "run_seq": relay.run_seq if relay else last.get("run_seq"),
+                    "lead_ms": last.get("lead_ms", go_lead.GO_LEAD_FLOOR_MS),
+                }
+                self._test_inject("setnextcue", str(target.id))
+                self._test_inject("go", value)
+            else:
+                from cuemsutils.cues import ActionCue
+
+                from .cues.ActionHandler import ACTION_HANDLER
+
+                kind = {
+                    "actionstop": "stop",
+                    "actionpause": "pause",
+                    "actionfadeout": "fade_out",
+                }[action]
+                action_cue = ActionCue()
+                action_cue.action_type = kind
+                action_cue.action_target = target.id
+                action_cue._action_target_object = target
+                ACTION_HANDLER.execute_action(action_cue, self.mtc_listener, None)
+        except Exception as e:
+            Logger.error(f"TEST KNOB: cancel {action} failed: {e}")
+        finally:
+            self._test_injecting = False
+
+    def _test_inject(self, command: str, value) -> None:
+        """A bus command as it arrives: the receive hook, then the handler."""
+        if not self._on_command_received(command, value):
+            self._handle_nng_command(command, value)
 
     def _skip_unarmed_cue(self, cue, skipped_disabled, go_mtc, was_in_flight):
         """A GO found its cue unarmed and could not get it armed: skip the
@@ -2329,7 +2673,11 @@ class NodeEngine(BaseEngine):
         # Must happen BEFORE blackout/reset so loop_cue threads don't
         # re-push DMX frames or send /visible after cleanup.
         CUE_HANDLER.stop_all_cues()
-        sleep(0.05)  # 50ms — loop_cue polls every 20ms
+        # 50 ms: loop_cue polls every 20 ms. 869feynrj D10: stop_all_cues sent
+        # /cancelstart to every selfgate player that may follow, and the first
+        # disconnect below must not cut its fade: wait max(50 ms, transit +
+        # one period + fade_ms + margin) (review 4 m3).
+        sleep(max(0.05, START_GATE.pending_fade_wait_s()))
 
         # DMX: disable MTC following first (freezes the playhead so queued
         # scenes can't fire), then blackout via OLA for instant visual reset.

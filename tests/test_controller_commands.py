@@ -16,6 +16,13 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 import pytest
 
 
+def _floor():
+    """The GO lead floor (869feynrj step 3): imported lazily, like the engine."""
+    from cuemsengine.cues.go_lead import GO_LEAD_FLOOR_MS
+
+    return GO_LEAD_FLOOR_MS
+
+
 @pytest.fixture(autouse=True)
 def set_config_path():
     """Point CUEMS_CONF_PATH at test XML files."""
@@ -502,15 +509,25 @@ class TestGoScriptAnchor:
             mock_fwd.assert_not_called()
 
     def test_forwards_go_mtc_ms_when_mtc_present(self, controller):
+        """869feynrj §4.5b-d, D11: the anchor is led -- MTC + L (the floor
+        here: no node reported a latency) ceiled to the next 40 ms frame --
+        and lead_ms rides along."""
+        from cuemsengine.cues.go_lead import GO_LEAD_FLOOR_MS, ceil_frame
+
         self._armed(controller)
         controller.mtc_listener = Mock()
         controller.mtc_listener.main_tc.milliseconds_exact = 79240.0
+        controller.mtc_listener.interpolated_ms.return_value = 79241.0
         controller.mtc_listener.is_receiving.return_value = True
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
                 "/engine/command/go",
-                {"go_mtc_ms": 79240.0, "run_seq": controller._run_seq},
+                {
+                    "go_mtc_ms": ceil_frame(79241.0 + GO_LEAD_FLOOR_MS),
+                    "lead_ms": GO_LEAD_FLOOR_MS,
+                    "run_seq": controller._run_seq,
+                },
             )
 
     def test_forwards_only_run_seq_when_mtc_listener_is_none(self, controller):
@@ -528,7 +545,8 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script("complex_test")
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go",
+                {"run_seq": controller._run_seq, "lead_ms": _floor()},
             )
 
     def test_forwards_only_run_seq_for_none_value_without_mtc(self, controller):
@@ -537,7 +555,8 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go",
+                {"run_seq": controller._run_seq, "lead_ms": _floor()},
             )
 
     def test_forwards_original_value_when_controller_mtc_is_dead(self, controller):
@@ -554,5 +573,6 @@ class TestGoScriptAnchor:
         with patch.object(controller, "_forward_command_to_nodes") as mock_fwd:
             controller.go_script(None)
             mock_fwd.assert_called_once_with(
-                "/engine/command/go", {"run_seq": controller._run_seq}
+                "/engine/command/go",
+                {"run_seq": controller._run_seq, "lead_ms": _floor()},
             )

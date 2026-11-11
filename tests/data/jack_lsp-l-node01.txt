@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+# jack_lsp -l -p on test2 node01 (869feynrj step 3, cuems-RELATIONS
+# baselines/869feynrj-step3/jack_lsp-l-node01.txt), as captured below.
+/usr/bin/jack_lsp
+system:capture_1
+	port playback latency = [ 0 0 ] frames
+	port capture latency = [ 512 512 ] frames
+	properties: output,physical,terminal,
+system:capture_2
+	port playback latency = [ 0 0 ] frames
+	port capture latency = [ 512 512 ] frames
+	properties: output,physical,terminal,
+system:playback_1
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+system:playback_2
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+system:playback_3
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+system:playback_4
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+analog_audio:playback_1
+	port playback latency = [ 1056 1056 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+analog_audio:playback_2
+	port playback latency = [ 1056 1056 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,physical,terminal,
+0_mixer:output_1
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_1
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_2
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_2
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_3
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_3
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_4
+	port playback latency = [ 1536 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_4
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_5
+	port playback latency = [ 0 0 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_5
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_6
+	port playback latency = [ 0 0 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_6
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_7
+	port playback latency = [ 1056 1056 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_7
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
+0_mixer:output_8
+	port playback latency = [ 1056 1056 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: output,
+0_mixer:input_8
+	port playback latency = [ 0 1536 ] frames
+	port capture latency = [ 0 0 ] frames
+	properties: input,
