@@ -36,6 +36,10 @@ class MtcListener(Thread):
         # monotonic() of the last MTC message received (quarter frame or
         # timecode full frame), None until the first one. See is_receiving.
         self.last_rx_monotonic: float | None = None
+        # 869feynrj §4.5b: (main_tc in ms, monotonic() when it was set), ONE
+        # tuple assigned at once so a reader never pairs a value with another
+        # value's stamp. None until the first frame. See interpolated_ms.
+        self._interp_pair: tuple[float, float] | None = None
         self.__open_port(port)
 
         self.step_callback = step_callback
@@ -181,6 +185,26 @@ class MtcListener(Thread):
         """
         return self.milliseconds_rounded()
 
+    def interpolated_ms(self, now: float | None = None) -> float:
+        """The MTC position now, between two whole frames (869feynrj §4.5b).
+
+        main_tc advances in whole frames (quarter frames 3 and 7), 0-40 ms
+        behind the players' interpolated heads. This is the last whole-frame
+        value plus the monotonic time since it was set, capped at one frame
+        (a stalled sender reads at most one frame ahead). Before the first
+        frame it is main_tc as is.
+        """
+        pair = getattr(self, "_interp_pair", None)
+        if pair is None:
+            return self.main_tc.milliseconds_exact
+        value, stamp = pair
+        try:
+            frame_ms = 1000.0 / float(self.main_tc.framerate)
+        except (TypeError, ValueError, ZeroDivisionError):
+            frame_ms = 40.0
+        now = monotonic() if now is None else now
+        return value + min(max(0.0, (now - stamp) * 1000.0), frame_ms)
+
     def is_receiving(self, max_age_s: float = 0.5) -> bool:
         """True if an MTC message arrived within the last max_age_s seconds.
 
@@ -196,6 +220,7 @@ class MtcListener(Thread):
 
     def __update_timecode(self, timecode):
         self.main_tc = timecode
+        self._interp_pair = (timecode.milliseconds_exact, monotonic())
         if self.main_tc.milliseconds_rounded == 0:
             if self.step_callback is not None and self.reset_callback is not None:
                 self.reset_callback()
