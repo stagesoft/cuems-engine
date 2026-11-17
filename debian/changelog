@@ -1,3 +1,34 @@
+cuems-engine (0.1.0rc6-8) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm (0.1.0rc6-8, 869feynrj Phase A, PRs #49
+    and #50): the first hit of a cue is no longer lost.
+    - GO lead: an operator GO is anchored L ms ahead (max output latency over
+      the cluster, ceil to the 40 ms MTC frame; delta 30, floor 80), so
+      press-to-sound is L to L + 40 ms. Journal: "GO lead:" / "GO timing:".
+    - Self-gated audio start: with a player announcing the selfgate cap, the
+      follow is committed at start - F and the player starts at sample 0 by
+      itself; every cancel path sends /cancelstart (fades at STOP). The START
+      line's snap field is logged as INFO "head kept".
+    - Self-gated video reveal: with a videocomposer announcing visible_at, the
+      follow commit sends visible_at 1, so the VC reveals frame 0 itself;
+      /visible 1 stays as a healer, every cancel sends visible_at 0.
+    - A CueList child disabled, stopped or replaced after the parent's setup
+      gets no follow and no reveal; no disable path stops a playing cue.
+    - Test knobs (CUEMS_TEST_*) are read only with CUEMS_TEST_KNOBS=1.
+  * Compatibility: without the caps the engine sends what rc6-7 sent (plus
+    /visible repeats, a no-op on the VC). An older node rejects a led anchor
+    as implausible and starts as before (head lost, no failure): run the same
+    engine on every box of a cluster.
+  * Pairs with cuems-audioplayer 0.0.3-16 (selfgate) and the videocomposer
+    with visible_at (0.1.2-14 or later). Depends on cuems-utils >= 0.1.0rc18,
+    unchanged.
+  * debian/rules: do not ship the build venv's CACHEDIR.TAG (cuems-nodeconf
+    owns it on the boxes).
+  * Known, not in this release: a loop-back through an ActionCue still loses
+    about 0.8 s per pass (869feynrj Phase B).
+
+ -- Ion Reguera <ion@stagelab.coop>  Tue, 17 Nov 2026 20:01:37 +0100
+
 cuems-engine (0.1.0rc6-7) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (0.1.0rc6-7, 869ejxng3 batch, PR #45):
