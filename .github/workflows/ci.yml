@@ -64,20 +64,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11 (deadsnakes)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends software-properties-common
-          sudo add-apt-repository -y ppa:deadsnakes/ppa
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            python3.11 \
-            python3.11-dev \
-            python3.11-venv \
-            python3.11-distutils
+      # Python 3.11 from GitHub's tool cache, as in the lint job. It used to come from the deadsnakes PPA, whose
+      # Launchpad server failed the job on 2026-11-11 (hung 15 min) and 2026-11-17 (503 on the .debs).
+      - name: Set up Python 3.11
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install system packages
         run: |
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libjack-jackd2-dev \
             libsystemd-dev \
@@ -107,23 +104,29 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Configure Poetry for Python 3.11
-        id: py
-        run: |
-          poetry config virtualenvs.options.system-site-packages true
-          poetry env use python3.11
-          echo "version=$(python3.11 -c 'import platform; print(platform.python_version())')" >> "$GITHUB_OUTPUT"
+        run: poetry env use "${{ steps.setup-python.outputs.python-path }}"
 
       - name: Load cached virtualenv
         id: cache-venv
         uses: actions/cache@v4
         with:
           path: .venv
-          # Full interpreter version in the key (see the lint job); deadsnakes updates its 3.11 too.
-          key: venv-v2-dev-${{ runner.os }}-deadsnakes-systemd-py${{ steps.py.outputs.version }}-${{ hashFiles('**/poetry.lock') }}
+          # Full interpreter version in the key (see the lint job).
+          key: venv-v2-dev-${{ runner.os }}-systemd-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
         # Always: repairs a stale or partial cached venv (see the lint job).
         run: poetry sync --with dev --no-interaction
+
+      - name: Let the venv see the modules the .debs installed
+        # pyossia, libmtcmaster and librtpmidid come as .debs into the system's dist-packages. The deadsnakes
+        # interpreter had those directories on its path and the venv used system-site-packages; this interpreter
+        # does not, so a .pth adds them AFTER the venv's own site-packages (nothing in the venv is shadowed).
+        # Directories that do not exist are skipped by site.
+        run: |
+          site=$(poetry run python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+          printf '%s\n' /usr/lib/python3/dist-packages /usr/lib/python3.11/dist-packages > "$site/cuems-system-dist-packages.pth"
+          poetry run python -c 'import pyossia; print("pyossia from", pyossia.__file__)'
 
       - name: Install Python 3.11 systemd bindings
         run: poetry run pip install systemd-python==235
