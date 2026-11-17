@@ -37,6 +37,10 @@ from cuemsutils.tools.media_sidecars import Period
 WRAP_ACK_TIMEOUT_S = 1.0
 CAPS_NEEDED = frozenset({"loop", "varispeed"})
 CAPS_DAYALIGN = "dayalign"
+# 869feynrj (cuems-RELATIONS Plans/2026-11-03-audio-first-pass-head-869feynrj.md
+# §4.1): the player starts itself at sample 0 once following (padded start),
+# takes /cancelstart and prints the START / CANCEL / LATENCY lines.
+CAPS_SELFGATE = "selfgate"
 DAY_MS = 86_400_000
 
 
@@ -59,6 +63,14 @@ def player_dayalign(player) -> bool:
     """The player converts ``/start_tod`` into its own MTC day (CAPS ``dayalign``)."""
     caps = getattr(player, "caps", None)
     return isinstance(caps, frozenset) and CAPS_DAYALIGN in caps
+
+
+def player_selfgate(player) -> bool:
+    """The player self-gates its start and takes ``/cancelstart`` (CAPS
+    ``selfgate``, 869feynrj §4.1). Every engine change of that plan that a
+    player sees is gated on this: an older player gets today's OSC."""
+    caps = getattr(player, "caps", None)
+    return isinstance(caps, frozenset) and CAPS_SELFGATE in caps
 
 
 def start_tod(start_ms: float) -> int:
@@ -152,6 +164,10 @@ def fall_back(cue, reason: str) -> None:
 # project; the grouping lives in NodeEngine, the rule here.
 
 VC_LOOP_PERIOD = "loop_period"
+# 869feynrj §4.6: /videocomposer/layer/<id>/visible_at, the self-gated reveal
+# on the first presented frame with content time >= 0 (cuems-videocomposer
+# utils/CapsFile.h:48, RemoteCommandRouter.cpp:134-136).
+VC_VISIBLE_AT = "visible_at"
 SLACK_FRAMES = 2
 SLACK_FLOOR_MS = 80
 PAIR_SLACK_MS = 500  # S; the same value as the videocomposer's HOLD_TAIL_MAX_MS
@@ -299,6 +315,12 @@ def video_wrap_eligible(cue, video_caps) -> bool:
         and period is not None
         and video_length(period) is not None
     )
+
+
+def vc_visible_at(video_caps) -> bool:
+    """The videocomposer takes ``visible_at`` (caps token, 869feynrj §4.6).
+    Without it the engine sends today's OSC: ``/visible 1`` at the reveal."""
+    return VC_VISIBLE_AT in (video_caps or ())
 
 
 def video_loop_args(cue) -> list:
