@@ -21,7 +21,8 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..players.StartGate import START_GATE
 from ..tools import MtcListener
-from . import go_lead, loop_mode
+from ..tools.engine_version import engine_version
+from . import chain_pass, go_lead, loop_mode
 from .ActionHandler import ACTION_HANDLER as _ACTION_HANDLER_SINGLETON
 from .arm_cue import arm_cue
 from .loop_cue import loop_cue
@@ -29,7 +30,7 @@ from .loop_mode import wrap_active
 from .run_cue import (
     blank_cue,
     current_pass,
-    first_enabled_child,
+    picked_child,
     installed_guard,
     installed_pass,
     reveal_cue,
@@ -107,6 +108,19 @@ def _dispatch_tag(seeded: bool):
         yield
     finally:
         _DISPATCH.seeded = previous
+
+
+def _root_seq_value(root: int):
+    """The root of the pass a go() on this thread mints (D31 d, addition 3):
+    the UI toggles the node had received when the GO it descends from
+    arrived."""
+    return chain_pass.entry(root=int(root or 0))
+
+
+def _root_seq(pass_):
+    """A pass a follow or a loop-back starts inherits the root of the pass
+    that starts it."""
+    return _root_seq_value(getattr(pass_, "root_seq", 0) or 0)
 
 
 class _SetupGuard:
@@ -394,42 +408,30 @@ class CueHandler:
         return pre + body + post
 
     @staticmethod
-    def _chain_advance_ms(cue: Cue) -> float:
-        """Timeline advance a cue contributes to a post_go='go' (Auto continue)
-        chain: **zero**.
+    def _advance_mode(cue: Cue) -> str:
+        """The advance mode of the chain a cue is in (1amfwm7jnqf, D11):
+        ``sequential`` ("en serie") for every cue. ``parallel`` ("en
+        paralelo", the 2026-08-14 rule) is kept for part 2's CueList mode and
+        passed by no production call."""
+        return chain_pass.SEQUENTIAL
 
-        Auto continue triggers the WHOLE chain at once. Every cue in it shares
-        one arrival — the chain trigger — and the only thing that separates the
-        cues is each cue's own prewait:
+    @staticmethod
+    def _chain_advance_ms(cue: Cue, mode: str | None = None) -> float:
+        """What a cue adds to the arrival of the cue after it in a
+        post_go='go' (Auto continue) chain (1amfwm7jnqf, D1, D26):
 
-            arrival(k) = chain_trigger
-            start(k)   = chain_trigger + prewait(k)
+            start(k)     = arrival(k) + prewait(k)
+            arrival(k+1) = start(k) + postwait(k)      "en serie"
 
-        So a cue's own waits must not push the cues after it. `prewait` is a
-        per-cue offset from the common trigger, and `postwait` does not gate a
-        chain whose pointer has already advanced — it stays meaningful for
-        Auto follow / Auto pause (a real tail after the body) and for this
-        cue's own illumination window, but it contributes nothing here.
-
-        Previously this returned `prewait + postwait`, which made each cue's
-        prewait cascade into every following cue: prewaits authored as absolute
-        offsets from GO (5/35/65/95/380 s) played as 5/40/105/200/580.
-        Castillo Medina del Campo, 2026-08-14 — ClickUp 869ej3cc8.
-
-        ⚠ Returning anything non-zero here is NOT just an arithmetic change.
-        The chain is now dispatched at its trigger and every cue parks on
-        `arrival + prewait`, so a non-zero advance would push a cue's anchor
-        past the moment its own thread already started waiting on — and it
-        would put the arrival of a rejoining cue (Plans/
-        prewait-dispatch-reorder-phase2.md §6) out of step with the pass that
-        stamped it. Re-audit that design before changing this value.
-
-        Auto follow (post_go='go_at_end') breaks the chain walk and fires its
-        next cue from loop_cue *after* the body, so it never reaches this
-        accumulator — its body wait is real, not anchored. See CLAUDE.md
-        "Cue play modes & pre/post-wait semantics".
-        """
-        return 0.0
+        so a cue's prewait and postwait push the cues after it, enabled or
+        not; the body never advances a chain. ``parallel`` ("en paralelo")
+        returns 0: every cue arrives at the trigger, the rule of 2026-08-14
+        (869ej3cc8, Castillo Medina del Campo). An unknown mode raises.
+        The arithmetic is chain_pass.advance_ms; a pass is laid out once by
+        chain_pass.layout (Design §1)."""
+        if mode is None:
+            mode = CueHandler._advance_mode(cue)
+        return chain_pass.advance_ms(cue, mode)
 
     #: An audio player in wrap mode ends its last pass by itself, a few ms
     #: after the engine's _end_mtc at most; its disarm (the kill) waits this
@@ -526,7 +528,7 @@ class CueHandler:
         """(the AudioCue a stop of ``cue`` reaches, its player) when that
         player is selfgate, else (None, None). A CueList reaches its first
         enabled child (S0-11)."""
-        target = first_enabled_child(cue) if isinstance(cue, CueList) else cue
+        target = picked_child(cue) if isinstance(cue, CueList) else cue
         if not isinstance(target, AudioCue):
             return None, None
         player = PLAYER_HANDLER.audio_player(target)
@@ -637,7 +639,7 @@ class CueHandler:
         parent's start (S0-11). None for any other cue or an older player."""
         target = cue
         if isinstance(cue, CueList):
-            target = first_enabled_child(cue)
+            target = picked_child(cue)
             if target is None or not getattr(target, "_local", False):
                 return None
         if getattr(target, "_start_mtc", None) is None:
@@ -798,6 +800,7 @@ class CueHandler:
         arrival_ms: float,
         start_ms: float,
         go_gen: int,
+        pass_=None,
     ) -> tuple[str, Cue | None]:
         """Setup, illumination and the follow commit of one pass, as three
         events taken in due-time order (869feynrj §4.2, review 4 M3):
@@ -813,19 +816,51 @@ class CueHandler:
         follow target or None), ("stopped", None) or ("failed", None) when
         run_cue raised (logged, illumination ended)."""
         pending = {"setup": start_ms - self._RUN_AHEAD_MS, "illum": arrival_ms}
-        rank = {"setup": 0, "commit": 1, "illum": 2}
+        rank = {"setup": 0, "decide": 1, "commit": 2, "illum": 3}
         target = None
+        # A cue with outputs on several nodes (1amfwm7jnqf Design §2): every
+        # owner decides its output at the same instant, start - W (or the
+        # pass's anchor if later), from the flag as every node sees it.
+        several = self._several_owners(cue)
+        decided = None
+        if pass_ is None:
+            pass_ = getattr(cue, "_pass", None)
+        if several:
+            pending["decide"] = self._decide_instant(cue, start_ms)
         while pending:
             name = min(pending, key=lambda n: (pending[n], rank[n]))
             due = pending.pop(name)
+            if name == "decide":
+                if self._wait_mtc(cue, mtc, due, go_gen) == "stopped":
+                    return "stopped", None
+                self._step_wait(cue, "decide", go_gen, pass_)
+                decided = self._common(cue, due)
+                self._step_done(cue, "decide", pass_)
+                if not decided:
+                    with self._lock:
+                        if getattr(cue, "_go_generation", 0) == go_gen:
+                            # Its held setup, if any, is dropped.
+                            self.cancel_start_locked(cue, "cancel")
+                    Logger.info(
+                        f"Cue {cue.id}: off as every node sees it at {due:.0f} "
+                        "ms; silent in this pass on every owner"
+                    )
+                    return "silent", None
+                if getattr(cue, "_setup_skipped", False):
+                    # Off on this node when its setup was due, on for every
+                    # owner now: armed and set up now, late if it must.
+                    cue._setup_skipped = False
+                    if not getattr(cue, "loaded", False):
+                        self.arm(cue, init=True)
+                    pending["setup"] = due
+                continue
             if name == "illum":
                 if self._wait_mtc(cue, mtc, due, go_gen) == "stopped":
                     return "stopped", None
                 # Illuminate (sequence-view highlight) at the cue's ARRIVAL —
-                # the start of its prewait — NOT at dispatch. Under Auto
-                # continue every cue arrives at the trigger, so the whole chain
-                # lights together and each cue stays lit for prewait +
-                # max(body, postwait).
+                # the start of its prewait — NOT at dispatch: each cue lights
+                # at its own place in the pass's layout (1amfwm7jnqf) and
+                # stays lit for prewait + max(body, postwait).
                 try:
                     self.communications_thread.add_cue(
                         cue.id, str(start_ms), timeout=0.1
@@ -840,6 +875,27 @@ class CueHandler:
                 # window returns at once.
                 if self._wait_mtc(cue, mtc, due, go_gen) == "stopped":
                     return "stopped", None
+                if isinstance(cue, (DmxCue, CueList)):
+                    self._step_wait(cue, "setup", go_gen, pass_)
+                if several and decided is None and not getattr(cue, "enabled", True):
+                    # Several owners, off on this node: set up only if every
+                    # owner decides it on.
+                    cue._setup_skipped = True
+                    continue
+                if isinstance(cue, DmxCue) and not self._common(
+                    cue, self._scene_instant(cue, start_ms)
+                ):
+                    # D25: a DMX cue off as every node sees it when its scene
+                    # is due sends none; enabled by its start, it sends it
+                    # late, at the start.
+                    cue._scene_withheld = True
+                    Logger.info(f"{cue.id}: DMX scene not sent, the cue is disabled")
+                    self._step_done(cue, "setup", pass_)
+                    continue
+                if isinstance(cue, CueList):
+                    # One pick per pass, before the setup sends anything
+                    # (Design §2).
+                    self._mark_cuelist_child(cue, go_gen, start_ms)
                 # Set up HELD at start_ms (video invisible / audio
                 # not-following / action not-yet-run / dmx self-scheduled from
                 # absolute mtc_time), close enough to the slot that the frame
@@ -867,8 +923,9 @@ class CueHandler:
                     with self._lock:
                         cue._revealed = True
                         cue._revealed_at = monotonic()
-                elif isinstance(cue, CueList):
-                    self._mark_cuelist_child(cue, go_gen)
+                        cue._scene_out = go_gen
+                    Logger.info(f"DMX scene sent to local player for cue {cue.id}")
+                self._step_done(cue, "setup", pass_)
                 target = self._follow_commit_target(cue)
                 if target is not None:
                     pending["commit"] = (
@@ -1239,12 +1296,14 @@ class CueHandler:
 
         # Recursive arms — only reached if cue was actually armed.
         # The claim is released by now; the loaded guard prevents re-arm.
-        if cue.post_go == "go" and cue._target_object:
-            if cue._target_object.enabled:
-                if walk is not None:
-                    self.arm(cue._target_object, init, walk=walk, epoch=epoch)
-                else:
-                    self.arm(cue._target_object, init, epoch=epoch)
+        # Through a disabled cue, as the lookahead does (1amfwm7jnqf §1): it
+        # keeps its place in the chain; it is never armed itself.
+        nxt = self._next_enabled_in_chain(cue) if cue.post_go == "go" else None
+        if nxt is not None:
+            if walk is not None:
+                self.arm(nxt, init, walk=walk, epoch=epoch)
+            else:
+                self.arm(nxt, init, epoch=epoch)
 
         # ActionCue(play) and FadeCue(fade_action) + target = 1 unit. Arm
         # target
@@ -1259,6 +1318,19 @@ class CueHandler:
                     self.arm(cue._action_target_object, init, epoch=epoch)
 
         return True
+
+    @staticmethod
+    def _next_enabled_in_chain(cue: Cue) -> Cue | None:
+        """The first enabled cue behind ``cue`` along post_go='go' links,
+        walking through disabled ones (a disabled cue that is not 'go' ends
+        the chain), or None."""
+        nxt, seen = getattr(cue, "_target_object", None), {id(cue)}
+        while nxt is not None and not getattr(nxt, "enabled", True):
+            if id(nxt) in seen or getattr(nxt, "post_go", None) != "go":
+                return None
+            seen.add(id(nxt))
+            nxt = getattr(nxt, "_target_object", None)
+        return nxt if nxt is not None and id(nxt) not in seen else None
 
     def armed_inventory(self) -> dict:
         """What this node holds armed right now: published (loaded) cues by
@@ -1486,6 +1558,12 @@ class CueHandler:
             # either before it (then it is in _armed_cues, flagged just
             # below and disarmed later) or after it (then it is abandoned).
             self._disarm_epoch = self._disarm_epoch + 1
+            # Every pass ends: every toggle record is folded (Design §3), and
+            # nothing waits for a step of it.
+            chain_pass.forget()
+            self._live_passes().clear()
+            self.__dict__.pop("_entered", None)
+            self._step_order().clear()
             for cue in self._armed_cues:
                 cue._stop_requested = True
                 cue._go_generation = getattr(cue, "_go_generation", 0) + 1
@@ -1521,185 +1599,238 @@ class CueHandler:
             except Exception as e:
                 Logger.error(f"STOP: /cancelstart to cue {cue.id} failed: {e}")
 
-    def cancel_pending_descendants(self, cue: Cue) -> int:
-        """Cancel the cues an Auto-continue chain dispatched behind `cue`.
+    @staticmethod
+    def _start_in_pass(cue: Cue, p) -> float | None:
+        arrival = p.arrival_of(cue) if p is not None else None
+        if arrival is None:
+            return None
+        try:
+            return arrival + cue.prewait.milliseconds_exact
+        except Exception:
+            return arrival
 
-        A chained cue only exists because its predecessor ran, so stopping a
-        cue must stop everything scheduled behind it. Under Phase 2 the whole
-        chain is dispatched at the trigger, so by now those cues are parked on
-        their own anchors and nothing else would hold them back — the
-        `_stop_requested` guard that used to sit in front of the dispatch has
-        moved to chain entry.
+    def cancel_pending_descendants(self, cue: Cue, until: Cue | None = None) -> int:
+        """Cancel the cues of the target's pass a stop takes with it
+        (1amfwm7jnqf D9, X1, Design §5).
+
+        The walk is the target's pass's layout behind the target, up to
+        ``until`` (the stop action's own cue: "A, Stop A, Z": Z plays), over
+        the cues due AFTER the stop action's own start (a cue due at its
+        instant stays, S41). A cue belongs to the walk while its ``_pass`` is
+        still the target's: a remote target is no longer a blind spot (S45),
+        a cue retaken in the pass is reached (S47), a disabled target is
+        treated like any other (S48), and a cue a newer pass owns is left
+        alone.
 
         Never touches a cue that has already produced output (`_revealed`):
-        that one is on stage and stays there. The walk continues PAST it,
-        because the cues behind it still depend on the cue being stopped.
-        Non-local cues are skipped too — the node that owns them runs this same
-        walk on its own graph (ActionCues are local everywhere), so the union
-        covers the cluster.
+        that one is on stage and stays there; the walk goes on past it.
+        Other nodes' cues are skipped: the node that owns them runs this same
+        walk (ActionCues are local everywhere). A DMX cue whose scene is
+        already in the player fires (D25, today's dmxplayer).
 
         Returns how many cues were cancelled.
         """
         cancelled = []
+        p = getattr(cue, "_pass", None)
+        t_stop = None
+        if until is not None:
+            t_stop = self._start_in_pass(until, getattr(until, "_pass", None))
         with self._lock:
-            # The pass this cue belongs to. Cues that a NEWER pass has since
-            # claimed are not ours to cancel — a loop-back can already have
-            # re-scheduled them against a fresh trigger.
-            target_epoch = getattr(cue, "_go_epoch", 0)
             self._chain_epoch = self._chain_epoch + 1
             epoch = self._chain_epoch
-            # Mark the target too: a dispatch of it currently blocked in its
-            # own arm must not come back to life after this.
+            # Mark the target too: a dispatch of it in flight must not come
+            # back to life after this.
             cue._go_epoch = epoch
-
-            node = (
-                getattr(cue, "_target_object", None)
-                if getattr(cue, "post_go", None) == "go"
-                else None
-            )
-            # A circular project (A→B→C→A) would otherwise re-mark the same
-            # cues on every revolution until the safety limit, reporting ~1024
-            # cancellations and firing that many remove_cue sends.
-            seen = set()
-            while node is not None and id(node) not in seen:
-                seen.add(id(node))
-                is_local = getattr(node, "_local", False)
-                owned = getattr(node, "_go_epoch", 0) <= target_epoch
-                if is_local and owned and getattr(node, "enabled", False):
-                    if not getattr(node, "_revealed", False):
-                        node._stop_requested = True
-                        node._go_generation = getattr(node, "_go_generation", 0) + 1
-                        node._go_epoch = epoch
-                        node._playing = False
-                        # 869feynrj §4.3: its player may already follow.
-                        self.cancel_start_locked(node, "cancel")
-                        cancelled.append(node)
-                elif is_local and owned:
-                    # Disabled: nothing to cancel, but claim it so enabling it
-                    # later cannot rejoin a chain that was stopped.
-                    node._go_epoch = epoch
-                if getattr(node, "post_go", None) != "go":
-                    # A chain break is a hand-off point, not a descendant.
-                    break
-                node = getattr(node, "_target_object", None)
-                if len(seen) > 1024:
-                    Logger.error(
-                        "cancel_pending_descendants hit safety limit; aborting"
-                    )
-                    break
+            layout = getattr(p, "layout", None) or []
+            pos = next((k for k, (c, _) in enumerate(layout) if c is cue), None)
+            behind = layout[pos + 1 :] if pos is not None else []
+            previous = cue
+            for node, arrival in behind:
+                if getattr(previous, "post_go", None) != "go":
+                    break  # a chain break is a hand-off, not a descendant
+                previous = node
+                if until is not None and node is until:
+                    break  # D9: nothing at or after the stop action
+                np = getattr(node, "_pass", None)
+                if np is not p:
+                    if np is not None and np.epoch < p.epoch:
+                        break  # the target's pass never reached this cue
+                    continue  # a newer pass owns it
+                if not getattr(node, "_local", False):
+                    continue
+                start = arrival + node.prewait.milliseconds_exact
+                if t_stop is not None and start <= t_stop:
+                    continue  # due at or before the stop's own instant
+                if isinstance(node, DmxCue) and getattr(node, "_scene_out", None):
+                    self._dmx_scene_out_locked(node, start, "a stop does not recall it")
+                    continue
+                if getattr(node, "_revealed", False):
+                    continue  # on stage: never cut
+                node._stop_requested = True
+                node._go_generation = getattr(node, "_go_generation", 0) + 1
+                node._go_epoch = epoch
+                node._playing = False
+                # 869feynrj §4.3: its player may already follow.
+                self.cancel_start_locked(node, "cancel")
+                cancelled.append(node)
 
         # Outside the lock: a cancelled cue's thread leaves through the
-        # generation guard, which sits upstream of the usual remove_cue, and
-        # the whole chain has been lit since the trigger — so the highlight
-        # has to be dropped here or the UI keeps showing dead cues as running.
+        # generation guard, upstream of the usual remove_cue, so the
+        # highlight is dropped here.
         for node in cancelled:
             self._end_illumination(node)
+            self._steps_done_for(node, p)
         if cancelled:
-            # str(): a cue's id is a Uuid, not a str, and join() would raise —
-            # inside the one log line that tells an operator this happened.
             Logger.info(
                 f"Stop of cue {cue.id} cancelled {len(cancelled)} scheduled "
                 f"cue(s) behind it: {', '.join(str(n.id) for n in cancelled)}"
             )
         return len(cancelled)
 
-    def cancel_parked(self, cue: Cue) -> bool:
-        """Cancel a cue that was dispatched but has not produced output yet.
-
-        Used when a cue is DISABLED after its chain was dispatched. Without
-        this the cue would still fire: the whole chain leaves at the trigger
-        and nothing downstream re-reads `enabled`. A cue that already
-        revealed is left alone — disabling never cuts live playback.
-
-        The cue keeps a stamp of the pass it was cancelled out of, so
-        re-enabling it before its slot puts it back (rejoin_chain).
-        """
+    def cancel_child(self, cue: Cue) -> bool:
+        """Cancel a CueList's child its pass set up and has not committed:
+        the child disabled before its commit (Design §2, S89). It stays
+        silent in that pass even if it is enabled again: a child is in no
+        layout and is never retaken. From its commit on a toggle changes
+        nothing (D31 c), and a child on stage is never cut (A3)."""
         with self._lock:
-            # Tested in the same section that sets the flags (869feynrj S0-1):
-            # tested before the lock, a reveal landing in between was flagged
-            # after it went on stage, never disarmed, and played to its end.
-            if getattr(cue, "_revealed", False) or not getattr(cue, "_playing", False):
+            # Tested in the same section that sets the flags (869feynrj S0-1).
+            if (
+                getattr(cue, "_revealed", False)
+                or not getattr(cue, "_playing", False)
+                or self._decided_locked(cue) is not None
+            ):
                 return False
-            self._chain_epoch = self._chain_epoch + 1
-            epoch = self._chain_epoch
             cue._stop_requested = True
             cue._go_generation = getattr(cue, "_go_generation", 0) + 1
-            cue._go_epoch = epoch
             cue._playing = False
             # 869feynrj §4.3: its player may already follow.
             self.cancel_start_locked(cue, "cancel")
-            # Remember where it would have played, so a re-enable can put it
-            # back at the same anchor instead of losing the slot.
-            arrival = getattr(cue, "_dispatch_arrival_ms", None)
-            if arrival is not None:
-                cue._chain_pass = (epoch, arrival)
         self._end_illumination(cue)
-        Logger.info(f"Cue {cue.id} disabled before its slot — cancelled")
+        Logger.info(f"Cue {cue.id} disabled before its commit — cancelled")
         return True
 
-    def rejoin_chain(self, cue: Cue, mtc: MtcListener) -> bool:
-        """Put a cue enabled mid-pass back into its running chain.
+    def _decided_locked(self, cue: Cue, now_ms: float | None = None) -> str | None:
+        """Why a toggle can no longer change a cue's output in its pass
+        (D31 c), or None. Call with self._lock held."""
+        if getattr(cue, "_revealed", False):
+            return "on stage"
+        if getattr(cue, "_follow_committed", False) is True:
+            return "committed already"
+        if getattr(cue, "_visible_at_gen", None) is not None:
+            return "committed already"
+        if now_ms is not None:
+            arrival = getattr(cue, "_dispatch_arrival_ms", None)
+            if arrival is not None:
+                start = arrival + cue.prewait.milliseconds_exact
+                if now_ms >= start - self._follow_lead_ms():
+                    return "committed already"
+        return None
 
-        The chain walk stamped this cue with the pass that would have
-        dispatched it while it was disabled. If that pass is still alive and
-        the cue's slot has not gone by, dispatch it at its original anchor so
-        it plays exactly when it was always going to.
-
-        Dispatched with unroll=False: the rest of the chain is already
-        running, and re-dispatching it would churn cues that are on stage.
-
-        Returns True if the cue was put back.
-        """
-        if not getattr(cue, "enabled", False) or not getattr(cue, "_local", False):
-            return False
-        stamp = getattr(cue, "_chain_pass", None)
-        if not stamp:
-            return False
-        epoch, arrival_ms = stamp
-        if arrival_ms is None:
-            return False
-
+    def retake(self, cue: Cue, mtc: MtcListener) -> Thread | None:
+        """All a toggle does to a running pass (Design §2): an audio or video
+        cue with one owner that a pass holds, not decided yet, whose thread
+        is not of the kind its flag now asks for (silent or not), is
+        dispatched again for itself alone: same arrival, same pass,
+        ``unroll=False``. go() refuses it, in its commit section, if it is
+        decided by then. Returns the new thread, or None."""
+        p = getattr(cue, "_pass", None)
+        if p is None or not getattr(cue, "_local", False):
+            return None
+        if self._runs_everywhere(cue) or self._several_owners(cue):
+            return None
+        if (
+            not getattr(cue, "_playing", False)
+            and getattr(cue, "_dispatch_arrival_ms", None) is None
+        ):
+            return None
+        if getattr(cue, "_thread_silent", None) == (not getattr(cue, "enabled", True)):
+            return None
         with self._lock:
-            barrier = self._last_stop_chain_epoch
-            if epoch <= self._last_stop_chain_epoch:
-                Logger.info(
-                    f"Cue {cue.id} enabled, but the chain it belonged to was "
-                    f"stopped — it will play on the next GO"
-                )
-                return False
-            if getattr(cue, "_go_epoch", 0) > epoch:
-                # A stop action (or a newer pass) claimed this cue after the
-                # stamp: a stop takes its scheduled descendants with it, and
-                # that outranks re-enabling one of them.
-                Logger.info(
-                    f"Cue {cue.id} enabled, but a stop already cancelled this "
-                    f"part of the chain — it will play on the next GO"
-                )
-                return False
+            why = self._decided_locked(cue, self._now_ms(mtc))
+        if why is not None:
+            return None
+        return self.go(
+            cue,
+            mtc,
+            getattr(cue, "_dispatch_arrival_ms", None),
+            pass_=p,
+            unroll=False,
+            retake=True,
+        )
 
-        start_ms = arrival_ms + cue.prewait.milliseconds_exact
-        now_ms = mtc.main_tc.milliseconds_exact
-        if start_ms < now_ms - self._LATE_DISPATCH_TOLERANCE_MS:
-            # Firing it now would put it on stage at the wrong moment, which
-            # mid-show is worse than not playing it at all.
-            Logger.warning(
-                f"Cue {cue.id} enabled after its slot (start={start_ms:.0f}ms, "
-                f"mtc={now_ms:.0f}ms) — NOT firing it late; it will play on "
-                f"the next GO"
-            )
+    def log_toggle(self, cue: Cue, value: bool, taken) -> None:
+        """The journal line of a toggle of a cue a running pass holds
+        (Design §6). Never raises."""
+        try:
+            p = getattr(cue, "_pass", None)
+            arrival = getattr(cue, "_dispatch_arrival_ms", None)
+            if p is None or arrival is None or not getattr(cue, "_playing", False):
+                return
+            word = "enabled" if value else "disabled"
+            start = arrival + cue.prewait.milliseconds_exact
+            n = getattr(p, "no", p.epoch)
+            if self._runs_everywhere(cue) or self._several_owners(cue):
+                instant = (
+                    start
+                    if self._runs_everywhere(cue)
+                    else self._decide_instant(cue, start)
+                )
+                if self._common(cue, instant) == bool(value):
+                    Logger.info(
+                        f"Cue {cue.id} {word}: counts in pass {n} "
+                        f"(start {start:.0f} ms)"
+                    )
+                else:
+                    limit = chain_pass.W_MS + (start - instant)
+                    Logger.info(
+                        f"Cue {cue.id} {word}: sent less than {limit:.0f} ms before "
+                        f"its start in pass {n} ({start:.0f} ms); from the next pass"
+                    )
+                return
+            if taken:
+                if value:
+                    Logger.info(
+                        f"Cue {cue.id} enabled: plays in pass {n} at {start:.0f} ms"
+                    )
+                else:
+                    Logger.info(
+                        f"Cue {cue.id} disabled: silent in pass {n} "
+                        f"(start {start:.0f} ms)"
+                    )
+                return
+            with self._lock:
+                why = self._decided_locked(cue)
+            if why == "on stage" and not value:
+                Logger.info(f"Cue {cue.id} disabled: on stage, it plays to its end")
+            elif why is not None and not value:
+                Logger.info(
+                    f"Cue {cue.id} disabled: committed already in pass {n}; silent "
+                    "from the next pass"
+                )
+            elif why is not None:
+                Logger.info(
+                    f"Cue {cue.id} enabled: silent already in pass {n}; it plays "
+                    "from the next pass"
+                )
+        except Exception as e:
+            Logger.debug(f"toggle line for {getattr(cue, 'id', cue)} not written: {e}")
+
+    @staticmethod
+    def _several_owners(cue: Cue) -> bool:
+        """An audio or video cue with outputs on more than one node (cuems-
+        utils MediaCue.get_all_output_names): its owners decide together."""
+        if not isinstance(cue, (AudioCue, VideoCue)):
             return False
-
-        Logger.info(
-            f"Cue {cue.id} enabled before its slot — rejoining the running "
-            f"chain at {start_ms:.0f}ms"
-        )
-        # require_stop_epoch closes the window between the check above and the
-        # dispatch: the lock is dropped in between, and a STOP landing there
-        # must not be overridden by the fresh epoch this go() mints.
-        return (
-            self.go(cue, mtc, arrival_ms, unroll=False, require_stop_epoch=barrier)
-            is not None
-        )
+        try:
+            names = cue.get_all_output_names()
+        except Exception:
+            return False
+        try:
+            nodes = {n[0] if isinstance(n, (tuple, list)) else n for n in (names or ())}
+        except TypeError:
+            return False
+        return len(nodes) > 1
 
     def disarm_all(self, reason: str = "unspecified") -> None:
         """Disarms all cues.
@@ -1755,37 +1886,248 @@ class CueHandler:
         except Exception:
             pass
 
-    def stamp_pass(self, skipped: list, arrival_ms: float) -> int:
-        """Mint a chain epoch and stamp `skipped` with it, dispatching nothing.
+    # ---- the pass (1amfwm7jnqf, Design §1) ---------------------------------
+    # Class-level default: a handler built with object.__new__ (tests) counts
+    # from 0 too. The node's pass number, for the journal only.
+    _pass_count = 0
 
-        For the case where a chain walk finds NO local+enabled cue on this
-        node (every local cue in the chain is currently disabled): go() is
-        never called, so nothing would mint an epoch, and enabling one of
-        those cues later could not rejoin the pass. Returns the epoch.
-        """
-        with self._lock:
-            self._chain_epoch = self._chain_epoch + 1
-            epoch = self._chain_epoch
-            self._stamp_skipped_locked(skipped, epoch, arrival_ms)
-        return epoch
+    @staticmethod
+    def _anchor_of(mtc: MtcListener, frozen_mtc_ms: float | None) -> float | None:
+        if frozen_mtc_ms is not None:
+            return float(frozen_mtc_ms)
+        try:
+            value = mtc.main_tc.milliseconds_exact
+        except Exception:
+            return None
+        return float(value) if isinstance(value, (int, float)) else None
 
-    def _stamp_skipped_locked(
-        self, skipped: list | None, epoch: int, arrival_ms: float
-    ) -> None:
-        """Record the pass that would have dispatched each skipped-disabled
-        cue, so enabling it later can rejoin at its own slot.
-
-        Caller must hold self._lock. A None arrival is not an anchor a rejoin
-        could be pinned to (the thread derives its own from live MTC), so it is
-        not stamped at all rather than stamped with something unusable.
-        """
-        if arrival_ms is None:
-            return
-        for cue in skipped or ():
+    def _mint_pass_locked(
+        self, layout: list, anchor_ms: float | None, root_seq: int = 0
+    ) -> chain_pass.Pass:
+        """Mint one pass: a new chain epoch, written with the layout on every
+        cue of it, local or not. Call with self._lock held."""
+        self._chain_epoch = self._chain_epoch + 1
+        if anchor_ms is None and layout:
+            anchor_ms = layout[0][1]
+        p = chain_pass.Pass(
+            epoch=self._chain_epoch,
+            anchor_ms=anchor_ms,
+            layout=layout,
+            root_seq=root_seq,
+            mode=(
+                self._advance_mode(layout[0][0]) if layout else chain_pass.SEQUENTIAL
+            ),
+        )
+        self._pass_count = self._pass_count + 1
+        p.no = self._pass_count
+        p.steps = {}
+        for c, _ in p.layout:
             try:
-                cue._chain_pass = (epoch, arrival_ms)
+                c._pass = p
             except Exception:
                 pass
+        self._add_steps(p)
+        return p
+
+    # ---- the order of instants on this node (Design §5) ------------------
+
+    def _step_order(self) -> chain_pass.StepOrder:
+        order = self.__dict__.get("_steps")
+        if order is None:
+            order = self.__dict__.setdefault("_steps", chain_pass.StepOrder())
+        return order
+
+    def _add_steps(self, p, start_pos: int = 0) -> None:
+        """The steps of a pass on this node: for each local cue more than one
+        node runs, what it does and when (an ActionCue's or a fade's start; a
+        DMX cue's scene and start; a CueList's setup and start; the decision
+        of a cue with several owners), keyed (instant, anchor, entry,
+        position, sub): the same on every node."""
+        steps = getattr(p, "steps", None)
+        if steps is None:
+            return
+        order = self._step_order()
+        anchor = p.anchor_ms if p.anchor_ms is not None else 0.0
+        entry = str(getattr(p.entry, "id", p.entry))
+        for pos, (c, arrival) in enumerate(p.layout):
+            if pos < start_pos or not getattr(c, "_local", False):
+                continue
+            everywhere = self._runs_everywhere(c)
+            several = not everywhere and self._several_owners(c)
+            if not (everywhere or several):
+                continue
+            try:
+                start = arrival + c.prewait.milliseconds_exact
+            except Exception:
+                start = arrival
+            mine = {}
+            if isinstance(c, (DmxCue, CueList)):
+                mine["setup"] = (
+                    max(start - self._RUN_AHEAD_MS, anchor),
+                    anchor,
+                    entry,
+                    pos,
+                    0,
+                )
+            if several:
+                mine["decide"] = (start - chain_pass.W_MS, anchor, entry, pos, 0)
+            if everywhere:
+                mine["start"] = (start, anchor, entry, pos, 1)
+            for key in mine.values():
+                order.add(key, str(c.id))
+            steps[id(c)] = mine
+
+    @staticmethod
+    def _step_key(cue: Cue, kind: str, p=None):
+        steps = getattr(p, "steps", None)
+        return (steps or {}).get(id(cue), {}).get(kind)
+
+    def _step_wait(self, cue: Cue, kind: str, go_gen: int, p=None) -> None:
+        """Do this cue's ``kind`` step only when no pending step of this node
+        has a smaller key (Design §5)."""
+        key = self._step_key(cue, kind, p)
+        if key is None:
+            return
+        self._step_order().wait_turn(
+            key,
+            name=str(cue.id),
+            abort=lambda: getattr(cue, "_go_generation", 0) != go_gen
+            or getattr(cue, "_stop_requested", False),
+        )
+
+    def _step_done(self, cue: Cue, kind: str, p=None) -> None:
+        steps = getattr(p, "steps", None)
+        if not steps:
+            return
+        mine = steps.get(id(cue))
+        if not mine:
+            return
+        key = mine.pop(kind, None)
+        if key is not None:
+            self._step_order().done(key)
+
+    def _steps_done_for(self, cue: Cue, p) -> None:
+        """Whatever ends a cue's part in a pass releases its steps: nothing
+        waits for a step that is silent, cut, held, replaced or refused."""
+        steps = getattr(p, "steps", None)
+        if not steps:
+            return
+        for key in (steps.pop(id(cue), None) or {}).values():
+            self._step_order().done(key)
+
+    def _log_pass(self, p: chain_pass.Pass) -> None:
+        """``Chain pass <n> (<mode>, engine <v>) from <id>, anchor <ms> ms:
+        <id> +<offset>[ off][ held][ remote], …`` (Design §6): once per pass
+        and node. Never raises."""
+        try:
+            version = engine_version().split(" (")[0]
+            anchor = p.anchor_ms if p.anchor_ms is not None else 0.0
+            held = getattr(p, "held", None) or ()
+            parts = []
+            for c, arrival in p.layout:
+                flags = ""
+                if not getattr(c, "enabled", True):
+                    flags += " off"
+                if id(c) in held:
+                    flags += " held"
+                if not getattr(c, "_local", False):
+                    flags += " remote"
+                parts.append(f"{c.id} +{max(arrival - anchor, 0.0):.0f}{flags}")
+            entry = p.entry
+            Logger.info(
+                f"Chain pass {p.no} ({p.mode}, engine {version}) from "
+                f"{getattr(entry, 'id', entry)}, anchor {anchor:.0f} ms: "
+                + ", ".join(parts)
+            )
+        except Exception as e:
+            Logger.error(f"Chain pass line not written: {e}")
+
+    def mint_pass(
+        self, layout: list, anchor_ms: float | None = None, root_seq: int = 0
+    ) -> chain_pass.Pass:
+        """A pass with no local cue to dispatch on this node (every local
+        cue's is minted by go()): it still has its place, its number and its
+        line, the same on every node."""
+        with self._lock:
+            p = self._mint_pass_locked(layout, anchor_ms, root_seq)
+        self._log_pass(p)
+        return p
+
+    def _live_passes(self) -> dict:
+        """epoch -> [pass, threads alive]: the passes that still have a local
+        cue to start or a hand-over to fire. Call with self._lock held."""
+        live = self.__dict__.get("_live")
+        if live is None:
+            live = self.__dict__.setdefault("_live", {})
+        return live
+
+    def _live_enter_locked(self, p) -> None:
+        epoch = getattr(p, "epoch", None)
+        if epoch is None:
+            return
+        slot = self._live_passes().setdefault(epoch, [p, 0])
+        slot[1] += 1
+
+    def _live_leave(self, p) -> None:
+        epoch = getattr(p, "epoch", None)
+        if epoch is None:
+            return
+        with self._lock:
+            live = self._live_passes()
+            slot = live.get(epoch)
+            if slot is not None:
+                slot[1] -= 1
+                if slot[1] <= 0:
+                    del live[epoch]
+
+    def retire_records(self, now_ms: float | None) -> int:
+        """Fold the toggle records nothing on this node can still read
+        (Design §3): older than the MTC minus W, than the anchor of every
+        pass with a cue to start or a hand-over to fire, and than the
+        instant of every relayed follow that waits. Never raises."""
+        if now_ms is None:
+            return 0
+        try:
+            floor = float(now_ms) - chain_pass.W_MS
+            with self._lock:
+                anchors = [
+                    p.anchor_ms
+                    for p, _ in self._live_passes().values()
+                    if getattr(p, "anchor_ms", None) is not None
+                ]
+            if anchors:
+                floor = min(floor, min(anchors))
+            relay = self._follow
+            if relay is not None:
+                waiting = relay.pending_instants()
+                if waiting:
+                    floor = min(floor, min(waiting))
+            return chain_pass.retire(floor)
+        except Exception as e:
+            Logger.error(f"Toggle records not retired: {e}")
+            return 0
+
+    def _first_entry_at(self, cue: Cue, seed_ms: float) -> bool:
+        """The loop guard (Design §5): False for an automatic entry into a cue
+        at an instant at which it was already entered (one number per cue);
+        a loop paced only by a cue that has no body any more would go round
+        for ever. Nothing on stage is stopped."""
+        with self._lock:
+            entered = self.__dict__.setdefault("_entered", {})
+            key = id(cue)
+            if entered.get(key) == round(float(seed_ms), 3):
+                return False
+            entered[key] = round(float(seed_ms), 3)
+            return True
+
+    @staticmethod
+    def _first_local_in(layout: list) -> tuple["Cue | None", float]:
+        """The first cue of a layout this node runs, enabled or not (a
+        disabled one gets a silent thread, D26), with its arrival."""
+        for c, arrival in layout:
+            if getattr(c, "_local", False):
+                return c, arrival
+        return None, 0.0
 
     @logged
     def go(
@@ -1793,134 +2135,69 @@ class CueHandler:
         cue: Cue,
         mtc: MtcListener,
         frozen_mtc_ms: float = None,
-        chain_epoch: int = None,
+        pass_: chain_pass.Pass | None = None,
         unroll: bool = True,
-        stamp_skipped: list = None,
         require_stop_epoch: int = None,
         arm_epoch: int = None,
         commit_gate: Callable[[Cue, int], bool] | None = None,
+        layout: list | None = None,
+        retake: bool = False,
     ) -> Thread | None:
         """Starts a cue in a thread.
 
         Args:
-            cue: The cue to start
+            cue: The cue to start (this node's; enabled or not: a disabled
+            cue gets a silent thread, D26).
             mtc: The MTC listener
-            frozen_mtc_ms: Optional frozen MTC timestamp for sync with chained
-            cues
-            chain_epoch: None for a FRESH chain entry (manual GO, go_from
-            re-entry, enable-rejoin) — mints a new epoch. Otherwise the epoch
-            of the pass this dispatch belongs to, which is validated against
-            the cue's own high-water mark and the STOP barrier.
+            frozen_mtc_ms: the cue's arrival on the MTC axis (its place in
+            the pass's layout); None: live MTC, read by the thread.
+            pass_: None for a FRESH chain entry (operator GO, go_from) --
+            go() mints the pass, with ``layout`` (default: laid out from
+            ``cue`` at its arrival) and a new chain epoch, in its commit
+            section, and writes it on every cue of the layout. Otherwise the
+            pass this dispatch belongs to, validated against the cue's own
+            high-water mark and the STOP barrier.
             unroll: False stops go_threaded from dispatching the rest of the
-            chain — used by the enable-rejoin, where the chain is already
-            unrolled and re-dispatching it would churn live cues.
-            stamp_skipped: cues the caller's chain walk skipped because they
-            are disabled; stamped with this pass so a later enable can rejoin.
+            chain (a retake: the chain is already unrolled).
+            retake: re-dispatch of a cue its pass holds (a toggle, Design
+            §2): same arrival, same pass, not refused as a duplicate.
             arm_epoch: the STOP/load epoch this dispatch belongs to (see
-            arm_epoch()). None for a fresh entry: read here. A continuation
-            inherits its chain's. It goes into every arm this dispatch causes
-            (the fallback re-arm, the lookahead, the cue's own thread), and a
-            dispatch whose epoch has moved is refused.
+            arm_epoch()). None: read here. Every arm this dispatch causes
+            belongs to it, and a dispatch whose epoch has moved is refused.
             commit_gate: called inside the commit section, after every other
             refusal, with the cue and the generation about to be assigned;
-            False (or an exception) refuses the dispatch. A cross-node follow
-            uses it so that its cancel and its dispatch are decided in one
-            place (869fc8ytz).
+            False (or an exception) refuses the dispatch (a cross-node
+            follow, 869fc8ytz).
+
+        go() arms nothing (D32, Design §4): the cue's own thread arms it, or
+        waits for the arm in flight, so a slow arm makes the cue late and
+        never holds the caller.
 
         Returns:
-            Thread running the cue, or None if the cue is disabled, not local
-            to this node (the node owning the target will run it via its own
-            GO/post_go dispatch), or the dispatch was refused as stale/after a
-            STOP.
+            Thread running the cue, or None if the cue is not local to this
+            node, or the dispatch was refused as stale / after a STOP.
         """
-        if not cue.enabled:
-            Logger.info(f"Cue {cue.id} is disabled, skipping execution")
-            return None
         if not getattr(cue, "_local", True):
-            # Non-local target: handled by the node where it IS local via that
-            # node's own go_threaded → post_go chain. Trying to arm/run it
-            # locally would fail at re-arm (no local player), raise inside the
-            # caller's thread, and kill chained playback (master videocomposer
-            # froze after loop 1 when post_go='go' targeted an audio cue local
-            # to slave only).
+            # Non-local: the node owning it runs it from its own layout.
             Logger.info(f"Cue {cue.id} is not local to this node, skipping execution")
             return None
         Logger.info(f"GO command received. Starting cue {cue.id}")
 
         if arm_epoch is None:
             arm_epoch = self._disarm_epoch
-        is_continuation = chain_epoch is not None
-        if not is_continuation:
-            # Fresh entry: claim the next epoch. It is greater than every
-            # recorded stop and every cue mark at this instant, so the checks
-            # below can only refuse it if a STOP arrives LATER — while this
-            # call is blocked in the re-arm fallback. That is the right
-            # outcome: the operator's STOP came after their GO.
-            with self._lock:
-                self._chain_epoch = self._chain_epoch + 1
-                chain_epoch = self._chain_epoch
+        is_continuation = pass_ is not None and not retake
+        if not getattr(cue, "loaded", False) and getattr(cue, "enabled", True):
+            Logger.info(
+                f"Cue {cue.id} not armed yet"
+                + (" at go() time" if is_continuation else "")
+                + " — dispatching; its own thread arms it or waits for the arm "
+                "in progress"
+            )
 
-        if not hasattr(cue, "loaded") or not cue.loaded:
-            # 869fbyjzx: say which case this is. An arm still in flight (a
-            # pre-arm, an audio player still starting) is not a failure; the
-            # old "pre-arm may have failed" said it was. Best-effort: the arm
-            # can start or finish between this look and arm() below, so the
-            # wait itself is reported from what arm() actually did. True
-            # fallbacks keep "not loaded at go() time" and "Re-arming as
-            # fallback": the harnesses count them.
-            # An arm in flight that a GO waits for is still a LATE cue when the
-            # arm is slower than the GO gap (an audio arm is ~0.47 s cold):
-            # arming before the hand-off ("Part B") is the only cure and is
-            # not built; see AudioMixer.connect_player_to_outputs (869fbyjzx).
-            in_flight = self.describe_arm_in_flight(cue)
-            if is_continuation:
-                Logger.info(
-                    f"Cue {cue.id} not armed yet at go() time — dispatching; "
-                    f"its own thread arms it or waits for the arm in progress"
-                )
-            elif in_flight is not None:
-                Logger.info(
-                    f"Cue {cue.id} is still being armed ({in_flight}) at go() "
-                    f"time — waiting for the arm in progress"
-                )
-            else:
-                Logger.warning(
-                    f"Cue {cue.id} not loaded at go() time — no arm in flight "
-                    f"(never armed, or an earlier arm failed or was "
-                    f"abandoned). Re-arming as fallback."
-                )
-            # A continuation does NOT arm here: dispatch now happens at chain
-            # entry, so this call runs on the PREVIOUS cue's thread, and an
-            # audio arm can block ~15s on its JACK ports — delaying or killing
-            # that cue's own reveal. go_threaded arms the cue on its own
-            # thread instead, overlapping its own prewait.
-            if not is_continuation:
-                wait_report = {}
-                self.arm(cue, init=True, epoch=arm_epoch, wait_report=wait_report)
-                self._log_arm_wait(cue, "go() time", in_flight, wait_report)
-                if not hasattr(cue, "loaded") or not cue.loaded:
-                    if arm_epoch != self._disarm_epoch:
-                        # Not an arm failure: the operator's STOP (or a load)
-                        # arrived while this cue was being re-armed, and
-                        # arm() refused or abandoned it. The STOP wins.
-                        Logger.warning(
-                            f"Refusing dispatch of cue {cue.id}: a STOP or a "
-                            "load arrived while it was being re-armed"
-                        )
-                        return None
-                    raise Exception(
-                        f"{cue.__class__.__name__} {cue.id} not loaded to go"
-                        f"(re-arm failed)"
-                    )
-
+        minted = None
         with self._lock:
-            # Validate + commit atomically. Both checks are deliberately made
-            # AFTER any arm above: that is what lets a STOP which landed
-            # during a long arm window survive instead of being wiped by the
-            # _stop_requested reset below (F4).
+            # Validate + commit atomically.
             if arm_epoch != self._disarm_epoch:
-                # Whether or not the cue is loaded: if it is, the STOP's own
-                # re-arm loaded it for the NEXT run, not for this dispatch.
                 Logger.warning(
                     f"Refusing dispatch of cue {cue.id}: a STOP or a load "
                     "arrived while it was being started"
@@ -1930,37 +2207,36 @@ class CueHandler:
                 require_stop_epoch is not None
                 and self._last_stop_chain_epoch != require_stop_epoch
             ):
-                # The caller validated something against the STOP barrier and
-                # then had to drop the lock (the enable-rejoin does). A STOP
-                # landing in that window must win — otherwise the cue plays
-                # after the operator stopped the show.
                 Logger.warning(
                     f"Refusing dispatch of cue {cue.id}: a STOP arrived while "
                     f"it was being put back into its chain"
                 )
                 return None
-            if chain_epoch <= self._last_stop_chain_epoch:
-                # For a continuation: the chain was stopped. For a fresh
-                # entry: a STOP landed while we were arming — it is newer than
-                # this GO, so it wins (the caller must tolerate None).
+            if pass_ is not None and pass_.epoch <= self._last_stop_chain_epoch:
                 Logger.warning(
                     f"Refusing dispatch of cue {cue.id}: a STOP ended this "
-                    f"chain (pass {chain_epoch} <= stop "
+                    f"chain (pass {pass_.epoch} <= stop "
                     f"{self._last_stop_chain_epoch})"
                 )
                 return None
-            if is_continuation:
-                if getattr(cue, "_go_epoch", 0) >= chain_epoch:
-                    # Either a newer pass already owns the cue (loop-back
-                    # racing the original unroll), or this same pass already
-                    # dispatched it — a post_go='go' cycle, which entry-time
-                    # dispatch would otherwise spin at thread-spawn rate.
-                    Logger.warning(
-                        f"Refusing stale/duplicate chain dispatch of cue "
-                        f"{cue.id} (cue pass {getattr(cue, '_go_epoch', 0)} >= "
-                        f"dispatch pass {chain_epoch})"
-                    )
-                    return None
+            if is_continuation and getattr(cue, "_go_epoch", 0) >= pass_.epoch:
+                # A newer pass already owns the cue (a loop-back racing the
+                # original unroll), or this pass already dispatched it.
+                if getattr(cue, "_pass", None) is not pass_:
+                    self._steps_done_for(cue, pass_)
+                Logger.warning(
+                    f"Refusing stale/duplicate chain dispatch of cue "
+                    f"{cue.id} (cue pass {getattr(cue, '_go_epoch', 0)} >= "
+                    f"dispatch pass {pass_.epoch})"
+                )
+                return None
+            if retake and (
+                getattr(cue, "_pass", None) is not pass_
+                or getattr(cue, "_go_epoch", 0) > pass_.epoch
+                or self._decided_locked(cue) is not None
+            ):
+                Logger.info(f"Cue {cue.id}: not retaken, a newer pass or a stop has it")
+                return None
 
             go_gen = getattr(cue, "_go_generation", 0) + 1
             if commit_gate is not None:
@@ -1975,75 +2251,77 @@ class CueHandler:
                         "follow was cancelled or replaced"
                     )
                     return None
+            if pass_ is None:
+                # Fresh entry: claim the next epoch and mint the pass. Greater
+                # than every recorded stop and every cue mark at this instant.
+                if layout is None:
+                    anchor = self._anchor_of(mtc, frozen_mtc_ms)
+                    layout = chain_pass.layout(
+                        cue, anchor if anchor is not None else 0.0
+                    )
+                    anchor_ms = anchor
+                else:
+                    anchor_ms = layout[0][1] if layout else frozen_mtc_ms
+                root = chain_pass.current_root()
+                pass_ = minted = self._mint_pass_locked(layout, anchor_ms, root)
             # Only past every refusal: a dispatch that is refused must not
             # cancel the follow of the pass still playing.
             self._take_follow_on_restart_locked(cue)
-            # 869feynrj: this pass replaces one that is on stage (a re-GO of a
-            # playing cue). Its follow commit then reaches a playing player,
-            # which prints no START: the reveal skips the lost-follow check.
             cue._superseded_playing = bool(
                 getattr(cue, "_revealed", False) and getattr(cue, "_playing", False)
             )
             if not getattr(cue, "_revealed", False):
-                # §4.3 row 1: the pass this GO supersedes produced no output,
-                # but its player may already follow it: cancel that pending
-                # start here, for the OLD pass, before the new thread exists
-                # (its own follow commit comes later; the filter is off,
-                # §4.4). A pass on stage is left alone: the new start replaces
-                # it (and an equal start is a no-op in the player, §4.1c).
+                # §4.3 row 1: the pass this dispatch supersedes produced no
+                # output, but its player may already follow it.
                 self.cancel_start_locked(cue, "cancel")
+            elif isinstance(cue, DmxCue) and getattr(cue, "_scene_out", None):
+                old_arrival = getattr(cue, "_dispatch_arrival_ms", None)
+                if old_arrival is not None:
+                    self._dmx_scene_out_locked(
+                        cue,
+                        old_arrival + cue.prewait.milliseconds_exact,
+                        "a newer pass replaces it",
+                    )
 
-            cue._go_epoch = chain_epoch
+            cue._go_epoch = pass_.epoch
+            cue._pass = pass_
             cue._pass_seeded = bool(getattr(_DISPATCH, "seeded", False))
-            # Recorded here, not in the spawned thread: a disable arriving in
-            # between has to find this cue's anchor to stamp a rejoin with, and
-            # in a loop project it would otherwise read the PREVIOUS cycle's.
-            # None (manual GO / go_at_end) means "derived from live MTC by the
-            # thread", which is not an anchor a rejoin can be pinned to.
+            # Recorded here, not in the spawned thread: a retake re-dispatches
+            # at this arrival. None (an entry with no seed) is derived from
+            # live MTC by the thread.
             cue._dispatch_arrival_ms = frozen_mtc_ms
             cue._stop_requested = False
             cue._go_generation = go_gen
-            # Output-commit flag: True once this cue has produced output
-            # (reveal, or the DMX scene send). The stop walk cancels only
-            # cues that have NOT committed — a playing cue is never cut.
             cue._revealed = False
-            # When this pass produced output (monotonic); set by go_threaded.
-            # A late cross-node follow cancel reads it (869fc8ytz).
             cue._revealed_at = None
-            # Lifecycle flag: True while a GO owns this cue; cleared by
-            # disarm() and stop_all_cues(). Unlike _go_generation
-            # (increment-only), this is a sound "currently playing" signal —
-            # the disable-action path uses it to decide whether disarming
-            # would cut live playback.
+            cue._follow_committed = False
+            cue._scene_withheld = False
+            cue._setup_skipped = False
+            # Its thread's kind, decided here (Design §2): a retake compares
+            # it with the flag.
+            cue._thread_silent = self._silent_at_dispatch(cue)
             cue._playing = True
-            # Measurement only: a cue a GO took is not a wasted arm, even if
-            # it is stopped before its reveal.
             cue._ever_played = True
-            # Stamped with the epoch minted in THIS lock section: reading it
-            # back off the cue afterwards could capture a newer unrelated
-            # dispatch's epoch and mis-anchor the rejoin.
-            self._stamp_skipped_locked(stamp_skipped, chain_epoch, frozen_mtc_ms)
+            self._live_enter_locked(pass_)
+
+        if minted is not None:
+            self._log_pass(minted)
+            # A play / fade_in reaches its deciding point here (Design §5).
+            chain_pass.release_step()
 
         thread = Thread(
             name=f"GO:{cue.__class__.__name__}:{cue.id}",
             target=self.go_threaded,
-            args=[cue, mtc, frozen_mtc_ms, go_gen, chain_epoch, unroll],
+            args=[cue, mtc, frozen_mtc_ms, go_gen, pass_, unroll],
             kwargs={"arm_epoch": arm_epoch},
             daemon=True,
         )
         thread.start()
 
-        # Duration-aware lookahead: arm ahead until 2 cues with meaningful
-        # playback duration are ready. SYNCHRONOUS on the caller's thread, and
-        # arm() can block ~15s per audio cue — so it must not run where the
-        # caller is something that cannot afford to wait:
-        #   - a continuation's caller is the PREVIOUS cue's thread (dispatch
-        #     happens at chain entry now), and blocking it would delay that
-        #     cue's own reveal. Chain cues are armed by arm()'s recursion at
-        #     load and, failing that, by their own thread in go_threaded.
-        #   - a rejoin (unroll=False) is called from the command thread and
-        #     the cue is already armed by definition.
-        if not is_continuation and unroll:
+        # Duration-aware lookahead, synchronous on the caller's thread: only
+        # for a fresh entry (a continuation's caller is the previous cue's
+        # thread, a retake's the command thread).
+        if minted is not None and unroll:
             self._arm_ahead(cue, arm_epoch=arm_epoch)
         return thread
 
@@ -2055,19 +2333,15 @@ class CueHandler:
         arm_epoch: int = None,
         require_stop_epoch: int = None,
         commit_gate: Callable[[Cue, int], bool] | None = None,
+        why: str | None = None,
     ) -> Thread | None:
-        """Re-enter a post_go='go' chain from start_cue (inclusive), firing THIS
-        node's first local+enabled cue at seed_ms + Σ(chain advance of the
-        enabled cues skipped on the way). Returns the Thread, or None if no
-        local+enabled cue is reachable before a chain break.
-
-        Mirrors NodeEngine.go_script's cross-node walk, but for an IN-CHAIN
-        re-entry — specifically an ActionCue 'play' that restarts a sequence
-        (e.g. a circular project's loop-back). Plain go() bails on a non-local
-        target (returns None), which drops every cue local to a DIFFERENT node
-        than the play target: a loop-back 'play' aimed at node01's cue would
-        never re-fire the controller's own cues. Walking here makes each engine
-        re-enter its own local segment, exactly as it does on a GO.
+        """Enter a post_go='go' chain at start_cue (inclusive), the pass
+        anchored at seed_ms (an ActionCue play / fade_in at its start, an Auto
+        follow at body end + postwait, a relayed follow): the pass is laid
+        out from the script alone (chain_pass.layout), the same on every
+        node, and THIS node's first local cue of it is dispatched at its
+        arrival. With no local cue the pass is still minted and logged.
+        Returns the Thread, or None.
 
         arm_epoch / require_stop_epoch / commit_gate are passed to go() when
         set: a cross-node follow dispatches on another thread than the one
@@ -2084,45 +2358,30 @@ class CueHandler:
         }
         if seed_ms is None:
             seed_ms = mtc.main_tc.milliseconds_exact
-        cue = start_cue
-        sigma_ms = 0.0
-        walked = 0
-        skipped_disabled = []
-        while cue is not None and not (
-            getattr(cue, "_local", False) and getattr(cue, "enabled", False)
-        ):
-            if not getattr(cue, "enabled", False):
-                # Remember it: enabling it before its slot rejoins this pass.
-                skipped_disabled.append(cue)
-            if getattr(cue, "post_go", None) != "go":
-                # chain break before any local cue — nothing for this node to do
-                cue = None
-                break
-            if getattr(cue, "enabled", False):
-                sigma_ms += self._chain_advance_ms(cue)
-            cue = getattr(cue, "_target_object", None)
-            walked += 1
-            if walked > 1024:
-                Logger.error("go_from walk hit safety limit; aborting")
-                return None
+        why = why or chain_pass.current_why()
+        if why not in (None, "go") and not self._first_entry_at(start_cue, seed_ms):
+            Logger.error(
+                f"zero-length loop: {why} into {start_cue.id} at {seed_ms:.0f} ms "
+                "a second time, refused"
+            )
+            chain_pass.release_step()
+            return None
+        if why == "follow":
+            # A hand-over enters its pass after everything this node still
+            # has to do that is due at or before its instant (Design §5).
+            self._step_order().wait_turn(
+                (float(seed_ms), float("inf")), name=f"follow into {start_cue.id}"
+            )
+        lay = chain_pass.layout(start_cue, seed_ms, self._advance_mode(start_cue))
+        cue, arrival = self._first_local_in(lay)
         if cue is None:
-            # No local cue to fire, but the disabled ones still get a pass to
-            # rejoin, or enabling one mid-show would do nothing at all.
-            if skipped_disabled:
-                self.stamp_pass(skipped_disabled, seed_ms)
+            self.mint_pass(lay, seed_ms, chain_pass.current_root())
+            chain_pass.release_step()
             return None
         # A seeded dispatch (869feynrj §4.5e), never led (S0-13: L per hop
         # would drift every go_at_end chain by L per cue).
         with _dispatch_tag(True):
-            if skipped_disabled:
-                return self.go(
-                    cue,
-                    mtc,
-                    seed_ms + sigma_ms,
-                    stamp_skipped=skipped_disabled,
-                    **guards,
-                )
-            return self.go(cue, mtc, seed_ms + sigma_ms, **guards)
+            return self.go(cue, mtc, arrival, layout=lay, **guards)
 
     def _reveal_wait(self, cue: Cue, mtc: MtcListener, go_gen: int = 0) -> str:
         """Block until live MTC reaches cue._start_mtc; return 'reached' or 'stopped'.
@@ -2148,60 +2407,22 @@ class CueHandler:
         return self._wait_mtc(cue, mtc, start.milliseconds_exact, go_gen)
 
     def _next_local_fire(
-        self, cue: Cue, arrival_ms: float, stamp_epoch: int = None
+        self, cue: Cue, pass_: chain_pass.Pass | None
     ) -> tuple["Cue | None", float]:
-        """From a just-played cue, walk its post_go='go' chain to THIS node's
-        next local+enabled cue and return (that_cue_or_None, its_arrival_ms).
-
-        Under Auto continue the chain advance is zero, so every cue in the
-        chain arrives at the same trigger; the accumulator is kept because the
-        helper is the one documented place expressing the rule. Cues we skip
-        are transparent, and the walk stops at a chain break (post_go != 'go')
-        — an explicit hand-off point — bounded against all-disabled/all-remote
-        cycles.
-
-        stamp_epoch: when given, disabled cues found on the way are stamped
-        with the pass that would have dispatched them, so enabling one later
-        can rejoin it at its own slot. Left None (the default) the walk touches
-        nothing — callers that only ask "who is next" must stay side-effect
-        free.
-        """
-        acc = arrival_ms + self._chain_advance_ms(cue)
-        node = getattr(cue, "_target_object", None)
-        walked = 0
-        while node is not None:
-            if getattr(node, "_local", False) and getattr(node, "enabled", False):
-                return node, acc
-            if stamp_epoch is not None and not getattr(node, "enabled", False):
-                # Disabled: transparent to the timeline, but remember the pass
-                # so a re-enable before its slot can still rejoin. Stamped here
-                # too when the disabled cue is itself the chain break, which
-                # the walk reaches but does not walk past. Guarded so that a
-                # caller only asking "who is next" touches nothing at all —
-                # including this handler's own attributes, since the walk is
-                # also driven with a bare class or a stub as `self`.
-                self._stamp_one(node, stamp_epoch, acc)
-            if getattr(node, "post_go", None) != "go":
-                return None, acc
-            if getattr(node, "enabled", False):
-                acc += self._chain_advance_ms(node)
-            node = getattr(node, "_target_object", None)
-            walked += 1
-            if walked > 1024:
-                Logger.error("post_go fire-walk hit safety limit; aborting")
-                return None, acc
-        return None, acc
-
-    def _stamp_one(self, cue: Cue, epoch: int | None, arrival_ms: float) -> None:
-        """Stamp a single skipped-disabled cue, if stamping was asked for.
-
-        Gated on `epoch is not None` in full — including the lock — because the
-        walk is also called with a bare class or a stub as `self`.
-        """
-        if epoch is None:
-            return
-        with self._lock:
-            self._stamp_skipped_locked([cue], epoch, arrival_ms)
+        """The next cue of ``pass_``'s layout after ``cue`` that THIS node
+        runs, enabled or not (a disabled one keeps its place and its waits
+        and gets a silent thread, D26), with its arrival in the layout. The
+        arrivals are the layout's: nothing is added on the way. (None, 0.0)
+        at the end of the layout, or when ``cue`` is not in it."""
+        if pass_ is None:
+            return None, 0.0
+        found = False
+        for c, arrival in pass_.layout:
+            if found and getattr(c, "_local", False):
+                return c, arrival
+            if c is cue:
+                found = True
+        return None, 0.0
 
     def go_threaded(
         self,
@@ -2209,7 +2430,7 @@ class CueHandler:
         mtc: MtcListener,
         frozen_mtc_ms: float = None,
         go_gen: int = 0,
-        chain_epoch: int = 0,
+        pass_: chain_pass.Pass | None = None,
         unroll: bool = True,
         arm_epoch: int = None,
     ):
@@ -2223,8 +2444,9 @@ class CueHandler:
                     generation has changed by the time the loop ends, another
                     go/stop cycle occurred and this thread must not touch the
                     cue.
-            chain_epoch: the pass this cue belongs to, carried unchanged into
-                    the continuation dispatch so the whole chain shares it.
+            pass_: the pass this cue belongs to (chain_pass.Pass), carried
+                    unchanged into the continuation dispatch so the whole
+                    chain shares it; its layout gives every arrival.
             unroll: False suppresses the continuation dispatch (enable-rejoin
                     of a chain that is already unrolled).
             arm_epoch: the STOP/load epoch of the go() that dispatched this
@@ -2242,7 +2464,7 @@ class CueHandler:
                     mtc,
                     frozen_mtc_ms,
                     go_gen,
-                    chain_epoch,
+                    pass_,
                     unroll,
                     arm_epoch,
                     follow,
@@ -2252,6 +2474,9 @@ class CueHandler:
             raise
         finally:
             self._leave_follow(cue, follow, arm_epoch)
+            self._steps_done_for(cue, pass_)
+            self._live_leave(pass_)
+            self.retire_records(self._now_ms(mtc) if pass_ is not None else None)
 
     def _run_cue_pass(
         self,
@@ -2259,7 +2484,7 @@ class CueHandler:
         mtc: MtcListener,
         frozen_mtc_ms: float,
         go_gen: int,
-        chain_epoch: int,
+        pass_: chain_pass.Pass | None,
         unroll: bool,
         arm_epoch: int | None,
         follow: _FollowOut,
@@ -2284,8 +2509,8 @@ class CueHandler:
         # Single prewait application point (Fable 1.2): the cue's media and reveal
         # are anchored at start = arrival + prewait. prewait is NO LONGER a
         # wall-clock sleep — _reveal_wait turns it into a real MTC-timeline gap.
-        # Under Auto continue every cue in the chain shares `arrival` (the
-        # trigger), so this is the ONLY term that separates them.
+        # The arrival is the cue's place in its pass's layout (1amfwm7jnqf,
+        # "en serie": the waits of the cues before it count).
         start_ms = arrival_ms + cue.prewait.milliseconds_exact
 
         # Safety net. Auto continue dispatches the whole chain from the trigger
@@ -2303,28 +2528,33 @@ class CueHandler:
         # Every cue of the pass carries the same chain_epoch, so a stale cascade
         # (loop-back) and a cycle are both refused in go().
         post_go_thread = None
-        if unroll and cue.post_go == "go" and not self._chain_continues(cue):
+        holds = cue.post_go == "go" and not self._chain_continues(cue)
+        if (
+            isinstance(cue, ActionCue)
+            and getattr(cue, "action_type", None) == "stop_project"
+        ):
+            cue._held_back = holds
+        if unroll and holds:
             Logger.info(
                 f"stop_project cue {cue.id}: chain break, the cues after it "
                 "are not dispatched"
             )
+            self._release_held_steps(cue, pass_)
         elif (
             unroll
+            and pass_ is not None
             and cue.post_go == "go"
             and not cue._stop_requested
             and getattr(cue, "_go_generation", 0) == go_gen
         ):
             try:
-                # Walk to THIS node's next local+enabled cue; cues we skip are
-                # transparent (the advance is zero), and disabled ones are
-                # stamped with this pass so enabling one later can rejoin it.
-                next_cue, next_arrival = self._next_local_fire(
-                    cue, arrival_ms, stamp_epoch=chain_epoch
-                )
+                # THIS node's next cue of the pass's layout, enabled or not,
+                # at its own arrival (Design §1).
+                next_cue, next_arrival = self._next_local_fire(cue, pass_)
                 if next_cue is not None:
                     Logger.info(
                         f"Unrolling post_go chain: dispatching {next_cue.id} "
-                        f"at the trigger"
+                        f"at {next_arrival:.0f} ms"
                     )
                     # A chain cue's pass is seeded iff its head's is (§4.5e).
                     with _dispatch_tag(getattr(cue, "_pass_seeded", False) is True):
@@ -2332,7 +2562,7 @@ class CueHandler:
                             next_cue,
                             mtc,
                             next_arrival,
-                            chain_epoch=chain_epoch,
+                            pass_=pass_,
                             arm_epoch=arm_epoch,
                         )
             except Exception as e:
@@ -2340,11 +2570,27 @@ class CueHandler:
                 # cue its own reveal.
                 Logger.error(f"Chain dispatch from cue {cue.id} failed: {e}")
 
-        if cue._local:
-            # A continuation does not arm on the dispatching thread (that is the
-            # PREVIOUS cue's thread — a ~15s audio arm there would delay or kill
-            # its reveal). It arms here instead, on its own thread, overlapping
-            # its own prewait.
+        # A silent thread (Design §2): an audio or video cue disabled at its
+        # dispatch. It keeps its place, its waits and its post_go; it sets
+        # nothing up, lights nothing, reveals nothing, and has no body.
+        silent = getattr(cue, "_thread_silent", None)
+        if silent is None or getattr(cue, "_go_generation", 0) != go_gen:
+            silent = self._silent_at_dispatch(cue)
+        # Its arm failed (D32): silent on this node, but it keeps its body
+        # and its hand-over: the cue is enabled.
+        failed_arm = False
+        if cue._local and silent:
+            cue._end_mtc = None
+            if self._follows_out(cue):
+                # Its hand-over, start + postwait, told at its dispatch, so
+                # the other nodes pre-arm and wait as for any follow.
+                self._announce_follow(cue, go_gen, start_ms, follow)
+            if self._wait_mtc(cue, mtc, start_ms, go_gen) != "stopped":
+                self._log_silent(cue, mtc)
+        elif cue._local:
+            # A cue arms on its own thread, overlapping its own prewait: a
+            # fresh entry's too (D32, Design §4), so a slow arm makes it late
+            # and never holds the GO or the other cues of the pass.
             if not getattr(cue, "loaded", False):
                 # 869fbyjzx: an arm in flight is waited for, not a fallback.
                 in_flight = self.describe_arm_in_flight(cue)
@@ -2364,53 +2610,73 @@ class CueHandler:
                 self._log_arm_wait(cue, "dispatch", in_flight, wait_report)
                 if arm_epoch is not None and arm_epoch != self._disarm_epoch:
                     # arm() refused or abandoned the arm: a STOP or a load
-                    # landed since this cue was dispatched. Said here, before
-                    # the generic failure below, because it is not one.
+                    # landed since this cue was dispatched.
                     Logger.info(
                         f"Cue {cue.id} was dispatched before a STOP or a "
                         "load; it will not play"
                     )
                     return
-                if not getattr(cue, "loaded", False):
-                    # The rest of the chain went out at entry, so this failure
-                    # costs this cue only.
-                    Logger.error(
-                        f"{cue.__class__.__name__} {cue.id} could not be armed; "
-                        f"it will not play. The rest of the chain is unaffected."
-                    )
+                if getattr(cue, "_go_generation", 0) != go_gen or getattr(
+                    cue, "_stop_requested", False
+                ):
                     return
-                # The check above ran before the arm; an arm longer than this
-                # cue's runway makes it late, and that must not be silent.
-                self._warn_if_late(cue, mtc, start_ms)
+                if not getattr(cue, "loaded", False) and getattr(cue, "enabled", True):
+                    # The rest of the chain went out at entry, so this failure
+                    # costs this cue only, on this node (D32, S100).
+                    failed_arm = True
+                    Logger.error(
+                        f"{cue.id} could not be armed; it does not play in pass "
+                        f"{getattr(pass_, 'no', '?')}"
+                    )
+                else:
+                    # The check above ran before the arm; an arm longer than
+                    # this cue's runway makes it late, and that must not be
+                    # silent.
+                    self._warn_if_late(cue, mtc, start_ms)
             elif arm_epoch is not None and arm_epoch != self._disarm_epoch:
                 # Loaded, but not for this dispatch: the STOP's own re-arm
-                # loaded it for the NEXT run while this thread was on its
-                # way here. stop_all_cues() could not flag this cue -- it was
-                # not armed when the STOP began -- so nothing downstream
-                # would hold it back.
+                # loaded it for the NEXT run while this thread was on its way.
                 Logger.info(
                     f"Cue {cue.id} was dispatched before a STOP or a load; "
                     "it will not play"
                 )
                 return
 
+        if cue._local and failed_arm:
+            silent = True
+            # Nothing of this pass waits for a cue that does nothing here.
+            self._steps_done_for(cue, pass_)
+            body = self._body_ms(cue)
+            cue._end_mtc = CTimecode(start_seconds=max(start_ms + body, 0.0) / 1000.0)
+            if self._wait_mtc(cue, mtc, start_ms, go_gen) != "stopped":
+                self._log_silent(cue, mtc)
+            if self._follows_out(cue):
+                self._announce_follow(cue, go_gen, start_ms, follow)
+        elif cue._local and not silent:
             # Setup, illumination and the follow commit, in due-time order
             # (869feynrj §4.2).
             phase, follow_target = self._run_timeline(
-                cue, mtc, arrival_ms, start_ms, go_gen
+                cue, mtc, arrival_ms, start_ms, go_gen, pass_=pass_
             )
             if phase == "failed":
                 return
+            if phase == "silent":
+                # Several owners, decided off: silent on every owner, each
+                # announcing the same hand-over, start + postwait.
+                silent = True
+                cue._end_mtc = None
+                if self._follows_out(cue):
+                    self._announce_follow(cue, go_gen, start_ms, follow)
+                if self._wait_mtc(cue, mtc, start_ms, go_gen) != "stopped":
+                    self._log_silent(cue, mtc)
+                phase = "stopped"
 
             # MTC-gated reveal: wait until live MTC reaches start_ms, then reveal
             # (video /visible; audio /mtcfollow, or nothing more for a
-            # follow-committed selfgate player; action EXECUTE; dmx no-op). This
-            # is what makes prewait/body/postwait real timeline gaps, honored
-            # identically on every node. Skipped when the pass was stopped
-            # before its setup — _start_mtc then holds no anchor to wait on.
+            # follow-committed selfgate player; action EXECUTE; dmx no-op).
+            # Skipped when the pass was stopped before its setup.
             # A CueList whose child committed its follow reveals at the
-            # child's start, not at once, so a cascade or a disable still
-            # reaches the child until it is on stage (review 4 m9).
+            # child's start, not at once (review 4 m9).
             gate = "stopped"
             if phase == "ready":
                 if isinstance(cue, CueList) and follow_target is not None:
@@ -2419,7 +2685,41 @@ class CueHandler:
                     )
                 else:
                     gate = self._reveal_wait(cue, mtc, go_gen)
+            if phase == "ready" and getattr(cue, "_scene_withheld", False):
+                gate = self._wait_mtc(cue, mtc, start_ms, go_gen)
             if gate != "stopped":
+                # What more than one node does happens in the order of its
+                # instants on every node (Design §5).
+                self._step_wait(cue, "start", go_gen, pass_)
+                if getattr(cue, "_go_generation", 0) != go_gen or getattr(
+                    cue, "_stop_requested", False
+                ):
+                    gate = "stopped"
+            plays = gate != "stopped" and self._plays_at_start(cue, start_ms)
+            if gate != "stopped" and not plays:
+                # A cue every node runs, off as every node sees it at its
+                # start: no output in this pass, and no body (D27 point 2).
+                silent = True
+                cue._end_mtc = None
+                self._log_silent(cue, mtc)
+                if isinstance(cue, DmxCue):
+                    with self._lock:
+                        self._dmx_scene_out_locked(cue, start_ms, "silenced")
+                gate = "silent"
+            elif plays and getattr(cue, "_scene_withheld", False):
+                # Enabled since its scene was due: the scene goes late, now.
+                cue._scene_withheld = False
+                guard = _SetupGuard(self._lock, cue, go_gen)
+                try:
+                    with installed_guard(guard):
+                        run_cue(cue, mtc, start_ms)
+                    Logger.info(
+                        f"DMX scene sent to local player for cue {cue.id} (late, "
+                        "at its start)"
+                    )
+                except Exception as e:
+                    Logger.error(f"run_cue failed for DmxCue {cue.id}: {e}")
+            if gate not in ("stopped", "silent"):
                 skip_child = None
                 # Commit under the same lock the stop walk takes, so a cancel
                 # landing inside the 20ms poll gap cannot leak a reveal past it.
@@ -2435,13 +2735,12 @@ class CueHandler:
                         cue._revealed_at = monotonic()
                         child = self._owned_cuelist_child(cue, go_gen)
                         if child is not None and not self._child_current_locked(
-                            cue, child, go_gen
+                            cue, child, go_gen, at_reveal=True
                         ):
                             # Review C2: the child was disabled, stopped,
                             # paused or GO'd on its own since the setup; the
-                            # reveal must neither reach it (a video healer, a
-                            # legacy audio follow) nor fall through to the
-                            # next enabled child, which was never set up.
+                            # reveal must neither reach it nor fall through to
+                            # the next enabled child, which was never set up.
                             skip_child = child
                             child = None
                         if child is not None:
@@ -2449,18 +2748,13 @@ class CueHandler:
                             child._revealed = True
                             child._revealed_at = cue._revealed_at
                         if isinstance(follow_target, VideoCue):
-                            # 869feynrj §4.6: on stage from here on; a stop
-                            # now hides it the usual way (/visible 0 and the
-                            # unload, or the reset), and a visible_at 0
-                            # would be the race's WARNING in the VC (D5).
+                            # 869feynrj §4.6: on stage from here on.
                             self._close_visible_at(
                                 follow_target,
                                 cue if cue is not follow_target else None,
                             )
                         # Committed or legacy reveal, decided here under the
-                        # lock and handed to reveal_audioCue (review fix 7):
-                        # read there, _follow_committed may already be a
-                        # newer pass's (its setup resets it).
+                        # lock and handed to reveal_audioCue (review fix 7).
                         ctx = current_pass()
                         if ctx is not None:
                             ctx.follow_committed = (
@@ -2470,27 +2764,36 @@ class CueHandler:
                                 and getattr(cue, "_follow_gen", None) == go_gen
                             )
                 if do_reveal:
+                    cue._scene_out = None  # a DMX scene fires now, as sent
                     revealed_at = cue._revealed_at
                     follow.revealed = True
+                    self._log_revealed(cue, mtc, start_ms, child)
                     if skip_child is None:
-                        reveal_cue(cue, mtc, start_ms)
+                        with chain_pass.entry(
+                            root=getattr(pass_, "root_seq", 0) or 0,
+                            release=partial(self._step_done, cue, "start", pass_),
+                        ):
+                            reveal_cue(cue, mtc, start_ms)
                     else:
                         Logger.info(
                             f"CueList {cue.id}: child {skip_child.id} was "
                             "disabled, stopped or replaced since the setup; "
                             "not revealed"
                         )
+                    silent_child = self._silent_picked_child(cue, child, skip_child)
+                    if silent_child is not None:
+                        self._log_silent(silent_child, mtc)
                     if isinstance(follow_target, AudioCue):
                         self._expect_start(cue, follow_target)
                     armed_at = getattr(cue, "_armed_at", None)
                     if armed_at is not None:
-                        # Both sides of the pre-arm policy in one number: a
-                        # small one is a thin margin, a large one an idle
-                        # hold. Logged after the reveal, so it never delays it.
                         Logger.info(
                             f"Cue {cue.id} started {revealed_at - armed_at:.3f} s "
                             "after it was armed"
                         )
+
+        if pass_ is not None:
+            self._step_done(cue, "start", pass_)
 
         # A superseding GO/reload (new _go_generation, without _stop_requested)
         # can arrive during the now-MTC-gated reveal wait — that fresh thread
@@ -2534,14 +2837,19 @@ class CueHandler:
                     self._announce_follow, cue, go_gen, start_ms, follow
                 )
 
-        if cue.post_go == "go_at_end":
+        if cue.post_go == "go_at_end" and not silent:
             self._arm_ahead(cue, arm_epoch=arm_epoch)
 
-        Logger.info(f"Going to loop for {cue.__class__.__name__}:{cue.id}")
-        if on_last_loop is None:
-            loop_cue(cue, mtc)
-        else:
-            loop_cue(cue, mtc, on_last_loop=on_last_loop)
+        if failed_arm:
+            # No player, but the cue keeps its body (D32): its end and its
+            # hand-over stay where they were.
+            self._wait_mtc(cue, mtc, cue._end_mtc.milliseconds_exact, go_gen)
+        elif not silent:
+            Logger.info(f"Going to loop for {cue.__class__.__name__}:{cue.id}")
+            if on_last_loop is None:
+                loop_cue(cue, mtc)
+            else:
+                loop_cue(cue, mtc, on_last_loop=on_last_loop)
 
         if getattr(cue, "_go_generation", 0) != go_gen:
             Logger.info(
@@ -2585,9 +2893,10 @@ class CueHandler:
             # Decided and sent under the lock, against this pass (869feynrj
             # §4.6): a /visible 0 drops a pending visible_at gate in the VC,
             # so a re-GO landing since the check above must not be blanked.
-            with self._lock:
-                if getattr(cue, "_go_generation", 0) == go_gen:
-                    blank_cue(cue, mtc)
+            if not silent:
+                with self._lock:
+                    if getattr(cue, "_go_generation", 0) == go_gen:
+                        blank_cue(cue, mtc)
             self._wait_mtc(cue, mtc, fire_seed_ms, go_gen)
             if getattr(cue, "_go_generation", 0) != go_gen:
                 # Real STOP (stop_all_cues bumps gen) / newer GO owns the cue:
@@ -2634,8 +2943,14 @@ class CueHandler:
             # arrival on the shared timeline; go_threaded adds the target's own
             # prewait on top. The target_gen0 compare makes this auto-fire YIELD
             # if a manual GO already started the target during the tail.
+            # The hand-over waits for the steps due by its instant; none of
+            # them is this cue's own.
+            self._steps_done_for(cue, pass_)
             if self._follow_fired(cue, follow, fire_seed_ms, go_gen):
-                go_at_end_thread = self.go_from(cue._target_object, mtc, fire_seed_ms)
+                with _root_seq(pass_):
+                    go_at_end_thread = self.go_from(
+                        cue._target_object, mtc, fire_seed_ms, why="follow"
+                    )
         elif (
             cue.post_go == "go_at_end"
             and cue._target_object
@@ -2658,22 +2973,175 @@ class CueHandler:
             if post_go_thread:
                 self.wait_for_cue(post_go_thread)
 
-    def _mark_cuelist_child(self, cue: Cue, go_gen: int) -> None:
-        """A CueList's child bypasses go(), so nothing marked it as owned by
-        a pass: a disable of a playing CueList disarmed (cut) its child
-        (S0-21, Q-S0-A = (A): no disable path stops a playing cue). Its pass
-        marks it here, at the setup: playing (the disable guard reads it)
-        and not yet revealed (a cancel still reaches a pending child); the
-        parent's reveal sets the child's _revealed, and the parent's pass
-        clears both at the child's end (_end_cuelist_child). Also cleared,
-        like any cue's, by disarm() and STOP."""
+    # ---- silent threads and the journal (1amfwm7jnqf, Design §2, §6) ------
+
+    @staticmethod
+    def _runs_everywhere(cue: Cue) -> bool:
+        """A cue every node runs (ActionCue, FadeCue, DmxCue, CueList:
+        cuems-utils Cue.localize_cue): it decides its output at its own
+        instants, not at its dispatch."""
+        return isinstance(cue, (ActionCue, DmxCue, CueList))
+
+    def _silent_at_dispatch(self, cue: Cue) -> bool:
+        """An audio or video cue with one owner whose flag is off when its
+        thread starts: its thread is a silent one (Design §2). A cue with
+        several owners decides at start - W."""
+        return (
+            getattr(cue, "_local", False)
+            and not self._runs_everywhere(cue)
+            and not getattr(cue, "enabled", True)
+            and not self._several_owners(cue)
+        )
+
+    def _plays_at_start(self, cue: Cue, start_ms: float) -> bool:
+        """Whether a cue every node runs has output at its start, from the
+        flag as every node sees it there (D31 d; an audio or video cue was
+        decided before)."""
+        if not self._runs_everywhere(cue):
+            return True
+        if isinstance(cue, CueList) and hasattr(cue, "_list_on"):
+            return bool(cue._list_on)  # decided at its setup (Design §2)
+        return self._common(cue, start_ms)
+
+    def _decide_instant(self, cue: Cue, start_ms: float) -> float:
+        """When the owners of a cue with several decide: start - W, or the
+        pass's anchor if that is later."""
+        anchor = getattr(getattr(cue, "_pass", None), "anchor_ms", None)
+        due = start_ms - chain_pass.W_MS
+        return max(due, anchor) if anchor is not None else due
+
+    @staticmethod
+    def _common(cue: Cue, instant_ms: float) -> bool:
+        """The flag as every node sees it at ``instant_ms``, for the pass the
+        cue is in (chain_pass.common_enabled)."""
+        root = getattr(getattr(cue, "_pass", None), "root_seq", 0) or 0
+        return chain_pass.common_enabled(cue, instant_ms, root)
+
+    def _scene_instant(self, cue: Cue, start_ms: float) -> float:
+        """When a DMX cue's scene is due: _RUN_AHEAD_MS before its start, or
+        its pass's anchor if that is later."""
+        anchor = getattr(getattr(cue, "_pass", None), "anchor_ms", None)
+        due = start_ms - self._RUN_AHEAD_MS
+        return max(due, anchor) if anchor is not None else due
+
+    def _dmx_scene_out_locked(self, cue: Cue, start_ms: float, why: str) -> bool:
+        """D25: a DMX cue silenced, stopped or replaced whose scene is already
+        in the player. A player that can cancel a scene gets the cancel;
+        today's dmxplayer cannot (ClickUp 1amfwm7jwnf): the scene fires at
+        the start, with a WARNING. Returns True when it fires. Call with
+        self._lock held."""
+        if not isinstance(cue, DmxCue) or getattr(cue, "_scene_out", None) is None:
+            return False
+        cue._scene_out = None
+        try:
+            capable = bool(PLAYER_HANDLER.dmx_can_cancel())
+        except Exception:
+            capable = False
+        if capable:
+            try:
+                PLAYER_HANDLER.cancel_dmx_scene(cue)
+            except Exception as e:
+                Logger.error(f"{cue.id}: DMX scene cancel failed: {e}")
+            Logger.info(f"{cue.id}: DMX scene cancelled in the player ({why})")
+            return False
+        Logger.warning(
+            f"{cue.id}: DMX scene already sent; it fires at {start_ms:.0f} ms ({why})"
+        )
+        return True
+
+    @staticmethod
+    def _silent_picked_child(cue: Cue, revealed: Cue | None, skipped: Cue | None):
+        """The local child a CueList's pass picked and does not reveal (off
+        on this node at the setup, or cancelled before its commit)."""
+        if not isinstance(cue, CueList) or revealed is not None:
+            return None
+        if skipped is not None:
+            return skipped
+        child = getattr(cue, "_marked_child", None)
+        if child is not None and getattr(child, "_local", False):
+            return child
+        return None
+
+    @staticmethod
+    def _body_ms(cue: Cue) -> float:
+        """The cue's body (media length or authored time), in ms."""
+        try:
+            return max(
+                CueHandler._effective_duration_ms(cue)
+                - cue.prewait.milliseconds_exact
+                - cue.postwait.milliseconds_exact,
+                0.0,
+            )
+        except Exception:
+            return 0.0
+
+    @staticmethod
+    def _now_ms(mtc: MtcListener) -> float:
+        try:
+            return float(mtc.main_tc.milliseconds_exact)
+        except Exception:
+            return 0.0
+
+    def _log_silent(self, cue: Cue, mtc: MtcListener) -> None:
+        Logger.info(f"Cue {cue.id} passed silent at mtc {self._now_ms(mtc):.0f} ms")
+
+    def _log_revealed(
+        self, cue: Cue, mtc: MtcListener, start_ms: float, child: Cue | None = None
+    ) -> None:
+        now = self._now_ms(mtc)
+        Logger.info(
+            f"Cue {cue.id} revealed at mtc {now:.0f} ms (start {start_ms:.0f} ms)"
+        )
+        if child is not None:
+            Logger.info(
+                f"Cue {child.id} revealed at mtc {now:.0f} ms (start {start_ms:.0f} ms)"
+            )
+
+    def _mark_cuelist_child(
+        self, cue: Cue, go_gen: int, start_ms: float | None = None
+    ) -> None:
+        """A CueList's setup (1amfwm7jnqf Design §2): its own flag and which
+        child is the first enabled one, read ONCE per pass from the flag as
+        every node sees them at the setup's instant; the child is recorded
+        in ``_marked_child``, local or not, and commit, reveal and end take
+        it from there (S85, S87). A local child off on this node at the
+        setup is not set up and is silent in this pass.
+
+        A CueList's child bypasses go(), so its pass marks it here: playing
+        (the disable guard reads it) and not yet revealed (a cancel still
+        reaches a pending child); the parent's reveal sets the child's
+        _revealed, and the parent's pass clears both at the child's end
+        (_end_cuelist_child). Also cleared, like any cue's, by disarm() and
+        STOP."""
+        instant = (
+            self._scene_instant(cue, start_ms)
+            if start_ms is not None
+            else self._now_ms(None)
+        )
+        on = self._common(cue, instant) if start_ms is not None else cue.enabled
+        child = None
+        if on:
+            child = next(
+                (
+                    c
+                    for c in (getattr(cue, "contents", None) or [])
+                    if (self._common(c, instant) if start_ms is not None else c.enabled)
+                ),
+                None,
+            )
         with self._lock:
             if getattr(cue, "_stop_requested", False) or (
                 getattr(cue, "_go_generation", 0) != go_gen
             ):
                 return
-            child = first_enabled_child(cue)
+            cue._list_on = bool(on)
+            cue._marked_child = child
+            cue._marked_child_set_up = True
             if child is None or not getattr(child, "_local", False):
+                return
+            if not getattr(child, "enabled", True):
+                # Off on its owner already: not set up, silent in this pass.
+                cue._marked_child_set_up = False
                 return
             child._playing = True
             child._revealed = False
@@ -2684,10 +3152,12 @@ class CueHandler:
             # is cleared, and its generation recorded, so a disable, stop,
             # pause or own GO from here on is seen by _child_current_locked.
             child._stop_requested = False
+            child._follow_committed = False
             child._cuelist_child_gen = getattr(child, "_go_generation", 0)
-            cue._marked_child = child
 
-    def _child_current_locked(self, cue: Cue, target: Cue, go_gen: int) -> bool:
+    def _child_current_locked(
+        self, cue: Cue, target: Cue, go_gen: int, at_reveal: bool = False
+    ) -> bool:
         """Review C2: may this pass of ``cue`` still commit to / reveal
         ``target``? Always for the cue's own pass. For a CueList's child: it
         is the child this pass marked at its setup, still enabled, not
@@ -2699,12 +3169,13 @@ class CueHandler:
             return True
         if self._owned_cuelist_child(cue, go_gen) is not target:
             return False
-        return (
-            getattr(target, "enabled", True) is not False
-            and not getattr(target, "_stop_requested", False)
-            and getattr(target, "_go_generation", 0)
-            == getattr(target, "_cuelist_child_gen", None)
-        )
+        # Its flag is read at the commit, not again at the reveal (Design §2):
+        # from its commit on a toggle changes nothing.
+        if not at_reveal and getattr(target, "enabled", True) is False:
+            return False
+        return not getattr(target, "_stop_requested", False) and getattr(
+            target, "_go_generation", 0
+        ) == getattr(target, "_cuelist_child_gen", None)
 
     @staticmethod
     def _owned_cuelist_child(cue: Cue, go_gen: int) -> Cue | None:
@@ -2790,16 +3261,65 @@ class CueHandler:
 
     @staticmethod
     def _chain_continues(cue: Cue) -> bool:
-        """False for a stop_project ActionCue (ClickUp 869fhjdq5): the authored
-        end of the show is a hard chain break on every node. Nothing after it
-        is unrolled at its arrival and no go_at_end follow fires from it, so no
-        cue can start in the milliseconds before the controller's STOP lands.
-        A DISABLED stop cue never gets here: disabled cues are transparent to
-        the chain walk (rehearsal mode)."""
-        return not (
+        """False for a stop_project ActionCue that is going to execute
+        (ClickUp 869fhjdq5; 1amfwm7jnqf D28): the authored end of the show
+        holds back the cues behind it in its pass on every node, so no cue
+        can start in the milliseconds before the controller's STOP lands. A
+        disabled one, as every node sees it at its start, holds nothing back
+        (D31 d): the chain goes on (S15, S16). Re-read when a toggle of it
+        arrives (stop_project_toggled)."""
+        if not (
             isinstance(cue, ActionCue)
             and getattr(cue, "action_type", None) == "stop_project"
-        )
+        ):
+            return True
+        arrival = getattr(cue, "_dispatch_arrival_ms", None)
+        if arrival is None:
+            return not getattr(cue, "enabled", True)
+        return not CueHandler._common(cue, arrival + cue.prewait.milliseconds_exact)
+
+    def _release_held_steps(self, cue: Cue, p) -> None:
+        """The cues behind a stop_project that holds them back do nothing in
+        this pass: nothing waits for their steps."""
+        layout = getattr(p, "layout", None) or []
+        pos = next((k for k, (c, _) in enumerate(layout) if c is cue), None)
+        if pos is None:
+            return
+        for c, _ in layout[pos + 1 :]:
+            self._steps_done_for(c, p)
+
+    def stop_project_toggled(self, cue: Cue, mtc: MtcListener) -> None:
+        """A toggle of a stop_project cue its pass holds, before its start
+        (Design §2): disabled, it hands on to the cues behind it at their
+        places (S16); enabled, it cancels them (the stop walk from itself,
+        S63)."""
+        p = getattr(cue, "_pass", None)
+        if p is None or getattr(cue, "_revealed", False):
+            return
+        if not getattr(cue, "_playing", False):
+            return
+        held = getattr(cue, "_held_back", None)
+        if held is None:
+            return
+        continues = self._chain_continues(cue)
+        if continues and held:
+            cue._held_back = False
+            nxt, arrival = self._next_local_fire(cue, p)
+            Logger.info(
+                f"stop_project cue {cue.id} disabled: the cues behind it play at "
+                "their places"
+            )
+            pos = p.position_of(cue)
+            if pos is not None:
+                self._add_steps(p, start_pos=pos + 1)
+            if nxt is not None:
+                self.go(nxt, mtc, arrival, pass_=p)
+        elif not continues and not held:
+            cue._held_back = True
+            Logger.info(
+                f"stop_project cue {cue.id} enabled: the cues behind it are held back"
+            )
+            self.cancel_pending_descendants(cue)
 
     @staticmethod
     def _follows_out(cue: Cue) -> bool:

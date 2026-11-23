@@ -185,22 +185,6 @@ class FakeMtc:
         pass
 
 
-class _Capture(logging.Handler):
-    """Every engine log line, with the node's MTC when it was written."""
-
-    def __init__(self, clock: VClock, journal: list):
-        super().__init__(level=logging.DEBUG)
-        self._clock, self._journal = clock, journal
-
-    def emit(self, record):
-        try:
-            msg = record.getMessage()
-        except Exception:
-            msg = str(record.msg)
-        self._journal.append((self._clock.now, record.levelname, msg))
-        self._clock.bump()
-
-
 # ---------------------------------------------------------------------------
 # the script tree
 # ---------------------------------------------------------------------------
@@ -314,6 +298,8 @@ class SimScript:
             for kspec in spec.get("children") or []:
                 kid = _make_cue(kspec, node)
                 kid._sim_parent = spec["name"]
+                kid._target_object = None
+                _set(kid, "target", None)  # as a loaded script has it
                 self.by_name[kspec["name"]] = kid
                 kids.append(kid)
             if kids:
@@ -387,14 +373,37 @@ class SimNode:
             )
 
     def _install_logging(self):
-        from cuemsutils.log import Logger
+        """Every Logger line into this node's journal, with its MTC; nothing
+        to stdout or syslog. cuemsutils.log keeps one logger per module
+        (main_logger, cached): Logger.log is replaced, and the cached
+        loggers lose their handlers."""
+        import cuemsutils.log as cl
 
-        base = getattr(Logger.logger, "logger", Logger.logger)
-        for h in list(base.handlers):  # no stdout, no syslog from a test node
-            base.removeHandler(h)
-        base.addHandler(_Capture(self.clock, self.journal))
-        base.setLevel(logging.DEBUG)
-        base.propagate = False
+        clock, journal = self.clock, self.journal
+
+        def log(level, message, **kwargs):
+            journal.append((clock.now, logging.getLevelName(level), str(message)))
+            clock.bump()
+
+        cl.Logger.log = staticmethod(log)
+        quiet = logging.NullHandler()
+
+        def strip(adapter):
+            base = getattr(adapter, "logger", adapter)
+            for h in list(base.handlers):
+                base.removeHandler(h)
+            base.addHandler(quiet)
+            base.propagate = False
+            return adapter
+
+        for adapter in list(cl._logger_cache.values()):
+            strip(adapter)
+        original = cl.main_logger
+
+        def main_logger(*a, **k):
+            return strip(original(*a, **k))
+
+        cl.main_logger = main_logger
 
     # -- fakes ---------------------------------------------------------------
     def _install_fakes(self):
@@ -433,6 +442,14 @@ class SimNode:
             return "stopped" if gone() else "reached"
 
         CH.CueHandler._wait_mtc = wait_mtc
+        # The body of a cue that has no player here (a failed arm keeps it).
+        CH.CueHandler._body_ms = staticmethod(
+            lambda cue: float(getattr(cue, "_sim_body_ms", 0.0))
+        )
+        # The advance mode: every production chain is sequential; the
+        # fixture's parallel rows switch the one switch the engine has.
+        mode = self.rules.get("mode") or "sequential"
+        CH.CueHandler._advance_mode = staticmethod(lambda cue, m=mode: m)
 
         # 3. players
         selfgate = getattr(loop_mode, "CAPS_SELFGATE", "selfgate")
@@ -444,18 +461,25 @@ class SimNode:
         PLAYER_HANDLER.audio_player = fake_audio_player
         # D25: the DMX player's capability to cancel a scene already sent. The
         # engine's check is Step 2's; the harness exposes the fact here.
-        PLAYER_HANDLER._sim_dmx_cancel = bool(self.rules.get("dmx_cancel"))
+        cancel = bool(self.rules.get("dmx_cancel"))
+        PLAYER_HANDLER.dmx_can_cancel = lambda: cancel
+        PLAYER_HANDLER.cancel_dmx_scene = lambda cue: None
         START_GATE.commit_follow = lambda cue, player, client, gen: True
         START_GATE.cancel = lambda *a, **k: "sim"
 
         def run_cue(cue, mtc, frozen_mtc_ms=None):
             start = float(frozen_mtc_ms) if frozen_mtc_ms is not None else clock.now
+            from cuemsutils.cues import AudioCue, VideoCue
+
             for c in (cue, getattr(cue, "_marked_child", None)):
                 if c is None:
                     continue
                 c._start_mtc = _Tc(start)
                 c._reveal_ready = True
                 c._osc = object()
+                if isinstance(c, (AudioCue, VideoCue)):
+                    # the real setup puts the media's end there (run_cue)
+                    c._end_mtc = _Tc(start + getattr(c, "_sim_body_ms", 0.0))
             from cuemsutils.cues import DmxCue
 
             if isinstance(cue, DmxCue):

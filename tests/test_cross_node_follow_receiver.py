@@ -661,20 +661,21 @@ class TestRealGoAndGate:
         assert e.state == "dispatched" and e.cue is t and e.gen == t._go_generation
 
     def test_a_cancel_while_inside_go_refuses_the_commit(self):
-        """The cancel lands while go() is in its fallback arm: the gate, run
-        later inside go()'s commit section, refuses."""
+        """The cancel lands after go_from has laid the pass out and before
+        go()'s commit section (go() no longer arms, D32: this is the window
+        there is): the gate, run inside the commit section, refuses."""
         from cuemsengine.cues.CueHandler import CueHandler
 
         ch = self._ch()
         rig, t = self._rig(ch)
         t.loaded = False
+        real_go = ch.go
 
-        def arm_and_cancel(c, init=False, epoch=None, **kw):
-            rig.cancel()  # arrives on the bus during the arm
-            c.loaded = True
-            return True
+        def cancel_then_go(*a, **kw):
+            rig.cancel()  # arrives on the bus just before the commit
+            return real_go(*a, **kw)
 
-        ch.arm.side_effect = arm_and_cancel
+        ch.go = cancel_then_go
         rig.announce()
         rig.mtc.set(1000.0)
         with patch.object(CueHandler, "go_threaded") as gt:

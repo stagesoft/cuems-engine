@@ -42,6 +42,7 @@ from typing import Any, Callable
 from cuemsutils.cues import ActionCue, DmxCue
 from cuemsutils.log import Logger
 
+from . import chain_pass
 from .CueHandler import _ArmWalk
 
 # A cancel that reaches a target which has already started stops it only if it
@@ -86,6 +87,8 @@ class _Entry:
     disarm_epoch: int | None = None
     armed_at: float | None = None
     lookahead_done: set = field(default_factory=set)
+    # The due entry of the same source this one waits for (Design §2).
+    after: "_Entry | None" = None
 
 
 class FollowRelay:
@@ -113,6 +116,9 @@ class FollowRelay:
         self._prearm_sleep = sleep
         self._lock = threading.Lock()
         self._table: dict[str, _Entry] = {}
+        # 1amfwm7jnqf Design §2: an announcement that arrived while the entry
+        # of the same source was due and not dispatched yet waits here for it.
+        self._next: dict[str, _Entry] = {}
         self._run_seq: int | None = None
         self._no_run_logged = False
         # STOP/load commands received (receive hook) and applied (after the
@@ -159,6 +165,7 @@ class FollowRelay:
             self._run_seq = seq
             dropped = len(self._table)
             self._table.clear()
+            self._next.clear()
         if seq is None:
             Logger.debug("GO carries no run_seq: cross-node follows are off")
         else:
@@ -171,6 +178,7 @@ class FollowRelay:
             self._run_seq = None
             dropped = sum(e.state in _LIVE for e in self._table.values())
             self._table.clear()
+            self._next.clear()
         if dropped:
             Logger.info(f"Follow: {why} dropped {dropped} pending follow(s)")
 
@@ -281,10 +289,13 @@ class FollowRelay:
             old = self._table.get(source_id)
             if (
                 old is not None
-                and old.state in _LIVE
+                and old.state in ("waiting", "dispatching")
                 and old.run_seq == self._run_seq
                 and abs(old.instant - instant) <= FOLLOW_INSTANT_MATCH_MS
             ):
+                # Another owner of the same cue, the same instant: one follow.
+                # (1amfwm7jnqf: one already dispatched is not this one; a
+                # second entry at its instant meets the loop guard.)
                 old.origins.add(origin)
                 return
             entry = _Entry(
@@ -297,7 +308,29 @@ class FollowRelay:
                 stop_epoch=stop_epoch,
                 project_gen=project_gen,
             )
-            self._table[source_id] = entry
+            nxt = self._next.get(source_id)
+            if (
+                nxt is not None
+                and nxt.state in _LIVE
+                and nxt.run_seq == self._run_seq
+                and abs(nxt.instant - instant) <= FOLLOW_INSTANT_MATCH_MS
+            ):
+                nxt.origins.add(origin)
+                return
+            if (
+                old is not None
+                and old.state == "waiting"
+                and old.run_seq == self._run_seq
+                and mtc is not None
+                and old.instant <= mtc.main_tc.milliseconds_exact
+            ):
+                # A follow whose instant has come and that is not dispatched
+                # yet is dispatched first (1amfwm7jnqf Design §2: a silent cue
+                # of a loop announces its next hand-over at its dispatch).
+                entry.after = old
+                self._next[source_id] = entry
+            else:
+                self._table[source_id] = entry
 
         now = mtc.main_tc.milliseconds_exact
         late = now - instant
@@ -328,6 +361,13 @@ class FollowRelay:
         what = f"{source_id} at {instant} from {origin} ({reason})"
         with self._lock:
             e = self._table.get(source_id)
+            nxt = self._next.get(source_id)
+            if (
+                nxt is not None
+                and instant is not None
+                and abs(nxt.instant - instant) <= FOLLOW_INSTANT_MATCH_MS
+            ):
+                e = nxt
             if (
                 e is None
                 or instant is None
@@ -355,9 +395,19 @@ class FollowRelay:
     # Receiver threads
     # ------------------------------------------------------------------
 
+    def pending_instants(self) -> list:
+        """The instants of the relayed follows still to dispatch here: what
+        a toggle's record must not be retired before (1amfwm7jnqf §3)."""
+        with self._lock:
+            return [
+                e.instant
+                for e in list(self._table.values()) + list(self._next.values())
+                if e.state == "waiting"
+            ]
+
     def _is_current(self, e: _Entry) -> bool:
         return (
-            self._table.get(e.source_id) is e
+            (self._table.get(e.source_id) is e or self._next.get(e.source_id) is e)
             and e.state in _LIVE
             and self._run_seq == e.run_seq
         )
@@ -433,10 +483,29 @@ class FollowRelay:
                 cue, should_continue=should_continue, arm_epoch=e.arm_epoch
             )
 
+    def _wait_for_due(self, e: _Entry) -> bool:
+        """An entry queued behind a due one of the same source: wait until
+        that one is dispatched (or gone), then take its place. False when
+        this entry was cancelled or replaced meanwhile."""
+        before = getattr(e, "after", None)
+        while before is not None:
+            with self._lock:
+                if self._next.get(e.source_id) is not e or e.state not in _LIVE:
+                    return False
+                if before.state not in ("waiting", "dispatching"):
+                    self._table[e.source_id] = e
+                    del self._next[e.source_id]
+                    e.after = None
+                    return True
+            self._sleep(FOLLOW_POLL_S)
+        return True
+
     def _wait_and_dispatch(self, e: _Entry) -> None:
         mtc = self._get_mtc()
         script = self._get_script()
         if mtc is None or script is None:
+            return
+        if not self._wait_for_due(e):
             return
         source = script.find(e.source_id)
         target = script.find(e.target_id)
@@ -474,15 +543,20 @@ class FollowRelay:
             if not self._is_current(e):
                 return
             e.state = "dispatching"
+        # A hand-over (1amfwm7jnqf): the loop guard covers it, it enters its
+        # pass after the steps due at or before its instant, and the pass
+        # inherits the root of the source's (D31 d).
+        root = getattr(getattr(source, "_pass", None), "root_seq", 0) or 0
         try:
-            thread = self._ch.go_from(
-                target,
-                mtc,
-                e.instant,
-                arm_epoch=e.arm_epoch,
-                require_stop_epoch=e.stop_epoch,
-                commit_gate=lambda cue, gen: self._gate(e, cue, gen),
-            )
+            with chain_pass.entry(why="follow", root=root):
+                thread = self._ch.go_from(
+                    target,
+                    mtc,
+                    e.instant,
+                    arm_epoch=e.arm_epoch,
+                    require_stop_epoch=e.stop_epoch,
+                    commit_gate=lambda cue, gen: self._gate(e, cue, gen),
+                )
         except Exception as ex:
             Logger.error(
                 f"Follow: dispatch of {e.source_id} -> {e.target_id} failed: {ex}"
