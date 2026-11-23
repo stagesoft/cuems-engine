@@ -67,9 +67,36 @@ def _go_handler(in_flight, arm):
     return ch
 
 
-def _go(ch, cue, chain_epoch=None):
+def _pass(epoch, anchor_ms=0.0, layout=(), root_seq=0, mode="sequential"):
+    """A chain_pass.Pass; before Step 2 the engine has none, and the tests
+    that only carry a pass through go_threaded need its attributes."""
+    try:
+        from cuemsengine.cues.chain_pass import Pass
+    except ImportError:
+        layout = list(layout)
+        return SimpleNamespace(
+            epoch=epoch,
+            anchor_ms=anchor_ms,
+            layout=layout,
+            root_seq=root_seq,
+            mode=mode,
+            arrival_of=lambda c: next((a for x, a in layout if x is c), None),
+        )
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
+
+
+def _go(ch, cue, pass_=None):
     with patch("cuemsengine.cues.CueHandler.Thread") as thread:
-        ch.go(cue, MagicMock(), 0.0, chain_epoch=chain_epoch)
+        if pass_ is None:
+            ch.go(cue, MagicMock(), 0.0)
+        else:
+            ch.go(cue, MagicMock(), 0.0, pass_=pass_)
     return thread
 
 
@@ -104,7 +131,7 @@ class TestGoSite:
         arm = _arm_that()
         ch = _go_handler(HELD, arm)
         with caplog.at_level(logging.INFO):
-            _go(ch, cue, chain_epoch=1)
+            _go(ch, cue, pass_=_pass(1, 0.0, [(cue, 0.0)]))
         assert "not armed yet at go() time — dispatching" in caplog.text
         assert "waited" not in caplog.text
         assert "Re-arming as fallback" not in caplog.text
@@ -205,7 +232,7 @@ class TestDispatchSite:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(c, mtc, 0.0, c._go_generation, 1)
+            ch.go_threaded(c, mtc, 0.0, c._go_generation, _pass(1, 0.0, [(c, 0.0)]))
         return c
 
     def test_an_arm_in_flight_is_waited_for(self, caplog):

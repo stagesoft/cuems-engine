@@ -32,6 +32,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
+from cuemsutils.tools.CTimecode import CTimecode  # noqa: E402
+
 from cuemsengine.cues.CueHandler import CueHandler  # noqa: E402
 
 
@@ -43,7 +45,25 @@ def _mtc(ms=0):
 
 
 def _cue(id="c", loaded=True, enabled=True, local=True, **kw):
+    kw.setdefault("post_go", "pause")
+    kw.setdefault("_target_object", None)
+    kw.setdefault("prewait", CTimecode(start_seconds=0))
+    kw.setdefault("postwait", CTimecode(start_seconds=0))
     return SimpleNamespace(id=id, loaded=loaded, enabled=enabled, _local=local, **kw)
+
+
+def _pass(epoch, anchor_ms=0.0, layout=(), root_seq=0, mode="sequential"):
+    """A chain_pass.Pass carrying `epoch`: a continuation is validated by it
+    exactly as by the old bare chain_epoch."""
+    from cuemsengine.cues.chain_pass import Pass
+
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
 
 
 def _ch():
@@ -105,7 +125,7 @@ class TestContinuationRefusal:
         ch = _ch()
         cue = _cue(_go_epoch=7, _go_generation=3)
         with patch.object(CueHandler, "go_threaded") as gt:
-            thread = ch.go(cue, _mtc(), 1000.0, chain_epoch=5)
+            thread = ch.go(cue, _mtc(), 1000.0, pass_=_pass(5))
         assert thread is None
         assert gt.call_count == 0
         assert cue._go_generation == 3, "a refused dispatch must not bump the gen"
@@ -116,13 +136,13 @@ class TestContinuationRefusal:
         ch = _ch()
         cue = _cue(_go_epoch=4)
         with patch.object(CueHandler, "go_threaded"):
-            assert ch.go(cue, _mtc(), 0.0, chain_epoch=4) is None
+            assert ch.go(cue, _mtc(), 0.0, pass_=_pass(4)) is None
 
     def test_newer_continuation_is_accepted(self):
         ch = _ch()
         cue = _cue(_go_epoch=3)
         with patch.object(CueHandler, "go_threaded"):
-            assert ch.go(cue, _mtc(), 0.0, chain_epoch=7) is not None
+            assert ch.go(cue, _mtc(), 0.0, pass_=_pass(7)) is not None
         assert cue._go_epoch == 7
 
     def test_unrelated_newer_chain_does_not_block_this_one(self):
@@ -132,14 +152,14 @@ class TestContinuationRefusal:
         ch._chain_epoch = 9
         cue = _cue(_go_epoch=3)
         with patch.object(CueHandler, "go_threaded"):
-            assert ch.go(cue, _mtc(), 0.0, chain_epoch=7) is not None
+            assert ch.go(cue, _mtc(), 0.0, pass_=_pass(7)) is not None
 
     def test_continuation_after_a_stop_is_refused(self):
         ch = _ch()
         ch._last_stop_chain_epoch = 6
         cue = _cue()
         with patch.object(CueHandler, "go_threaded"):
-            assert ch.go(cue, _mtc(), 0.0, chain_epoch=4) is None
+            assert ch.go(cue, _mtc(), 0.0, pass_=_pass(4)) is None
 
 
 class TestStopDuringArmWindow:
@@ -177,7 +197,7 @@ class TestStopDuringArmWindow:
         reveal — silently, since its LATE check already ran."""
         ch = _ch()
         with patch.object(CueHandler, "go_threaded"):
-            ch.go(_cue(), _mtc(), 0.0, chain_epoch=1)
+            ch.go(_cue(), _mtc(), 0.0, pass_=_pass(1))
         ch._arm_ahead.assert_not_called()
 
     def test_a_rejoin_does_not_arm_ahead_either(self):
@@ -200,7 +220,7 @@ class TestStopDuringArmWindow:
         ch = _ch()
         cue = _cue()
         with patch.object(CueHandler, "go_threaded"):
-            ch.go(cue, _mtc(), 4200.0, chain_epoch=1)
+            ch.go(cue, _mtc(), 4200.0, pass_=_pass(1))
         assert cue._dispatch_arrival_ms == 4200.0
 
     def test_a_continuation_does_not_arm_on_the_caller_thread(self):
@@ -210,7 +230,7 @@ class TestStopDuringArmWindow:
         ch = _ch()
         cue = _cue(loaded=False)
         with patch.object(CueHandler, "go_threaded"):
-            thread = ch.go(cue, _mtc(), 0.0, chain_epoch=1)
+            thread = ch.go(cue, _mtc(), 0.0, pass_=_pass(1))
         assert thread is not None
         ch.arm.assert_not_called()
 
@@ -254,7 +274,7 @@ class TestStampSkipped:
         skipped = [_cue("x", enabled=False)]
         cue = _cue(_go_epoch=9)
         with patch.object(CueHandler, "go_threaded"):
-            ch.go(cue, _mtc(), 0.0, chain_epoch=2, stamp_skipped=skipped)
+            ch.go(cue, _mtc(), 0.0, pass_=_pass(2), stamp_skipped=skipped)
         assert not hasattr(skipped[0], "_chain_pass")
 
     def test_stamp_pass_stamps_without_dispatching(self):

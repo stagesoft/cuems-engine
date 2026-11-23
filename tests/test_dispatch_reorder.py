@@ -96,6 +96,30 @@ def _dmx_cue(prewait=0):
     return cue
 
 
+def _pass(epoch=1, anchor_ms=0.0, layout=(), root_seq=0, mode="sequential"):
+    """A chain_pass.Pass; before Step 2 the engine has none, and the tests
+    that only carry a pass through go_threaded need its attributes."""
+    try:
+        from cuemsengine.cues.chain_pass import Pass
+    except ImportError:
+        layout = list(layout)
+        return SimpleNamespace(
+            epoch=epoch,
+            anchor_ms=anchor_ms,
+            layout=layout,
+            root_seq=root_seq,
+            mode=mode,
+            arrival_of=lambda c: next((a for x, a in layout if x is c), None),
+        )
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
+
+
 def _ch():
     ch = object.__new__(CueHandler)
     ch._lock = Lock()
@@ -110,9 +134,14 @@ def _ch():
     return ch
 
 
-def _run(ch, cue, mtc, order=None, **kw):
-    """Drive go_threaded with the players patched out, recording call order."""
+def _run(ch, cue, mtc, order=None, pass_=None, **kw):
+    """Drive go_threaded with the players patched out, recording call order.
+
+    The pass goes in positionally (go_threaded's fifth argument), so a test
+    that does not look at it keeps running on the engine before Step 2."""
     calls = order if order is not None else []
+    if pass_ is None:
+        pass_ = _pass(1, 0.0, [(cue, 0.0)])
 
     def rec(name, ret=None):
         def _f(*a, **k):
@@ -121,7 +150,8 @@ def _run(ch, cue, mtc, order=None, **kw):
 
         return _f
 
-    kw.setdefault("go_gen", cue._go_generation)
+    go_gen = kw.pop("go_gen", cue._go_generation)
+    frozen = kw.pop("frozen_mtc_ms", None)
     with (
         patch("cuemsengine.cues.CueHandler.run_cue", side_effect=rec("run_cue")) as rc,
         patch(
@@ -135,7 +165,7 @@ def _run(ch, cue, mtc, order=None, **kw):
     ):
         ch.communications_thread.add_cue.side_effect = rec("add_cue")
         ch.go.side_effect = rec("dispatch")
-        ch.go_threaded(cue, mtc, **kw)
+        ch.go_threaded(cue, mtc, frozen, go_gen, pass_, **kw)
     return calls, rc, rv
 
 
@@ -148,7 +178,7 @@ class TestDispatchAtEntry:
         ch._next_local_fire = MagicMock(return_value=(nxt, 0.0))
         cue = _cue(prewait=30)
         mtc = _FakeMtc(0)
-        calls, _, _ = _run(ch, cue, mtc, chain_epoch=4)
+        calls, _, _ = _run(ch, cue, mtc, pass_=_pass(4, 0.0, [(cue, 0.0), (nxt, 0.0)]))
         assert calls[0] == "dispatch"
         assert calls.index("dispatch") < calls.index("run_cue")
         assert calls.index("dispatch") < calls.index("reveal")
@@ -158,8 +188,10 @@ class TestDispatchAtEntry:
         nxt = SimpleNamespace(id="n")
         ch._next_local_fire = MagicMock(return_value=(nxt, 1234.0))
         mtc = _FakeMtc(0)
-        _run(ch, _cue(), mtc, chain_epoch=42)
-        ch.go.assert_called_once_with(nxt, mtc, 1234.0, chain_epoch=42, arm_epoch=None)
+        cue = _cue()
+        p = _pass(42, 0.0, [(cue, 0.0), (nxt, 1234.0)])
+        _run(ch, cue, mtc, pass_=p)
+        ch.go.assert_called_once_with(nxt, mtc, 1234.0, pass_=p, arm_epoch=None)
 
     def test_a_pause_cue_does_not_dispatch_its_target(self):
         """post_go='pause'/'go_at_end' cues carry a _target_object too — it is
@@ -191,7 +223,9 @@ class TestDispatchAtEntry:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         reveal.assert_called_once()
 
     def test_descending_prewait_chain_is_on_time_and_silent(self):
@@ -203,7 +237,7 @@ class TestDispatchAtEntry:
         a = _cue("A", prewait=10, target=b)
         mtc = _FakeMtc(0)
         with patch("cuemsengine.cues.CueHandler.Logger") as log:
-            _run(ch, a, mtc, chain_epoch=1)
+            _run(ch, a, mtc, pass_=_pass(1, 0.0, [(a, 0.0), (b, 0.0)]))
         # B was dispatched at the trigger (mtc still 0), so its own thread
         # will park on 2s — no anchor was missed anywhere.
         assert ch.go.call_args[0][2] == 0.0
@@ -225,7 +259,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert seen["at"] >= 60000 - CueHandler._RUN_AHEAD_MS
         assert seen["at"] < 60000, "must still be held before its start"
 
@@ -243,7 +279,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert seen["at"] == 0.0
 
     def test_run_cue_failure_clears_the_illumination(self):
@@ -261,7 +299,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.communications_thread.remove_cue.assert_called_once()
         reveal.assert_not_called()
 
@@ -278,7 +318,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert cue._revealed is True
 
 
@@ -299,7 +341,9 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=stop_after_a_bit),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         rc.assert_not_called()
         rv.assert_not_called()
 
@@ -321,7 +365,7 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, 1, 1)
+            ch.go_threaded(cue, mtc, 0.0, 1, _pass(1, 0.0, [(cue, 0.0)]))
         rv.assert_not_called()
         assert cue._revealed is False
 
@@ -335,7 +379,9 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert cue._revealed is True
 
 
@@ -356,7 +402,9 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.arm.assert_called_once_with(cue, init=True, epoch=None, wait_report={})
         rv.assert_called_once()
 
@@ -376,7 +424,9 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
             patch("cuemsengine.cues.CueHandler.Logger") as log,
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.go.assert_called_once()  # the chain still went out
         rc.assert_not_called()
         rv.assert_not_called()
@@ -402,7 +452,9 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
             patch("cuemsengine.cues.CueHandler.Logger") as log,
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert [c for c in log.warning.call_args_list if "LATE" in str(c)]
 
 
@@ -423,7 +475,9 @@ class TestIllumination:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert seen["at"] == 0.0
 
     def test_the_dispatch_arrival_is_recorded_on_the_cue(self):
