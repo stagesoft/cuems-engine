@@ -403,23 +403,43 @@ class TestGoCommit:
         assert cue._revealed_at is None
 
 
+def _guards(call):
+    """go()'s keyword arguments but the pass's layout, which go_from now
+    computes and hands over (1amfwm7jnqf, Design §1)."""
+    return {k: v for k, v in call.kwargs.items() if k != "layout"}
+
+
+def _chain_end(**kw):
+    """A local cue that ends its chain, with the waits a layout reads."""
+    return _plain(
+        post_go="pause",
+        _target_object=None,
+        prewait=CTimecode(start_seconds=0),
+        postwait=CTimecode(start_seconds=0),
+        **kw,
+    )
+
+
 class TestGoFrom:
     def test_passes_the_guards_only_when_set(self):
         ch = _ch()
         del ch.go_from
-        cue = _plain(post_go="pause")
-        ch.go_from(cue, _FakeMtc(), 10.0)
-        ch.go.assert_called_once_with(cue, ch.go.call_args.args[1], 10.0)
+        cue = _chain_end()
+        mtc = _FakeMtc()
+        ch.go_from(cue, mtc, 10.0)
+        ch.go.assert_called_once()
+        assert ch.go.call_args.args == (cue, mtc, 10.0)
+        assert _guards(ch.go.call_args) == {}
 
     def test_passes_the_guards_through(self):
         ch = _ch()
         del ch.go_from
-        cue = _plain(post_go="pause")
+        cue = _chain_end()
         gate = MagicMock()
         ch.go_from(
             cue, _FakeMtc(), 10.0, arm_epoch=3, require_stop_epoch=2, commit_gate=gate
         )
-        assert ch.go.call_args.kwargs == {
+        assert _guards(ch.go.call_args) == {
             "arm_epoch": 3,
             "require_stop_epoch": 2,
             "commit_gate": gate,

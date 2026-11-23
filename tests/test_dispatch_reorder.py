@@ -18,6 +18,14 @@ consequences this file pins:
   send) is deferred to `start − _RUN_AHEAD_MS`, so unrolling at GO does not
   preload the whole chain at once.
 
+Since 1amfwm7jnqf the chain is laid out once per pass (`chain_pass.layout`)
+and "en serie" (`sequential`): a cue's prewait and postwait push the cues
+after it. The 2026-08-14 tests that pin the common trigger
+(`test_descending_prewait_chain_is_on_time_and_silent`,
+`test_the_whole_chain_lights_at_the_trigger`) run on a `parallel` layout ("en
+paralelo"), each with its `sequential` twin. A cue whose arm fails is silent
+on its node and keeps its body and its hand-over (D32).
+
 `_wait_mtc` polls live MTC and sleeps between polls, so a test whose MTC never
 moves would spin forever on any future target. `_FakeMtc` advances the
 timeline by exactly the duration each patched sleep asks for.
@@ -96,6 +104,25 @@ def _dmx_cue(prewait=0):
     return cue
 
 
+def _pass(epoch=1, anchor_ms=0.0, layout=(), root_seq=0, mode="sequential"):
+    """A chain_pass.Pass."""
+    from cuemsengine.cues.chain_pass import Pass
+
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
+
+
+def _layout(entry, anchor_ms, mode):
+    from cuemsengine.cues import chain_pass
+
+    return chain_pass.layout(entry, anchor_ms, mode)
+
+
 def _ch():
     ch = object.__new__(CueHandler)
     ch._lock = Lock()
@@ -110,9 +137,14 @@ def _ch():
     return ch
 
 
-def _run(ch, cue, mtc, order=None, **kw):
-    """Drive go_threaded with the players patched out, recording call order."""
+def _run(ch, cue, mtc, order=None, pass_=None, **kw):
+    """Drive go_threaded with the players patched out, recording call order.
+
+    The pass goes in positionally (go_threaded's fifth argument), so a test
+    that does not look at it keeps running on the engine before Step 2."""
     calls = order if order is not None else []
+    if pass_ is None:
+        pass_ = _pass(1, 0.0, [(cue, 0.0)])
 
     def rec(name, ret=None):
         def _f(*a, **k):
@@ -121,7 +153,8 @@ def _run(ch, cue, mtc, order=None, **kw):
 
         return _f
 
-    kw.setdefault("go_gen", cue._go_generation)
+    go_gen = kw.pop("go_gen", cue._go_generation)
+    frozen = kw.pop("frozen_mtc_ms", None)
     with (
         patch("cuemsengine.cues.CueHandler.run_cue", side_effect=rec("run_cue")) as rc,
         patch(
@@ -135,7 +168,7 @@ def _run(ch, cue, mtc, order=None, **kw):
     ):
         ch.communications_thread.add_cue.side_effect = rec("add_cue")
         ch.go.side_effect = rec("dispatch")
-        ch.go_threaded(cue, mtc, **kw)
+        ch.go_threaded(cue, mtc, frozen, go_gen, pass_, **kw)
     return calls, rc, rv
 
 
@@ -148,7 +181,7 @@ class TestDispatchAtEntry:
         ch._next_local_fire = MagicMock(return_value=(nxt, 0.0))
         cue = _cue(prewait=30)
         mtc = _FakeMtc(0)
-        calls, _, _ = _run(ch, cue, mtc, chain_epoch=4)
+        calls, _, _ = _run(ch, cue, mtc, pass_=_pass(4, 0.0, [(cue, 0.0), (nxt, 0.0)]))
         assert calls[0] == "dispatch"
         assert calls.index("dispatch") < calls.index("run_cue")
         assert calls.index("dispatch") < calls.index("reveal")
@@ -158,8 +191,10 @@ class TestDispatchAtEntry:
         nxt = SimpleNamespace(id="n")
         ch._next_local_fire = MagicMock(return_value=(nxt, 1234.0))
         mtc = _FakeMtc(0)
-        _run(ch, _cue(), mtc, chain_epoch=42)
-        ch.go.assert_called_once_with(nxt, mtc, 1234.0, chain_epoch=42, arm_epoch=None)
+        cue = _cue()
+        p = _pass(42, 0.0, [(cue, 0.0), (nxt, 1234.0)])
+        _run(ch, cue, mtc, pass_=p)
+        ch.go.assert_called_once_with(nxt, mtc, 1234.0, pass_=p, arm_epoch=None)
 
     def test_a_pause_cue_does_not_dispatch_its_target(self):
         """post_go='pause'/'go_at_end' cues carry a _target_object too — it is
@@ -172,7 +207,8 @@ class TestDispatchAtEntry:
         ch.go.assert_not_called()
 
     def test_unroll_false_suppresses_the_dispatch(self):
-        """The enable-rejoin re-enters a chain that is already unrolled."""
+        """A retake (an enable during the pass) re-enters a chain that is
+        already unrolled."""
         ch = _ch()
         ch._next_local_fire = MagicMock(return_value=(SimpleNamespace(id="n"), 0.0))
         _run(ch, _cue(), _FakeMtc(0), unroll=False)
@@ -191,22 +227,42 @@ class TestDispatchAtEntry:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         reveal.assert_called_once()
 
     def test_descending_prewait_chain_is_on_time_and_silent(self):
-        """The field case, inverted: cue B's prewait is SMALLER than cue A's.
-        Under Phase 1 B was dispatched after its own anchor and fired late."""
+        """`parallel`: the field case, inverted: cue B's prewait is SMALLER
+        than cue A's. Under Phase 1 B was dispatched after its own anchor and
+        fired late."""
         ch = _ch()
-        b = _cue("B", prewait=2)
-        ch._next_local_fire = MagicMock(return_value=(b, 0.0))
+        del ch._next_local_fire  # the real walk, on the pass's layout
+        b = _cue("B", prewait=2, post_go="pause")
         a = _cue("A", prewait=10, target=b)
+        p = _pass(1, 0.0, _layout(a, 0.0, "parallel"), mode="parallel")
         mtc = _FakeMtc(0)
         with patch("cuemsengine.cues.CueHandler.Logger") as log:
-            _run(ch, a, mtc, chain_epoch=1)
+            _run(ch, a, mtc, pass_=p)
         # B was dispatched at the trigger (mtc still 0), so its own thread
         # will park on 2s — no anchor was missed anywhere.
-        assert ch.go.call_args[0][2] == 0.0
+        ch.go.assert_called_once_with(b, mtc, 0.0, pass_=p, arm_epoch=None)
+        assert not [c for c in log.warning.call_args_list if "LATE" in str(c)]
+
+    def test_sequential_chain_is_dispatched_at_entry_with_its_place(self):
+        """`sequential` twin: B arrives after A's prewait (10 s) and starts at
+        12 s; it is still dispatched at A's entry, and on time."""
+        ch = _ch()
+        del ch._next_local_fire
+        b = _cue("B", prewait=2, post_go="pause")
+        a = _cue("A", prewait=10, target=b)
+        p = _pass(1, 0.0, _layout(a, 0.0, "sequential"))
+        mtc = _FakeMtc(0)
+        order = []
+        with patch("cuemsengine.cues.CueHandler.Logger") as log:
+            _run(ch, a, mtc, order=order, pass_=p)
+        ch.go.assert_called_once_with(b, mtc, 10000.0, pass_=p, arm_epoch=None)
+        assert order.index("dispatch") < order.index("run_cue")
         assert not [c for c in log.warning.call_args_list if "LATE" in str(c)]
 
 
@@ -225,7 +281,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert seen["at"] >= 60000 - CueHandler._RUN_AHEAD_MS
         assert seen["at"] < 60000, "must still be held before its start"
 
@@ -243,7 +301,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert seen["at"] == 0.0
 
     def test_run_cue_failure_clears_the_illumination(self):
@@ -261,7 +321,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.communications_thread.remove_cue.assert_called_once()
         reveal.assert_not_called()
 
@@ -278,7 +340,9 @@ class TestDeferredRunCue:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert cue._revealed is True
 
 
@@ -299,7 +363,9 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=stop_after_a_bit),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         rc.assert_not_called()
         rv.assert_not_called()
 
@@ -321,7 +387,7 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, 1, 1)
+            ch.go_threaded(cue, mtc, 0.0, 1, _pass(1, 0.0, [(cue, 0.0)]))
         rv.assert_not_called()
         assert cue._revealed is False
 
@@ -335,7 +401,9 @@ class TestCancelWhileParked:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert cue._revealed is True
 
 
@@ -356,13 +424,16 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.arm.assert_called_once_with(cue, init=True, epoch=None, wait_report={})
         rv.assert_called_once()
 
     def test_an_unarmable_cue_dies_alone(self):
         """Its chain was already dispatched at entry, so a failed arm must
-        take out this cue only — and say so."""
+        take out this cue only — and say so. D32: it is silent on this node
+        (`passed silent`), with the ERROR the plan names."""
         ch = _ch()
         nxt = SimpleNamespace(id="n")
         ch._next_local_fire = MagicMock(return_value=(nxt, 0.0))
@@ -376,11 +447,55 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
             patch("cuemsengine.cues.CueHandler.Logger") as log,
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         ch.go.assert_called_once()  # the chain still went out
         rc.assert_not_called()
         rv.assert_not_called()
         assert log.error.called
+        errors = [str(c.args[0]) for c in log.error.call_args_list if c.args]
+        assert any(
+            "c could not be armed; it does not play in pass" in e for e in errors
+        ), errors
+        infos = [str(c.args[0]) for c in log.info.call_args_list if c.args]
+        assert any(x.startswith("Cue c passed silent at mtc ") for x in infos), infos
+
+    def test_an_unarmable_cue_keeps_its_body_and_its_hand_over(self):
+        """D32, S100: the cue is enabled, so it keeps its body: an Auto-follow
+        cue whose arm failed still hands over at body_end + postwait, as if
+        it had played (a disabled cue would hand over at start + postwait)."""
+        ch = _ch()
+        target = SimpleNamespace(id="t", _go_generation=0)
+        cue = _cue(post_go="go_at_end", target=target)
+        cue.loaded = False
+        cue.loop = 1
+        ch.go_from = MagicMock(return_value=None)
+        ch._follow_fired = MagicMock(return_value=True)
+        ch._follow_instant_ms = MagicMock(return_value=4000.0)
+        ch._chain_continues = MagicMock(return_value=True)
+        ch._follows_out = MagicMock(return_value=False)
+        ch._leave_follow = MagicMock()
+        ch._wait_wrap_player_end = MagicMock()
+        ch._end_cuelist_child = MagicMock()
+        ch.wait_for_cue = MagicMock()
+        mtc = _FakeMtc(0)
+        with (
+            patch("cuemsengine.cues.CueHandler.run_cue"),
+            patch("cuemsengine.cues.CueHandler.reveal_cue") as rv,
+            patch("cuemsengine.cues.CueHandler.loop_cue"),
+            patch("cuemsengine.cues.CueHandler.blank_cue"),
+            patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
+            patch("cuemsengine.cues.CueHandler.Logger"),
+        ):
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
+        rv.assert_not_called()
+        ch._follow_instant_ms.assert_called_once()
+        ch.go_from.assert_called_once()
+        assert ch.go_from.call_args.args[0] is target
+        assert ch.go_from.call_args.args[2] == 4000.0
 
     def test_an_arm_that_overruns_the_runway_warns_late(self):
         """The entry LATE check ran before the arm; an arm longer than the
@@ -402,16 +517,15 @@ class TestOwnArm:
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
             patch("cuemsengine.cues.CueHandler.Logger") as log,
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
+            ch.go_threaded(
+                cue, mtc, 0.0, cue._go_generation, _pass(1, 0.0, [(cue, 0.0)])
+            )
         assert [c for c in log.warning.call_args_list if "LATE" in str(c)]
 
 
 class TestIllumination:
-    def test_the_whole_chain_lights_at_the_trigger(self):
-        """Documented rule: a cue illuminates when it ARRIVES, and under auto
-        continue every cue arrives at the trigger."""
+    def _lit_at(self, cue, arrival_ms, pass_):
         ch = _ch()
-        cue = _cue(prewait=60)
         mtc = _FakeMtc(0)
         seen = {}
         ch.communications_thread.add_cue.side_effect = lambda *a, **k: seen.setdefault(
@@ -423,11 +537,29 @@ class TestIllumination:
             patch("cuemsengine.cues.CueHandler.loop_cue"),
             patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
         ):
-            ch.go_threaded(cue, mtc, 0.0, cue._go_generation, 1)
-        assert seen["at"] == 0.0
+            ch.go_threaded(cue, mtc, arrival_ms, cue._go_generation, pass_)
+        return seen["at"]
+
+    def test_the_whole_chain_lights_at_the_trigger(self):
+        """`parallel`: a cue illuminates when it ARRIVES, and in that mode
+        every cue arrives at the trigger."""
+        cue = _cue("C", prewait=60, post_go="pause")
+        head = _cue("H", prewait=30, target=cue)
+        p = _pass(1, 0.0, _layout(head, 0.0, "parallel"), mode="parallel")
+        assert p.arrival_of(cue) == 0.0
+        assert self._lit_at(cue, p.arrival_of(cue), p) == 0.0
+
+    def test_a_sequential_cue_lights_at_its_own_arrival(self):
+        """`sequential` twin: C arrives after H's 30 s prewait and lights then,
+        whatever its own prewait."""
+        cue = _cue("C", prewait=60, post_go="pause")
+        head = _cue("H", prewait=30, target=cue)
+        p = _pass(1, 0.0, _layout(head, 0.0, "sequential"))
+        assert p.arrival_of(cue) == 30000.0
+        assert self._lit_at(cue, p.arrival_of(cue), p) == 30000.0
 
     def test_the_dispatch_arrival_is_recorded_on_the_cue(self):
-        """The cancel paths need it to stamp a re-enable's rejoin anchor."""
+        """A retake re-dispatches the cue at this same arrival (Design §2)."""
         ch = _ch()
         cue = _cue()
         _run(ch, cue, _FakeMtc(0), frozen_mtc_ms=7000.0)

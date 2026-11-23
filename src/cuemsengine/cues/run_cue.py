@@ -126,6 +126,26 @@ def _first_enabled_child(cue: CueList) -> Cue | None:
     return next((c for c in contents if c.enabled), None)
 
 
+_NO_PICK = object()
+
+
+def picked_child(cue) -> Cue | None:
+    """The child a CueList's setup picked for this pass (1amfwm7jnqf Design
+    §2: one pick per pass, from the flag as every node sees it), or None.
+    Commit, reveal and end take it from there and nothing picks again. A
+    CueList set up by no pass falls back to its first enabled child."""
+    child = getattr(cue, "_marked_child", _NO_PICK)
+    if child is _NO_PICK:
+        return _first_enabled_child(cue)
+    return child
+
+
+def _child_set_up_here(cue) -> bool:
+    """False when the setup picked a child this node must not set up (off on
+    its owner at the setup: silent in this pass)."""
+    return getattr(cue, "_marked_child_set_up", True) is not False
+
+
 def _ensure_child_loaded(parent: CueList, child: Cue) -> bool:
     """Give a CueList's first-enabled child the same "not loaded at go() time →
     re-arm + warn" safety net CueHandler.go() gives top-level cues.
@@ -189,8 +209,8 @@ def run_cueList(cue: CueList, mtc: MtcListener, frozen_mtc_ms: float = None):
     (_ensure_child_loaded) — otherwise an un-armed child fires with only a
     misleading log and no recovery.
     """
-    child = _first_enabled_child(cue)
-    if child is None:
+    child = picked_child(cue)
+    if child is None or not _child_set_up_here(cue):
         return
     if not _ensure_child_loaded(cue, child):
         return  # re-arm failed (already logged loudly) — don't dispatch
@@ -996,8 +1016,8 @@ def reveal_cueList(cue: CueList, mtc, frozen_mtc_ms: float = None):
     send a wrong /offset then enable /mtcfollow — actively wrong playback, worse
     than a clean skip.
     """
-    child = _first_enabled_child(cue)
-    if child is None:
+    child = picked_child(cue)
+    if child is None or not _child_set_up_here(cue):
         return
     if getattr(child, "_local", True) and not getattr(child, "loaded", False):
         Logger.warning(

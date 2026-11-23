@@ -4,7 +4,8 @@
 """869feynrj S0-21 (cuems-RELATIONS Plans/2026-11-03-audio-first-pass-head-
 869feynrj.md §12, Q-S0-A = (A), Ion 2026-11-05): no disable path stops a
 playing cue -- a disable takes effect from the next round. The two leaks of
-that design, one test each:
+that design, one test each (kept under 1amfwm7jnqf: a toggle never stops a
+cue on stage, A3):
 
 - a CueList child never got a playing mark (children bypass go()), so
   disabling a playing CueList disarmed -- cut -- its child
@@ -110,9 +111,15 @@ def _play_cuelist(ch, cl, on_sleep=None):
 
 
 def _disable(ch, cl):
+    """A disable as it reaches a node since 1amfwm7jnqf: the receive hook has
+    set the flag already (chain_pass.ui_toggle); the command thread then runs
+    the side effects for the flag as it is by then (Design §3)."""
     NE = importlib.import_module("cuemsengine.NodeEngine")
     node = object.__new__(NE.NodeEngine)
     node.next_cue_pointer = None
+    node._project_generation = 1
+    node.mtc_listener = _Mtc(1500.0)
+    cl.enabled = False
     with patch.object(NE, "CUE_HANDLER", ch):
         node._apply_cue_enabled_side_effects(cl, False)
 

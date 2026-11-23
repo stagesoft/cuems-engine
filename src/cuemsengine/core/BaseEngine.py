@@ -511,11 +511,13 @@ class BaseEngine(SignalEngine):
 
     @staticmethod
     def _first_local_enabled_in_go_chain(start):
-        """First cue THIS node will dispatch when a GO starts at `start`.
+        """First cue THIS node must arm for a GO that starts at `start`.
 
-        Walks the post_go='go' chain exactly like NodeEngine.go_script:
-        returns the first cue that is `_local` AND `enabled`; other nodes'
-        cues and disabled cues are stepped over while they chain on
+        Walks the post_go='go' chain and returns the first cue that is
+        `_local` AND `enabled`. Not the first cue go_script dispatches: since
+        1amfwm7jnqf it also dispatches a disabled local cue, as a silent
+        thread that needs no arm. Other nodes' cues and
+        disabled cues are stepped over while they chain on
         (post_go == 'go'); a cue that hands off (post_go != 'go') before
         any local+enabled cue means "nothing for this node on that GO" ->
         None. Bounded by the same 1024-step cycle guard.
