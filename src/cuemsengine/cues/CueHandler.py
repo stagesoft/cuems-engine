@@ -30,9 +30,9 @@ from .loop_mode import wrap_active
 from .run_cue import (
     blank_cue,
     current_pass,
-    picked_child,
     installed_guard,
     installed_pass,
+    picked_child,
     reveal_cue,
     run_cue,
 )
