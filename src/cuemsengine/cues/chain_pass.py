@@ -19,7 +19,10 @@ are read by duck typing (`prewait` / `postwait` with `.milliseconds_exact`,
   :func:`action_toggle`, :func:`common_enabled`, :func:`retire`, with the
   records a node keeps on a cue;
 - :class:`StepOrder`: a node does what more than one node does in the order
-  of the instants at which it is due.
+  of the instants at which it is due;
+- :func:`as_enabled`, :func:`cue_enabled`, :func:`normalise_enabled`: a cue's
+  ``enabled`` as a real bool, whatever the script reader left in it (a
+  saved-disabled DmxCue is read as the string ``'False'``, which is truthy).
 """
 
 from __future__ import annotations
@@ -137,6 +140,79 @@ class Pass:
 
 
 # ---------------------------------------------------------------------------
+# a cue's enabled as a bool
+# ---------------------------------------------------------------------------
+
+_ENABLED_TRUE = frozenset({"true", "1", "yes", "on"})
+_ENABLED_FALSE = frozenset({"false", "0", "no", "off"})
+_ENABLED_MISSING = object()
+#: the cues (or values) already warned about, so each warns once
+_ENABLED_WARNED: set = set()
+
+
+def as_enabled(value, cue_id=None) -> bool:
+    """``value`` (a cue's ``enabled``) as a bool. A bool passes; None is
+    True; a string is read strictly (``true/false/1/0/yes/no/on/off``, any
+    case); an int 0 / 1 is its bool. Anything else is True, as the editor
+    means a cue it has not disabled, with one WARNING per cue.
+
+    The script reader leaves the text of the XML in some cues (a DmxCue saved
+    disabled has ``enabled == 'False'``), and ``bool('False')`` is True."""
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        word = value.strip().lower()
+        if word in _ENABLED_TRUE:
+            return True
+        if word in _ENABLED_FALSE:
+            return False
+    elif isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    key = str(cue_id) if cue_id is not None else repr(value)
+    if key not in _ENABLED_WARNED:
+        _ENABLED_WARNED.add(key)
+        Logger.warning(
+            f"cue {cue_id}: enabled is {value!r}, which is not a yes or a no;"
+            " the cue is taken as enabled"
+        )
+    return True
+
+
+def cue_enabled(cue, default: bool = True) -> bool:
+    """The cue's ``enabled`` as a bool (:func:`as_enabled`); ``default`` when
+    the cue has none."""
+    value = getattr(cue, "enabled", _ENABLED_MISSING)
+    if value is _ENABLED_MISSING:
+        return default
+    return as_enabled(value, getattr(cue, "id", None))
+
+
+def normalise_enabled(cuelist) -> int:
+    """At load: every cue under ``cuelist`` (and the cuelist itself) gets its
+    ``enabled`` as a bool, so every later read of ``cue.enabled`` is one.
+    Returns how many cues held something else."""
+    changed, seen, todo = 0, set(), [cuelist]
+    while todo:
+        cue = todo.pop()
+        if cue is None or id(cue) in seen:
+            continue
+        seen.add(id(cue))
+        value = getattr(cue, "enabled", _ENABLED_MISSING)
+        if value is not _ENABLED_MISSING and not isinstance(value, bool):
+            try:
+                cue.enabled = as_enabled(value, getattr(cue, "id", None))
+                changed += 1
+            except Exception as e:
+                Logger.error(f"cue {getattr(cue, 'id', cue)}: enabled not set ({e})")
+        todo.extend(getattr(cue, "contents", None) or [])
+    if changed:
+        Logger.info(f"{changed} cue(s) had enabled read as text; now a bool")
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # the flag as every node sees it (D31 d), and its records
 # ---------------------------------------------------------------------------
 
@@ -159,8 +235,11 @@ def _records(cue) -> list:
 def _base(cue) -> bool:
     """The cue's value without its pending records."""
     if not _records(cue):
-        return bool(getattr(cue, "enabled", True))
-    return bool(getattr(cue, "_toggle_base", getattr(cue, "enabled", True)))
+        return cue_enabled(cue)
+    base = getattr(cue, "_toggle_base", _ENABLED_MISSING)
+    if base is _ENABLED_MISSING:
+        return cue_enabled(cue)
+    return as_enabled(base, getattr(cue, "id", None))
 
 
 def _counts(since, seq, instant, root) -> bool:
@@ -205,7 +284,7 @@ def _append(cue, value, since, seq) -> None:
     with _FLAG_LOCK:
         recs = _records(cue)
         if not recs:
-            cue._toggle_base = bool(getattr(cue, "enabled", True))
+            cue._toggle_base = cue_enabled(cue)
         recs.append((int(seq), since, value))
         cue.enabled = value
         _WITH_RECORDS[id(cue)] = cue

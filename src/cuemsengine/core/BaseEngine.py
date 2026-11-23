@@ -16,6 +16,7 @@ from cuemsutils.tools.CTimecode import CTimecode
 from cuemsutils.tools.SignalEngine import SignalEngine
 from cuemsutils.xml import XmlReaderWriter
 
+from ..cues import chain_pass
 from ..cues.CueHandler import CUE_HANDLER
 from ..osc import (
     VALUE_TYPES_DICT,
@@ -508,6 +509,10 @@ class BaseEngine(SignalEngine):
             raise FileNotFoundError(f"Script file {xml_file} not found")
         reader = XmlReaderWriter(schema_name="script", xmlfile=xml_file)
         self.script = reader.read_to_objects()
+        # The reader leaves the XML's text in some cues' enabled (a DmxCue
+        # saved disabled reads 'False', which is truthy): every cue gets a
+        # bool here, once, on the controller and on every node.
+        chain_pass.normalise_enabled(getattr(self.script, "cuelist", None))
 
     @staticmethod
     def _first_local_enabled_in_go_chain(start):
@@ -530,7 +535,7 @@ class BaseEngine(SignalEngine):
         cue = start
         walked = 0
         while cue is not None and not (
-            getattr(cue, "_local", False) and getattr(cue, "enabled", False)
+            getattr(cue, "_local", False) and chain_pass.cue_enabled(cue, False)
         ):
             if getattr(cue, "post_go", None) != "go":
                 return None
@@ -632,7 +637,7 @@ class BaseEngine(SignalEngine):
         if cuelist.contents:
             first_cue = None
             for c in cuelist.contents:
-                if c.enabled:
+                if chain_pass.cue_enabled(c):
                     first_cue = c
                     break
             # If the cuelist's first cue isn't ours, walk the post_go='go'

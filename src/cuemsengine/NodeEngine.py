@@ -2193,7 +2193,7 @@ class NodeEngine(BaseEngine):
         if cue is None:
             return
         cue_id = value.split(" ", 1)[0]
-        enabled = bool(getattr(cue, "enabled", True))
+        enabled = chain_pass.cue_enabled(cue)
         self._apply_cue_enabled_side_effects(cue, enabled)
         self._notify_cue_enabled(cue_id, enabled)
         Logger.info(f'Cue {cue_id} set to {"enabled" if enabled else "disabled"}')
@@ -2504,10 +2504,10 @@ class NodeEngine(BaseEngine):
         ):
             z = z._target_object
             walked += 1
-        if z is None or getattr(z, "enabled", True):
+        if z is None or chain_pass.cue_enabled(z):
             return cue.get_next_cue()
         nxt, walked = getattr(z, "_target_object", None), 0
-        while nxt is not None and not getattr(nxt, "enabled", True) and walked < 1024:
+        while nxt is not None and not chain_pass.cue_enabled(nxt) and walked < 1024:
             nxt = getattr(nxt, "_target_object", None)
             walked += 1
         return nxt
