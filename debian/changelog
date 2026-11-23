@@ -1,3 +1,11 @@
+cuems-engine (0.1.0rc6-9~pre1amfwm7jnqf.2) bookworm; urgency=medium
+
+  * TEST BUILD, not for show machines (1amfwm7jnqf, c8cfd4a): a cue's
+    enabled flag read from XML as a string is a bool (a saved-disabled
+    DmxCue sent its scene: cuems-utils rc18 DmxCueParser keeps the string).
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 23 Nov 2026 21:16:12 +0100
+
 cuems-engine (0.1.0rc6-9~pre1amfwm7jnqf.1) bookworm; urgency=medium
 
   * TEST BUILD, not for show machines (1amfwm7jnqf, branch
