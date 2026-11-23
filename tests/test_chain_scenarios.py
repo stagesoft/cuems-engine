@@ -6,7 +6,8 @@ per scenario of the executable model, on one subprocess per simulated node.
 
 The fixture `tests/fixtures/chain_scenarios.json` is the model's own data,
 exported from cuems-RELATIONS `baselines/autocontinue-cumulative/model/` at
-commit 41d257f (rev 9.1) with `python3 -I run_all.py --json`; it is never edited
+commit 41d257f (rev 9.1; run_all.py since exports the model's constants too,
+which the harness reads) with `python3 -I run_all.py --json`; it is never edited
 by hand. When the model changes, export it again (Constraints, "The model
 leads").
 

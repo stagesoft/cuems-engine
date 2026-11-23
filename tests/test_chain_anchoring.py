@@ -58,20 +58,9 @@ def _cue(id, local, enabled, post_go="go", target=None):
 
 
 def _pass(epoch, anchor_ms, layout, root_seq=0, mode="sequential"):
-    """A chain_pass.Pass; before Step 2 the engine has none, and the tests
-    that only carry a pass through go_threaded / go() need its attributes."""
-    try:
-        from cuemsengine.cues.chain_pass import Pass
-    except ImportError:
-        layout = list(layout)
-        return SimpleNamespace(
-            epoch=epoch,
-            anchor_ms=anchor_ms,
-            layout=layout,
-            root_seq=root_seq,
-            mode=mode,
-            arrival_of=lambda c: next((a for x, a in layout if x is c), None),
-        )
+    """A chain_pass.Pass."""
+    from cuemsengine.cues.chain_pass import Pass
+
     return Pass(
         epoch=epoch,
         anchor_ms=anchor_ms,

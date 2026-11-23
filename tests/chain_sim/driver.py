@@ -9,9 +9,9 @@ event and from wake to wake: at each instant it first moves every node's MTC
 there, then delivers what is due, in the order the model's `World` takes it.
 
 Delays. The fixture (`run_all.py --json`) carries each scenario's perturbations
-but NOT the model's constants, so they are copied here from
-cuems-RELATIONS `baselines/autocontinue-cumulative/model/chain_model.py`
-(rev 9.1, commit 41d257f): `BUS_MS`, `RELAY_MS`, `GO_LEAD_MS`. A GO for anchor
+and the model's constants (`constants`: `bus_ms`, `relay_ms`, `go_lead_ms`, from
+cuems-RELATIONS `baselines/autocontinue-cumulative/model/chain_model.py`); the
+values below are only the fallback for a row without them. A GO for anchor
 `T` is sent at `T - GO_LEAD_MS` and reaches a node `bus` ms later; a UI toggle
 sent at `t` reaches it at `t + bus`, carrying `sent_ms = t`; an operator STOP
 reaches every node at `t`; what a node sends (a follow announcement or cancel,
@@ -26,10 +26,21 @@ import multiprocessing
 import os
 import time
 
-# chain_model.py (rev 9.1): BUS_MS, RELAY_MS, GO_LEAD_MS. Not in the fixture.
+# chain_model.py (rev 9.1): the fallback when a row has no "constants".
 BUS_MS = {"n1": 3.0, "n2": 5.0, "n3": 7.0}
 RELAY_MS = 8.0
 GO_LEAD_MS = 80.0
+
+
+def constants(scenario: dict) -> tuple:
+    """(bus_ms per node, relay_ms, go_lead_ms) from the fixture row."""
+    c = scenario.get("constants") or {}
+    return (
+        dict(c.get("bus_ms") or BUS_MS),
+        float(c.get("relay_ms", RELAY_MS)),
+        float(c.get("go_lead_ms", GO_LEAD_MS)),
+    )
+
 
 WALL_TIMEOUT_S = float(os.environ.get("CUEMS_CHAIN_SIM_TIMEOUT", "300"))
 REPLY_TIMEOUT_S = 60.0
@@ -100,17 +111,18 @@ def event_time_ms(ev) -> float:
 
 def bus_ms(scenario: dict, node: str) -> float:
     p = ((scenario.get("perturb") or {}).get(node) or {}).get("bus_ms")
-    return float(p) if p is not None else BUS_MS[node]
+    return float(p) if p is not None else float(constants(scenario)[0][node])
 
 
 def run_scenario(scenario: dict) -> dict:
     """Run one fixture scenario; {node: {"journal", "standby", "flags", "ids",
     "stuck"}}."""
     names = list(scenario["nodes"])
+    _, relay_ms, go_lead_ms = constants(scenario)
     T0 = float(scenario["t0_ms"])
     until = T0 + float(scenario["until_s"]) * 1000.0
     times = [event_time_ms(e) for e in scenario["events"]]
-    start = min([T0 - GO_LEAD_MS] + times) - 50.0
+    start = min([T0 - go_lead_ms] + times) - 50.0
 
     queue: list = []  # (t, order key, seq, node, kind, payload)
     seq = [0]
@@ -133,8 +145,8 @@ def run_scenario(scenario: dict) -> dict:
         if kind in ("go", "go_next"):
             run_seq += 1
             T = float(ev[2] if kind == "go" else ev[1])
-            sent = T - GO_LEAD_MS
-            go = {"go_mtc_ms": T, "lead_ms": GO_LEAD_MS, "run_seq": run_seq}
+            sent = T - go_lead_ms
+            go = {"go_mtc_ms": T, "lead_ms": go_lead_ms, "run_seq": run_seq}
             for n in names:
                 if kind == "go":
                     put(
@@ -176,11 +188,11 @@ def run_scenario(scenario: dict) -> dict:
                 if kind == "follow":
                     for n in names:
                         if n != origin:
-                            put(now + RELAY_MS, (now, 1), n, "follow", payload)
+                            put(now + relay_ms, (now, 1), n, "follow", payload)
                 elif kind == "stop_project" and not stopped_by_project[0]:
                     stopped_by_project[0] = True  # first valid message wins
                     for n in names:
-                        put(now + RELAY_MS, (now, 1), n, "stop", None)
+                        put(now + relay_ms, (now, 1), n, "stop", None)
 
         now = start
         while True:

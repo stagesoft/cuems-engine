@@ -131,7 +131,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S02",
@@ -298,7 +310,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "Fade out musica 1 0, Fade video 50, Fade video - Copy 111, Cancion 2 172, Stop cancion 2 192; stopped: Cancion 2 at 192",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S03",
@@ -432,7 +456,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "dmx1 5, dmx2 40, dmx3 105, dmx4 200, dmx5 580",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S04",
@@ -566,7 +602,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "dmx1 5, dmx2 35, dmx3 65, dmx4 95, dmx5 380",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S05",
@@ -700,7 +748,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "dmx1 5, dmx2 35, dmx3 65, dmx4 95, dmx5 380",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S06",
@@ -817,7 +877,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 5, C 2, D 3",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S07",
@@ -934,7 +1006,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S08",
@@ -1057,7 +1141,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S09",
@@ -1143,7 +1239,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 36",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S10",
@@ -1240,7 +1348,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, SP 3",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S11",
@@ -1364,7 +1484,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~3, C 12",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S12",
@@ -1488,7 +1620,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~3, D 11",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S13",
@@ -1591,7 +1735,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, X ~2, C 6",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S14",
@@ -1677,7 +1833,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "M ~2, C 6",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S15",
@@ -1777,7 +1945,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, SP ~3, Z 4",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S16",
@@ -1883,7 +2063,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, SP ~3, Z 4",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S17",
@@ -1986,7 +2178,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "K 0, A ~3, B 8",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S18",
@@ -2085,7 +2289,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A ~2, B 11",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S19",
@@ -2185,7 +2401,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "Dz ~0, A 0, B 2",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S20",
@@ -2304,7 +2532,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "V 0, W 0, L ~30",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S21",
@@ -2423,7 +2663,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "V 0, F ~0, L ~0",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S22",
@@ -2546,7 +2798,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S23",
@@ -2669,7 +2933,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S24",
@@ -2801,7 +3077,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/40, B 12/~52, C 24/64, D 27/67",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S25",
@@ -2924,7 +3212,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S26",
@@ -3056,7 +3356,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/40, B ~12/52, C 24/64, D 27/67",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S27",
@@ -3187,7 +3499,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~12, C 24, D 27",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S28",
@@ -3316,7 +3640,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S29",
@@ -3439,7 +3775,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S30",
@@ -3571,7 +3919,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/40, B 12/~52, C 24/64, D 27/67",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S31",
@@ -3698,7 +4058,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S32",
@@ -3809,7 +4181,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "En 0/10, C ~0/10, D 1/11",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S33",
@@ -3912,7 +4296,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, C ~6",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S34",
@@ -4015,7 +4411,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, C 6",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S35",
@@ -4124,7 +4532,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, X ~5, C 9",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S36",
@@ -4233,7 +4653,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, X 5, C 39",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S37",
@@ -4330,7 +4762,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "En 0, C 2",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S38",
@@ -4463,7 +4907,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 3/21/39, B 8/~26/~44, Dz 18/36, P 18/36",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S39",
@@ -4592,7 +5048,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 3/21/39, B 8/26/44, Dz 18/36, P 18/36",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S40",
@@ -4731,7 +5199,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 2, Dz 2, P ~2",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S41",
@@ -4860,7 +5340,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, Q 5, S 5, Z 5; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S42",
@@ -4965,7 +5457,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, S 5, Z 7; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S43",
@@ -5067,7 +5571,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, S 5; stopped: A at 5",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S44",
@@ -5188,7 +5704,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 5; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S45",
@@ -5323,7 +5851,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 5; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S46",
@@ -5445,7 +5985,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 30, C 30, K 5",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S47",
@@ -5572,7 +6124,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 5; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S48",
@@ -5688,7 +6252,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 3; stopped: none",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S49",
@@ -5815,7 +6391,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 5; stopped: A at 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S50",
@@ -5960,7 +6548,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 10; stopped: A at 10",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S51",
@@ -6066,7 +6666,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, M ~8, C 10",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S52",
@@ -6174,7 +6786,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, M 8, C 10",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S53",
@@ -6280,7 +6904,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, M ~8, C 10",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S54",
@@ -6406,7 +7042,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, M 8, K 4; stopped: A at 4",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S55",
@@ -6518,7 +7166,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/4, M 8/12, C 14",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S56",
@@ -6641,7 +7301,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B ~5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S57",
@@ -6764,7 +7436,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S58",
@@ -6898,7 +7582,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/40, B 5/~45, C 57, D 60",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S59",
@@ -7025,7 +7721,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/8, B 5/13, C 25, D 28",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S60",
@@ -7134,7 +7842,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17/34, B 5/22/39, P 17/34",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S61",
@@ -7275,7 +7995,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17/34/51, B 5/22/~39/56, P 17/34/51",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S62",
@@ -7390,7 +8122,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/20, X 0/~20, P 20",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S63",
@@ -7493,7 +8237,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, SP 3",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S64",
@@ -7579,7 +8335,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "X ~5, T 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S65",
@@ -7685,7 +8453,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "K 0, X ~0, T 0",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S66",
@@ -7794,7 +8574,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, X ~5, T 5",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S67",
@@ -7901,7 +8693,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, X 5, T 5/9",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S68",
@@ -8017,7 +8821,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17, B 5/22, P 17/~34",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S69",
@@ -8128,7 +8944,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17, B 5, P ~17",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S70",
@@ -8224,7 +9052,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "Fd 5, N 9",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S71",
@@ -8336,7 +9176,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 5, P ~17",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S72",
@@ -8463,7 +9315,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, En 5, B 10, P ~12",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S73",
@@ -8579,7 +9443,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17, B 5/22, P 17/~34",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S74",
@@ -8708,7 +9584,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/12, En 5/17, B 10, P 12",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S75",
@@ -8838,7 +9726,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 2, M 2, Z 3",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S76",
@@ -8965,7 +9865,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, K 2, M ~2, Z 3",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S77",
@@ -9058,7 +9970,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "M ~0, C 2",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S78",
@@ -9171,7 +10095,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/17, B 5, P ~17",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S79",
@@ -9297,7 +10233,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, V 6, T 36, U 36",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S80",
@@ -9420,7 +10368,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, V ~6, T 6, U 36",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S81",
@@ -9546,7 +10506,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, V ~6, T 6, U 6",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S82",
@@ -9683,7 +10655,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/50, V 6/~56, T 36/56, U 36/56",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S83",
@@ -9776,7 +10760,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "V 6, T 36",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S84",
@@ -9921,7 +10917,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, V 6, T 36, U 36",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S85",
@@ -10055,7 +11063,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/20, L 6/26, Ka 6, Kb 26",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S86",
@@ -10181,7 +11201,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, L 6, Ka 6, Kb 6",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S87",
@@ -10315,7 +11347,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/20, L 8/28, Ka 28, Kb 8",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S88",
@@ -10439,7 +11483,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, L 8, Ka 8, Kb 8",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S89",
@@ -10577,7 +11633,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/20, L 6/26, Ka ~6/26",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S90",
@@ -10696,7 +11764,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, Dz 5, B 15",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S91",
@@ -10817,7 +11897,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, Dz 5, B 15",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S92",
@@ -10931,7 +12023,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/5.2/10.4, En 5/10.2, P 5.2/10.4",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S93",
@@ -11041,7 +12145,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/5.2/10.4, En 5/10.2, P 5.2/10.4",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S94",
@@ -11173,7 +12289,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0/8/16, M 5/~13, Dz 5/13, P 8/16",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S95",
@@ -11282,7 +12410,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "En 0, X ~0, N 0",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S96",
@@ -11390,7 +12530,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "K 0, A ~0, B ~0",
-  "model_verdict": "INFO"
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S97",
@@ -11502,7 +12654,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "K 0, A ~0/~0/~0/~0/~0/~0, B ~0/~0/~0/~0/~0",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S98",
@@ -11633,7 +12797,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S99",
@@ -11764,7 +12940,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A 0, B 12, C 24, D 27",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S100",
@@ -11903,7 +13091,19 @@
   },
   "t0_ms": 100000.0,
   "model_result": "A ~0, B 5, C 17, D 20",
-  "model_verdict": "PASS"
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  },
  {
   "id": "S101",
@@ -12032,6 +13232,18 @@
   },
   "t0_ms": 100000.0,
   "model_result": "B 5, D 20",
-  "model_verdict": "DEFECT SHOWN"
+  "model_verdict": "DEFECT SHOWN",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  }
 ]
