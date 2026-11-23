@@ -594,13 +594,15 @@ def run_dmxCue(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
     with _setup_section(cue) as ok:
         if not ok:
             _skipped(cue)
-            return
-        _run_dmxCue_held(cue, mtc, frozen_mtc_ms)
+            return False
+        return _run_dmxCue_held(cue, mtc, frozen_mtc_ms)
 
 
-def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
+def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None) -> bool:
     """run_dmxCue's body: the scene send IS the DMX commit, so all of it runs
-    inside the setup section (869feynrj S0-2)."""
+    inside the setup section (869feynrj S0-2). True when the scene went to the
+    player; the caller logs a send only then (1amfwm7jnqf AC12 d1: a cue never
+    armed has no frame data, and its "sent" line was false)."""
     try:
         # CRITICAL FOR SYNC: Use frozen timestamp if provided (for post_go='go'
         # chains)
@@ -646,7 +648,7 @@ def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
                 f"DMX cue {cue.id} has no frame data to send",
                 extra={"caller": cue.__class__.__name__},
             )
-            return
+            return False
 
         # Convert fadein_time to seconds for the DMX player (only fadein is
         # used for now)
@@ -658,7 +660,7 @@ def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
                 f"DMX cue {cue.id} has no OSC client available",
                 extra={"caller": cue.__class__.__name__},
             )
-            return
+            return False
 
         # Enable MTC following so the dmxplayer tracks timecode and stops
         # advancing when MTC stops (e.g. on STOP command).
@@ -678,6 +680,7 @@ def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             f"universes={len(universe_frames)}, fade={fade_time}s",
             extra={"caller": cue.__class__.__name__},
         )
+        return True
 
     except Exception as e:
         Logger.error(
@@ -685,6 +688,7 @@ def _run_dmxCue_held(cue: DmxCue, mtc, frozen_mtc_ms: float = None):
             extra={"caller": cue.__class__.__name__},
         )
         Logger.exception(e)
+        return False
 
 
 def _record_placement_failure(cue: VideoCue, layer_id: str) -> None:
