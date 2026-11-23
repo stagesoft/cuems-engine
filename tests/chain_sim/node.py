@@ -485,7 +485,13 @@ class SimNode:
             if isinstance(cue, DmxCue):
                 from cuemsutils.log import Logger
 
+                # The real run_dmxCue sends what the arm parsed: a cue never
+                # armed has no frame data and sends nothing (AC12 d1).
+                if not getattr(cue, "loaded", False):
+                    Logger.warning(f"SIM: DMX cue {cue.id} has no frame data to send")
+                    return False
                 Logger.info(f"SIM: DMX scene sent to the player for cue {cue.id}")
+                return True
 
         def reveal_cue(cue, mtc, frozen_mtc_ms=None):
             from cuemsutils.cues import ActionCue

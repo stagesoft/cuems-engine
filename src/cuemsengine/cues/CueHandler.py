@@ -900,10 +900,12 @@ class CueHandler:
                 # not-following / action not-yet-run / dmx self-scheduled from
                 # absolute mtc_time), close enough to the slot that the frame
                 # is ready. Its sends re-check the pass under _lock (S0-2).
+                if isinstance(cue, DmxCue):
+                    self._arm_dmx_for_scene(cue)
                 guard = _SetupGuard(self._lock, cue, go_gen)
                 try:
                     with installed_guard(guard):
-                        run_cue(cue, mtc, start_ms)
+                        sent = run_cue(cue, mtc, start_ms)
                 except Exception as e:
                     # Illumination may have happened above, so a failure here
                     # would leave the cue lit forever with a dead thread.
@@ -923,8 +925,12 @@ class CueHandler:
                     with self._lock:
                         cue._revealed = True
                         cue._revealed_at = monotonic()
-                        cue._scene_out = go_gen
-                    Logger.info(f"DMX scene sent to local player for cue {cue.id}")
+                        if sent:
+                            cue._scene_out = go_gen
+                    if sent:
+                        Logger.info(f"DMX scene sent to local player for cue {cue.id}")
+                    else:
+                        Logger.warning(f"{cue.id}: DMX scene not sent (see above)")
                 self._step_done(cue, "setup", pass_)
                 target = self._follow_commit_target(cue)
                 if target is not None:
@@ -2777,14 +2783,20 @@ class CueHandler:
             elif plays and getattr(cue, "_scene_withheld", False):
                 # Enabled since its scene was due: the scene goes late, now.
                 cue._scene_withheld = False
+                self._arm_dmx_for_scene(cue)
                 guard = _SetupGuard(self._lock, cue, go_gen)
                 try:
                     with installed_guard(guard):
-                        run_cue(cue, mtc, start_ms)
-                    Logger.info(
-                        f"DMX scene sent to local player for cue {cue.id} (late, "
-                        "at its start)"
-                    )
+                        sent = run_cue(cue, mtc, start_ms)
+                    if sent:
+                        Logger.info(
+                            f"DMX scene sent to local player for cue {cue.id} "
+                            "(late, at its start)"
+                        )
+                    else:
+                        Logger.warning(
+                            f"{cue.id}: DMX scene not sent at its start (see above)"
+                        )
                 except Exception as e:
                     Logger.error(f"run_cue failed for DmxCue {cue.id}: {e}")
             if gate not in ("stopped", "silent"):
@@ -3091,6 +3103,16 @@ class CueHandler:
         anchor = getattr(getattr(cue, "_pass", None), "anchor_ms", None)
         due = start_ms - self._RUN_AHEAD_MS
         return max(due, anchor) if anchor is not None else due
+
+    def _arm_dmx_for_scene(self, cue: Cue) -> None:
+        """A DMX cue's scene is what its arm parsed from the script. A cue off
+        at the load and at its dispatch was never armed (arm() arms an enabled
+        cue only), and an enable inside its pass leaves it to this thread
+        (Design §3: a cue every node runs decides at its own instants). So the
+        thread arms it here, before the send, on every node alike (D33; AC12
+        d1). The arm parses the scene and picks the local player: no I/O."""
+        if isinstance(cue, DmxCue) and not getattr(cue, "loaded", False):
+            self.arm(cue, init=True)
 
     def _dmx_scene_out_locked(self, cue: Cue, start_ms: float, why: str) -> bool:
         """D25: a DMX cue silenced, stopped or replaced whose scene is already
