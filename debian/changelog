@@ -1,3 +1,12 @@
+cuems-engine (0.1.0rc6-9~pre1amfwm7jnqf.3) bookworm; urgency=medium
+
+  * TEST BUILD, not for show machines (1amfwm7jnqf, 5a2e696): a DMX cue
+    saved disabled and enabled inside its pass is armed by its own thread
+    before its scene, and its send is logged only when the scene went out
+    (AC12 d1: nothing was sent on any node, with a "sent" line).
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 23 Nov 2026 23:16:39 +0100
+
 cuems-engine (0.1.0rc6-9~pre1amfwm7jnqf.2) bookworm; urgency=medium
 
   * TEST BUILD, not for show machines (1amfwm7jnqf, c8cfd4a): a cue's
