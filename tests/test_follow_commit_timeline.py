@@ -523,7 +523,7 @@ class TestLegacyEndOfPass:
 class TestCueListChildGuard:
     """Review C2 (cuems-RELATIONS baselines/869feynrj-step5/reviews/
     engine-visible-at-marked.md), the audio side of S0-11: a CueList child
-    disabled (cancel_parked: the setup marked it _playing, so it is flagged),
+    disabled (cancel_child: the setup marked it _playing, so it is flagged),
     paused or GO'd on its own between the parent's setup and start - F gets
     no /mtcfollow 1, neither from the commit nor from the reveal."""
 
@@ -544,6 +544,8 @@ class TestCueListChildGuard:
     def test_a_marked_child_commits(self):
         ch = _ch()
         parent, child = self._marked(ch)
+        # One pick per pass (1amfwm7jnqf §2): the setup records its child.
+        assert parent._marked_child is child
         assert self._commit(ch, parent, child, _player()) is True
         assert child._osc.times("/mtcfollow", 1) == [0.0]
 
@@ -553,7 +555,7 @@ class TestCueListChildGuard:
         child.enabled = False
         player = _player()
         with patch.object(PLAYER_HANDLER, "audio_player", lambda c: player):
-            assert ch.cancel_parked(child) is True
+            assert ch.cancel_child(child) is True
         assert self._commit(ch, parent, child, player) is False
         assert child._osc.times("/mtcfollow") == [] and player.may_follow is False
 
@@ -580,7 +582,7 @@ class TestCueListChildGuard:
         def disable(now):
             if now >= 2000.0 and child.enabled:
                 child.enabled = False
-                ch.cancel_parked(child)
+                ch.cancel_child(child)
 
         ev = _drive(ch, parent, mtc, 1000.0, _player(), audio=child, on_sleep=disable)
         assert ev["commit"] == []
@@ -616,7 +618,7 @@ class TestCueListChildGuard:
         def disable(now):
             if now >= 2000.0 and child.enabled:
                 child.enabled = False
-                ch.cancel_parked(child)
+                ch.cancel_child(child)
 
         ev = _drive(
             ch, parent, mtc, 1000.0, _player(OLD), audio=child, on_sleep=disable

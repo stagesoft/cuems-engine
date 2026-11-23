@@ -5,6 +5,10 @@
 + CueHandler._reveal_wait). Guards the regressions found reviewing the split:
 - a CueList used as a chain target must reveal its first enabled child;
 - reveal_audioCue must no-op if run_audioCue aborted setup before /offset.
+
+1amfwm7jnqf (Design §2, one pick per pass): run_cueList and reveal_cueList
+take the child the CueList's setup picked (`_marked_child`, written by
+CueHandler._mark_cuelist_child) and never pick again; the fixtures set it.
 """
 
 import sys
@@ -54,9 +58,11 @@ def _child(loaded=False, local=True, enabled=True, cid="c", layer="LX"):
 
 
 def _cuelist(children, cid="cl"):
+    """A CueList whose setup picked its first enabled child (None: no pick)."""
     cl = Mock(spec=CueList)
     cl.id = cid
     cl.contents = children
+    cl._marked_child = next((c for c in children if c.enabled), None)
     return cl
 
 
@@ -78,6 +84,7 @@ class TestRevealCue:
         child = _video("LC")
         cl = Mock(spec=CueList)
         cl.contents = [child]
+        cl._marked_child = child  # what its setup picked
         reveal_cue(cl, Mock())
         child._osc.set_value.assert_any_call("/videocomposer/layer/LC/visible", 1)
 
@@ -137,6 +144,20 @@ class TestRunCueListRearm:
     """run_cueList gives its first-enabled child go()'s re-arm safety net
     (869e2dat9). CUE_HANDLER is patched at its definition site because
     _ensure_child_loaded imports it lazily (from .CueHandler import CUE_HANDLER)."""
+
+    def test_run_takes_the_pick(self):
+        """run_cueList sets up the child the setup picked, not the first
+        enabled one by the flags of this moment (§2)."""
+        first = _child(loaded=True, cid="c1")
+        second = _child(loaded=True, cid="c2")
+        cl = _cuelist([first, second])
+        cl._marked_child = second
+        with (
+            patch("cuemsengine.cues.CueHandler.CUE_HANDLER"),
+            patch("cuemsengine.cues.run_cue.run_cue") as rc,
+        ):
+            run_cueList(cl, Mock(), 100.0)
+        rc.assert_called_once_with(second, ANY, 100.0)
 
     def test_loaded_child_dispatches_without_rearm(self):
         child = _child(loaded=True)
@@ -200,6 +221,7 @@ class TestRunCueListRearm:
         rc.assert_called_once_with(child, ANY, 100.0)
 
     def test_no_enabled_child_is_noop(self):
+        # no pick: the setup found no enabled child
         child = _child(enabled=False)
         cl = _cuelist([child])
         with (
@@ -233,6 +255,29 @@ class TestRevealCueListGuard:
         child._osc.set_value.assert_any_call("/videocomposer/layer/LN/visible", 1)
 
     def test_no_enabled_child_is_noop(self):
+        # no pick: the setup found no enabled child
         child = _child(enabled=False)
         reveal_cueList(_cuelist([child]), Mock())
         child._osc.set_value.assert_not_called()
+
+    def test_the_reveal_takes_the_pick_and_never_picks_again(self):
+        """S85 / S86: the child picked at the setup is the one revealed; a
+        child enabled or disabled since does not change it, and no other
+        child (never set up) is revealed."""
+        first = _child(loaded=True, cid="c1", layer="L1")
+        second = _child(loaded=True, cid="c2", layer="L2")
+        cl = _cuelist([first, second])
+        cl._marked_child = second  # first was disabled at the setup
+        reveal_cueList(cl, Mock())
+        second._osc.set_value.assert_any_call("/videocomposer/layer/L2/visible", 1)
+        first._osc.set_value.assert_not_called()
+
+    def test_a_pick_disabled_after_the_setup_is_still_the_pick(self):
+        """From its commit on a toggle changes nothing (§2): the reveal does
+        not fall through to the next enabled child."""
+        picked = _child(loaded=True, cid="c1", layer="L1")
+        other = _child(loaded=True, cid="c2", layer="L2")
+        cl = _cuelist([picked, other])
+        picked.enabled = False
+        reveal_cueList(cl, Mock())
+        other._osc.set_value.assert_not_called()

@@ -228,6 +228,7 @@ def _media(
     local=True,
     loop=-1,
     enabled=True,
+    postwait=0.0,
 ):
     c = kind(
         {
@@ -247,6 +248,7 @@ def _media(
     c.post_go = post_go
     c._target_object = target
     c.prewait = CTimecode(start_seconds=prewait)
+    c.postwait = CTimecode(start_seconds=postwait)
     return c
 
 
@@ -348,6 +350,57 @@ def test_a_disabled_member_still_makes_the_pair():
     _choose(_node(audio, video), [audio, video])
     assert video._loop_origin == "longest"
     assert video._loop_period.num == 30 * RATE
+
+
+# 1amfwm7jnqf (Auto-continue waits accumulate, Design §6): the key's start is
+# measured back from the chain's last cue, every cue's advance counted (D14).
+
+
+def test_a_video_5_0_then_an_audio_0_0_on_one_file_start_together():
+    """video 5/0 -> audio 0/0: the audio arrives at the video's arrival + 5 s
+    and starts there, with the video: a pair (on the zero advance it started
+    5 s before the video and made none)."""
+    from cuemsengine.players.LoopPeriods import start_together_key
+
+    raw = _p(28 * RATE, 750)
+    audio = _media(AudioCue, raw)
+    video = _media(VideoCue, raw, prewait=5.0, post_go="go", target=audio)
+    key = start_together_key([video, audio])
+    assert key(video) == key(audio)
+    log = _choose(_node(video, audio), [video, audio])
+    assert audio._loop_origin == video._loop_origin == "longest"
+    assert audio._loop_period == video._loop_period
+    assert len([x for x in _lines(log, "info") if x.startswith("A/V pair")]) == 1
+    assert not _lines(log, "warning")
+
+
+def test_a_video_0_6_then_an_audio_0_0_on_one_file_do_not_pair():
+    """video 0/6 -> audio 0/0: the video's postwait now pushes the audio 6 s
+    later, so they do not start together: no pair, and the same-file
+    WARNING (on the zero advance they paired)."""
+    from cuemsengine.players.LoopPeriods import start_together_key
+
+    raw = _p(32 * RATE, 750)
+    audio = _media(AudioCue, raw)
+    video = _media(VideoCue, raw, postwait=6.0, post_go="go", target=audio)
+    key = start_together_key([video, audio])
+    assert key(video) != key(audio)
+    log = _choose(_node(video, audio), [video, audio])
+    assert video._loop_origin == "video" and audio._loop_origin == "audio"
+    assert not [x for x in _lines(log, "info") if x.startswith("A/V pair")]
+    assert any("same file, different starts" in w for w in _lines(log, "warning"))
+
+
+def test_start_together_key_takes_the_advance_it_is_given():
+    """advance=None counts every cue's prewait + postwait; an explicit
+    advance (here the parallel mode's 0) is used instead."""
+    from cuemsengine.players.LoopPeriods import start_together_key
+
+    raw = _p(28 * RATE, 750)
+    audio = _media(AudioCue, raw)
+    video = _media(VideoCue, raw, prewait=5.0, post_go="go", target=audio)
+    key = start_together_key([video, audio], advance=lambda c: 0.0)
+    assert key(video) != key(audio)
 
 
 def test_several_videocues_and_one_audiocue_form_one_group():

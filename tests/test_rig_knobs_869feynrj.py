@@ -365,6 +365,23 @@ class TestCancelAt:
         # the start label the player gets: 11010 rounded to the 40 ms grid
         assert at == round(11_010.0 / 40.0) * 40.0 - 120.0
 
+    def test_the_plan_reads_the_start_from_the_layout(self, knobs):
+        """1amfwm7jnqf (D26, §6): the AudioCue's start is its arrival in the
+        pass's layout + its prewait; every cue before it advances the chain
+        by prewait + postwait, a disabled one too."""
+        knobs(CANCEL_AT="stop:-120")
+        NE, node = _node()
+        lead = _audio(2000.0)
+        lead.postwait = CTimecode(start_seconds=3.0)
+        lead.enabled = False  # skipped as the target, but its waits count
+        lead.post_go = "go"
+        target = _audio(1000.0)
+        lead._target_object = target
+        action, offset, cue, at, k, count = node._test_cancel_plan(lead, 10_000.0)
+        assert cue is target
+        # arrival 10000 + 2000 + 3000, start + 1000 = 16000 (on the 40 ms grid)
+        assert at == 16_000.0 - 120.0
+
     @pytest.mark.parametrize("offset", [-200.0, -45.0, 0.0, 30.0])
     def test_fires_at_the_offset_within_a_ms(self, knobs, offset):
         plan, clock, calls, log, ah, cue = self._fire(knobs, "stop", offset)
