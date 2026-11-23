@@ -9,8 +9,9 @@ older player. The rows are step 0a's inventory (baselines/869feynrj-step0/
 0a-0c-inventory.md §0a.4):
 
   row 1  superseding GO (go() commit section)       kind cancel, old pass only
-  row 2  cascade (cancel_pending_descendants)       kind cancel
-  row 3  disable before slot (cancel_parked)        kind cancel; S0-1 race
+  row 2  cascade (cancel_pending_descendants)       kind cancel, by the pass
+  row 3  a toggle (retake, 1amfwm7jnqf D31 c)       nothing once committed;
+         a CueList child (cancel_child)             S0-1 race
   row 4  cross-node follow cancel                   cancel / stop_of_playing (D12)
   row 5  STOP (stop_all_cues), D10, S0-4            stop_of_playing, player table
   rows 10-12  ActionCue stop / pause / fade_out     S0-8 lock, D12
@@ -106,6 +107,30 @@ def _cuelist(child):
     return cl
 
 
+def _pass(epoch, anchor_ms=0.0, layout=(), root_seq=0, mode="sequential"):
+    """A chain_pass.Pass; before Step 2 the engine has none, and the cascade
+    tests need only its attributes (today's walk follows the links)."""
+    try:
+        from cuemsengine.cues.chain_pass import Pass
+    except ImportError:
+        layout = list(layout)
+        return SimpleNamespace(
+            epoch=epoch,
+            anchor_ms=anchor_ms,
+            layout=layout,
+            root_seq=root_seq,
+            mode=mode,
+            arrival_of=lambda c: next((a for x, a in layout if x is c), None),
+        )
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
+
+
 def _ch():
     ch = object.__new__(CueHandler)
     ch._lock = Lock()
@@ -191,10 +216,19 @@ class TestCascade:
     """Row 2."""
 
     def _chain(self, b):
+        """A → b, both in one pass: the walk is that pass's layout and a cue
+        belongs to it while its `_pass` is the target's (Design §5)."""
         a = SimpleNamespace(
-            id="A", post_go="go", _local=True, enabled=True, _target_object=b
+            id="A",
+            post_go="go",
+            _local=True,
+            enabled=True,
+            _target_object=b,
+            _revealed=True,
         )
         b._go_epoch = 0
+        p = _pass(1, 0.0, [(a, 0.0), (b, 0.0)])
+        a._pass = b._pass = p
         return a
 
     def test_a_pending_descendant_is_cancelled(self, ch, players):
@@ -219,40 +253,85 @@ class TestCascade:
         assert client.cancels() == [([1, 5], True)]
 
 
-class TestCancelParked:
-    """Row 3, S0-1."""
+class TestRetake:
+    """Row 3 (1amfwm7jnqf, D31 c): a toggle no longer cancels a chain cue; it
+    retakes it (`CueHandler.retake`), and a retake refuses a cue that is
+    decided (committed in its player, or revealed) in the same lock section
+    that would replace it. So no toggle sends a /cancelstart."""
 
-    def test_a_parked_cue_is_cancelled_under_the_lock(self, ch, players):
+    def _armed(self, ch, cue):
+        cue._pass = _pass(1, 0.0, [(cue, 0.0)])
+        cue._dispatch_arrival_ms = 0.0
+        cue._go_epoch = 1
+        ch.go_threaded = MagicMock()
+        ch._arm_ahead = MagicMock()
+        ch._chain_epoch = 1
+        ch._last_stop_chain_epoch = 0
+
+    def test_a_retake_after_the_commit_sends_no_cancelstart(self, ch, players):
+        """The players fixture commits the follow (start - F has passed)."""
         cue = _audio(revealed=False, playing=True)
         _, client = players(cue)
-        assert ch.cancel_parked(cue) is True
-        assert client.cancels() == [([1, 5], True)]
+        cue._follow_committed = True
+        cue._follow_gen = cue._go_generation
+        self._armed(ch, cue)
+        cue.enabled = False
+        assert ch.retake(cue, MagicMock()) is None
+        assert client.cancels() == []
+        assert cue._stop_requested is False
+        assert cue._go_generation == 1
 
-    def test_the_reveal_check_is_inside_the_lock(self, ch, players):
-        """S0-1: a reveal committed while cancel_parked waits for the lock
-        must win: before, the check ran first and the cue played to its end
-        flagged as cancelled."""
+    def test_a_retake_racing_a_reveal_is_refused(self, ch, players):
+        """S0-1, kept: a reveal committed while the retake waits for the lock
+        must win."""
         cue = _audio(revealed=False, playing=True)
-        _, client = players(cue)
+        _, client = players(cue, follow=False)
+        self._armed(ch, cue)
+        cue.enabled = False
         result = {}
         ch._lock.acquire()
         t = threading.Thread(
-            target=lambda: result.setdefault("r", ch.cancel_parked(cue))
+            target=lambda: result.setdefault("r", ch.retake(cue, MagicMock()))
         )
         t.start()
         t.join(0.1)
         cue._revealed = True  # the reveal commit, under the lock the test holds
         ch._lock.release()
         t.join(2)
-        assert result["r"] is False
+        assert result["r"] is None
         assert cue._stop_requested is False
         assert client.cancels() == []
 
-    def test_a_disabled_cuelist_reaches_its_pending_child(self, ch, players):
-        child = _audio()
+    def test_a_retake_refuses_a_revealed_cue(self, ch, players):
+        """A toggle never stops a cue on stage (A3); was
+        test_enable_rejoin's test_a_playing_cue_is_never_cancelled."""
+        cue = _audio(revealed=True, playing=True)
+        _, client = players(cue)
+        self._armed(ch, cue)
+        cue.enabled = False
+        assert ch.retake(cue, MagicMock()) is None
+        assert cue._stop_requested is False and cue._playing is True
+        assert client.cancels() == []
+
+
+class TestCancelChild:
+    """cancel_parked is kept, as cancel_child, for its one caller: a
+    CueList's child disabled before its commit (Design §2, S89)."""
+
+    def test_a_committed_child_is_refused_and_sends_nothing(self, ch, players):
+        child = _audio(revealed=False, playing=True)
         _, client = players(child)
-        assert ch.cancel_parked(_cuelist(child)) is True
-        assert client.cancels() == [([1, 5], True)]
+        child._follow_committed = True
+        child._follow_gen = child._go_generation
+        assert ch.cancel_child(child) is False
+        assert client.cancels() == []
+        assert child._stop_requested is False
+
+    def test_a_child_before_its_commit_is_cancelled(self, ch, players):
+        child = _audio(revealed=False, playing=True)
+        players(child, follow=False)
+        assert ch.cancel_child(child) is True
+        assert child._stop_requested is True and child._playing is False
 
 
 class TestFollowCancel:
