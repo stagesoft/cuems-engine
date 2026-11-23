@@ -2945,7 +2945,7 @@ class CueHandler:
         # target (setnextcue + GO) does that: a plain GO does not, because
         # Cue.get_next_cue() skips go/go_at_end targets, so next_cue_pointer
         # already points past the whole chain and a plain GO in the tail fires
-        # the cue after it while the target still auto-follows. QLab-like; kept
+        # the cue after it while the target still auto-follows. Kept
         # deliberately (Ion, 2026-09-26; verified on test2, ClickUp 869ej4x38).
         target_gen0 = (
             getattr(cue._target_object, "_go_generation", 0)
