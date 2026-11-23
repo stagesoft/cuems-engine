@@ -37,13 +37,13 @@ def comms(monkeypatch):
     return obj
 
 
-def _op(name, value):
+def _op(name, value, **extra):
     return NodeOperation(
         type=OperationType.COMMAND,
         action=ActionType.UPDATE,
         sender=CONTROLLER_UUID,
         target=name,
-        data={"value": value, "address": f"/engine/command/{name}"},
+        data={"value": value, "address": f"/engine/command/{name}", **extra},
     )
 
 
@@ -71,7 +71,7 @@ class TestReceiveHook:
         hook = MagicMock(return_value=False)
         comms.set_receive_hook(hook)
         started = _threads_started(comms, _op("go", {"run_seq": 7}))
-        hook.assert_called_once_with("go", {"run_seq": 7})
+        hook.assert_called_once_with("go", {"run_seq": 7}, sent_ms=None)
         assert started == ["NNG-Command-go"]
 
     def test_a_hook_that_raises_never_loses_the_command(self, comms):
@@ -107,6 +107,7 @@ class TestNodeEngineHook:
 
         node = object.__new__(NodeEngine)
         node._follow_relay = _Relay()
+        node._ui_seq = 0
         return node
 
     def test_follow_is_consumed(self):

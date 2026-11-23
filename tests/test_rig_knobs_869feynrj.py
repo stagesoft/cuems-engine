@@ -336,7 +336,11 @@ class TestCancelAt:
         assert plan is not None
         clock = _Clock(arrival)
         calls = []
-        node._on_command_received = lambda n, v: calls.append(("hook", n, v)) or False
+        # The receive hook takes the send time beside the value (1amfwm7jnqf
+        # D31 d); the knob sends none (the arrival rule, with its WARNING).
+        node._on_command_received = (
+            lambda n, v, sent_ms=None: calls.append(("hook", n, v)) or False
+        )
         node._handle_nng_command = lambda n, v: calls.append(("cmd", n, v))
         with (
             patch.object(NE.CUE_HANDLER, "_interpolated_clock", lambda m: clock),
@@ -383,7 +387,7 @@ class TestCancelAt:
         ]
         assert plans[1][3] == 11_000.0 - 45.0
         clock = _Clock(10_000.0)
-        node._on_command_received = lambda n, v: False
+        node._on_command_received = lambda n, v, sent_ms=None: False
         node._handle_nng_command = lambda n, v: None
         with (
             patch.object(NE.CUE_HANDLER, "_interpolated_clock", lambda m: clock),
@@ -409,7 +413,7 @@ class TestCancelAt:
         plan = node._test_cancel_plan(cue, 10_080.0)  # a led GO: start 10080
         clock = _Clock(10_000.0)  # the GO is handled at 10000 > 9880
         calls = []
-        node._on_command_received = lambda n, v: False
+        node._on_command_received = lambda n, v, sent_ms=None: False
         node._handle_nng_command = lambda n, v: calls.append(n)
         with (
             patch.object(NE.CUE_HANDLER, "_interpolated_clock", lambda m: clock),
