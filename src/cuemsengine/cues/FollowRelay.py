@@ -276,6 +276,11 @@ class FollowRelay:
         if refuse:
             Logger.warning(f"Follow: refusing announce {what}: {refuse}")
             return
+        # 1amfwm7jnqf (Design §3, S102): the passes that held the toggle-record
+        # floor for this hand-over may let it go now.
+        heard = getattr(self._ch, "follow_heard", None)
+        if callable(heard):
+            heard(source_id, instant)
 
         # Read before taking the table lock: nothing calls into CueHandler or
         # the engine while holding it. While a STOP or a load is pending here

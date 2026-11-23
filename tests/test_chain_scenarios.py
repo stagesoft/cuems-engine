@@ -6,8 +6,9 @@ per scenario of the executable model, on one subprocess per simulated node.
 
 The fixture `tests/fixtures/chain_scenarios.json` is the model's own data,
 exported from cuems-RELATIONS `baselines/autocontinue-cumulative/model/` at
-commit 41d257f (rev 9.1; run_all.py since exports the model's constants too,
-which the harness reads) with `python3 -I run_all.py --json`; it is never edited
+commit 41d257f (rev 9.1; since then run_all.py exports the model's constants,
+which the harness reads, and S102 / S103 were added: the toggle-record floor's
+remote Auto-follow term) with `python3 -I run_all.py --json`; it is never edited
 by hand. When the model changes, export it again (Constraints, "The model
 leads").
 
@@ -60,7 +61,7 @@ TWINS = {
     "S101": "S100",
 }
 #: AC2: readings the plan does not take.
-NOT_TAKEN = ("S27", "S67", "S74", "S76", "S86", "S91", "S93")
+NOT_TAKEN = ("S27", "S67", "S74", "S76", "S86", "S91", "S93", "S103")
 TOL_S = 0.041  # one 25 fps frame, and the ms of a rounded label
 
 
@@ -403,14 +404,14 @@ def problems(sc: dict, want: dict, seen: dict, runs: dict) -> list:
 # ---------------------------------------------------------------------------
 # tests without subprocesses
 # ---------------------------------------------------------------------------
-def test_the_fixture_is_the_models_101_scenarios():
+def test_the_fixture_is_the_models_103_scenarios():
     assert [sc["id"] for sc in SCENARIOS] == [
-        f"S{i:02d}" if i < 100 else f"S{i}" for i in range(1, 102)
+        f"S{i:02d}" if i < 100 else f"S{i}" for i in range(1, 104)
     ]
     kinds = {}
     for sc in SCENARIOS:
         kinds[sc["kind"]] = kinds.get(sc["kind"], 0) + 1
-    assert kinds == {"rule": 78, "info": 14, "defect": 9}
+    assert kinds == {"rule": 79, "info": 15, "defect": 9}
     assert {sc["model_verdict"] for sc in SCENARIOS if sc["kind"] == "rule"} == {"PASS"}
     assert all(sc["t0_ms"] == 100_000.0 for sc in SCENARIOS)
 

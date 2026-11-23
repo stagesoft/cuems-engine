@@ -1562,6 +1562,7 @@ class CueHandler:
             # nothing waits for a step of it.
             chain_pass.forget()
             self._live_passes().clear()
+            self._awaiting_passes().clear()
             self.__dict__.pop("_entered", None)
             self._step_order().clear()
             for cue in self._armed_cues:
@@ -1641,6 +1642,9 @@ class CueHandler:
             # Mark the target too: a dispatch of it in flight must not come
             # back to life after this.
             cue._go_epoch = epoch
+            # A stopped remote Auto-follow cue does not hand over: its pass
+            # no longer holds the floor for it.
+            self._drop_awaiting_locked(cue, p)
             layout = getattr(p, "layout", None) or []
             pos = next((k for k, (c, _) in enumerate(layout) if c is cue), None)
             behind = layout[pos + 1 :] if pos is not None else []
@@ -1657,6 +1661,7 @@ class CueHandler:
                         break  # the target's pass never reached this cue
                     continue  # a newer pass owns it
                 if not getattr(node, "_local", False):
+                    self._drop_awaiting_locked(node, p)
                     continue
                 start = arrival + node.prewait.milliseconds_exact
                 if t_stop is not None and start <= t_stop:
@@ -1927,7 +1932,64 @@ class CueHandler:
             except Exception:
                 pass
         self._add_steps(p)
+        self._await_remote_follows_locked(p)
         return p
+
+    # ---- the floor's remote Auto-follow term (Design §3, model S102) --------
+
+    def _awaiting_passes(self) -> dict:
+        """epoch -> pass holding another node's Auto-follow cue whose owner has
+        not announced its hand-over yet. Call with self._lock held."""
+        found = self.__dict__.get("_awaiting")
+        if found is None:
+            found = self.__dict__.setdefault("_awaiting", {})
+        return found
+
+    def _await_remote_follows_locked(self, p) -> None:
+        """A pass holding another node's audio or video Auto-follow cue: the
+        hand-over it will announce may come late and start a pass that reads
+        flags from its instant on, so this pass's anchor holds the floor until
+        the announcement comes (S102; without it: S103). Call with self._lock
+        held."""
+        awaiting = {}
+        for c, arrival in p.layout:
+            if (
+                not getattr(c, "_local", False)
+                and isinstance(c, (AudioCue, VideoCue))
+                and getattr(c, "post_go", None) == "go_at_end"
+                and getattr(c, "_target_object", None) is not None
+            ):
+                awaiting[id(c)] = (c, arrival + c.prewait.milliseconds_exact)
+        found = self._awaiting_passes()
+        for other in list(found.values()):
+            for key in [k for k in other.awaiting if k in awaiting]:
+                del other.awaiting[key]  # a newer pass holds the cue now
+            if not other.awaiting:
+                found.pop(other.epoch, None)
+        p.awaiting = awaiting
+        if awaiting:
+            found[p.epoch] = p
+
+    def _drop_awaiting_locked(self, cue: Cue, p) -> None:
+        awaiting = getattr(p, "awaiting", None)
+        if awaiting and awaiting.pop(id(cue), None) is not None and not awaiting:
+            self._awaiting_passes().pop(p.epoch, None)
+
+    def follow_heard(self, source_id: str, instant_ms: float) -> None:
+        """The relay received the hand-over of another node's Auto-follow cue
+        (FollowRelay): the passes waiting for it release the floor. Never
+        raises."""
+        try:
+            with self._lock:
+                found = self._awaiting_passes()
+                for p in list(found.values()):
+                    for key, (c, start) in list(p.awaiting.items()):
+                        if str(c.id) == str(source_id) and start <= instant_ms:
+                            del p.awaiting[key]
+                    if not p.awaiting:
+                        found.pop(p.epoch, None)
+        except Exception as e:
+            Logger.error(f"follow_heard for {source_id} failed: {e}")
 
     # ---- the order of instants on this node (Design §5) ------------------
 
@@ -2093,6 +2155,10 @@ class CueHandler:
                 anchors = [
                     p.anchor_ms
                     for p, _ in self._live_passes().values()
+                    if getattr(p, "anchor_ms", None) is not None
+                ] + [
+                    p.anchor_ms
+                    for p in self._awaiting_passes().values()
                     if getattr(p, "anchor_ms", None) is not None
                 ]
             if anchors:

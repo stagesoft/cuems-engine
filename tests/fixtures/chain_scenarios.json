@@ -13245,5 +13245,290 @@
    "commit_ms": 120.0,
    "run_ahead_ms": 5000.0
   }
+ },
+ {
+  "id": "S102",
+  "family": "record of a toggle",
+  "name": "X (n1's, Auto follow, 1 s) hands over to P (a fade every node runs) at +1, X's thread 3 s late on n1; a UI 'disable P' sent at +1.2 does not count at P's start, and a 'disable Q' at +2.5 makes n2 retire records: the record of P is still there on n2 when the late hand-over reaches it (its floor waits for X's owner), P fades on both nodes",
+  "events": [
+   [
+    "go",
+    "X",
+    100000.0
+   ],
+   [
+    "toggle",
+    "P",
+    false,
+    101200.0
+   ],
+   [
+    "toggle",
+    "Q",
+    false,
+    102500.0
+   ]
+  ],
+  "expect": {
+   "X": [
+    0
+   ],
+   "P": [
+    1
+   ]
+  },
+  "anchors": [
+   0,
+   1
+  ],
+  "perturb": {
+   "n1": {
+    "late": {
+     "X": 3000.0
+    }
+   }
+  },
+  "until_s": 120.0,
+  "kind": "rule",
+  "notes": [
+   "follow of X announced 2008 ms after its instant on n2"
+  ],
+  "own": null,
+  "stops": null,
+  "standby": null,
+  "agree": true,
+  "nodes": [
+   "n1",
+   "n2"
+  ],
+  "flags": {
+   "n1": {
+    "P": false,
+    "Q": false
+   },
+   "n2": {
+    "P": false,
+    "Q": false
+   }
+  },
+  "script": [
+   {
+    "name": "X",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "go_at_end",
+    "kind": "audio",
+    "node": "n1",
+    "body": 1000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   },
+   {
+    "name": "P",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "pause",
+    "kind": "fade",
+    "node": "*",
+    "body": 2000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   },
+   {
+    "name": "Q",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "pause",
+    "kind": "audio",
+    "node": "n2",
+    "body": 4000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   }
+  ],
+  "rules": {
+   "mode": "sequential",
+   "toggle": "sent",
+   "commit_decides": true,
+   "order": "instants",
+   "pointer": "rule",
+   "until": true,
+   "ownership": "pass",
+   "dmx_cancel": false,
+   "owners": "common",
+   "child": "carried",
+   "retire": "open",
+   "guard": "auto",
+   "late_arm": "late",
+   "arm_fail": "silent"
+  },
+  "t0_ms": 100000.0,
+  "model_result": "X 0, P 1",
+  "model_verdict": "PASS",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
+ },
+ {
+  "id": "S103",
+  "family": "record of a toggle",
+  "name": "the same without the floor's remote Auto-follow term: n2 has nothing of its own to wait for, retires the record of P at the 'disable Q' and reads P disabled at its start: P fades on n1 only",
+  "events": [
+   [
+    "go",
+    "X",
+    100000.0
+   ],
+   [
+    "toggle",
+    "P",
+    false,
+    101200.0
+   ],
+   [
+    "toggle",
+    "Q",
+    false,
+    102500.0
+   ]
+  ],
+  "expect": {
+   "X": [
+    0
+   ],
+   "P": [
+    1
+   ]
+  },
+  "anchors": [
+   0,
+   1
+  ],
+  "perturb": {
+   "n1": {
+    "late": {
+     "X": 3000.0
+    }
+   }
+  },
+  "until_s": 120.0,
+  "kind": "info",
+  "notes": [
+   "follow of X announced 2008 ms after its instant on n2",
+   "LATE READ of P's flag on n2"
+  ],
+  "own": {
+   "n2": {}
+  },
+  "stops": null,
+  "standby": null,
+  "agree": "times",
+  "nodes": [
+   "n1",
+   "n2"
+  ],
+  "flags": {
+   "n1": {
+    "P": false,
+    "Q": false
+   },
+   "n2": {
+    "P": false,
+    "Q": false
+   }
+  },
+  "script": [
+   {
+    "name": "X",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "go_at_end",
+    "kind": "audio",
+    "node": "n1",
+    "body": 1000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   },
+   {
+    "name": "P",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "pause",
+    "kind": "fade",
+    "node": "*",
+    "body": 2000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   },
+   {
+    "name": "Q",
+    "pre": 0.0,
+    "post": 0.0,
+    "post_go": "pause",
+    "kind": "audio",
+    "node": "n2",
+    "body": 4000.0,
+    "enabled": true,
+    "action": null,
+    "target": null,
+    "link": null,
+    "children": []
+   }
+  ],
+  "rules": {
+   "mode": "sequential",
+   "toggle": "sent",
+   "commit_decides": true,
+   "order": "instants",
+   "pointer": "rule",
+   "until": true,
+   "ownership": "pass",
+   "dmx_cancel": false,
+   "owners": "common",
+   "child": "carried",
+   "retire": "no_remote",
+   "guard": "auto",
+   "late_arm": "late",
+   "arm_fail": "silent"
+  },
+  "t0_ms": 100000.0,
+  "model_result": "X 0, P 1",
+  "model_verdict": "INFO",
+  "constants": {
+   "bus_ms": {
+    "n1": 3.0,
+    "n2": 5.0,
+    "n3": 7.0
+   },
+   "relay_ms": 8.0,
+   "go_lead_ms": 80.0,
+   "w_ms": 500.0,
+   "commit_ms": 120.0,
+   "run_ahead_ms": 5000.0
+  }
  }
 ]
