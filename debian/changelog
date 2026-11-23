@@ -1,3 +1,14 @@
+cuems-engine (0.1.0rc6-9~pre1amfwm7jnqf.1) bookworm; urgency=medium
+
+  * TEST BUILD, not for show machines (1amfwm7jnqf, branch
+    feat/autocontinue-cumulative-waits 0a4edf9 on rc_1 18d3ff7): Auto
+    continue waits accumulate; a disabled cue keeps its waits and post_go
+    and loses only its output; toggles never re-time; UI toggles carry the
+    controller's send time (sent_ms, W 500 ms); one layout per pass.
+    Plan: cuems-RELATIONS Plans/2026-11-18-autocontinue-cumulative-waits.md.
+
+ -- Ion Reguera <ion@stagelab.coop>  Mon, 23 Nov 2026 19:14:31 +0100
+
 cuems-engine (0.1.0rc6-8) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (0.1.0rc6-8, 869feynrj Phase A, PRs #49
