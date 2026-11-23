@@ -19,7 +19,7 @@ from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
-from .cues import go_lead
+from .cues import chain_pass, go_lead
 from .tools import test_knobs
 from .tools.engine_version import engine_version
 
@@ -1255,7 +1255,7 @@ class ControllerEngine(BaseEngine):
             for item in cuelist.contents:
                 if item is None:
                     continue
-                result[item.id] = item.enabled
+                result[item.id] = chain_pass.cue_enabled(item)
                 if isinstance(item, CueList):
                     result.update(self._collect_cue_enabled(item))
         return result

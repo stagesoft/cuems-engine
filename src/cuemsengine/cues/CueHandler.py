@@ -877,7 +877,7 @@ class CueHandler:
                     return "stopped", None
                 if isinstance(cue, (DmxCue, CueList)):
                     self._step_wait(cue, "setup", go_gen, pass_)
-                if several and decided is None and not getattr(cue, "enabled", True):
+                if several and decided is None and not chain_pass.cue_enabled(cue):
                     # Several owners, off on this node: set up only if every
                     # owner decides it on.
                     cue._setup_skipped = True
@@ -1038,7 +1038,7 @@ class CueHandler:
                 target = getattr(target, "_target_object", None)
                 walked += 1
                 continue
-            if not target.enabled:
+            if not chain_pass.cue_enabled(target):
                 target = getattr(target, "_target_object", None)
                 walked += 1
                 continue
@@ -1161,7 +1161,9 @@ class CueHandler:
                     # A disabled cue takes effect from the next round (Q-S0-A
                     # = (A), S0-21): a cue still playing is never disarmed
                     # here; disarm() / STOP clear _playing when it ends.
-                    if not cue.enabled and not getattr(cue, "_playing", False):
+                    if not chain_pass.cue_enabled(cue) and not getattr(
+                        cue, "_playing", False
+                    ):
                         needs_disarm = True
                 elif in_flight is not None:
                     if not init:
@@ -1174,7 +1176,7 @@ class CueHandler:
                     if cue.id not in self._armed_cues_set:
                         self._armed_cues.append(cue)
                         self._armed_cues_set.add(cue.id)
-                elif cue._local and cue.enabled:
+                elif cue._local and chain_pass.cue_enabled(cue):
                     # Claim the cue inside the lock to block concurrent arm
                     # attempts; released in the finally below (outside the
                     # lock — intentional: avoids holding it during arm_cue()).
@@ -1236,7 +1238,7 @@ class CueHandler:
             with self._lock:
                 if epoch != self._disarm_epoch:
                     abandoned = "a STOP or a load happened while it was arming"
-                elif not cue.enabled:
+                elif not chain_pass.cue_enabled(cue):
                     abandoned = "it was disabled while it was arming"
                 else:
                     cue.loaded = True
@@ -1325,7 +1327,7 @@ class CueHandler:
         walking through disabled ones (a disabled cue that is not 'go' ends
         the chain), or None."""
         nxt, seen = getattr(cue, "_target_object", None), {id(cue)}
-        while nxt is not None and not getattr(nxt, "enabled", True):
+        while nxt is not None and not chain_pass.cue_enabled(nxt):
             if id(nxt) in seen or getattr(nxt, "post_go", None) != "go":
                 return None
             seen.add(id(nxt))
@@ -2252,7 +2254,7 @@ class CueHandler:
         if arm_epoch is None:
             arm_epoch = self._disarm_epoch
         is_continuation = pass_ is not None and not retake
-        if not getattr(cue, "loaded", False) and getattr(cue, "enabled", True):
+        if not getattr(cue, "loaded", False) and chain_pass.cue_enabled(cue):
             Logger.info(
                 f"Cue {cue.id} not armed yet"
                 + (" at go() time" if is_continuation else "")
@@ -2686,7 +2688,7 @@ class CueHandler:
                     cue, "_stop_requested", False
                 ):
                     return
-                if not getattr(cue, "loaded", False) and getattr(cue, "enabled", True):
+                if not getattr(cue, "loaded", False) and chain_pass.cue_enabled(cue):
                     # The rest of the chain went out at entry, so this failure
                     # costs this cue only, on this node (D32, S100).
                     failed_arm = True

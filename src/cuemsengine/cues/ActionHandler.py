@@ -403,7 +403,7 @@ def _ready_action_target(action: str, target: Cue, ch: CueOrchestrator) -> dict 
     its flag (a disabled target passes silent with its waits, D28) and the
     target's own thread arms it (D34)."""
     target_id = getattr(target, "id", None)
-    if not target.enabled:
+    if not chain_pass.cue_enabled(target):
         return ActionHandler._action_result(
             "failed", action, target_id, "Target is disabled"
         )
@@ -576,7 +576,7 @@ def _toggle(action: str, action_cue: Any, target: Cue, mtc, frozen_mtc_ms) -> di
     reacts to 'applied')."""
     target_id = target.id
     value = action == "enable"
-    before = bool(getattr(target, "enabled", True))
+    before = chain_pass.cue_enabled(target)
     p = getattr(action_cue, "_pass", None)
     root = getattr(p, "root_seq", 0) or 0
     live = chain_pass.action_toggle(
