@@ -19,8 +19,9 @@ from .comms.ControllerCommunications import ControllerCommunications
 from .comms.NodesHub import ActionType, NodeOperation, OperationType
 from .core.BaseEngine import BaseEngine
 from .core.libmtc import libmtcmaster
-from .cues import go_lead
+from .cues import chain_pass, go_lead
 from .tools import test_knobs
+from .tools.engine_version import engine_version
 
 # Where cuems-nodeconf binds its NNG responder. Checked before an adopt so a
 # disabled daemon is an instant, explanatory refusal instead of a 15 s stall.
@@ -616,6 +617,7 @@ class ControllerEngine(BaseEngine):
                     armed_now = set(self._armed_nodes)
                     required = set(self._required_nodes)
                 Logger.info(f"Node {sender} armed ({len(armed_now)}/{len(required)})")
+                self._note_engine_version(sender, operation.data.get("engine_version"))
                 self._note_node_latency(sender, operation.data.get("out_latency_ms"))
                 legacy = operation.data.get("legacy_period")
                 if legacy:
@@ -1253,7 +1255,7 @@ class ControllerEngine(BaseEngine):
             for item in cuelist.contents:
                 if item is None:
                     continue
-                result[item.id] = item.enabled
+                result[item.id] = chain_pass.cue_enabled(item)
                 if isinstance(item, CueList):
                     result.update(self._collect_cue_enabled(item))
         return result
@@ -1755,11 +1757,62 @@ class ControllerEngine(BaseEngine):
 
         self.cue_enabled_status[cue_id] = enabled
         self._broadcast_cue_enabled(cue_id, enabled)
-        self._forward_command_to_nodes("/engine/command/cue_enabled", value)
+        # D31 (d), 1amfwm7jnqf: the controller's MTC at the send rides beside
+        # the unchanged string; none when the listener is not receiving.
+        sent_ms = self._toggle_send_time()
+        if sent_ms is None:
+            self._forward_command_to_nodes("/engine/command/cue_enabled", value)
+        else:
+            self._forward_command_to_nodes(
+                "/engine/command/cue_enabled", value, extra={"sent_ms": sent_ms}
+            )
         Logger.info(f'Cue {cue_id} {"enabled" if enabled else "disabled"}')
 
-    def _forward_command_to_nodes(self, address: str, value) -> None:
-        """Forward a generic command to NodeEngine via NNG."""
+    def _note_engine_version(self, sender, version) -> None:
+        """D16 (1amfwm7jnqf): the node's cuems-engine version, from its
+        armed_ready, logged once per load and node; a WARNING when it differs
+        from this controller's or is absent (an older node). GO is never
+        blocked by it. Never raises."""
+        try:
+            seen = self.__dict__.setdefault("_engine_versions_seen", set())
+            key = (getattr(self, "_load_id", 0), sender)
+            if key in seen:
+                return
+            seen.add(key)
+            theirs = str(version) if version else "unknown"
+            Logger.info(f"Node {sender} runs cuems-engine {theirs}")
+            own = engine_version()
+            if theirs != own:
+                Logger.warning(
+                    f"Engine version mismatch: node {sender} runs {theirs}, this "
+                    f"controller {own}; run the same cuems-engine on every box "
+                    "of this cluster"
+                )
+        except Exception as e:
+            Logger.error(f"Engine version of node {sender} not checked: {e}")
+
+    def _toggle_send_time(self) -> float | None:
+        """This controller's MTC now, or None when its listener is not
+        receiving (or there is none). Never raises."""
+        listener = getattr(self, "mtc_listener", None)
+        if listener is None:
+            return None
+        try:
+            receiving = listener.is_receiving()
+        except Exception:
+            receiving = False
+        if receiving is not True:
+            return None
+        try:
+            return float(self._interpolated_mtc_ms())
+        except Exception:
+            return None
+
+    def _forward_command_to_nodes(self, address: str, value, extra=None) -> None:
+        """Forward a generic command to NodeEngine via NNG. ``extra``: more
+        keys for the operation's data, beside ``value`` and ``address`` (an
+        engine up to 0.1.0rc6-8 reads those two by key and ignores the
+        rest)."""
         if not hasattr(self, "communications_thread") or not self.communications_thread:
             Logger.warning(
                 "Cannot forward command to nodes: communications thread not available"
@@ -1778,7 +1831,7 @@ class ControllerEngine(BaseEngine):
                 else "controller"
             ),
             target=command_name,
-            data={"value": value, "address": address},
+            data={"value": value, "address": address, **(extra or {})},
         )
 
         try:

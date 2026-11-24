@@ -418,15 +418,20 @@ class TestSharedTeardownRearmHelpers:
         node_engine = NodeEngine(with_mtc=False)
         mock_comms = MagicMock()
 
-        with patch.object(
-            CUE_HANDLER, "communications_thread", mock_comms, create=True
+        with (
+            patch.object(CUE_HANDLER, "communications_thread", mock_comms, create=True),
+            patch("cuemsengine.NodeEngine.engine_version", return_value="9.9-test"),
         ):
             node_engine._notify_armed_ready("test-context")
 
         mock_comms.send_operation.assert_called_once()
         operation = mock_comms.send_operation.call_args.args[0]
         assert operation.target == "armed_ready"
-        assert operation.data == {"armed": "yes"}
+        # The keys an old controller reads, plus engine_version (1amfwm7jnqf,
+        # D16: additive); out_latency_ms only when this node knows it.
+        assert operation.data["armed"] == "yes"
+        assert operation.data["engine_version"] == "9.9-test"
+        assert set(operation.data) <= {"armed", "engine_version", "out_latency_ms"}
         assert operation.sender == node_engine.cm.node_uuid
         assert mock_comms.send_operation.call_args.kwargs.get("timeout") == 0.1
         engine_cleanup(node_engine)

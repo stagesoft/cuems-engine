@@ -690,47 +690,32 @@ class TestNoPlayAfterStop:
 
 
 class TestGoCarriesTheEpoch:
-    def test_go_hands_its_epoch_to_the_fallback_arm_and_the_lookahead(self):
+    """1amfwm7jnqf D32 (Design §4): go() no longer arms a fresh entry; the
+    cue's own thread arms it with the dispatch's epoch (test_chain_epoch's
+    TestStopDuringArmWindow has the STOP during that arm). The lookahead a
+    fresh entry runs still carries the epoch."""
+
+    def test_go_hands_its_epoch_to_the_lookahead_and_arms_nothing(self):
         ch = _handler()
         cue = _cue()
         ch._arm_ahead = MagicMock()
         epoch = ch._disarm_epoch
-
-        def arm(c, init=False, walk=None, epoch=None, wait_report=None):
-            c.loaded = True
-
-        ch.arm = MagicMock(side_effect=arm)
+        ch.arm = MagicMock()
         with patch.object(CueHandler, "go_threaded"):
             assert ch.go(cue, _mtc()) is not None
 
-        assert ch.arm.call_args.kwargs["epoch"] == epoch
+        ch.arm.assert_not_called()
         ch._arm_ahead.assert_called_once_with(cue, arm_epoch=epoch)
 
-    def test_a_stop_during_the_fallback_arm_returns_none_instead_of_raising(self):
-        """The arm is refused because a STOP moved the epoch: that is the
-        operator's STOP winning, not an arm failure to raise about."""
+    def test_an_unloaded_cue_is_dispatched_its_thread_arms_it(self):
         ch = _handler()
         cue = _cue()
-        cue._stop_requested = True
-
-        def arm(c, init=False, walk=None, epoch=None, wait_report=None):
-            ch.stop_all_cues()  # and the arm, stale now, loads nothing
-
-        ch.arm = MagicMock(side_effect=arm)
-        with patch.object(CueHandler, "go_threaded") as go_threaded:
-            assert ch.go(cue, _mtc()) is None
-
-        go_threaded.assert_not_called()
-        assert cue._stop_requested is True
-
-    def test_a_genuine_arm_failure_still_raises(self):
-        import pytest
-
-        ch = _handler()
-        cue = _cue()
+        cue.loaded = False
         ch.arm = MagicMock(return_value=False)
-        with patch.object(CueHandler, "go_threaded"), pytest.raises(Exception):
-            ch.go(cue, _mtc())
+        with patch.object(CueHandler, "go_threaded") as go_threaded:
+            assert ch.go(cue, _mtc()) is not None
+        go_threaded.assert_called_once()
+        ch.arm.assert_not_called()
 
     def test_a_dispatch_whose_epoch_moved_is_refused_even_if_the_cue_is_loaded(self):
         ch = _handler()
@@ -756,7 +741,10 @@ class TestGoCarriesTheEpoch:
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
             patch("cuemsengine.cues.CueHandler.loop_cue"),
         ):
-            ch.go_threaded(first, _mtc(), 0.0, 1, 1, True, arm_epoch=7)
+            from cuemsengine.cues import chain_pass
+
+            p = chain_pass.Pass(1, 0.0, [(first, 0.0), (nxt, 0.0)])
+            ch.go_threaded(first, _mtc(), 0.0, 1, p, True, arm_epoch=7)
 
         assert ch.go.call_args.kwargs["arm_epoch"] == 7
 

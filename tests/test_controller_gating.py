@@ -206,6 +206,90 @@ class TestArmedReadyAggregation:
             start_tc.assert_called_once()
 
 
+# ─── armed_ready: engine_version (1amfwm7jnqf, D16) ─────────────────────
+
+
+def _armed_ready_with(sender: str, version=None) -> NodeOperation:
+    data = {"armed": "yes"}
+    if version is not None:
+        data["engine_version"] = version
+    return NodeOperation(
+        type=OperationType.STATUS,
+        action=ActionType.UPDATE,
+        sender=sender,
+        target="armed_ready",
+        data=data,
+    )
+
+
+class TestEngineVersion:
+    """The node's version rides in armed_ready (additive). The controller
+    logs it once per load and node, and WARNS once per load and node when it
+    differs from its own or is absent (an older node). GO is never blocked."""
+
+    OWN = "0.1.0rc6-9"
+
+    def _feed(self, controller, *ops):
+        with (
+            patch("cuemsengine.ControllerEngine.engine_version", return_value=self.OWN),
+            patch("cuemsengine.ControllerEngine.Logger") as log,
+        ):
+            for op in ops:
+                controller.status_operation_callback(op)
+        warnings = [
+            str(c.args[0])
+            for c in log.warning.call_args_list
+            if "Engine version mismatch" in str(c.args[0])
+        ]
+        infos = [
+            str(c.args[0])
+            for c in log.info.call_args_list
+            if "runs cuems-engine" in str(c.args[0])
+        ]
+        return warnings, infos
+
+    def test_without_engine_version_one_warning_per_node_and_go_enabled(
+        self, controller
+    ):
+        controller.set_status("armed", "no")
+        warnings, infos = self._feed(
+            controller,
+            _armed_ready_with(CONTROLLER_UUID),
+            _armed_ready_with(SLAVE_UUID),
+            _armed_ready_with(SLAVE_UUID),  # a repeat in the same load
+        )
+        assert controller.get_status("armed") == "yes"
+        assert len(warnings) == 2
+        assert any(SLAVE_UUID in w for w in warnings)
+        assert any(CONTROLLER_UUID in w for w in warnings)
+        assert all("run the same cuems-engine on every box" in w for w in warnings)
+        assert len(infos) == 2 and all("unknown" in i for i in infos)
+
+    def test_another_version_warns_once_for_that_node(self, controller):
+        controller.set_status("armed", "no")
+        warnings, infos = self._feed(
+            controller,
+            _armed_ready_with(CONTROLLER_UUID, self.OWN),
+            _armed_ready_with(SLAVE_UUID, "0.1.0rc6-8"),
+            _armed_ready_with(SLAVE_UUID, "0.1.0rc6-8"),
+        )
+        assert controller.get_status("armed") == "yes"
+        assert len(warnings) == 1
+        assert SLAVE_UUID in warnings[0] and "0.1.0rc6-8" in warnings[0]
+        assert len(infos) == 2
+        assert any(self.OWN in i and CONTROLLER_UUID in i for i in infos)
+
+    def test_the_same_version_everywhere_warns_nothing(self, controller):
+        controller.set_status("armed", "no")
+        warnings, infos = self._feed(
+            controller,
+            _armed_ready_with(CONTROLLER_UUID, self.OWN),
+            _armed_ready_with(SLAVE_UUID, self.OWN),
+        )
+        assert controller.get_status("armed") == "yes"
+        assert warnings == [] and len(infos) == 2
+
+
 # ─── pong handling ──────────────────────────────────────────────────────
 
 

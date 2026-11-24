@@ -24,6 +24,7 @@ from ..comms.NodeCommunications import NodeCommunications
 from ..comms.NodesHub import ActionType, NodeOperation, OperationType
 from ..players.PlayerHandler import PLAYER_HANDLER
 from ..tools.MtcListener import MtcListener
+from . import chain_pass
 
 # Actions supported by the engine runtime.
 # The XSD schema (script.xsd ActionType) also defines these not-yet-implemented
@@ -394,25 +395,31 @@ class ActionHandler:
 
 
 def _ready_action_target(action: str, target: Cue, ch: CueOrchestrator) -> dict | None:
-    """Ensure target is enabled and loaded before dispatch; arm if needed.
+    """The target of a go_to or a fade must be enabled (1amfwm7jnqf, D34): no
+    arm runs inside an action's step, so a slow or failing arm never holds
+    the actions behind it. Returns a failure result dict, or None.
 
-    Returns a failure result dict on the first problem, or None if ready.
-    """
+    play / fade_in do not call this: they enter the target's chain whatever
+    its flag (a disabled target passes silent with its waits, D28) and the
+    target's own thread arms it (D34)."""
     target_id = getattr(target, "id", None)
-    if not target.enabled:
+    if not chain_pass.cue_enabled(target):
         return ActionHandler._action_result(
             "failed", action, target_id, "Target is disabled"
         )
-    if not getattr(target, "loaded", False):
+    return None
+
+
+def _arm_in_background(target: Cue, ch: CueOrchestrator, action: str) -> None:
+    """go_to's arm, off the action's step (D34). Never raises."""
+
+    def run():
         try:
             ch.arm(target, init=True)
         except Exception as exc:
-            return ActionHandler._action_result("failed", action, target_id, str(exc))
-    if not getattr(target, "loaded", False):
-        return ActionHandler._action_result(
-            "failed", action, target_id, "Target could not be armed"
-        )
-    return None
+            Logger.error(f"{action}: arming {target.id} failed: {exc}")
+
+    threading.Thread(target=run, daemon=True, name=f"ActionArm:{target.id}").start()
 
 
 # ---------------------------------------------------------------------------
@@ -436,14 +443,9 @@ def _handle_play(
     frozen_mtc_ms: float | None = None,
 ) -> dict:
     target_id = target.id
-    # Readiness gates the cue we would play locally. For a NON-local target,
-    # go_from walks PAST it to THIS node's own local cue (which go() re-arms),
-    # so don't gate on the non-local target — it can never arm here, and doing
-    # so silently dropped the controller's own cues on a cross-node loop-back.
-    if getattr(target, "_local", False):
-        fail = _ready_action_target("play", target, ch)
-        if fail is not None:
-            return fail
+    # D28 (S17), D34: the play enters the target's chain whatever its flag (a
+    # disabled target passes silent with its waits) and arms nothing: the
+    # target's own thread arms it, late if the arm is slow.
     # No `target._stop_requested = False` here (869feynrj S0-9): unlocked, it
     # could un-pause a pass paused < 20 ms earlier; go()'s commit section
     # clears it under the lock for the pass it starts.
@@ -452,13 +454,16 @@ def _handle_play(
         # first local+enabled cue. A plain go() bails when `target` is local to
         # another node, dropping this node's own cues on a cross-node loop-back
         # (circular project). See CueHandler.go_from.
-        ch.go_from(target, mtc, frozen_mtc_ms)
+        with chain_pass.entry(why="play"):
+            ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result("failed", "play", target_id, str(exc))
     return ActionHandler._action_result("applied", "play", target_id)
 
 
-def _cancel_chain_behind(ch: CueOrchestrator, target: Cue, action: str) -> None:
+def _cancel_chain_behind(
+    ch: CueOrchestrator, target: Cue, action: str, until: Any = None
+) -> None:
     """Take the target's scheduled Auto-continue descendants down with it.
 
     Auto continue dispatches the whole chain at the trigger, so the cues after
@@ -467,7 +472,8 @@ def _cancel_chain_behind(ch: CueOrchestrator, target: Cue, action: str) -> None:
     predecessor ran. Cues that are already playing are left alone.
     """
     try:
-        ch.cancel_pending_descendants(target)
+        # D9 (1amfwm7jnqf): up to the stop action itself.
+        ch.cancel_pending_descendants(target, until=until)
     except Exception as exc:
         # The stop itself already applied; losing the sweep must not turn a
         # successful stop into a failed action.
@@ -517,7 +523,10 @@ def _handle_pause(
         )
     # The target's chain: those cues were dispatched only because this one
     # was going to run.
-    _cancel_chain_behind(ch, target, "pause")
+    _cancel_chain_behind(ch, target, "pause", until=_action_cue)
+    # Design §5: a stop decides here; what waits for it may go (stops due
+    # together still fall together, before the sleep and the disarm).
+    chain_pass.release_step()
     return ActionHandler._action_result("applied", "pause", target_id)
 
 
@@ -533,7 +542,10 @@ def _handle_stop(
         return ActionHandler._action_result(
             "applied_no_change", "stop", target_id, "Already stopped"
         )
-    _cancel_chain_behind(ch, target, "stop")
+    _cancel_chain_behind(ch, target, "stop", until=_action_cue)
+    # Design §5: a stop decides here; what waits for it may go (stops due
+    # together still fall together, before the sleep and the disarm).
+    chain_pass.release_step()
     # Allow loop_cue to see _stop_requested and exit (polls every 20ms); also
     # covers a selfgate player's fade (D12), which the disconnect waits for.
     time.sleep(0.1)
@@ -544,42 +556,65 @@ def _handle_stop(
     return ActionHandler._action_result("applied", "stop", target_id)
 
 
+def _action_instant(action_cue: Any, mtc: MtcListener, frozen_mtc_ms) -> float:
+    """The instant an action acts at: its start (the frozen anchor), else the
+    MTC now."""
+    if frozen_mtc_ms is not None:
+        return float(frozen_mtc_ms)
+    try:
+        return float(mtc.main_tc.milliseconds_exact)
+    except Exception:
+        return 0.0
+
+
+def _toggle(action: str, action_cue: Any, target: Cue, mtc, frozen_mtc_ms) -> dict:
+    """An enable / disable ActionCue (1amfwm7jnqf, D31 d, S72): it writes the
+    flag at its start on every node, after the UI toggles that count there
+    and before the others, which keep the last word
+    (chain_pass.action_toggle). Its "already enabled / disabled" guard then
+    only decides whether the side effects run (NodeEngine._action_result_sink
+    reacts to 'applied')."""
+    target_id = target.id
+    value = action == "enable"
+    before = chain_pass.cue_enabled(target)
+    p = getattr(action_cue, "_pass", None)
+    root = getattr(p, "root_seq", 0) or 0
+    live = chain_pass.action_toggle(
+        target, value, _action_instant(action_cue, mtc, frozen_mtc_ms), root
+    )
+    if bool(live) == before:
+        return ActionHandler._action_result(
+            "applied_no_change",
+            action,
+            target_id,
+            "Already enabled" if value else "Already disabled",
+        )
+    return ActionHandler._action_result("applied", action, target_id)
+
+
 def _handle_enable(
     ch: CueOrchestrator,
-    _action_cue: Any,
+    action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
 ) -> dict:
-    # Pure flag flip. The arm/pre-load side effect for the newly enabled cue
-    # (async ReArm) lives in NodeEngine._action_result_sink, which reacts to
-    # this handler's 'applied' outcome.
-    target_id = target.id
-    if target.enabled:
-        return ActionHandler._action_result(
-            "applied_no_change", "enable", target_id, "Already enabled"
-        )
-    target.enabled = True
-    return ActionHandler._action_result("applied", "enable", target_id)
+    # A flag write. The arm/pre-load side effect for the newly enabled cue
+    # (async ReArm, retake) lives in NodeEngine._action_result_sink, which
+    # reacts to this handler's 'applied' outcome.
+    return _toggle("enable", action_cue, target, mtc, frozen_mtc_ms)
 
 
 def _handle_disable(
     ch: CueOrchestrator,
-    _action_cue: Any,
+    action_cue: Any,
     target: Cue,
     mtc: MtcListener,
     frozen_mtc_ms: float | None = None,
 ) -> dict:
-    # Pure flag flip. The disarm-if-idle side effect for the disabled cue
-    # lives in NodeEngine._action_result_sink, which reacts to this handler's
-    # 'applied' outcome (guarded by the cue's _playing lifecycle flag).
-    target_id = target.id
-    if not target.enabled:
-        return ActionHandler._action_result(
-            "applied_no_change", "disable", target_id, "Already disabled"
-        )
-    target.enabled = False
-    return ActionHandler._action_result("applied", "disable", target_id)
+    # A flag write. The disarm-if-idle / retake side effect lives in
+    # NodeEngine._action_result_sink (guarded by the cue's _playing flag).
+    return _toggle("disable", action_cue, target, mtc, frozen_mtc_ms)
 
 
 def _handle_fade_in(
@@ -592,17 +627,13 @@ def _handle_fade_in(
     # TODO: implement fade envelope; currently identical to play
     Logger.info("fade_in treated as play (fade envelope not yet implemented)")
     target_id = target.id
-    # Only gate on a local target (see _handle_play) — non-local targets are
-    # walked past by go_from.
-    if getattr(target, "_local", False):
-        fail = _ready_action_target("fade_in", target, ch)
-        if fail is not None:
-            return fail
+    # As play (D28, D34): enters the target's chain, arms nothing.
     # S0-9: no unlocked `target._stop_requested = False` (see _handle_play).
     try:
         # go_from (not go): same cross-node walk as play — a plain go() would
         # drop other nodes' cues on a chain owned by the target's node.
-        ch.go_from(target, mtc, frozen_mtc_ms)
+        with chain_pass.entry(why="fade_in"):
+            ch.go_from(target, mtc, frozen_mtc_ms)
     except Exception as exc:
         return ActionHandler._action_result("failed", "fade_in", target_id, str(exc))
     return ActionHandler._action_result("applied", "fade_in", target_id)
@@ -622,7 +653,10 @@ def _handle_fade_out(
     Logger.info("fade_out treated as stop (fade envelope not yet implemented)")
     target_id = target.id
     _flag_stop(ch, target, "fade_out")
-    _cancel_chain_behind(ch, target, "fade_out")
+    _cancel_chain_behind(ch, target, "fade_out", until=_action_cue)
+    # Design §5: a stop decides here; what waits for it may go (stops due
+    # together still fall together, before the sleep and the disarm).
+    chain_pass.release_step()
     return ActionHandler._action_result("applied", "fade_out", target_id)
 
 
@@ -639,6 +673,8 @@ def _handle_go_to(
     fail = _ready_action_target("go_to", target, ch)
     if fail is not None:
         return fail
+    if getattr(target, "_local", False) and not getattr(target, "loaded", False):
+        _arm_in_background(target, ch, "go_to")
     return ActionHandler._action_result("applied", "go_to", target_id)
 
 
@@ -693,6 +729,12 @@ def _handle_fade_action(
     fail = _ready_action_target("fade_action", target, ch)
     if fail is not None:
         return fail
+    if not getattr(target, "loaded", False):
+        # D34: no arm in the action's step. A target that is not loaded is
+        # not playing: there is nothing to fade.
+        return ActionHandler._action_result(
+            "failed", "fade_action", target_id, "Target is not loaded"
+        )
 
     gradient_client = PLAYER_HANDLER.get_gradient_client()
     if gradient_client is None:

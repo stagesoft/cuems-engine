@@ -1,30 +1,33 @@
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
-"""Increment 2 — chain timeline anchoring.
+"""Increment 2 — chain timeline anchoring, under the pass (1amfwm7jnqf).
 
 Covers the Σ (chain-advance) accumulation that turns prewait into a real
-MTC-timeline gap honored identically on every node. Auto continue triggers the
-WHOLE chain at once, so the advance is **zero**: every cue arrives at the shared
-trigger and plays at `trigger + its own prewait` (2026-08-14, ClickUp 869ej3cc8
-— see TestChainAdvanceIsZero / TestMedinaRegression below). The walk mechanics
-are still exercised against a stubbed advance so they stay independent of that
-value:
-- CueHandler._next_local_fire (the go_threaded fire-walk): non-local ENABLED
-  cues advance the timeline (+_chain_advance_ms), disabled cues are transparent
-  (+0), the walk stops at a chain break and terminates on an
-  all-remote/all-disabled cycle;
+MTC-timeline gap honored identically on every node. Since 1amfwm7jnqf an
+Auto-continue chain is "en serie" (`sequential`): a cue's prewait and postwait
+push the cues after it, `arrival(k+1) = arrival(k) + prewait(k) + postwait(k)`.
+The 2026-08-14 rule (ClickUp 869ej3cc8), every cue at the shared trigger, is
+kept as the "en paralelo" (`parallel`) mode: TestChainAdvanceIsZero /
+TestMedinaRegression run under it, beside their `sequential` twins.
+- CueHandler._next_local_fire(cue, pass_) reads the pass's layout: the next
+  local cue after `cue`, enabled or not (a disabled cue keeps its place and its
+  waits, D26: it gets a silent thread), with its layout arrival;
 - _effective_duration_ms surfaces an enabled-A/V body==0 as an error (silent
   cross-node desync source);
 - ActionHandler._handle_play forwards the frozen anchor UNCHANGED via go_from
   (no +advance double-count — the frozen arriving there is already the
   action's slot).
+
+Plan: cuems-RELATIONS Plans/2026-11-18-autocontinue-cumulative-waits.md.
 """
 
 import sys
 from threading import Lock
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 sys.modules.setdefault("cuemsutils.tools.Osc_nodes_hub", Mock())
 
@@ -43,81 +46,108 @@ def _mtc(ms=5000, framerate=25.0):
     return mtc
 
 
-def _cue(id, local, enabled, adv, post_go="go", target=None):
-    """A minimal chain node. _adv is the value the stubbed
-    _chain_advance_ms returns for this cue (prewait+postwait slot)."""
+def _cue(id, local, enabled, post_go="go", target=None):
+    """A minimal chain node; its place comes from the pass's layout."""
     return SimpleNamespace(
         id=id,
         _local=local,
         enabled=enabled,
-        _adv=adv,
         post_go=post_go,
         _target_object=target,
     )
 
 
-def _fire(head_cue, arrival):
-    """Call _next_local_fire with a fake self whose _chain_advance_ms
-    returns each cue's _adv — isolates the walk logic from duration math."""
-    fake = SimpleNamespace(_chain_advance_ms=lambda c: c._adv)
-    return CueHandler._next_local_fire(fake, head_cue, arrival)
+def _pass(epoch, anchor_ms, layout, root_seq=0, mode="sequential"):
+    """A chain_pass.Pass."""
+    from cuemsengine.cues.chain_pass import Pass
+
+    return Pass(
+        epoch=epoch,
+        anchor_ms=anchor_ms,
+        layout=list(layout),
+        root_seq=root_seq,
+        mode=mode,
+    )
+
+
+def _layout(entry, anchor_ms, mode):
+    from cuemsengine.cues import chain_pass
+
+    return chain_pass.layout(entry, anchor_ms, mode)
+
+
+def _fire(cue, pass_):
+    """_next_local_fire on a bare handler: it reads only the pass."""
+    return CueHandler._next_local_fire(object.__new__(CueHandler), cue, pass_)
 
 
 class TestNextLocalFire:
+    """The next local cue of my pass's layout, with its arrival. The arrivals
+    are the layout's; nothing is added on the way."""
+
     def test_immediate_local_target(self):
-        b = _cue("B", local=True, enabled=True, adv=999)
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)
-        cue, arrival = _fire(a, 1000)
+        b = _cue("B", local=True, enabled=True)
+        a = _cue("A", local=True, enabled=True, target=b)
+        p = _pass(1, 1000.0, [(a, 1000.0), (b, 1100.0)])
+        cue, arrival = _fire(a, p)
         assert cue is b
-        assert arrival == 1100  # 1000 + adv(A)
+        assert arrival == 1100.0
 
-    def test_non_local_enabled_advances_timeline(self):
-        c = _cue("C", local=True, enabled=True, adv=999)
-        b = _cue("B", local=False, enabled=True, adv=200, target=c)
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)
-        cue, arrival = _fire(a, 1000)
+    def test_a_non_local_cue_is_walked_past(self):
+        c = _cue("C", local=True, enabled=True)
+        b = _cue("B", local=False, enabled=True, target=c)
+        a = _cue("A", local=True, enabled=True, target=b)
+        p = _pass(1, 1000.0, [(a, 1000.0), (b, 1100.0), (c, 1300.0)])
+        cue, arrival = _fire(a, p)
         assert cue is c
-        assert arrival == 1300  # 1000 + adv(A)=100 + adv(B)=200
+        assert arrival == 1300.0  # C's own place, not recomputed
 
-    def test_disabled_is_transparent(self):
-        c = _cue("C", local=True, enabled=True, adv=999)
-        b = _cue("B", local=True, enabled=False, adv=200, target=c)
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)
-        cue, arrival = _fire(a, 1000)
+    def test_a_disabled_local_cue_is_not_skipped(self):
+        """S07/S08 (D26): a disabled cue keeps its place and its waits; its
+        node gives it a silent thread, so the walk stops at it."""
+        c = _cue("C", local=True, enabled=True)
+        b = _cue("B", local=True, enabled=False, target=c)
+        a = _cue("A", local=True, enabled=True, target=b)
+        p = _pass(1, 1000.0, [(a, 1000.0), (b, 1100.0), (c, 1300.0)])
+        cue, arrival = _fire(a, p)
+        assert cue is b
+        assert arrival == 1100.0
+        cue, arrival = _fire(b, p)
         assert cue is c
-        assert arrival == 1100  # disabled B adds 0
+        assert arrival == 1300.0
 
-    def test_mixed_skip(self):
-        d = _cue("D", local=True, enabled=True, adv=999)
-        c = _cue("C", local=False, enabled=True, adv=300, target=d)  # +300
-        b = _cue("B", local=True, enabled=False, adv=200, target=c)  # +0
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)  # +100
-        cue, arrival = _fire(a, 1000)
+    def test_mixed_remote_and_disabled(self):
+        d = _cue("D", local=True, enabled=True)
+        c = _cue("C", local=False, enabled=True, target=d)
+        b = _cue("B", local=False, enabled=False, target=c)
+        a = _cue("A", local=True, enabled=True, target=b)
+        p = _pass(1, 1000.0, [(a, 1000.0), (b, 1100.0), (c, 1100.0), (d, 1400.0)])
+        cue, arrival = _fire(a, p)
         assert cue is d
-        assert arrival == 1400  # 1000 + 100 + 0 + 300
+        assert arrival == 1400.0
 
-    def test_chain_break_returns_none(self):
-        b = _cue("B", local=False, enabled=True, adv=200, post_go="pause")
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)
-        cue, arrival = _fire(a, 1000)
+    def test_the_end_of_the_layout_returns_none(self):
+        b = _cue("B", local=False, enabled=True, post_go="pause")
+        a = _cue("A", local=True, enabled=True, target=b)
+        p = _pass(1, 1000.0, [(a, 1000.0), (b, 1100.0)])
+        cue, _ = _fire(a, p)
         assert cue is None
-        assert arrival == 1100  # arrival of B, but nothing local to fire
 
-    def test_end_of_chain_returns_none(self):
-        a = _cue("A", local=True, enabled=True, adv=100, target=None)
-        cue, arrival = _fire(a, 1000)
+    def test_a_single_cue_pass_returns_none(self):
+        a = _cue("A", local=True, enabled=True, target=None)
+        cue, _ = _fire(a, _pass(1, 1000.0, [(a, 1000.0)]))
         assert cue is None
-        assert arrival == 1100
 
-    def test_all_remote_cycle_terminates(self):
-        # Self-referential non-local chain — must hit the 1024 bound, not spin.
-        b = _cue("B", local=False, enabled=True, adv=0, post_go="go")
+    def test_an_all_remote_cycle_ends_with_the_layout(self):
+        """The layout never holds a cue twice (chain_pass.layout stops before a
+        cue it would reach a second time), so the walk cannot spin."""
+        b = _wait_cue(id="B", _local=False, enabled=True)
         b._target_object = b
-        a = _cue("A", local=True, enabled=True, adv=100, target=b)
-        with patch("cuemsengine.cues.CueHandler.Logger") as log:
-            cue, _ = _fire(a, 1000)
+        a = _wait_cue(id="A", _local=True, enabled=True, _target_object=b)
+        layout = _layout(a, 1000.0, "sequential")
+        assert [c for c, _ in layout] == [a, b]
+        cue, _ = _fire(a, _pass(1, 1000.0, layout))
         assert cue is None
-        log.error.assert_called_once()
 
 
 class TestEffectiveDurationBodyZero:
@@ -264,16 +294,18 @@ class TestGoThreadedAnchoring:
         nxt = SimpleNamespace(id="n")
         ch._next_local_fire = MagicMock(return_value=(nxt, 9000.0))
         cue, go_gen = _go_threaded_cue(post_go="go", target=SimpleNamespace(id="t"))
+        p = _pass(3, 5000.0, [(cue, 5000.0), (nxt, 9000.0)])
         mtc = _mtc()
         with (
             patch("cuemsengine.cues.CueHandler.run_cue"),
             patch("cuemsengine.cues.CueHandler.reveal_cue"),
             patch("cuemsengine.cues.CueHandler.loop_cue"),
         ):
-            ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen, chain_epoch=3)
+            ch.go_threaded(cue, mtc, frozen_mtc_ms=5000.0, go_gen=go_gen, pass_=p)
         # the pass is carried unchanged into the continuation, so every cue in
-        # the chain is dispatched under one epoch
-        ch.go.assert_called_once_with(nxt, mtc, 9000.0, chain_epoch=3, arm_epoch=None)
+        # the chain is dispatched under one pass
+        ch._next_local_fire.assert_called_once_with(cue, p)
+        ch.go.assert_called_once_with(nxt, mtc, 9000.0, pass_=p, arm_epoch=None)
 
     def test_superseded_generation_does_not_fire(self):
         # go_gen=7 but the cue's live generation is 8 (a fresh GO/reload took
@@ -294,15 +326,48 @@ class TestGoThreadedAnchoring:
         ch._next_local_fire.assert_not_called()
         ch.go.assert_not_called()
 
+    def test_a_disabled_cue_passes_silent_and_still_unrolls(self):
+        """S07 (D26): a disabled cue is the same cue without output. Its thread
+        sets nothing up, lights nothing and reveals nothing; it waits for its
+        start, says `passed silent`, and the chain behind it is still
+        dispatched at its own place in the pass."""
+        ch = self._ch()
+        nxt = SimpleNamespace(id="n")
+        ch._next_local_fire = MagicMock(return_value=(nxt, 15000.0))
+        cue, go_gen = _go_threaded_cue(
+            prewait_ms=5000, postwait_ms=10000, post_go="go", target=nxt
+        )
+        cue.enabled = False
+        p = _pass(1, 0.0, [(cue, 0.0), (nxt, 15000.0)])
+        mtc = _AdvancingMtc(0.0)
+        with (
+            patch("cuemsengine.cues.CueHandler.run_cue") as run_cue,
+            patch("cuemsengine.cues.CueHandler.reveal_cue") as reveal_cue,
+            patch("cuemsengine.cues.CueHandler.loop_cue"),
+            patch("cuemsengine.cues.CueHandler.sleep", side_effect=mtc.advance),
+            patch("cuemsengine.cues.CueHandler.Logger") as log,
+        ):
+            ch.go_threaded(cue, mtc, frozen_mtc_ms=0.0, go_gen=go_gen, pass_=p)
+        run_cue.assert_not_called()
+        reveal_cue.assert_not_called()
+        ch.communications_thread.add_cue.assert_not_called()
+        ch.go.assert_called_once_with(nxt, mtc, 15000.0, pass_=p, arm_epoch=None)
+        lines = [str(c.args[0]) for c in log.info.call_args_list if c.args]
+        assert any(x.startswith("Cue c passed silent at mtc ") for x in lines), lines
+        assert mtc.main_tc.milliseconds_exact >= 5000.0, "it waits for its start"
+
 
 # ---------------------------------------------------------------------------
-# Auto continue == one common trigger (Medina del Campo, 869ej3cc8)
+# The two advance modes: "en serie" (sequential, every Auto-continue chain
+# since 1amfwm7jnqf) and "en paralelo" (parallel, the 2026-08-14 rule of
+# Medina del Campo, 869ej3cc8, kept with its tests; no production path)
 # ---------------------------------------------------------------------------
 
 
 def _wait_cue(prewait_s=0.0, postwait_s=0.0, post_go="go", **kw):
     """A chain node carrying REAL CTimecode waits — for the tests that must
     exercise the actual _chain_advance_ms, not a stub."""
+    kw.setdefault("_target_object", None)
     return SimpleNamespace(
         prewait=CTimecode(framerate=25, start_seconds=prewait_s),
         postwait=CTimecode(framerate=25, start_seconds=postwait_s),
@@ -311,22 +376,49 @@ def _wait_cue(prewait_s=0.0, postwait_s=0.0, post_go="go", **kw):
     )
 
 
+def _linked(waits, post_gos=None, local=None, enabled=None):
+    """Cues with (prewait, postwait) in seconds, linked front to back."""
+    n = len(waits)
+    post_gos = post_gos or ["go"] * (n - 1) + ["pause"]
+    local = local or [True] * n
+    enabled = enabled or [True] * n
+    cues = [
+        _wait_cue(
+            prewait_s=pre,
+            postwait_s=post,
+            post_go=pg,
+            id=f"c{i}",
+            _local=lo,
+            enabled=en,
+        )
+        for i, ((pre, post), pg, lo, en) in enumerate(
+            zip(waits, post_gos, local, enabled)
+        )
+    ]
+    for a, b in zip(cues, cues[1:]):
+        a._target_object = b
+    return cues
+
+
+def _starts(layout):
+    return [arr + c.prewait.milliseconds_exact for c, arr in layout]
+
+
 class TestChainAdvanceIsZero:
-    """Auto continue triggers the whole chain at once: a cue's own waits must
-    NOT push the following cues' arrival. The advance is zero — prewait is a
-    per-cue offset from the common trigger, and postwait does not gate a chain
-    whose pointer has already advanced.
-    """
+    """`parallel` ("en paralelo"): a cue's own waits do NOT push the following
+    cues' arrival; every cue of the chain shares the trigger."""
 
     def test_prewait_does_not_advance_the_chain(self):
-        assert CueHandler._chain_advance_ms(_wait_cue(prewait_s=35.0)) == 0.0
+        cue = _wait_cue(prewait_s=35.0)
+        assert CueHandler._chain_advance_ms(cue, mode="parallel") == 0.0
 
     def test_postwait_does_not_advance_the_chain(self):
-        assert CueHandler._chain_advance_ms(_wait_cue(postwait_s=5.0)) == 0.0
+        cue = _wait_cue(postwait_s=5.0)
+        assert CueHandler._chain_advance_ms(cue, mode="parallel") == 0.0
 
     def test_both_waits_together_still_zero(self):
         cue = _wait_cue(prewait_s=95.0, postwait_s=12.0)
-        assert CueHandler._chain_advance_ms(cue) == 0.0
+        assert CueHandler._chain_advance_ms(cue, mode="parallel") == 0.0
 
     def test_independent_of_cue_type(self):
         # DmxCue was the reported case, but the rule is type-agnostic: the same
@@ -337,37 +429,82 @@ class TestChainAdvanceIsZero:
         vid = Mock(spec=VideoCue)
         vid.prewait = CTimecode(framerate=25, start_seconds=35.0)
         vid.postwait = CTimecode(framerate=25, start_seconds=0.0)
-        assert CueHandler._chain_advance_ms(dmx) == CueHandler._chain_advance_ms(vid)
-        assert CueHandler._chain_advance_ms(dmx) == 0.0
+        a = CueHandler._chain_advance_ms(dmx, mode="parallel")
+        assert a == CueHandler._chain_advance_ms(vid, mode="parallel") == 0.0
+
+
+class TestChainAdvanceIsBothWaits:
+    """`sequential` ("en serie"), the mode of every Auto-continue chain: a
+    cue adds its prewait and its postwait, enabled or not (D1, D26)."""
+
+    def test_the_default_mode_is_sequential(self):
+        cue = _wait_cue(prewait_s=5.0, postwait_s=10.0)
+        assert CueHandler._advance_mode(cue) == "sequential"
+        assert CueHandler._chain_advance_ms(cue) == 15000.0
+
+    def test_sequential_is_prewait_plus_postwait(self):
+        cue = _wait_cue(prewait_s=95.0, postwait_s=12.0)
+        assert CueHandler._chain_advance_ms(cue, mode="sequential") == 107000.0
+
+    def test_a_disabled_cue_keeps_its_waits(self):
+        cue = _wait_cue(prewait_s=5.0, postwait_s=10.0, enabled=False)
+        assert CueHandler._chain_advance_ms(cue) == 15000.0
+
+    def test_independent_of_cue_type(self):
+        dmx = Mock(spec=DmxCue)
+        dmx.prewait = CTimecode(framerate=25, start_seconds=35.0)
+        dmx.postwait = CTimecode(framerate=25, start_seconds=1.0)
+        vid = Mock(spec=VideoCue)
+        vid.prewait = CTimecode(framerate=25, start_seconds=35.0)
+        vid.postwait = CTimecode(framerate=25, start_seconds=1.0)
+        a = CueHandler._chain_advance_ms(dmx)
+        assert a == CueHandler._chain_advance_ms(vid) == 36000.0
+
+    def test_an_unknown_mode_raises(self):
+        with pytest.raises(ValueError):
+            CueHandler._chain_advance_ms(_wait_cue(prewait_s=1.0), mode="timed")
+
+
+class TestIonsChain:
+    """The plan's first example, A 0/0, B 5/10, C 2/0, D 3/0 (S01, S06)."""
+
+    WAITS = [(0, 0), (5, 10), (2, 0), (3, 0)]
+
+    def test_sequential(self):
+        cues = _linked(self.WAITS)
+        layout = _layout(cues[0], 0.0, "sequential")
+        assert [arr for _, arr in layout] == [0.0, 0.0, 15000.0, 17000.0]
+        assert _starts(layout) == [0.0, 5000.0, 17000.0, 20000.0]
+
+    def test_sequential_with_b_disabled_is_the_same(self):
+        """S07: B keeps its place and its waits; only its output is missing."""
+        cues = _linked(self.WAITS, enabled=[True, False, True, True])
+        layout = _layout(cues[0], 0.0, "sequential")
+        assert _starts(layout) == [0.0, 5000.0, 17000.0, 20000.0]
+
+    def test_parallel(self):
+        cues = _linked(self.WAITS)
+        layout = _layout(cues[0], 0.0, "parallel")
+        assert [arr for _, arr in layout] == [0.0] * 4
+        assert _starts(layout) == [0.0, 5000.0, 2000.0, 3000.0]
 
 
 class TestMedinaRegression:
     """The field case: DMX cues authored with prewait as ABSOLUTE offsets from
     GO (Castillo Medina del Campo, cupula2, project medina_cupula_2_torre-001).
 
-    Authored 5/35/65/95/380 s; before the fix the engine played 5/40/105/200/580
-    because each cue's prewait advanced the whole chain.
+    Authored 5/35/65/95/380 s. Under `parallel` (the 2026-08-14 rule) they
+    play as authored; under `sequential` (this plan) they play
+    5/40/105/200/580, and the show re-authored with relative prewaits
+    5/30/30/30/285 plays 5/35/65/95/380 again (S03, S04, S05).
     """
 
     PREWAITS = [5.0, 35.0, 65.0, 95.0, 380.0]
+    RELATIVE = [5.0, 30.0, 30.0, 30.0, 285.0]
 
-    def _chain(self):
+    def _chain(self, prewaits=None):
         # Botella 1..4 auto-continue; "Off Botella 4" breaks the chain (pause).
-        post_gos = ["go", "go", "go", "go", "pause"]
-        cues = [
-            _wait_cue(
-                prewait_s=p,
-                post_go=pg,
-                id=f"botella{i}",
-                _local=True,
-                enabled=True,
-                _target_object=None,
-            )
-            for i, (p, pg) in enumerate(zip(self.PREWAITS, post_gos))
-        ]
-        for a, b in zip(cues, cues[1:]):
-            a._target_object = b
-        return cues
+        return _linked([(p, 0.0) for p in (prewaits or self.PREWAITS)])
 
     def test_every_cue_starts_at_its_own_prewait(self):
         cues = self._chain()
@@ -378,35 +515,47 @@ class TestMedinaRegression:
             starts.append(arrival + cue.prewait.milliseconds_exact)
             if cue.post_go != "go":
                 break
-            arrival += CueHandler._chain_advance_ms(cue)
+            arrival += CueHandler._chain_advance_ms(cue, mode="parallel")
         assert starts == [p * 1000 for p in self.PREWAITS]
 
     def test_walk_keeps_every_arrival_at_the_trigger(self):
-        # _next_local_fire must hand each following cue the SAME arrival.
+        # The parallel layout hands each following cue the SAME arrival, and
+        # _next_local_fire passes it on unchanged.
         cues = self._chain()
+        p = _pass(1, 0.0, _layout(cues[0], 0.0, "parallel"), mode="parallel")
         arrivals = []
-        cue, arrival = CueHandler._next_local_fire(CueHandler, cues[0], 0.0)
+        cue, arrival = _fire(cues[0], p)
         while cue is not None:
             arrivals.append(arrival)
-            if cue.post_go != "go":
-                break
-            cue, arrival = CueHandler._next_local_fire(CueHandler, cue, arrival)
+            cue, arrival = _fire(cue, p)
         assert arrivals == [0.0, 0.0, 0.0, 0.0]
 
     def test_skipped_non_local_cue_does_not_shift_later_local_segment(self):
         # A-B-A across nodes (plan §5.5 / review F6): under one common trigger a
         # skipped non-local cue contributes nothing, so this node's SECOND local
         # segment still anchors at the trigger.
-        c = _wait_cue(prewait_s=9.0, id="C", _local=True, enabled=True)
-        b = _wait_cue(
-            prewait_s=60.0, id="B", _local=False, enabled=True, _target_object=c
-        )
-        a = _wait_cue(
-            prewait_s=5.0, id="A", _local=True, enabled=True, _target_object=b
-        )
-        cue, arrival = CueHandler._next_local_fire(CueHandler, a, 0.0)
-        assert cue is c
+        cues = _linked([(5.0, 0.0), (60.0, 0.0), (9.0, 0.0)], local=[True, False, True])
+        p = _pass(1, 0.0, _layout(cues[0], 0.0, "parallel"), mode="parallel")
+        cue, arrival = _fire(cues[0], p)
+        assert cue is cues[2]
         assert arrival == 0.0
+
+    def test_sequential_cascades_the_absolute_offsets(self):
+        layout = _layout(self._chain()[0], 0.0, "sequential")
+        assert _starts(layout) == [5000.0, 40000.0, 105000.0, 200000.0, 580000.0]
+
+    def test_sequential_with_relative_prewaits_gives_the_authored_times(self):
+        layout = _layout(self._chain(self.RELATIVE)[0], 0.0, "sequential")
+        assert _starts(layout) == [5000.0, 35000.0, 65000.0, 95000.0, 380000.0]
+
+    def test_sequential_a_skipped_non_local_cue_still_counts(self):
+        # A-B-A again: B is another node's, but its waits are in the layout
+        # every node computes, so the second local segment is at 5 + 60.
+        cues = _linked([(5.0, 0.0), (60.0, 0.0), (9.0, 0.0)], local=[True, False, True])
+        p = _pass(1, 0.0, _layout(cues[0], 0.0, "sequential"))
+        cue, arrival = _fire(cues[0], p)
+        assert cue is cues[2]
+        assert arrival == 65000.0
 
 
 class TestLateDispatchIsLogged:

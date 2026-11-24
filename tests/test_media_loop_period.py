@@ -304,14 +304,23 @@ def test_armed_ready_carries_the_legacy_list():
     n = NodeEngine.__new__(NodeEngine)
     n.cm = SimpleNamespace(node_uuid="node-1")
     comms = Mock()
-    with patch.object(CUE_HANDLER, "communications_thread", comms, create=True):
+    with (
+        patch.object(CUE_HANDLER, "communications_thread", comms, create=True),
+        patch("cuemsengine.NodeEngine.engine_version", return_value="9.9-test"),
+    ):
         n._legacy_period = []
         n._notify_armed_ready("load")
         n._legacy_period = ["cue-a"]
         n._notify_armed_ready("re-arm")
     first, second = (c.args[0].data for c in comms.send_operation.call_args_list)
-    assert first == {"armed": "yes"}  # what an old controller reads
-    assert second == {"armed": "yes", "legacy_period": ["cue-a"]}
+    # What an old controller reads, plus the additive engine_version
+    # (1amfwm7jnqf, D16); out_latency_ms is absent here (none known).
+    assert first == {"armed": "yes", "engine_version": "9.9-test"}
+    assert second == {
+        "armed": "yes",
+        "legacy_period": ["cue-a"],
+        "engine_version": "9.9-test",
+    }
 
 
 def test_ensure_video_indexes_uses_the_shared_caller():
