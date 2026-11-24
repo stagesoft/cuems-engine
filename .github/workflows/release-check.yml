@@ -54,7 +54,7 @@ jobs:
           mk-build-deps --install --remove \
             --tool 'apt-get -y --no-install-recommends' debian/control
 
-      - name: Build the deb (never published: casas builds the release)
+      - name: Build the deb (only inspected, casas builds the release)
         run: dpkg-buildpackage -us -uc -b
 
       - name: Inspect the deb
