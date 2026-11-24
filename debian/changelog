@@ -1,3 +1,49 @@
+cuems-engine (0.1.0rc6-9) bookworm; urgency=medium
+
+  * Merge rc_1 into debian/bookworm (0.1.0rc6-9, 1amfwm7jnqf, PR #55):
+    Auto-continue waits accumulate.
+    - Auto continue: a cue's prewait and postwait now delay the cues after it
+      (start = arrival + prewait, next arrival = start + postwait; the body
+      never advances a chain). Auto follow hands over at body end + postwait;
+      pause ends the chain. BEFORE UPGRADING A VENUE, run
+      venue-timing-audit.py (cuems-RELATIONS) on its shows and read every
+      CHANGES, STOP_IN_CHAIN and DISABLED_IN_CHAIN line. A show re-authored
+      for this rule starts early on an older engine.
+    - A disabled cue is the same cue without output: its waits count, a
+      disabled pause still ends the chain, and what follows a disabled
+      Auto-follow cue comes after its postwait (before, the chain ended
+      there). Enable / disable never moves another cue; a cue already
+      committed in its player (its last 120 ms) plays. A stop action no
+      longer cancels the cues after itself.
+    - From the UI, enable / disable of an action, a fade or a DMX cue due
+      less than half a second later in a show already running (a cue with
+      outputs on several nodes: less than a second) takes effect from its
+      next pass: the screen shows the toggle at once, the cue still does this
+      pass what it was going to do, and the node journals say "from the next
+      pass". A GO pressed after the toggle always sees it. A cue enabled just
+      before its GO, or just before its start in a show already running,
+      plays, late if it is not armed yet. A disable of a DMX cue needs more
+      than 5.5 s before its start (its scene leaves 5 s ahead); later, the
+      scene fires.
+    - A cue's enabled read from the XML as text is a bool: a DmxCue saved
+      disabled no longer sends its scene (cuems-utils rc18 DmxCueParser keeps
+      the text 'False'). A DmxCue enabled inside its pass is armed before its
+      scene and sends it, late at its start if it must.
+    - Journal: "Chain pass <n> (<mode>, engine <v>) from <id>, anchor <ms>
+      ms: ..." at every GO; "Cue <id> revealed at mtc ..." / "passed silent".
+  * The whole cluster must run this engine: a node on an older one lays out
+    chains by the old rule; the controller warns at load ("Engine version
+    mismatch").
+  * Same players as 0.1.0rc6-8 (cuems-audioplayer 0.0.3-16, the videocomposer
+    with visible_at). Depends on cuems-utils >= 0.1.0rc18, unchanged.
+  * Tested on the test rig 2026-11-23/24 (test debs
+    0.1.0rc6-9~pre1amfwm7jnqf.1-.3, the last one the landed tree): every
+    rig row of the plan PASS (musica larga as authored: +0/+50/+111/+172/+192
+    s, the stop after Cancion 2). Plan:
+    cuems-RELATIONS Plans/2026-11-18-autocontinue-cumulative-waits.md.
+
+ -- Ion Reguera <ion@stagelab.coop>  Tue, 24 Nov 2026 11:30:29 +0100
+
 cuems-engine (0.1.0rc6-8) bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (0.1.0rc6-8, 869feynrj Phase A, PRs #49
