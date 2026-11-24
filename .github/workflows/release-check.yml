@@ -54,6 +54,13 @@ jobs:
           mk-build-deps --install --remove \
             --tool 'apt-get -y --no-install-recommends' debian/control
 
+      - name: Use the builder's virtualenv
+        # Debian's virtualenv (20.17) does not write the CACHEDIR.TAG that
+        # newer ones put in the venv root, and that file made dpkg refuse the
+        # 0.1.0rc6-8 deb. Pin the version the release builder (casas) has, so a
+        # debian/rules without the line that removes it fails here too.
+        run: pip install --break-system-packages 'virtualenv==20.29.3'
+
       - name: Build the deb (only inspected, casas builds the release)
         run: dpkg-buildpackage -us -uc -b
 
