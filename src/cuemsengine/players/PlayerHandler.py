@@ -291,6 +291,19 @@ class PlayerHandler:
     def loop_period_cache(self) -> LoopPeriodCache:
         return self._loop_period_cache
 
+    def dmx_can_cancel(self) -> bool:
+        """D25 (1amfwm7jnqf): can the dmxplayer cancel a scene it was already
+        sent? No dmxplayer can today (it takes /quit /check /stoponlost
+        /mtcfollow /blackout /frame /fade_time /mtc_time /start_offset only);
+        ClickUp 1amfwm7jwnf defines the message. Until then a scene sent 5 s
+        ahead fires, with a WARNING."""
+        return False
+
+    def cancel_dmx_scene(self, cue) -> None:
+        """The cancel of a scene already sent (1amfwm7jwnf); nothing to send
+        while dmx_can_cancel() is False."""
+        return None
+
     @property
     def video_caps(self) -> frozenset:
         """What the running videocomposer can do (its caps file, §4.2)."""

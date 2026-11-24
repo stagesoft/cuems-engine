@@ -473,6 +473,11 @@ class TestCascadeAndDisable:
             id="A", post_go="go", _local=True, enabled=True, _target_object=b
         )
         b._go_epoch = 0
+        # 1amfwm7jnqf §5: the stop walk follows the target's pass (ownership
+        # by `_pass`); a duck-typed pass, so this file needs no chain_pass.
+        a._pass = b._pass = SimpleNamespace(
+            epoch=1, anchor_ms=0.0, layout=[(a, 0.0), (b, 0.0)], root_seq=0
+        )
         return a
 
     def test_a_pending_descendant(self, ch, committed):
@@ -488,18 +493,29 @@ class TestCascadeAndDisable:
         assert ch.cancel_pending_descendants(self._chain(b)) == 0
         assert client.sent == []
 
-    def test_cancel_parked(self, ch, committed):
+    def test_a_retake_after_the_commit_sends_no_visible_at_0(self, ch, committed):
+        """D31 (c), 1amfwm7jnqf §2: a toggle after the commit counts from the
+        next pass. retake refuses a decided cue in its lock section, so no
+        toggle ever cancels a committed start."""
         cue = _video()
         client = committed(cue)
-        assert ch.cancel_parked(cue) is True
-        assert _zeros(client) == ZEROS
+        cue.enabled = False
+        assert ch.retake(cue, MagicMock()) is None
+        assert _zeros(client) == []
 
-    def test_a_cuelist_reaches_its_committed_child(self, ch, committed):
+    def test_a_cuelist_child_committed_is_not_cancelled_by_a_toggle(
+        self, ch, committed
+    ):
+        """A CueList is decided at its setup; from the child's commit on,
+        cancel_child refuses (§2) and a retake of the parent does nothing."""
         child = _video()
         cl = _cuelist(child)
         client = committed(child, cl)
-        assert ch.cancel_parked(cl) is True
-        assert _zeros(client) == ZEROS
+        child.enabled = False
+        assert ch.cancel_child(child) is False
+        cl.enabled = False
+        assert ch.retake(cl, MagicMock()) is None
+        assert _zeros(client) == []
 
 
 class TestFollowCancel:
@@ -865,13 +881,14 @@ def _marked(ch, child, gen=1):
 class TestCueListChildGuard:
     """C2: between the parent's setup and its commit (up to 5 s for a
     chain cue) the child can be disabled (NodeEngine ->
-    cancel_parked(child): the setup marked it _playing, so it IS flagged),
+    cancel_child(child): the setup marked it _playing, so it IS flagged),
     stopped or paused, or GO'd on its own. The commit and the parent's
     /visible 1 healer must then leave it alone."""
 
     def test_a_marked_child_commits(self, ch):
         child = _video()
         parent = _marked(ch, child)
+        assert parent._marked_child is child  # one pick per pass (§2)
         assert ch._commit_follow(parent, child, 1) is True
         assert len(child._osc.visible_at(1)) == len(LAYERS)
 
@@ -879,7 +896,7 @@ class TestCueListChildGuard:
         child = _video()
         parent = _marked(ch, child)
         child.enabled = False
-        assert ch.cancel_parked(child) is True  # what the disable does
+        assert ch.cancel_child(child) is True  # what the disable does
         assert ch._commit_follow(parent, child, 1) is False
         assert child._osc.visible_at() == []
 
@@ -938,7 +955,7 @@ class TestCueListChildGuard:
         def disable(now):
             if now >= 2000.0 and child.enabled:
                 child.enabled = False
-                ch.cancel_parked(child)
+                ch.cancel_child(child)
 
         _drive(ch, parent, mtc, 1000.0, VC_NEW, on_sleep=disable)
         assert child._osc.visible_at() == []
@@ -976,7 +993,9 @@ class TestReGoOfARevealedCue:
         def cancel(now):
             if len(cue._osc.visible_at(1)) == 2 * len(LAYERS) and not cancelled:
                 cancelled.append(now)
-                assert ch.cancel_parked(cue) is True
+                # A stop action's path (a toggle no longer cancels a
+                # committed cue, D31 c): flags + cancel_start_locked.
+                assert AH._flag_stop(ch, cue, "stop") is True
 
         ch.go_threaded = CueHandler.go_threaded.__get__(ch)
         events = {"reveal": []}

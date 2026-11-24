@@ -37,13 +37,13 @@ def comms(monkeypatch):
     return obj
 
 
-def _op(name, value):
+def _op(name, value, **extra):
     return NodeOperation(
         type=OperationType.COMMAND,
         action=ActionType.UPDATE,
         sender=CONTROLLER_UUID,
         target=name,
-        data={"value": value, "address": f"/engine/command/{name}"},
+        data={"value": value, "address": f"/engine/command/{name}", **extra},
     )
 
 
@@ -71,8 +71,19 @@ class TestReceiveHook:
         hook = MagicMock(return_value=False)
         comms.set_receive_hook(hook)
         started = _threads_started(comms, _op("go", {"run_seq": 7}))
-        hook.assert_called_once_with("go", {"run_seq": 7})
+        hook.assert_called_once_with("go", {"run_seq": 7}, sent_ms=None)
         assert started == ["NNG-Command-go"]
+
+    def test_the_hook_gets_the_send_time_beside_the_value(self, comms):
+        """D31 (d): a cue_enabled carries the controller's MTC at the send in
+        the operation's data, beside the unchanged value string."""
+        hook = MagicMock(return_value=False)
+        comms.set_receive_hook(hook)
+        started = _threads_started(
+            comms, _op("cue_enabled", "uuid-1 0", sent_ms=101234.5)
+        )
+        hook.assert_called_once_with("cue_enabled", "uuid-1 0", sent_ms=101234.5)
+        assert started == ["NNG-Command-cue_enabled"]
 
     def test_a_hook_that_raises_never_loses_the_command(self, comms):
         comms.set_receive_hook(MagicMock(side_effect=RuntimeError("boom")))
@@ -107,6 +118,7 @@ class TestNodeEngineHook:
 
         node = object.__new__(NodeEngine)
         node._follow_relay = _Relay()
+        node._ui_seq = 0
         return node
 
     def test_follow_is_consumed(self):
@@ -126,7 +138,9 @@ class TestNodeEngineHook:
         assert node._on_command_received(name, None) is False
         assert node._follow_relay.calls == [("end_run", name)]
 
-    @pytest.mark.parametrize("name", ["setnextcue", "cue_enabled", "deploy"])
+    # cue_enabled is no longer passed through untouched: the hook applies the
+    # toggle (chain_pass.ui_toggle, D31 d). Its tests: test_toggles_in_pass.py.
+    @pytest.mark.parametrize("name", ["setnextcue", "deploy"])
     def test_other_commands_are_untouched(self, name):
         node = self._node()
         assert node._on_command_received(name, "v") is False

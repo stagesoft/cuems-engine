@@ -150,10 +150,10 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
-            # An idle cue was never dispatched, so there is nothing parked to
-            # cancel — the real cancel_parked() returns False here, and a
-            # MagicMock's truthy default would wrongly suppress the disarm.
-            ch.cancel_parked.return_value = False
+            # An idle cue is in no pass, so there is nothing to retake: the
+            # real retake() returns None here, and a MagicMock's truthy
+            # default would wrongly suppress the disarm-if-idle.
+            ch.retake.return_value = None
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue, reason="disabled")
 
@@ -177,22 +177,61 @@ class TestApplyCueEnabledSideEffects:
         node = _make_node()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = True
-            # An idle cue was never dispatched, so there is nothing parked to
-            # cancel — the real cancel_parked() returns False here, and a
-            # MagicMock's truthy default would wrongly suppress the disarm.
-            ch.cancel_parked.return_value = False
+            # An idle cue is in no pass, so there is nothing to retake: the
+            # real retake() returns None here, and a MagicMock's truthy
+            # default would wrongly suppress the disarm-if-idle.
+            ch.retake.return_value = None
             node._apply_cue_enabled_side_effects(cue, False)
             ch.disarm.assert_called_once_with(cue, reason="disabled")
 
-    def test_disable_next_cue_advances_pointer_and_broadcasts(self):
+    def test_disable_does_not_move_the_pointer(self):
+        """D30 (S18): a toggle does not move the next-cue pointer. A cue
+        disabled while it is the standby stays the standby; a GO there passes
+        it silent with its waits and its post_go."""
         follow = _FakeCue(cue_id="cue-2")
         cue = _FakeCue(next_cue=follow)
         node = _make_node(next_cue_pointer=cue)
+        node.mtc_listener = _MM()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = False
+            ch.retake.return_value = None
             node._apply_cue_enabled_side_effects(cue, False)
-        assert node.next_cue_pointer is follow
-        node._broadcast_nextcue.assert_called_once()
+        assert node.next_cue_pointer is cue
+        node._broadcast_nextcue.assert_not_called()
+
+    def test_disable_of_a_cue_a_pass_holds_retakes_it_and_does_not_disarm(self):
+        """§3: retake is all a toggle does to a running pass; the cue it took
+        a silent thread for is not disarmed: an enable before its commit must
+        find it armed."""
+        cue = _FakeCue(playing=False)
+        node = _make_node()
+        node.mtc_listener = _MM()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = True
+            ch.retake.return_value = _MM()  # the silent thread that replaced it
+            node._apply_cue_enabled_side_effects(cue, False)
+            ch.retake.assert_called_once_with(cue, node.mtc_listener)
+            ch.disarm.assert_not_called()
+
+    def test_enable_retakes_at_the_enable_not_at_the_end_of_the_arm(self):
+        """D33 (S99): a cue enabled during its pass is retaken at the enable;
+        the thread the retake starts waits for the arm in flight and plays
+        late if the arm ends after its start (never silent for a slow arm).
+        Before, the rejoin ran at the end of the arm and missed the slot."""
+        cue = _FakeCue(enabled=True)
+        node = _make_node()
+        node.mtc_listener = _MM()
+        release = threading.Event()
+        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
+            ch.find_armed_cue.return_value = False
+            ch.arm.side_effect = lambda *a, **k: release.wait(2.0)
+            node._apply_cue_enabled_side_effects(cue, True)
+            # the arm is still running: the retake has happened already
+            ch.retake.assert_called_once_with(cue, node.mtc_listener)
+            release.set()
+            assert _wait_until(lambda: ch.arm.called)
+            _join_rearm(cue.id)
+            ch.retake.assert_called_once()  # not again at the end of the arm
 
     def test_cuelist_target_reacts_on_first_enabled_child(self):
         from cuemsutils.cues import CueList
@@ -235,7 +274,6 @@ class TestArmWithEnabledGuard:
         same project, the NEW object's player (Cue equality is by id)."""
         cue = _FakeCue()
         node = _make_node()
-        node._rejoin_running_chain = _MM()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
 
             def gen_bump_arm(c, init=False, epoch=None):
@@ -245,12 +283,12 @@ class TestArmWithEnabledGuard:
             ch.find_armed_cue.return_value = True
             node._arm_with_enabled_guard(cue, project_gen=1)
             ch.disarm.assert_not_called()
-        node._rejoin_running_chain.assert_not_called()
+            # D33: the retake happens at the enable, never at the end of an arm
+            ch.retake.assert_not_called()
 
     def test_the_arm_carries_the_epoch_its_spawner_captured(self):
         cue = _FakeCue()
         node = _make_node()
-        node._rejoin_running_chain = _MM()
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=7)
             ch.arm.assert_called_once_with(cue, init=True, epoch=7)
@@ -377,14 +415,31 @@ class TestActionResultSinkEnableDisable:
 
 class TestHandleCueEnabledDelegates:
 
-    def test_parse_set_flag_delegate_notify(self):
+    def test_the_hook_sets_the_flag_and_the_command_thread_does_not(self):
+        """D31 (d), §3: the receive hook applies the toggle in bus order
+        (chain_pass.ui_toggle); the command thread no longer writes the flag.
+        It runs the side effects and the STATUS for the flag AS IT IS by then
+        (a later toggle may have landed in the hook meanwhile)."""
         cue = _FakeCue(enabled=True)
         node = _make_node(script_cue=cue)
+        node._follow_relay = None
+        node._ui_seq = 0
+        node.mtc_listener = _MM()
+        node.mtc_listener.main_tc.milliseconds_exact = 1000.0
+        node.mtc_listener.interpolated_ms.return_value = 1000.0
         node._apply_cue_enabled_side_effects = _MM()
-        node._handle_cue_enabled(f"{cue.id} 0")
-        assert cue.enabled is False
-        node._apply_cue_enabled_side_effects.assert_called_once_with(cue, False)
-        node._notify_cue_enabled.assert_called_once_with(cue.id, False)
+
+        assert (
+            node._on_command_received("cue_enabled", f"{cue.id} 0", sent_ms=995.0)
+            is False
+        )  # the command thread still runs
+        assert cue.enabled is False  # set in the hook, at once
+
+        cue.enabled = True  # a later toggle, already applied by its hook
+        node._handle_cue_enabled(f"{cue.id} 0")  # the first one's command thread
+        assert cue.enabled is True  # not written back by the command thread
+        node._apply_cue_enabled_side_effects.assert_called_once_with(cue, True)
+        node._notify_cue_enabled.assert_called_once_with(cue.id, True)
 
 
 # ---------------------------------------------------------------------------
@@ -707,9 +762,14 @@ class _ChainCue(_FakeCue):
     """_FakeCue plus the chain fields go_script / the pre-arm walk read."""
 
     def __init__(self, cue_id, local, post_go, enabled=True):
+        from cuemsutils.tools.CTimecode import CTimecode
+
         super().__init__(cue_id=cue_id, enabled=enabled, local=local)
         self.post_go = post_go
         self._target_object = None
+        # the layout of a pass reads every cue's waits (1amfwm7jnqf §1)
+        self.prewait = CTimecode(start_seconds=0)
+        self.postwait = CTimecode(start_seconds=0)
 
 
 def _chain(*cues):
@@ -1034,143 +1094,62 @@ class TestAdvancePreArmRunsOffTheCommandLock:
         ch.disarm.assert_not_called()
 
 
-class TestGoThatCannotArmItsCueSkipsIt:
-    """A GO whose cue cannot be armed in time used to return without touching
-    the pointer: the node then played that cue on the NEXT GO and stayed one
-    GO behind the controller until STOP. Decided 2026-09-30 (Ion): skip the
-    cue, advance the pointer in lockstep, and say so loudly. 5 s is plenty
-    for a slow load; an arm still in flight after it counts as failed for
-    this GO."""
+class TestGoDispatchesACueStillArming:
+    """D32 (S98, S100; Design §4): a GO whose cue is enabled but not armed yet
+    dispatches at once. _go_script no longer arms before go() (and
+    _skip_unarmed_cue is gone): the cue's own thread arms it or waits for the
+    arm in flight, and plays late; a failed arm silences that cue on this
+    node only. The pointer moves as on any GO; the command lock is not held
+    for an arm. (Replaces TestGoThatCannotArmItsCueSkipsIt and
+    TestReArmDoesNotRejoinAnUnarmedCue: no skip, no rejoin.)"""
 
-    def _skip(self, node, ch, in_flight="held by PreArm:n1 for 5.0s"):
-        ch.find_armed_cue.return_value = False  # arm() never gets it armed
+    def _go(self, node, ch, in_flight):
+        ch.find_armed_cue.return_value = False
         ch._arm_ahead.return_value = []
         ch.describe_arm_in_flight.return_value = in_flight
-        with patch("cuemsengine.NodeEngine.Logger") as log:
-            node.go_script({"go_mtc_ms": 1000.0})
-        return [str(c.args[0]) for c in log.error.call_args_list]
+        ch.go.return_value = _MM()
+        node.go_script({"go_mtc_ms": 1000.0})
 
-    def test_the_pointer_advances_in_lockstep_and_nothing_is_dispatched(self):
+    def test_a_cue_still_arming_is_dispatched_at_once(self):
         n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
         node = _go_node(pointer=n1)
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            self._skip(node, ch)
-            _join_prearm(n2.id)
-
+            self._go(node, ch, "held by PreArm:n1 for 0.3s")
+            ch.arm.assert_not_called()
+            ch.go.assert_called_once()
+            assert ch.go.call_args.args[0] is n1
+            assert ch.go.call_args.args[2] == 1000.0  # its arrival, the anchor
         assert node.next_cue_pointer is n2
-        node._broadcast_nextcue.assert_called_once()
-        ch.go.assert_not_called()
-        node.set_status.assert_not_called()  # nothing runs, nothing is stopped
+        node.set_status.assert_called_with("running", "yes")
 
-    def test_the_skip_is_annotated(self):
+    def test_a_cue_whose_arm_failed_is_still_dispatched(self):
+        """The GO no longer returns when its first local cue cannot be armed
+        (rc_1: nothing of the pass was dispatched on this node, S101): the
+        thread goes on silent with its body and hand-over, the rest of the
+        node's pass is dispatched (S100)."""
         n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
         node = _go_node(pointer=n1)
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            errors = self._skip(node, ch)
-            _join_prearm(n2.id)
+            with patch("cuemsengine.NodeEngine.Logger") as log:
+                self._go(node, ch, None)
+            ch.arm.assert_not_called()
+            ch.go.assert_called_once()
+        assert not [c for c in log.error.call_args_list if "SKIPPED" in str(c.args[0])]
+        assert node.next_cue_pointer is n2
 
-        (line,) = [e for e in errors if "SKIPPED on this node" in e]
-        assert "n1" in line and "_ChainCue" in line
-        assert "held by PreArm:n1 for 5.0s" in line
-        assert "Pointer advanced to n2" in line
-
-    def test_a_plain_arm_failure_says_so(self):
-        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
-        node = _go_node(pointer=n1)
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            errors = self._skip(node, ch, in_flight=None)
-            _join_prearm(n2.id)
-
-        (line,) = [e for e in errors if "SKIPPED on this node" in e]
-        assert "its arm failed" in line
-
-    def test_the_next_segment_is_pre_armed(self):
-        """The skip path never reaches go()'s own lookahead, so without this
-        the next GO would arm at GO time and start late -- the very symptom
-        869f9wqpn is about."""
-        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
-        node = _go_node(pointer=n1)
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            self._skip(node, ch)
-            _join_prearm(n2.id)
-
-        armed = [c.args[0] for c in ch.arm.call_args_list]
-        assert armed == [n1, n2]
-        assert ch.arm.call_args.kwargs["walk"] is not None  # on the PreArm thread
-
-    def test_a_skipped_last_segment_does_not_restart_the_node_from_the_top(self):
-        """The pointer becomes None. Without an ongoing cue the next GO would
-        read that as 'first GO' and start again from contents[0], while every
-        other node says 'No more cues'."""
-        (n1,) = _chain(_ChainCue("n1", True, "pause"))
-        node = _go_node(pointer=n1)
-        node.script.cuelist.contents = [n1]
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            self._skip(node, ch)
-            assert node.next_cue_pointer is None
-            arms_after_the_skip = ch.arm.call_count
-            node.go_script({"go_mtc_ms": 2000.0})
-
-            assert ch.arm.call_count == arms_after_the_skip
-            ch.go.assert_not_called()
-
-    def test_disabled_cues_the_walk_passed_are_stamped_like_on_the_other_paths(self):
-        """Both the success path (go(stamp_skipped=)) and the no-local branch
-        (stamp_pass) stamp them, so enabling one mid-show can rejoin."""
-        off, n1, n2 = _chain(
-            _ChainCue("off", True, "go", enabled=False),
-            _ChainCue("n1", True, "pause"),
+    def test_a_disabled_standby_is_dispatched_as_a_silent_thread(self):
+        """D30 (S18): the GO on a disabled standby cue dispatches it (go()
+        gives it a silent thread); the pointer moves past the first pause."""
+        n1, n2 = _chain(
+            _ChainCue("n1", True, "pause", enabled=False),
             _ChainCue("n2", True, "pause"),
         )
-        node = _go_node(pointer=off)
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            self._skip(node, ch)
-            _join_prearm(n2.id)
-
-        ch.stamp_pass.assert_called_once_with([off], 1000.0)
-
-    def test_an_arm_that_finished_just_too_late_is_not_reported_as_failed(self):
-        """The holder can finish between arm() giving up and the log line."""
-        n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
         node = _go_node(pointer=n1)
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            ch.find_armed_cue.return_value = False
-            ch._arm_ahead.return_value = []
-            # in flight before the arm, gone right after it
-            ch.describe_arm_in_flight.side_effect = ["held by PreArm:n1 for 0.1s", None]
-            with patch("cuemsengine.NodeEngine.Logger") as log:
-                node.go_script({"go_mtc_ms": 1000.0})
-            _join_prearm(n2.id)
-
-        (line,) = [
-            str(c.args[0])
-            for c in log.error.call_args_list
-            if "SKIPPED on this node" in str(c.args[0])
-        ]
-        assert "its arm failed" not in line
-        assert "did not deliver" in line
-
-
-class TestReArmDoesNotRejoinAnUnarmedCue:
-    def test_a_refused_or_failed_arm_does_not_go_on_to_rejoin(self):
-        """rejoin_chain would run go()'s fallback: a second wait and a second
-        arm for a cue that just could not be armed."""
-        cue = _FakeCue()
-        node = _make_node()
-        node._rejoin_running_chain = _MM()
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            ch.find_armed_cue.return_value = False  # arm() did not arm it
-            node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=1)
-        node._rejoin_running_chain.assert_not_called()
-
-    def test_an_armed_cue_still_rejoins(self):
-        cue = _FakeCue()
-        node = _make_node()
-        node._rejoin_running_chain = _MM()
-        with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
-            ch.find_armed_cue.return_value = True
-            node._arm_with_enabled_guard(cue, project_gen=1, arm_epoch=1)
-        node._rejoin_running_chain.assert_called_once_with(cue)
+            self._go(node, ch, None)
+            ch.go.assert_called_once()
+            assert ch.go.call_args.args[0] is n1
+        assert node.next_cue_pointer is n2
 
 
 # ---------------------------------------------------------------------------
@@ -1204,16 +1183,20 @@ class TestArmedInventoryIsLogged:
             _join_prearm(n1.id)
         assert self._inventory_calls(ch) == ["GO", "PreArm:n1"]
 
-    def test_after_a_go_that_skipped_its_cue(self):
+    def test_after_a_go_whose_cue_is_not_armed_yet(self):
+        """D32: that GO now dispatches its cue (no skip, no PreArm of the
+        next segment on the skip path): the inventory is the GO's."""
         n1, n2 = _chain(_ChainCue("n1", True, "pause"), _ChainCue("n2", True, "pause"))
         node = _go_node(pointer=n1)
         with patch("cuemsengine.NodeEngine.CUE_HANDLER") as ch:
             ch.find_armed_cue.return_value = False
             ch._arm_ahead.return_value = []
             ch.describe_arm_in_flight.return_value = None
+            ch.go.return_value = _MM()
             node.go_script({"go_mtc_ms": 1000.0})
             _join_prearm(n2.id)
-        assert self._inventory_calls(ch) == ["GO", "PreArm:n2"]
+        ch.go.assert_called_once()
+        assert self._inventory_calls(ch) == ["GO"]
 
     def test_not_without_a_script(self):
         node = _make_node(script_cue=None)

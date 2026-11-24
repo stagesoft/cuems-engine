@@ -98,19 +98,24 @@ class TestPlayAction:
         mock_go.assert_called_once()
         assert target._stop_requested is False
 
-    def test_play_disabled_target_fails(self, handler, mtc):
+    def test_play_disabled_target_enters_its_pass(self, handler, mtc):
+        """D28 (S17): a disabled cue is the same cue without output. A play
+        aimed at it enters its chain there (the target passes silent with its
+        waits, the cues behind it follow); it is not refused."""
         target = _make_target(enabled=False)
         cue = _make_action_cue("play", target)
 
         with (
-            patch.object(handler, "go") as mock_go,
-            patch.object(handler, "arm"),
+            patch.object(handler, "go_from") as mock_go_from,
+            patch.object(handler, "arm") as mock_arm,
         ):
-            result = handler.execute_action(cue, mtc)
+            result = handler.execute_action(cue, mtc, 1234.5)
 
-        assert result["status"] == "failed"
-        assert "disabled" in result["reason"]
-        mock_go.assert_not_called()
+        assert result["status"] == "applied"
+        assert result["action_type"] == "play"
+        mock_go_from.assert_called_once()
+        assert mock_go_from.call_args.args[:3] == (target, mtc, 1234.5)
+        mock_arm.assert_not_called()
 
     def test_play_threads_frozen_mtc_ms(self, handler, mtc):
         # When an ActionCue 'play' fires inside a post_go='go' chain, the
@@ -126,7 +131,9 @@ class TestPlayAction:
         ):
             handler.execute_action(cue, mtc, 1234.5)
 
-        mock_go.assert_called_once_with(target, mtc, 1234.5)
+        # go_from hands go() the pass's layout too (1amfwm7jnqf, Design §1).
+        mock_go.assert_called_once()
+        assert mock_go.call_args.args == (target, mtc, 1234.5)
 
     def test_play_without_frozen_mtc_passes_none(self, handler, mtc):
         # Standalone ActionCue (no chain) → frozen_mtc_ms defaults to None.
@@ -144,18 +151,26 @@ class TestPlayAction:
 
         mock_go_from.assert_called_once_with(target, mtc, None)
 
-    def test_play_arm_raises_returns_failed(self, handler, mtc):
+    def test_play_does_not_arm_its_target(self, handler, mtc):
+        """D34: no arm runs inside the action's step. An enabled, unloaded
+        target enters its chain at once; its own thread arms it (late if the
+        arm is slow), so a slow or failing arm never holds the actions
+        behind this one."""
         target = _make_target(loaded=False)
         cue = _make_action_cue("play", target)
 
-        with patch.object(
-            handler, "arm", side_effect=RuntimeError("player init failed")
+        with (
+            patch.object(
+                handler, "arm", side_effect=RuntimeError("player init failed")
+            ) as mock_arm,
+            patch.object(handler, "go_from") as mock_go_from,
         ):
             result = handler.execute_action(cue, mtc)
 
-        assert result["status"] == "failed"
+        assert result["status"] == "applied"
         assert result["action_type"] == "play"
-        assert "player init failed" in result["reason"]
+        mock_arm.assert_not_called()
+        mock_go_from.assert_called_once()
 
     def test_play_go_raises_returns_failed(self, handler, mtc):
         target = _make_target()
@@ -269,30 +284,40 @@ class TestFadeInAction:
         assert result["action_type"] == "fade_in"
         mock_go.assert_called_once()
 
-    def test_fade_in_disabled_target_fails(self, handler, mtc):
+    def test_fade_in_disabled_target_enters_its_pass(self, handler, mtc):
+        """D28: as play, fade_in enters a disabled target's chain."""
         target = _make_target(enabled=False)
         cue = _make_action_cue("fade_in", target)
 
         with (
-            patch.object(handler, "go") as mock_go,
-            patch.object(handler, "arm"),
+            patch.object(handler, "go_from") as mock_go_from,
+            patch.object(handler, "arm") as mock_arm,
         ):
-            result = handler.execute_action(cue, mtc)
+            result = handler.execute_action(cue, mtc, 1234.5)
 
-        assert result["status"] == "failed"
-        assert "disabled" in result["reason"]
-        mock_go.assert_not_called()
+        assert result["status"] == "applied"
+        assert result["action_type"] == "fade_in"
+        mock_go_from.assert_called_once()
+        assert mock_go_from.call_args.args[:3] == (target, mtc, 1234.5)
+        mock_arm.assert_not_called()
 
-    def test_fade_in_arm_raises_returns_failed(self, handler, mtc):
+    def test_fade_in_does_not_arm_its_target(self, handler, mtc):
+        """D34: as play, no arm inside the action."""
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_in", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        with (
+            patch.object(
+                handler, "arm", side_effect=RuntimeError("arm failed")
+            ) as mock_arm,
+            patch.object(handler, "go_from") as mock_go_from,
+        ):
             result = handler.execute_action(cue, mtc)
 
-        assert result["status"] == "failed"
+        assert result["status"] == "applied"
         assert result["action_type"] == "fade_in"
-        assert "arm failed" in result["reason"]
+        mock_arm.assert_not_called()
+        mock_go_from.assert_called_once()
 
     def test_fade_in_go_raises_returns_failed(self, handler, mtc):
         target = _make_target()
@@ -330,15 +355,22 @@ class TestFadeOutAction:
 
 
 class TestGoToAction:
-    def test_go_to_arms_target(self, handler, mtc):
+    def test_go_to_arms_target_off_its_step(self, handler, mtc):
+        """D34 (1amfwm7jnqf): no arm runs inside an action's step; go_to
+        arms its target in the background and applies at once."""
+        import threading
+
         target = _make_target(loaded=False)
         cue = _make_action_cue("go_to", target)
+        armed = threading.Event()
 
         def _do_arm(t, *, init):
             t.loaded = True
+            armed.set()
 
         with patch.object(handler, "arm", side_effect=_do_arm) as mock_arm:
             result = handler.execute_action(cue, mtc)
+            assert armed.wait(2.0)
 
         assert result["status"] == "applied"
         assert result["action_type"] == "go_to"
@@ -355,26 +387,25 @@ class TestGoToAction:
         assert "disabled" in result["reason"]
         mock_arm.assert_not_called()
 
-    def test_go_to_arm_raises_returns_failed(self, handler, mtc):
+    def test_go_to_arm_failure_does_not_fail_the_action(self, handler, mtc):
+        """D34: the arm is not the action's step; its failure is logged by
+        the background arm and the action still applies."""
+        import threading
+
         target = _make_target(loaded=False)
         cue = _make_action_cue("go_to", target)
+        tried = threading.Event()
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        def _fail(t, *, init):
+            tried.set()
+            raise RuntimeError("arm failed")
+
+        with patch.object(handler, "arm", side_effect=_fail):
             result = handler.execute_action(cue, mtc)
+            assert tried.wait(2.0)
 
-        assert result["status"] == "failed"
+        assert result["status"] == "applied"
         assert result["action_type"] == "go_to"
-        assert "arm failed" in result["reason"]
-
-    def test_go_to_arm_not_loaded_returns_failed(self, handler, mtc):
-        target = _make_target(loaded=False)
-        cue = _make_action_cue("go_to", target)
-
-        with patch.object(handler, "arm"):  # succeeds but loaded stays False
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "failed"
-        assert "could not be armed" in result["reason"]
 
 
 # ---------------------------------------------------------------------------
@@ -700,27 +731,19 @@ class TestFadeActionHandler:
         assert "disabled" in result["reason"]
         mock_arm.assert_not_called()
 
-    def test_fade_action_arm_raises_returns_failed(self, handler, mtc):
+    def test_fade_action_does_not_arm_an_unloaded_target(self, handler, mtc):
+        """D34 (1amfwm7jnqf): no arm in the action's step. A target that is
+        not loaded is not playing: the fade fails, nothing is armed."""
         target = _make_target(loaded=False)
         cue = _make_action_cue("fade_action", target)
 
-        with patch.object(handler, "arm", side_effect=RuntimeError("arm failed")):
+        with patch.object(handler, "arm") as mock_arm:
             result = handler.execute_action(cue, mtc)
 
         assert result["status"] == "failed"
         assert result["action_type"] == "fade_action"
-        assert "arm failed" in result["reason"]
-
-    def test_fade_action_arm_not_loaded_returns_failed(self, handler, mtc):
-        target = _make_target(loaded=False)
-        cue = _make_action_cue("fade_action", target)
-
-        with patch.object(handler, "arm"):  # succeeds but loaded stays False
-            result = handler.execute_action(cue, mtc)
-
-        assert result["status"] == "failed"
-        assert result["action_type"] == "fade_action"
-        assert "could not be armed" in result["reason"]
+        assert "not loaded" in result["reason"]
+        mock_arm.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -800,13 +823,22 @@ class TestGoRearm:
         # If go() didn't re-arm, it would have raised an exception
         assert True  # reaching here means go() succeeded
 
-    def test_go_disabled_returns_none(self, handler, mtc):
-        """A disabled cue should not be executed — go() must return None."""
-        cue = _make_action_target(loaded=False, enabled=False, _local=False)
+    def test_go_gives_a_local_disabled_cue_a_silent_thread(self, handler, mtc):
+        """§2 (S07): go() no longer refuses a disabled cue. A local one gets
+        a thread, which runs silent: it keeps its place and its waits, sends
+        nothing and lights nothing. A disabled cue is never armed (§1)."""
+        cue = _make_action_target(loaded=False, enabled=False)
+        cue._action_target_object = _make_target(enabled=False)
         cue._target_object = None
+        cue.post_go = "pause"
 
-        result = handler.go(cue, mtc)
-        assert result is None
+        with patch.object(handler, "arm") as mock_arm:
+            thread = handler.go(cue, mtc)
+            assert thread is not None
+            thread.join(timeout=2)
+
+        mock_arm.assert_not_called()
+        assert cue._action_target_object.enabled is False  # the action never ran
 
     def test_go_already_loaded_skips_rearm(self, handler, mtc):
         """A cue with loaded=True should NOT trigger a re-arm."""
