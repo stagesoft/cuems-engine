@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -931,8 +931,7 @@
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 38</span>
-<span class="normal"> 39</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 39</span>
 <span class="normal"> 40</span>
 <span class="normal"> 41</span>
 <span class="normal"> 42</span>
@@ -1551,7 +1550,14 @@
 <span class="normal">655</span>
 <span class="normal">656</span>
 <span class="normal">657</span>
-<span class="normal">658</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BaseEngine</span><span class="p">(</span><span class="n">SignalEngine</span><span class="p">):</span>
+<span class="normal">658</span>
+<span class="normal">659</span>
+<span class="normal">660</span>
+<span class="normal">661</span>
+<span class="normal">662</span>
+<span class="normal">663</span>
+<span class="normal">664</span>
+<span class="normal">665</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BaseEngine</span><span class="p">(</span><span class="n">SignalEngine</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">with_cm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -2024,14 +2030,20 @@
             <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Script file </span><span class="si">{</span><span class="n">xml_file</span><span class="si">}</span><span class="s2"> not found"</span><span class="p">)</span>
         <span class="n">reader</span> <span class="o">=</span> <span class="n">XmlReaderWriter</span><span class="p">(</span><span class="n">schema_name</span><span class="o">=</span><span class="s2">"script"</span><span class="p">,</span> <span class="n">xmlfile</span><span class="o">=</span><span class="n">xml_file</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read_to_objects</span><span class="p">()</span>
+        <span class="c1"># The reader leaves the XML's text in some cues' enabled (a DmxCue</span>
+        <span class="c1"># saved disabled reads 'False', which is truthy): every cue gets a</span>
+        <span class="c1"># bool here, once, on the controller and on every node.</span>
+        <span class="n">chain_pass</span><span class="o">.</span><span class="n">normalise_enabled</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"cuelist"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_first_local_enabled_in_go_chain</span><span class="p">(</span><span class="n">start</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""First cue THIS node will dispatch when a GO starts at `start`.</span>
+<span class="w">        </span><span class="sd">"""First cue THIS node must arm for a GO that starts at `start`.</span>
 
-<span class="sd">        Walks the post_go='go' chain exactly like NodeEngine.go_script:</span>
-<span class="sd">        returns the first cue that is `_local` AND `enabled`; other nodes'</span>
-<span class="sd">        cues and disabled cues are stepped over while they chain on</span>
+<span class="sd">        Walks the post_go='go' chain and returns the first cue that is</span>
+<span class="sd">        `_local` AND `enabled`. Not the first cue go_script dispatches: since</span>
+<span class="sd">        1amfwm7jnqf it also dispatches a disabled local cue, as a silent</span>
+<span class="sd">        thread that needs no arm. Other nodes' cues and</span>
+<span class="sd">        disabled cues are stepped over while they chain on</span>
 <span class="sd">        (post_go == 'go'); a cue that hands off (post_go != 'go') before</span>
 <span class="sd">        any local+enabled cue means "nothing for this node on that GO" -&gt;</span>
 <span class="sd">        None. Bounded by the same 1024-step cycle guard.</span>
@@ -2044,7 +2056,7 @@
         <span class="n">cue</span> <span class="o">=</span> <span class="n">start</span>
         <span class="n">walked</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">while</span> <span class="n">cue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
-            <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_local"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"enabled"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"_local"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="n">chain_pass</span><span class="o">.</span><span class="n">cue_enabled</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="p">):</span>
             <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cue</span><span class="p">,</span> <span class="s2">"post_go"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">"go"</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">None</span>
@@ -2146,7 +2158,7 @@
         <span class="k">if</span> <span class="n">cuelist</span><span class="o">.</span><span class="n">contents</span><span class="p">:</span>
             <span class="n">first_cue</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cuelist</span><span class="o">.</span><span class="n">contents</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">chain_pass</span><span class="o">.</span><span class="n">cue_enabled</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
                     <span class="n">first_cue</span> <span class="o">=</span> <span class="n">c</span>
                     <span class="k">break</span>
             <span class="c1"># If the cuelist's first cue isn't ours, walk the post_go='go'</span>
@@ -2267,8 +2279,7 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 39</span>
-<span class="normal"> 40</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 40</span>
 <span class="normal"> 41</span>
 <span class="normal"> 42</span>
 <span class="normal"> 43</span>
@@ -2328,7 +2339,8 @@
 <span class="normal"> 97</span>
 <span class="normal"> 98</span>
 <span class="normal"> 99</span>
-<span class="normal">100</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">100</span>
+<span class="normal">101</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">with_cm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">with_mtc</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -2419,8 +2431,7 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">417</span>
-<span class="normal">418</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">418</span>
 <span class="normal">419</span>
 <span class="normal">420</span>
 <span class="normal">421</span>
@@ -2451,7 +2462,8 @@
 <span class="normal">446</span>
 <span class="normal">447</span>
 <span class="normal">448</span>
-<span class="normal">449</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">find_hosts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bool</span><span class="p">]]:</span>
+<span class="normal">449</span>
+<span class="normal">450</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">find_hosts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bool</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Extract the list of adopted online hosts in the network map</span>
 
@@ -2518,8 +2530,7 @@ path (the controller's hub binds 0.0.0.0, reachable either way).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">345</span>
-<span class="normal">346</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">346</span>
 <span class="normal">347</span>
 <span class="normal">348</span>
 <span class="normal">349</span>
@@ -2543,7 +2554,8 @@ path (the controller's hub binds 0.0.0.0, reachable either way).</p>
 <span class="normal">367</span>
 <span class="normal">368</span>
 <span class="normal">369</span>
-<span class="normal">370</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_controller_ip</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="normal">370</span>
+<span class="normal">371</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_controller_ip</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Resolve the controller's NNG-hub IP.</span>
 
 <span class="sd">    Resolution order (Phase 2 — late-binding to controller.local):</span>
@@ -2638,8 +2650,7 @@ path (the controller's hub binds 0.0.0.0, reachable either way).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">143</span>
-<span class="normal">144</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">144</span>
 <span class="normal">145</span>
 <span class="normal">146</span>
 <span class="normal">147</span>
@@ -2651,7 +2662,8 @@ path (the controller's hub binds 0.0.0.0, reachable either way).</p>
 <span class="normal">153</span>
 <span class="normal">154</span>
 <span class="normal">155</span>
-<span class="normal">156</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="normal">156</span>
+<span class="normal">157</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Get the status of the engine</span>
 
 <span class="sd">    Args:</span>
@@ -2688,14 +2700,7 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">542</span>
-<span class="normal">543</span>
-<span class="normal">544</span>
-<span class="normal">545</span>
-<span class="normal">546</span>
-<span class="normal">547</span>
-<span class="normal">548</span>
-<span class="normal">549</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">549</span>
 <span class="normal">550</span>
 <span class="normal">551</span>
 <span class="normal">552</span>
@@ -2804,7 +2809,14 @@ and to load all the "loaded" flagged</p>
 <span class="normal">655</span>
 <span class="normal">656</span>
 <span class="normal">657</span>
-<span class="normal">658</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@logged</span>
+<span class="normal">658</span>
+<span class="normal">659</span>
+<span class="normal">660</span>
+<span class="normal">661</span>
+<span class="normal">662</span>
+<span class="normal">663</span>
+<span class="normal">664</span>
+<span class="normal">665</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@logged</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">initial_cuelist_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cuelist</span><span class="p">:</span> <span class="n">CueList</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Review all the items recursively to update target uuids and objects</span>
@@ -2895,7 +2907,7 @@ and to load all the "loaded" flagged</p>
     <span class="k">if</span> <span class="n">cuelist</span><span class="o">.</span><span class="n">contents</span><span class="p">:</span>
         <span class="n">first_cue</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cuelist</span><span class="o">.</span><span class="n">contents</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">chain_pass</span><span class="o">.</span><span class="n">cue_enabled</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
                 <span class="n">first_cue</span> <span class="o">=</span> <span class="n">c</span>
                 <span class="k">break</span>
         <span class="c1"># If the cuelist's first cue isn't ours, walk the post_go='go'</span>
@@ -2943,8 +2955,7 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">311</span>
-<span class="normal">312</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">312</span>
 <span class="normal">313</span>
 <span class="normal">314</span>
 <span class="normal">315</span>
@@ -2975,7 +2986,8 @@ and to load all the "loaded" flagged</p>
 <span class="normal">340</span>
 <span class="normal">341</span>
 <span class="normal">342</span>
-<span class="normal">343</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_config_manager</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">343</span>
+<span class="normal">344</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_config_manager</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Set the ConfigManager"""</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cm</span> <span class="o">=</span> <span class="n">ConfigManager</span><span class="p">(</span><span class="n">load_all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -3030,8 +3042,7 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">258</span>
-<span class="normal">259</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">259</span>
 <span class="normal">260</span>
 <span class="normal">261</span>
 <span class="normal">262</span>
@@ -3047,7 +3058,8 @@ and to load all the "loaded" flagged</p>
 <span class="normal">272</span>
 <span class="normal">273</span>
 <span class="normal">274</span>
-<span class="normal">275</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_mtc_listener</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">275</span>
+<span class="normal">276</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_mtc_listener</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Set the MTC listener"""</span>
     <span class="n">mtc_step</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">BaseEngine</span><span class="o">.</span><span class="n">mtc_callback</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
     <span class="n">mtc_reset</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">BaseEngine</span><span class="o">.</span><span class="n">mtc_callback</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">CTimecode</span><span class="p">(</span><span class="s2">"00:00:00:00"</span><span class="p">))</span>
@@ -3150,8 +3162,7 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">126</span>
-<span class="normal">127</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">127</span>
 <span class="normal">128</span>
 <span class="normal">129</span>
 <span class="normal">130</span>
@@ -3165,7 +3176,8 @@ and to load all the "loaded" flagged</p>
 <span class="normal">138</span>
 <span class="normal">139</span>
 <span class="normal">140</span>
-<span class="normal">141</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">141</span>
+<span class="normal">142</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">property</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Set the status of the engine</span>
 
 <span class="sd">    Args:</span>
@@ -3203,11 +3215,11 @@ and to load all the "loaded" flagged</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/cuemsengine/core/BaseEngine.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">158</span>
-<span class="normal">159</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">159</span>
 <span class="normal">160</span>
 <span class="normal">161</span>
-<span class="normal">162</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">status_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">162</span>
+<span class="normal">163</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">status_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Callback for the status endpoint"""</span>
     <span class="n">Logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Status callback received: </span><span class="si">{</span><span class="n">endpoint</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="n">parameter</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">endpoint</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
