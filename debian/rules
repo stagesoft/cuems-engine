@@ -33,7 +33,6 @@ override_dh_virtualenv:
 	# The build host's virtualenv writes a CACHEDIR.TAG into the venv root; the
 	# installed boxes have it from cuems-nodeconf, so dpkg refuses an engine deb
 	# that ships it too (test2, 2026-11-06). Not engine content: drop it.
-	rm -f debian/cuems-engine/usr/lib/cuems/CACHEDIR.TAG
 
 override_dh_install:
 	dh_install
