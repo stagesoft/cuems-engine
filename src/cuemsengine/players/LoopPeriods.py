@@ -31,6 +31,7 @@ from cuemsutils.log import Logger
 from cuemsutils.tools import media_sidecars
 from cuemsutils.tools.media_sidecars import Period, PeriodError, PeriodTimeout
 
+from ..cues import chain_pass
 from ..tools import test_knobs
 
 DEFAULT_CACHE_PATH = "/var/cache/cuems/loop-periods.json"
@@ -249,39 +250,68 @@ def probe_loop_periods(
 DRIFT_WARN_FRACTION = 0.05
 
 
-def start_together_key(contents):
+def start_together_key(contents, advance=None):
     """The D7 predicate (§4.7, Z14) as a key function over the cues of
-    *contents* (top level): two cues with equal keys start together — the same
-    Auto-continue chain (``post_go == "go"`` links, which trigger the whole
-    chain at once) and the same prewait. Locality plays no part:
-    ``_target_object`` is set for every cue on every node. Used by the D7
-    warning and by the D15 same-file pair (§4.1a)."""
-    parent = {}
+    *contents* (top level): two cues with equal keys start together. Locality
+    plays no part: ``_target_object`` is set for every cue on every node.
+    Used by the D7 warning and by the D15 same-file pair (§4.1a).
 
-    def find(c):
-        while parent.setdefault(id(c), c) is not c:
-            c = parent[id(c)]
-        return c
+    1amfwm7jnqf (Design §6): a cue's waits push the cues after it in an
+    Auto-continue chain, so the key is (the chain's last cue, the cue's
+    start measured back from it): ``prewait(c) - Σ advance(x)`` from ``c`` to
+    the cue before the last, every cue counted, enabled or not (D14).
+    ``advance`` defaults to the ``sequential`` mode's prewait + postwait. A
+    chain that closes on itself or joins another gets no pair, and one
+    line."""
+    if advance is None:
 
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra is not rb:
-            parent[id(rb)] = ra
+        def advance(c):
+            try:
+                return chain_pass.advance_ms(c, chain_pass.SEQUENTIAL)
+            except Exception:
+                return 0.0
 
-    for c in list(contents or []):
-        find(c)
+    cues = list(contents or [])
+    members = {id(c) for c in cues}
+    incoming = {}
+    for c in cues:
         target = getattr(c, "_target_object", None)
         if getattr(c, "post_go", None) == "go" and target is not None:
-            union(c, target)
+            incoming[id(target)] = incoming.get(id(target), 0) + 1
 
-    def start_ms(c):
+    def prewait(c):
         try:
             return c.prewait.milliseconds_exact
         except AttributeError:
             return 0.0
 
+    keys = {}
+    told = set()
+    for c in cues:
+        acc, x, seen, alone = 0.0, c, {id(c)}, False
+        while getattr(x, "post_go", None) == "go":
+            target = getattr(x, "_target_object", None)
+            if target is None or id(target) not in members:
+                break
+            if id(target) in seen or incoming.get(id(target), 0) > 1:
+                alone = True
+                break
+            acc += advance(x)
+            seen.add(id(target))
+            x = target
+        if alone:
+            keys[id(c)] = (id(c), "alone")
+            if id(c) not in told:
+                told.update(seen)
+                Logger.info(
+                    f"loop pairing: the chain of {c.id} closes on itself or "
+                    "joins another; its cues make no A/V pair"
+                )
+        else:
+            keys[id(c)] = (id(x), round(prewait(c) - acc, 3))
+
     def key(c):
-        return (id(find(c)), start_ms(c))
+        return keys.get(id(c), (id(c), "unknown"))
 
     return key
 

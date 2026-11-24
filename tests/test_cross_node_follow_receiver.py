@@ -200,6 +200,21 @@ class TestAnnounce:
         assert not basic.relay._is_current(old)
         assert len(basic.spawned) == 4
 
+    def test_a_new_instant_does_not_replace_a_due_follow(self, basic):
+        """Design §2 (1amfwm7jnqf): a silent cue announces at its dispatch, so
+        the cue of a loop can announce its next hand-over while this node has
+        not dispatched the one before yet (its waiter polls every 20 ms). An
+        entry whose instant has come and that is not dispatched yet is kept and
+        dispatched first; the new announcement is taken after it."""
+        basic.announce(seed=1000.0)
+        old = basic.entry()
+        basic.mtc.set(1000.0)  # due, its waiter has not run yet
+        basic.announce(seed=5000.0)
+        assert basic.relay._is_current(old)
+        basic.run("FollowWait")
+        seeds = [c.args[2] for c in basic.ch.go_from.call_args_list]
+        assert seeds == [1000.0, 5000.0]
+
     def test_a_late_announcement_is_logged(self, basic):
         basic.mtc.set(1500.0)
         with patch("cuemsengine.cues.FollowRelay.Logger") as log:
@@ -646,20 +661,21 @@ class TestRealGoAndGate:
         assert e.state == "dispatched" and e.cue is t and e.gen == t._go_generation
 
     def test_a_cancel_while_inside_go_refuses_the_commit(self):
-        """The cancel lands while go() is in its fallback arm: the gate, run
-        later inside go()'s commit section, refuses."""
+        """The cancel lands after go_from has laid the pass out and before
+        go()'s commit section (go() no longer arms, D32: this is the window
+        there is): the gate, run inside the commit section, refuses."""
         from cuemsengine.cues.CueHandler import CueHandler
 
         ch = self._ch()
         rig, t = self._rig(ch)
         t.loaded = False
+        real_go = ch.go
 
-        def arm_and_cancel(c, init=False, epoch=None, **kw):
-            rig.cancel()  # arrives on the bus during the arm
-            c.loaded = True
-            return True
+        def cancel_then_go(*a, **kw):
+            rig.cancel()  # arrives on the bus just before the commit
+            return real_go(*a, **kw)
 
-        ch.arm.side_effect = arm_and_cancel
+        ch.go = cancel_then_go
         rig.announce()
         rig.mtc.set(1000.0)
         with patch.object(CueHandler, "go_threaded") as gt:

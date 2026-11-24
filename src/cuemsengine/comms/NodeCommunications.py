@@ -124,7 +124,9 @@ class NodeCommunications(AsyncCommsThread):
 
         if self._receive_hook is not None:
             try:
-                if self._receive_hook(command_name, value):
+                # D31 (d), 1amfwm7jnqf: a UI toggle carries the controller's
+                # MTC at its send beside the unchanged value (None otherwise).
+                if self._receive_hook(command_name, value, sent_ms=data.get("sent_ms")):
                     return
             except Exception as e:
                 # Never lose a GO, a STOP or a load to a bug in the hook.

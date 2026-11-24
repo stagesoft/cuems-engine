@@ -1,0 +1,9 @@
+SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+SPDX-License-Identifier: GPL-3.0-or-later
+SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
+Exported from the executable model of plan 2026-11-18-autocontinue-cumulative-waits
+(rev 9.1): cuems-RELATIONS 41d257f with run_all.py exporting the model's constants
+and S102 / S103 (1amfwm7jnqf Step 2), baselines/autocontinue-cumulative/model/,
+`python3 -I run_all.py --json > chain_scenarios.json`. Do not edit by hand: change the
+model, export again (plan Constraints, "The model leads").
