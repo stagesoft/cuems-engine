@@ -2748,3 +2748,4 @@ def redirect_video_cmd(path_parts: list[str], value: str) -> None:
     videocomposer_cmd = "/" + "/".join(path_parts[videocomposer_index:])
     client: VideoClient = PLAYER_HANDLER.get_video_client()
     client.set_value(videocomposer_cmd, value)
+# TEST ONLY 1amfwm7kan4: differs from rc_1
