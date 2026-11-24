@@ -7,6 +7,11 @@
 # release time is checked here, by .github/scripts/release-check.sh.
 name: Release check
 
+# The job names below are a contract: once debian/bookworm requires the check
+# "Tree equals rc_1, changelog valid" (1amfwm7kan4, planned for after the first
+# release that carries this workflow), renaming it makes the protection wait
+# for a check that never reports. Change the name and the protection together.
+
 on:
   pull_request:
     branches: [debian/bookworm]
