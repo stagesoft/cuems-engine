@@ -1,4 +1,4 @@
-cuems-engine (0.1.0rc6-9) bookworm; urgency=medium
+cuems-engine (0.1.0rc6-9 bookworm; urgency=medium
 
   * Merge rc_1 into debian/bookworm (0.1.0rc6-9, 1amfwm7jnqf, PR #55):
     Auto-continue waits accumulate.
