@@ -14,13 +14,14 @@ set -euo pipefail
 fail() { echo "::error::$*"; exit 1; }
 
 # Print FILE as it is in REV with the lines that legitimately differ in a
-# release removed: the version in pyproject.toml, the version and the comment
-# header (contributor lines) in src/cuemsengine/__init__.py.
+# release removed: the version in pyproject.toml, the version and the SPDX
+# header lines in src/cuemsengine/__init__.py (the version itself is checked
+# against pyproject.toml by check_changelog).
 normalised() {
     local rev=$1 file=$2
     case $file in
         pyproject.toml)              git show "$rev:$file" | grep -v '^version = ' || true ;;
-        src/cuemsengine/__init__.py) git show "$rev:$file" | grep -v -e '^__version__ = ' -e '^#' || true ;;
+        src/cuemsengine/__init__.py) git show "$rev:$file" | grep -v -e '^__version__ = ' -e '^# SPDX-' || true ;;
         *)                           git show "$rev:$file" ;;
     esac
 }
@@ -46,7 +47,7 @@ check_tree() {
                 echo "::error file=$f::differs from rc_1 ($base)"
                 bad=1 ;;
         esac
-    done < <(git diff --name-only "$base" "$head")
+    done < <(git diff --no-renames --name-only "$base" "$head")
     [ "$bad" = 0 ] || fail "the tree is not rc_1's: a release must only add debian/ and the version"
     echo "OK: the tree equals rc_1 ($(git rev-parse --short "$base")) outside debian/ and the version lines"
 }
@@ -58,8 +59,12 @@ check_changelog() {
     [ -n "$pyproj" ] || fail "no version in pyproject.toml"
     echo "changelog: $deb   pyproject.toml: $pyproj"
     [ "${deb%-*}" = "$pyproj" ] || fail "changelog upstream version '${deb%-*}' is not pyproject.toml's '$pyproj'"
+    local init
+    init=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/cuemsengine/__init__.py | head -n1)
+    echo "src/cuemsengine/__init__.py __version__: $init"
+    [ "$init" = "$pyproj" ] || fail "__version__ '$init' in src/cuemsengine/__init__.py is not pyproject.toml's '$pyproj'"
     [ "$(dpkg-parsechangelog -S Distribution)" = bookworm ] || fail "changelog distribution is not bookworm"
-    echo "OK: debian/changelog is valid and matches pyproject.toml"
+    echo "OK: debian/changelog is valid and matches pyproject.toml and __version__"
 }
 
 check_deb() {
@@ -77,7 +82,8 @@ check_deb() {
     grep -q 'site-packages/cuemsengine/' <<<"$list" || fail "cuemsengine is not in the venv"
     local dep
     for dep in cuems-utils cuems-common python3-pyossia python3-systemd ffmpeg; do
-        grep -q "$dep" <<<"$control" || fail "Depends lost $dep"
+        # whole package name: ffmpeg must not be satisfied by some-ffmpeg-thing
+        grep -qE "(^|[ ,|])${dep}( |,|\$|\()" <<<"$control" || fail "Depends lost $dep"
     done
     echo "OK: no CACHEDIR.TAG, rtmidi and cuemsengine in the venv, Depends complete"
 }
