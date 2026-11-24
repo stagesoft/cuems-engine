@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
+
+# Release control for PRs to debian/bookworm (1amfwm7kan4). Lint and tests are
+# not repeated: the code already passed ci.yml on rc_1. What only fails at
+# release time is checked here, by .github/scripts/release-check.sh.
+name: Release check
+
+on:
+  pull_request:
+    branches: [debian/bookworm]
+  workflow_dispatch:
+
+jobs:
+  tree-and-changelog:
+    name: Tree equals rc_1, changelog valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Fetch rc_1
+        run: git fetch --no-tags origin rc_1:refs/remotes/origin/rc_1
+
+      - name: Tree equals the rc_1 commit it integrates
+        run: .github/scripts/release-check.sh tree HEAD
+
+      - name: debian/changelog is valid and matches pyproject.toml
+        run: .github/scripts/release-check.sh changelog
+
+  build-deb:
+    name: The deb builds and is sound
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - name: Install the build toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential devscripts equivs
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install the build dependencies
+        run: |
+          # python-rtmidi and friends are built from source inside the venv.
+          apt-get install -y --no-install-recommends \
+            libasound2-dev libjack-jackd2-dev pkg-config
+          mk-build-deps --install --remove \
+            --tool 'apt-get -y --no-install-recommends' debian/control
+
+      - name: Use the builder's virtualenv
+        # Debian's virtualenv (20.17) does not write the CACHEDIR.TAG that
+        # newer ones put in the venv root, and that file made dpkg refuse the
+        # 0.1.0rc6-8 deb. Pin the version the release builder (casas) has, so a
+        # debian/rules without the line that removes it fails here too.
+        run: pip install --break-system-packages 'virtualenv==20.29.3'
+
+      - name: Build the deb (only inspected, casas builds the release)
+        run: dpkg-buildpackage -us -uc -b
+
+      - name: Inspect the deb
+        run: .github/scripts/release-check.sh deb
